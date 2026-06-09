@@ -3,6 +3,13 @@
 Flutter app: geodesic circle/zone layers on OpenStreetMap, stored locally (Drift/SQLite),
 no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
 
+## Current status
+
+Milestones **M0–M2 done** (data model + settings schema; composited rendering engine with
+union/band/inverse; UI restructure: layers left drawer, docked live editor, add/remove).
+Next: **M3** settings screen (uncertainty value UI), then M4 locate-me, M5 planes, M6 app
+icon. Track in `IMPLEMENTATION_PLAN.md` (milestone status) and `PLAN.md` (feature backlog).
+
 ## Workflow rule (required)
 
 - After completing **all** the steps of a task/milestone, **update the plan docs**
