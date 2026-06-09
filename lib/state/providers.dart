@@ -50,6 +50,19 @@ class ActiveLayerNotifier extends Notifier<String?> {
 final activeLayerProvider =
     NotifierProvider<ActiveLayerNotifier, String?>(ActiveLayerNotifier.new);
 
+/// Id of the currently selected circle, or null. Drives the docked editor sheet
+/// and the remove button.
+class SelectedCircleNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void select(String? id) => state = id;
+}
+
+final selectedCircleProvider =
+    NotifierProvider<SelectedCircleNotifier, String?>(
+        SelectedCircleNotifier.new);
+
 /// Resolves the effective active layer id given the current layer list,
 /// falling back to the top-most layer when nothing is explicitly selected.
 String? effectiveActiveLayerId(List<Layer> layers, String? selected) {

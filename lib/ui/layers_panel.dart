@@ -6,19 +6,11 @@ import '../data/database.dart';
 import '../data/repository.dart';
 import '../state/providers.dart';
 
-/// Shows the layer management sheet (list, visibility, reorder, colour,
-/// rename, add, delete, and choosing the active layer).
-Future<void> showLayersPanel(BuildContext context) {
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    showDragHandle: true,
-    builder: (_) => const _LayersPanel(),
-  );
-}
-
-class _LayersPanel extends ConsumerWidget {
-  const _LayersPanel();
+/// Left-hand drawer for managing layers: list, choose active, visibility,
+/// reorder, colour, rename, inverse, delete, and add. Replaces the old bottom
+/// sheet so the map stays usable alongside it.
+class LayersDrawer extends ConsumerWidget {
+  const LayersDrawer({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -27,83 +19,79 @@ class _LayersPanel extends ConsumerWidget {
     final selected = ref.watch(activeLayerProvider);
     final repo = ref.read(repositoryProvider);
 
-    return SafeArea(
-      child: DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.5,
-        maxChildSize: 0.9,
-        minChildSize: 0.3,
-        builder: (context, scrollController) {
-          return layersAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('Error: $e')),
-            data: (layers) {
-              // Display top-of-stack first (reverse of draw order).
-              final display = layers.reversed.toList();
-              final activeId = effectiveActiveLayerId(layers, selected);
+    return Drawer(
+      child: SafeArea(
+        child: layersAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => Center(child: Text('Error: $e')),
+          data: (layers) {
+            // Display top-of-stack first (reverse of draw order).
+            final display = layers.reversed.toList();
+            final activeId = effectiveActiveLayerId(layers, selected);
 
-              return Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
-                    child: Row(
-                      children: [
-                        Text('Layers',
-                            style: Theme.of(context).textTheme.titleLarge),
-                        const Spacer(),
-                        TextButton.icon(
-                          onPressed: () async {
-                            final id = await repo.createLayer(
-                              name: 'Layer ${layers.length + 1}',
-                              colorArgb: _palette[
-                                      layers.length % _palette.length]
-                                  .toARGB32(),
-                            );
-                            ref.read(activeLayerProvider.notifier).select(id);
-                          },
-                          icon: const Icon(Icons.add),
-                          label: const Text('Add'),
-                        ),
-                      ],
-                    ),
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+                  child: Row(
+                    children: [
+                      Text('Layers',
+                          style: Theme.of(context).textTheme.titleLarge),
+                      const Spacer(),
+                      TextButton.icon(
+                        onPressed: () async {
+                          final id = await repo.createLayer(
+                            name: 'Layer ${layers.length + 1}',
+                            colorArgb:
+                                _palette[layers.length % _palette.length]
+                                    .toARGB32(),
+                          );
+                          ref.read(activeLayerProvider.notifier).select(id);
+                        },
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add'),
+                      ),
+                    ],
                   ),
-                  Expanded(
-                    child: ReorderableListView.builder(
-                      scrollController: scrollController,
-                      itemCount: display.length,
-                      onReorderItem: (oldIndex, newIndex) {
-                        final reordered = [...display];
-                        final moved = reordered.removeAt(oldIndex);
-                        reordered.insert(newIndex, moved);
-                        // Persist as bottom-to-top draw order.
-                        repo.reorderLayers(
-                          reordered.reversed.map((l) => l.id).toList(),
-                        );
-                      },
-                      itemBuilder: (context, index) {
-                        final layer = display[index];
-                        final count = circles
-                            .where((c) => c.layerId == layer.id)
-                            .length;
-                        return _LayerTile(
-                          key: ValueKey(layer.id),
-                          layer: layer,
-                          circleCount: count,
-                          isActive: layer.id == activeId,
-                          canDelete: layers.length > 1,
-                        );
-                      },
-                    ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: ReorderableListView.builder(
+                    itemCount: display.length,
+                    onReorderItem: (oldIndex, newIndex) {
+                      final reordered = [...display];
+                      final moved = reordered.removeAt(oldIndex);
+                      reordered.insert(newIndex, moved);
+                      // Persist as bottom-to-top draw order.
+                      repo.reorderLayers(
+                        reordered.reversed.map((l) => l.id).toList(),
+                      );
+                    },
+                    itemBuilder: (context, index) {
+                      final layer = display[index];
+                      final count =
+                          circles.where((c) => c.layerId == layer.id).length;
+                      return _LayerTile(
+                        key: ValueKey(layer.id),
+                        layer: layer,
+                        circleCount: count,
+                        isActive: layer.id == activeId,
+                        canDelete: layers.length > 1,
+                      );
+                    },
                   ),
-                ],
-              );
-            },
-          );
-        },
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
 }
+
+IconData _typeIcon(String type) =>
+    type == 'planes' ? Icons.change_history : Icons.circle_outlined;
 
 class _LayerTile extends ConsumerWidget {
   const _LayerTile({
@@ -122,7 +110,11 @@ class _LayerTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final repo = ref.read(repositoryProvider);
+    final subtitle = StringBuffer('$circleCount circle${circleCount == 1 ? '' : 's'}');
+    if (layer.isInverted) subtitle.write(' · inverted');
+
     return ListTile(
+      selected: isActive,
       onTap: () => ref.read(activeLayerProvider.notifier).select(layer.id),
       leading: IconButton(
         tooltip: layer.isVisible ? 'Hide' : 'Show',
@@ -137,8 +129,8 @@ class _LayerTile extends ConsumerWidget {
           GestureDetector(
             onTap: () => _pickColor(context, ref),
             child: Container(
-              width: 22,
-              height: 22,
+              width: 20,
+              height: 20,
               decoration: BoxDecoration(
                 color: Color(layer.colorArgb),
                 shape: BoxShape.circle,
@@ -146,22 +138,16 @@ class _LayerTile extends ConsumerWidget {
               ),
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(child: Text(layer.name)),
+          const SizedBox(width: 8),
+          Icon(_typeIcon(layer.type), size: 16),
+          const SizedBox(width: 6),
+          Expanded(child: Text(layer.name, overflow: TextOverflow.ellipsis)),
         ],
       ),
-      subtitle: Text('$circleCount circle${circleCount == 1 ? '' : 's'}'),
+      subtitle: Text(subtitle.toString()),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (isActive)
-            const Padding(
-              padding: EdgeInsets.only(right: 4),
-              child: Chip(
-                label: Text('active'),
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
           PopupMenuButton<String>(
             onSelected: (value) async {
               switch (value) {
@@ -169,6 +155,9 @@ class _LayerTile extends ConsumerWidget {
                   await _rename(context, repo);
                 case 'color':
                   await _pickColor(context, ref);
+                case 'inverse':
+                  await repo.updateLayer(layer.id,
+                      isInverted: !layer.isInverted);
                 case 'delete':
                   await repo.deleteLayer(layer.id);
               }
@@ -176,6 +165,10 @@ class _LayerTile extends ConsumerWidget {
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'rename', child: Text('Rename')),
               const PopupMenuItem(value: 'color', child: Text('Colour')),
+              PopupMenuItem(
+                value: 'inverse',
+                child: Text(layer.isInverted ? 'Un-invert' : 'Invert'),
+              ),
               if (canDelete)
                 const PopupMenuItem(value: 'delete', child: Text('Delete')),
             ],

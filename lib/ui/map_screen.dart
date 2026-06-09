@@ -68,29 +68,45 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     return null;
   }
 
+  String? _activeCirclesLayerId(List<Layer> layers) {
+    final activeId =
+        effectiveActiveLayerId(layers, ref.read(activeLayerProvider));
+    final layer = layers.where((l) => l.id == activeId).firstOrNull;
+    return (layer != null && layer.type == 'circles') ? layer.id : null;
+  }
+
+  Future<void> _addCircleAt(LatLng latlng, List<Layer> layers) async {
+    final layerId = _activeCirclesLayerId(layers);
+    if (layerId == null) return;
+    final id = await ref.read(repositoryProvider).createCircle(
+          layerId: layerId,
+          centerLat: latlng.latitude,
+          centerLng: latlng.longitude,
+          radiusMeters: _defaultRadius(),
+        );
+    ref.read(selectedCircleProvider.notifier).select(id);
+  }
+
   Future<void> _handleTap(
     LatLng latlng,
     List<Layer> layers,
     List<Circle> circles,
   ) async {
-    // Tapped an existing circle -> edit it.
+    final selNotifier = ref.read(selectedCircleProvider.notifier);
+
+    // Tapped an existing circle -> select it for editing.
     final hit = _circleAt(latlng, layers, circles);
     if (hit != null) {
-      await showCircleEditor(context, circle: hit, layers: layers);
+      selNotifier.select(hit.id);
       return;
     }
 
-    // Otherwise add a circle to the active layer (only circle-type layers).
-    final activeId = effectiveActiveLayerId(layers, ref.read(activeLayerProvider));
-    if (activeId == null) return;
-    final activeLayer = layers.where((l) => l.id == activeId).firstOrNull;
-    if (activeLayer == null || activeLayer.type != 'circles') return;
-    await ref.read(repositoryProvider).createCircle(
-          layerId: activeId,
-          centerLat: latlng.latitude,
-          centerLng: latlng.longitude,
-          radiusMeters: _defaultRadius(),
-        );
+    // Tapped empty space: close the editor if open, otherwise add a circle.
+    if (ref.read(selectedCircleProvider) != null) {
+      selNotifier.select(null);
+      return;
+    }
+    await _addCircleAt(latlng, layers);
   }
 
   @override
@@ -102,10 +118,15 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final circles = ref.watch(circlesProvider).asData?.value ?? const <Circle>[];
     final uncertainty =
         ref.watch(settingsProvider).asData?.value.uncertaintyMeters ?? 0;
+    final selectedId = ref.watch(selectedCircleProvider);
+    final selectedCircle =
+        circles.where((c) => c.id == selectedId).firstOrNull;
     final activeId = effectiveActiveLayerId(layers, ref.watch(activeLayerProvider));
     final activeLayer = layers.where((l) => l.id == activeId).firstOrNull;
+    final canAdd = activeLayer != null && activeLayer.type == 'circles';
 
     return Scaffold(
+      drawer: const LayersDrawer(),
       appBar: AppBar(
         title: const Text('Zonecraft'),
         bottom: PreferredSize(
@@ -115,7 +136,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             child: Text(
               activeLayer == null
                   ? 'Tap the map to add a circle'
-                  : 'Adding to: ${activeLayer.name}  ·  tap a circle to edit',
+                  : 'Active: ${activeLayer.name}  ·  tap to add, tap a circle to edit',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
@@ -151,11 +172,41 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => showLayersPanel(context),
-        icon: const Icon(Icons.layers),
-        label: Text('Layers (${layers.length})'),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (selectedCircle != null)
+            FloatingActionButton.small(
+              heroTag: 'remove',
+              tooltip: 'Remove selected circle',
+              onPressed: () async {
+                await ref
+                    .read(repositoryProvider)
+                    .deleteCircle(selectedCircle.id);
+                ref.read(selectedCircleProvider.notifier).select(null);
+              },
+              child: const Icon(Icons.delete_outline),
+            ),
+          const SizedBox(height: 12),
+          FloatingActionButton.extended(
+            heroTag: 'add',
+            onPressed: canAdd
+                ? () => _addCircleAt(_mapController.camera.center, layers)
+                : null,
+            backgroundColor: canAdd ? null : Theme.of(context).disabledColor,
+            icon: const Icon(Icons.add_location_alt_outlined),
+            label: const Text('Add circle'),
+          ),
+        ],
       ),
+      bottomSheet: selectedCircle == null
+          ? null
+          : CircleEditorSheet(
+              key: ValueKey(selectedCircle.id),
+              circle: selectedCircle,
+              layers: layers,
+            ),
     );
   }
 }

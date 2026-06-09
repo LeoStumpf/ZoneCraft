@@ -4,22 +4,23 @@ Backlog of planned features beyond v1. Grouped by area; check items off as they 
 Notes under each item are implementation hints, not final decisions. Open design
 questions are collected at the bottom.
 
-> **Progress:** M0 (data model + settings) and M1 (rendering engine) are **done** — see
-> `IMPLEMENTATION_PLAN.md`. The engine now handles union/flat-colour, the uncertainty
-> band, and inverse rendering for circles; the `Planes`/`AppSettings`/layer-`type` schema
-> exists. Remaining work for the items below is mostly the **UI** to drive these
-> (drawer, bottom editor, settings screen, inverse toggle) plus planes + locate-me + icon.
+> **Progress:** M0 (data model + settings), M1 (rendering engine) and M2 (UI restructure)
+> are **done** — see `IMPLEMENTATION_PLAN.md`. The engine handles union/flat-colour, the
+> uncertainty band, and inverse rendering for circles; the layers **left drawer** (with
+> visibility/reorder/colour/rename/**invert**/delete), the docked **bottom editor**, and
+> **add/remove** are in. Remaining: settings screen (uncertainty value UI), locate-me,
+> planes, and the app icon.
 
 ---
 
 ## UI & navigation
 
-- [ ] **Move the layers menu to a left side drawer.**
+- [x] **Move the layers menu to a left side drawer.**
   - Replace the bottom-sheet `showLayersPanel` (`lib/ui/layers_panel.dart`) with a
     left `Drawer` opened from the AppBar / a hamburger button.
   - Keep all existing layer controls (visibility, reorder, colour, rename, active).
 
-- [ ] **Add an explicit add / remove button (object add/delete).**
+- [x] **Add an explicit add / remove button (object add/delete).**
   - A clear "add object" action and a "remove" action, instead of relying only on
     map taps. Add button creates an object in the active layer; remove deletes the
     selected object.
@@ -33,7 +34,7 @@ questions are collected at the bottom.
 
 ## Object editing
 
-- [ ] **Edit objects via a bottom menu, not a dialog floating over the map.**
+- [x] **Edit objects via a bottom menu, not a dialog floating over the map.**
   - Replace the `AlertDialog` in `lib/ui/circle_editor.dart` with a persistent /
     docked **bottom panel** (e.g. bottom sheet that stays while the map is visible),
     so the map stays usable while editing.
@@ -64,12 +65,12 @@ questions are collected at the bottom.
 
 ## Layer behaviour
 
-- [ ] **Per-layer "inverse" toggle.**
+- [x] **Per-layer "inverse" toggle.**
   - When inverted, fill everything **not** covered by the layer's objects instead of
     the covered area (e.g. a circles layer fills the outside, leaving holes where the
     circles are). Store as a `isInverted` flag on the layer.
 
-- [ ] **Union rendering — overlaps don't darken.**
+- [x] **Union rendering — overlaps don't darken.**
   - Overlapping objects within a layer (and overlapping layers) must show a **single
     flat colour**, not compounded opacity. The interior is one uniform colour; only
     the **uncertainty band** differs.

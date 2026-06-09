@@ -85,7 +85,13 @@ for circles first.
   overlap); a circle shows a lighter outer band when uncertainty > 0; toggling a layer's
   inverse fills the complement.
 
-## Milestone 2 — UI restructure (drawer, bottom editor, add/remove)
+## Milestone 2 — UI restructure (drawer, bottom editor, add/remove) ✅ DONE
+
+**Status:** complete (2026-06-09). Verified on device (screenshots): left `LayersDrawer`
+(visibility/reorder/colour/rename/**invert**/delete/active + type icon), docked
+`CircleEditorSheet` (live radius slider + lat/lng/label/layer, delete/close) with the map
+still interactive, and add/remove via FABs + tap-to-select/deselect. Confirmed overlapping
+circles render as one flat union.
 
 **Goal:** the requested navigation/editing UX.
 
