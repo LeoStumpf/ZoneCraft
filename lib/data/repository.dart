@@ -20,7 +20,12 @@ class Repository {
   }
 
   /// Creates a layer placed on top of all existing ones. Returns its id.
-  Future<String> createLayer({required String name, required int colorArgb}) async {
+  /// [type] is the object kind the layer holds ('circles' or 'planes').
+  Future<String> createLayer({
+    required String name,
+    required int colorArgb,
+    String type = 'circles',
+  }) async {
     final maxOrder = await _maxSortOrder();
     final id = _uuid.v4();
     await _db.into(_db.layers).insert(
@@ -29,6 +34,7 @@ class Repository {
             name: name,
             colorArgb: colorArgb,
             sortOrder: maxOrder + 1,
+            type: Value(type),
           ),
         );
     return id;
@@ -39,6 +45,7 @@ class Repository {
     String? name,
     int? colorArgb,
     bool? isVisible,
+    bool? isInverted,
   }) {
     return (_db.update(_db.layers)..where((l) => l.id.equals(id))).write(
       LayersCompanion(
@@ -46,6 +53,8 @@ class Repository {
         colorArgb: colorArgb == null ? const Value.absent() : Value(colorArgb),
         isVisible:
             isVisible == null ? const Value.absent() : Value(isVisible),
+        isInverted:
+            isInverted == null ? const Value.absent() : Value(isInverted),
       ),
     );
   }
@@ -125,6 +134,88 @@ class Repository {
 
   Future<void> deleteCircle(String id) {
     return (_db.delete(_db.circles)..where((c) => c.id.equals(id))).go();
+  }
+
+  // --- Planes ---------------------------------------------------------------
+
+  Stream<List<Plane>> watchAllPlanes() {
+    return _db.select(_db.planes).watch();
+  }
+
+  Future<String> createPlane({
+    required String layerId,
+    required double aLat,
+    required double aLng,
+    required double bLat,
+    required double bLng,
+    bool nearA = true,
+    String? label,
+  }) async {
+    final id = _uuid.v4();
+    await _db.into(_db.planes).insert(
+          PlanesCompanion.insert(
+            id: id,
+            layerId: layerId,
+            aLat: aLat,
+            aLng: aLng,
+            bLat: bLat,
+            bLng: bLng,
+            nearA: Value(nearA),
+            label: Value(label),
+          ),
+        );
+    return id;
+  }
+
+  Future<void> updatePlane(
+    String id, {
+    double? aLat,
+    double? aLng,
+    double? bLat,
+    double? bLng,
+    bool? nearA,
+    String? layerId,
+    Value<String?> label = const Value.absent(),
+  }) {
+    return (_db.update(_db.planes)..where((p) => p.id.equals(id))).write(
+      PlanesCompanion(
+        aLat: aLat == null ? const Value.absent() : Value(aLat),
+        aLng: aLng == null ? const Value.absent() : Value(aLng),
+        bLat: bLat == null ? const Value.absent() : Value(bLat),
+        bLng: bLng == null ? const Value.absent() : Value(bLng),
+        nearA: nearA == null ? const Value.absent() : Value(nearA),
+        layerId: layerId == null ? const Value.absent() : Value(layerId),
+        label: label,
+      ),
+    );
+  }
+
+  Future<void> deletePlane(String id) {
+    return (_db.delete(_db.planes)..where((p) => p.id.equals(id))).go();
+  }
+
+  // --- Settings -------------------------------------------------------------
+
+  /// Watches the single settings row, emitting defaults when it doesn't exist
+  /// yet (so callers never have to seed it before reading).
+  Stream<AppSetting> watchSettings() {
+    return (_db.select(_db.appSettings)..where((s) => s.id.equals(1)))
+        .watch()
+        .map(
+          (rows) => rows.isEmpty
+              ? const AppSetting(id: 1, uncertaintyMeters: 0)
+              : rows.first,
+        );
+  }
+
+  /// Upserts the global uncertainty (metres) into the single settings row.
+  Future<void> updateUncertainty(double meters) {
+    return _db.into(_db.appSettings).insertOnConflictUpdate(
+          AppSettingsCompanion.insert(
+            id: const Value(1),
+            uncertaintyMeters: Value(meters),
+          ),
+        );
   }
 
   // --- Seed -----------------------------------------------------------------

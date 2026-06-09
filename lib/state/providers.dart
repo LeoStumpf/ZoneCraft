@@ -24,6 +24,16 @@ final circlesProvider = StreamProvider<List<Circle>>((ref) {
   return ref.watch(repositoryProvider).watchAllCircles();
 });
 
+/// Reactive list of every plane across all layers.
+final planesProvider = StreamProvider<List<Plane>>((ref) {
+  return ref.watch(repositoryProvider).watchAllPlanes();
+});
+
+/// App-wide settings (currently the global uncertainty radius).
+final settingsProvider = StreamProvider<AppSetting>((ref) {
+  return ref.watch(repositoryProvider).watchSettings();
+});
+
 /// Runs once at startup to guarantee a layer exists.
 final seedProvider = FutureProvider<String>((ref) {
   return ref.watch(repositoryProvider).ensureDefaultLayer();

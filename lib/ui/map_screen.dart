@@ -4,10 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart' hide Circle;
 
 import '../data/database.dart';
-import '../geo/geodesic.dart';
 import '../state/providers.dart';
 import 'circle_editor.dart';
 import 'layers_panel.dart';
+import 'region_layer.dart';
 
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key});
@@ -18,15 +18,11 @@ class MapScreen extends ConsumerStatefulWidget {
 
 class _MapScreenState extends ConsumerState<MapScreen> {
   final _mapController = MapController();
-
-  /// Updated by [PolygonLayer] on every gesture; tells us which circle (if any)
-  /// was under the tap so we can edit it instead of adding a new one.
-  final LayerHitNotifier<String> _hitNotifier = ValueNotifier(null);
+  static const _hitTest = Distance(calculator: Haversine());
 
   @override
   void dispose() {
     _mapController.dispose();
-    _hitNotifier.dispose();
     super.dispose();
   }
 
@@ -49,23 +45,46 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     return (widthMeters * 0.15).clamp(10.0, 2000000.0);
   }
 
-  Future<void> _handleTap(TapPosition _, LatLng latlng, List<Layer> layers) async {
-    final hit = _hitNotifier.value;
-    final circles = ref.read(circlesProvider).asData?.value ?? const <Circle>[];
-
-    // Tapped an existing circle -> edit it.
-    if (hit != null && hit.hitValues.isNotEmpty) {
-      final id = hit.hitValues.first;
-      final circle = circles.where((c) => c.id == id).firstOrNull;
-      if (circle != null) {
-        await showCircleEditor(context, circle: circle, layers: layers);
-        return;
+  /// The smallest circle (in the top-most visible layer) that contains [latlng],
+  /// or null. Hit testing is geographic (Haversine), independent of rendering.
+  Circle? _circleAt(LatLng latlng, List<Layer> layers, List<Circle> circles) {
+    for (final layer in layers.reversed) {
+      if (!layer.isVisible) continue;
+      Circle? best;
+      for (final c in circles.where((c) => c.layerId == layer.id)) {
+        if (!c.radiusMeters.isFinite || c.radiusMeters <= 0) continue;
+        final d = _hitTest.as(
+          LengthUnit.Meter,
+          LatLng(c.centerLat, c.centerLng),
+          latlng,
+        );
+        if (d <= c.radiusMeters &&
+            (best == null || c.radiusMeters < best.radiusMeters)) {
+          best = c;
+        }
       }
+      if (best != null) return best;
+    }
+    return null;
+  }
+
+  Future<void> _handleTap(
+    LatLng latlng,
+    List<Layer> layers,
+    List<Circle> circles,
+  ) async {
+    // Tapped an existing circle -> edit it.
+    final hit = _circleAt(latlng, layers, circles);
+    if (hit != null) {
+      await showCircleEditor(context, circle: hit, layers: layers);
+      return;
     }
 
-    // Otherwise add a circle to the active layer.
+    // Otherwise add a circle to the active layer (only circle-type layers).
     final activeId = effectiveActiveLayerId(layers, ref.read(activeLayerProvider));
     if (activeId == null) return;
+    final activeLayer = layers.where((l) => l.id == activeId).firstOrNull;
+    if (activeLayer == null || activeLayer.type != 'circles') return;
     await ref.read(repositoryProvider).createCircle(
           layerId: activeId,
           centerLat: latlng.latitude,
@@ -81,10 +100,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
     final layers = ref.watch(layersProvider).asData?.value ?? const <Layer>[];
     final circles = ref.watch(circlesProvider).asData?.value ?? const <Circle>[];
+    final uncertainty =
+        ref.watch(settingsProvider).asData?.value.uncertaintyMeters ?? 0;
     final activeId = effectiveActiveLayerId(layers, ref.watch(activeLayerProvider));
     final activeLayer = layers.where((l) => l.id == activeId).firstOrNull;
-
-    final polygons = _buildPolygons(layers, circles);
 
     return Scaffold(
       appBar: AppBar(
@@ -107,7 +126,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         options: MapOptions(
           initialCenter: const LatLng(48.137, 11.575), // Munich
           initialZoom: 5,
-          onTap: (pos, latlng) => _handleTap(pos, latlng, layers),
+          onTap: (_, latlng) => _handleTap(latlng, layers, circles),
         ),
         children: [
           TileLayer(
@@ -115,10 +134,16 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             userAgentPackageName: 'com.zonecraft.zonecraft',
             maxZoom: 19,
           ),
-          PolygonLayer<String>(
-            hitNotifier: _hitNotifier,
-            polygons: polygons,
-          ),
+          // One composited region per visible layer, bottom-to-top.
+          for (final layer in layers)
+            if (layer.isVisible && layer.type == 'circles')
+              RegionLayer(
+                key: ValueKey(layer.id),
+                layer: layer,
+                circles:
+                    circles.where((c) => c.layerId == layer.id).toList(),
+                uncertaintyMeters: uncertainty,
+              ),
           const RichAttributionWidget(
             attributions: [
               TextSourceAttribution('© OpenStreetMap contributors'),
@@ -132,32 +157,5 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         label: Text('Layers (${layers.length})'),
       ),
     );
-  }
-
-  /// Builds circle polygons across all visible layers in draw order
-  /// (bottom-to-top), so higher layers overlay lower ones.
-  List<Polygon<String>> _buildPolygons(List<Layer> layers, List<Circle> circles) {
-    final polygons = <Polygon<String>>[];
-    for (final layer in layers) {
-      if (!layer.isVisible) continue;
-      final color = Color(layer.colorArgb);
-      for (final c in circles.where((c) => c.layerId == layer.id)) {
-        final ring = geodesicCircle(
-          LatLng(c.centerLat, c.centerLng),
-          c.radiusMeters,
-        );
-        if (ring.isEmpty) continue; // skip invalid circles instead of crashing
-        polygons.add(
-          Polygon<String>(
-            points: ring,
-            color: color.withValues(alpha: 0.22),
-            borderColor: color,
-            borderStrokeWidth: 2,
-            hitValue: c.id,
-          ),
-        );
-      }
-    }
-    return polygons;
   }
 }

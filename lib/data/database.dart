@@ -5,6 +5,9 @@ part 'database.g.dart';
 
 /// A map overlay layer. Layers stack on the map ordered by [sortOrder]
 /// (higher = drawn on top) and can be toggled on/off via [isVisible].
+///
+/// A layer holds a single object [type] ('circles' or 'planes'). When
+/// [isInverted] is true the layer fills everything *not* covered by its objects.
 class Layers extends Table {
   TextColumn get id => text()();
   TextColumn get name => text()();
@@ -13,6 +16,12 @@ class Layers extends Table {
   IntColumn get colorArgb => integer()();
   BoolColumn get isVisible => boolean().withDefault(const Constant(true))();
   IntColumn get sortOrder => integer()();
+
+  /// Object kind this layer holds: 'circles' or 'planes'.
+  TextColumn get type => text().withDefault(const Constant('circles'))();
+
+  /// When true, render the complement (outside the objects) instead.
+  BoolColumn get isInverted => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 
   @override
@@ -35,7 +44,38 @@ class Circles extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-@DriftDatabase(tables: [Layers, Circles])
+/// A "plane": the region of points closer to one of two points (A, B) than the
+/// other — i.e. one side of their perpendicular bisector. [nearA] selects which
+/// point's side is the enabled region.
+class Planes extends Table {
+  TextColumn get id => text()();
+  TextColumn get layerId =>
+      text().references(Layers, #id, onDelete: KeyAction.cascade)();
+  RealColumn get aLat => real()();
+  RealColumn get aLng => real()();
+  RealColumn get bLat => real()();
+  RealColumn get bLng => real()();
+  BoolColumn get nearA => boolean().withDefault(const Constant(true))();
+  TextColumn get label => text().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// App-wide settings, stored as a single row (id == 1).
+class AppSettings extends Table {
+  IntColumn get id => integer().withDefault(const Constant(1))();
+
+  /// Global measurement uncertainty in metres; rendered as a lighter band.
+  RealColumn get uncertaintyMeters =>
+      real().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DriftDatabase(tables: [Layers, Circles, Planes, AppSettings])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(driftDatabase(name: 'zonecraft'));
 
@@ -43,12 +83,21 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
+        onCreate: (m) => m.createAll(),
+        onUpgrade: (m, from, to) async {
+          if (from < 2) {
+            await m.addColumn(layers, layers.type);
+            await m.addColumn(layers, layers.isInverted);
+            await m.createTable(planes);
+            await m.createTable(appSettings);
+          }
+        },
         beforeOpen: (details) async {
-          // Required for the Circles -> Layers ON DELETE CASCADE to fire.
+          // Required for the Circles/Planes -> Layers ON DELETE CASCADE to fire.
           await customStatement('PRAGMA foreign_keys = ON');
         },
       );

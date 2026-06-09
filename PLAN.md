@@ -4,6 +4,12 @@ Backlog of planned features beyond v1. Grouped by area; check items off as they 
 Notes under each item are implementation hints, not final decisions. Open design
 questions are collected at the bottom.
 
+> **Progress:** M0 (data model + settings) and M1 (rendering engine) are **done** — see
+> `IMPLEMENTATION_PLAN.md`. The engine now handles union/flat-colour, the uncertainty
+> band, and inverse rendering for circles; the `Planes`/`AppSettings`/layer-`type` schema
+> exists. Remaining work for the items below is mostly the **UI** to drive these
+> (drawer, bottom editor, settings screen, inverse toggle) plus planes + locate-me + icon.
+
 ---
 
 ## UI & navigation

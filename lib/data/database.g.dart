@@ -63,6 +63,31 @@ class $LayersTable extends Layers with TableInfo<$LayersTable, Layer> {
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _typeMeta = const VerificationMeta('type');
+  @override
+  late final GeneratedColumn<String> type = GeneratedColumn<String>(
+    'type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('circles'),
+  );
+  static const VerificationMeta _isInvertedMeta = const VerificationMeta(
+    'isInverted',
+  );
+  @override
+  late final GeneratedColumn<bool> isInverted = GeneratedColumn<bool>(
+    'is_inverted',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_inverted" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -82,6 +107,8 @@ class $LayersTable extends Layers with TableInfo<$LayersTable, Layer> {
     colorArgb,
     isVisible,
     sortOrder,
+    type,
+    isInverted,
     createdAt,
   ];
   @override
@@ -131,6 +158,18 @@ class $LayersTable extends Layers with TableInfo<$LayersTable, Layer> {
     } else if (isInserting) {
       context.missing(_sortOrderMeta);
     }
+    if (data.containsKey('type')) {
+      context.handle(
+        _typeMeta,
+        type.isAcceptableOrUnknown(data['type']!, _typeMeta),
+      );
+    }
+    if (data.containsKey('is_inverted')) {
+      context.handle(
+        _isInvertedMeta,
+        isInverted.isAcceptableOrUnknown(data['is_inverted']!, _isInvertedMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -166,6 +205,14 @@ class $LayersTable extends Layers with TableInfo<$LayersTable, Layer> {
         DriftSqlType.int,
         data['${effectivePrefix}sort_order'],
       )!,
+      type: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}type'],
+      )!,
+      isInverted: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_inverted'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -187,6 +234,12 @@ class Layer extends DataClass implements Insertable<Layer> {
   final int colorArgb;
   final bool isVisible;
   final int sortOrder;
+
+  /// Object kind this layer holds: 'circles' or 'planes'.
+  final String type;
+
+  /// When true, render the complement (outside the objects) instead.
+  final bool isInverted;
   final DateTime createdAt;
   const Layer({
     required this.id,
@@ -194,6 +247,8 @@ class Layer extends DataClass implements Insertable<Layer> {
     required this.colorArgb,
     required this.isVisible,
     required this.sortOrder,
+    required this.type,
+    required this.isInverted,
     required this.createdAt,
   });
   @override
@@ -204,6 +259,8 @@ class Layer extends DataClass implements Insertable<Layer> {
     map['color_argb'] = Variable<int>(colorArgb);
     map['is_visible'] = Variable<bool>(isVisible);
     map['sort_order'] = Variable<int>(sortOrder);
+    map['type'] = Variable<String>(type);
+    map['is_inverted'] = Variable<bool>(isInverted);
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -215,6 +272,8 @@ class Layer extends DataClass implements Insertable<Layer> {
       colorArgb: Value(colorArgb),
       isVisible: Value(isVisible),
       sortOrder: Value(sortOrder),
+      type: Value(type),
+      isInverted: Value(isInverted),
       createdAt: Value(createdAt),
     );
   }
@@ -230,6 +289,8 @@ class Layer extends DataClass implements Insertable<Layer> {
       colorArgb: serializer.fromJson<int>(json['colorArgb']),
       isVisible: serializer.fromJson<bool>(json['isVisible']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      type: serializer.fromJson<String>(json['type']),
+      isInverted: serializer.fromJson<bool>(json['isInverted']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -242,6 +303,8 @@ class Layer extends DataClass implements Insertable<Layer> {
       'colorArgb': serializer.toJson<int>(colorArgb),
       'isVisible': serializer.toJson<bool>(isVisible),
       'sortOrder': serializer.toJson<int>(sortOrder),
+      'type': serializer.toJson<String>(type),
+      'isInverted': serializer.toJson<bool>(isInverted),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -252,6 +315,8 @@ class Layer extends DataClass implements Insertable<Layer> {
     int? colorArgb,
     bool? isVisible,
     int? sortOrder,
+    String? type,
+    bool? isInverted,
     DateTime? createdAt,
   }) => Layer(
     id: id ?? this.id,
@@ -259,6 +324,8 @@ class Layer extends DataClass implements Insertable<Layer> {
     colorArgb: colorArgb ?? this.colorArgb,
     isVisible: isVisible ?? this.isVisible,
     sortOrder: sortOrder ?? this.sortOrder,
+    type: type ?? this.type,
+    isInverted: isInverted ?? this.isInverted,
     createdAt: createdAt ?? this.createdAt,
   );
   Layer copyWithCompanion(LayersCompanion data) {
@@ -268,6 +335,10 @@ class Layer extends DataClass implements Insertable<Layer> {
       colorArgb: data.colorArgb.present ? data.colorArgb.value : this.colorArgb,
       isVisible: data.isVisible.present ? data.isVisible.value : this.isVisible,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      type: data.type.present ? data.type.value : this.type,
+      isInverted: data.isInverted.present
+          ? data.isInverted.value
+          : this.isInverted,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -280,14 +351,24 @@ class Layer extends DataClass implements Insertable<Layer> {
           ..write('colorArgb: $colorArgb, ')
           ..write('isVisible: $isVisible, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('type: $type, ')
+          ..write('isInverted: $isInverted, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, name, colorArgb, isVisible, sortOrder, createdAt);
+  int get hashCode => Object.hash(
+    id,
+    name,
+    colorArgb,
+    isVisible,
+    sortOrder,
+    type,
+    isInverted,
+    createdAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -297,6 +378,8 @@ class Layer extends DataClass implements Insertable<Layer> {
           other.colorArgb == this.colorArgb &&
           other.isVisible == this.isVisible &&
           other.sortOrder == this.sortOrder &&
+          other.type == this.type &&
+          other.isInverted == this.isInverted &&
           other.createdAt == this.createdAt);
 }
 
@@ -306,6 +389,8 @@ class LayersCompanion extends UpdateCompanion<Layer> {
   final Value<int> colorArgb;
   final Value<bool> isVisible;
   final Value<int> sortOrder;
+  final Value<String> type;
+  final Value<bool> isInverted;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const LayersCompanion({
@@ -314,6 +399,8 @@ class LayersCompanion extends UpdateCompanion<Layer> {
     this.colorArgb = const Value.absent(),
     this.isVisible = const Value.absent(),
     this.sortOrder = const Value.absent(),
+    this.type = const Value.absent(),
+    this.isInverted = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -323,6 +410,8 @@ class LayersCompanion extends UpdateCompanion<Layer> {
     required int colorArgb,
     this.isVisible = const Value.absent(),
     required int sortOrder,
+    this.type = const Value.absent(),
+    this.isInverted = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -335,6 +424,8 @@ class LayersCompanion extends UpdateCompanion<Layer> {
     Expression<int>? colorArgb,
     Expression<bool>? isVisible,
     Expression<int>? sortOrder,
+    Expression<String>? type,
+    Expression<bool>? isInverted,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -344,6 +435,8 @@ class LayersCompanion extends UpdateCompanion<Layer> {
       if (colorArgb != null) 'color_argb': colorArgb,
       if (isVisible != null) 'is_visible': isVisible,
       if (sortOrder != null) 'sort_order': sortOrder,
+      if (type != null) 'type': type,
+      if (isInverted != null) 'is_inverted': isInverted,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -355,6 +448,8 @@ class LayersCompanion extends UpdateCompanion<Layer> {
     Value<int>? colorArgb,
     Value<bool>? isVisible,
     Value<int>? sortOrder,
+    Value<String>? type,
+    Value<bool>? isInverted,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
@@ -364,6 +459,8 @@ class LayersCompanion extends UpdateCompanion<Layer> {
       colorArgb: colorArgb ?? this.colorArgb,
       isVisible: isVisible ?? this.isVisible,
       sortOrder: sortOrder ?? this.sortOrder,
+      type: type ?? this.type,
+      isInverted: isInverted ?? this.isInverted,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -387,6 +484,12 @@ class LayersCompanion extends UpdateCompanion<Layer> {
     if (sortOrder.present) {
       map['sort_order'] = Variable<int>(sortOrder.value);
     }
+    if (type.present) {
+      map['type'] = Variable<String>(type.value);
+    }
+    if (isInverted.present) {
+      map['is_inverted'] = Variable<bool>(isInverted.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -404,6 +507,8 @@ class LayersCompanion extends UpdateCompanion<Layer> {
           ..write('colorArgb: $colorArgb, ')
           ..write('isVisible: $isVisible, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('type: $type, ')
+          ..write('isInverted: $isInverted, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -879,16 +984,770 @@ class CirclesCompanion extends UpdateCompanion<Circle> {
   }
 }
 
+class $PlanesTable extends Planes with TableInfo<$PlanesTable, Plane> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PlanesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _layerIdMeta = const VerificationMeta(
+    'layerId',
+  );
+  @override
+  late final GeneratedColumn<String> layerId = GeneratedColumn<String>(
+    'layer_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES layers (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _aLatMeta = const VerificationMeta('aLat');
+  @override
+  late final GeneratedColumn<double> aLat = GeneratedColumn<double>(
+    'a_lat',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _aLngMeta = const VerificationMeta('aLng');
+  @override
+  late final GeneratedColumn<double> aLng = GeneratedColumn<double>(
+    'a_lng',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _bLatMeta = const VerificationMeta('bLat');
+  @override
+  late final GeneratedColumn<double> bLat = GeneratedColumn<double>(
+    'b_lat',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _bLngMeta = const VerificationMeta('bLng');
+  @override
+  late final GeneratedColumn<double> bLng = GeneratedColumn<double>(
+    'b_lng',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nearAMeta = const VerificationMeta('nearA');
+  @override
+  late final GeneratedColumn<bool> nearA = GeneratedColumn<bool>(
+    'near_a',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("near_a" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _labelMeta = const VerificationMeta('label');
+  @override
+  late final GeneratedColumn<String> label = GeneratedColumn<String>(
+    'label',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    layerId,
+    aLat,
+    aLng,
+    bLat,
+    bLng,
+    nearA,
+    label,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'planes';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Plane> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('layer_id')) {
+      context.handle(
+        _layerIdMeta,
+        layerId.isAcceptableOrUnknown(data['layer_id']!, _layerIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_layerIdMeta);
+    }
+    if (data.containsKey('a_lat')) {
+      context.handle(
+        _aLatMeta,
+        aLat.isAcceptableOrUnknown(data['a_lat']!, _aLatMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_aLatMeta);
+    }
+    if (data.containsKey('a_lng')) {
+      context.handle(
+        _aLngMeta,
+        aLng.isAcceptableOrUnknown(data['a_lng']!, _aLngMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_aLngMeta);
+    }
+    if (data.containsKey('b_lat')) {
+      context.handle(
+        _bLatMeta,
+        bLat.isAcceptableOrUnknown(data['b_lat']!, _bLatMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bLatMeta);
+    }
+    if (data.containsKey('b_lng')) {
+      context.handle(
+        _bLngMeta,
+        bLng.isAcceptableOrUnknown(data['b_lng']!, _bLngMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bLngMeta);
+    }
+    if (data.containsKey('near_a')) {
+      context.handle(
+        _nearAMeta,
+        nearA.isAcceptableOrUnknown(data['near_a']!, _nearAMeta),
+      );
+    }
+    if (data.containsKey('label')) {
+      context.handle(
+        _labelMeta,
+        label.isAcceptableOrUnknown(data['label']!, _labelMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Plane map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Plane(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      layerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}layer_id'],
+      )!,
+      aLat: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}a_lat'],
+      )!,
+      aLng: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}a_lng'],
+      )!,
+      bLat: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}b_lat'],
+      )!,
+      bLng: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}b_lng'],
+      )!,
+      nearA: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}near_a'],
+      )!,
+      label: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}label'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PlanesTable createAlias(String alias) {
+    return $PlanesTable(attachedDatabase, alias);
+  }
+}
+
+class Plane extends DataClass implements Insertable<Plane> {
+  final String id;
+  final String layerId;
+  final double aLat;
+  final double aLng;
+  final double bLat;
+  final double bLng;
+  final bool nearA;
+  final String? label;
+  final DateTime createdAt;
+  const Plane({
+    required this.id,
+    required this.layerId,
+    required this.aLat,
+    required this.aLng,
+    required this.bLat,
+    required this.bLng,
+    required this.nearA,
+    this.label,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['layer_id'] = Variable<String>(layerId);
+    map['a_lat'] = Variable<double>(aLat);
+    map['a_lng'] = Variable<double>(aLng);
+    map['b_lat'] = Variable<double>(bLat);
+    map['b_lng'] = Variable<double>(bLng);
+    map['near_a'] = Variable<bool>(nearA);
+    if (!nullToAbsent || label != null) {
+      map['label'] = Variable<String>(label);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  PlanesCompanion toCompanion(bool nullToAbsent) {
+    return PlanesCompanion(
+      id: Value(id),
+      layerId: Value(layerId),
+      aLat: Value(aLat),
+      aLng: Value(aLng),
+      bLat: Value(bLat),
+      bLng: Value(bLng),
+      nearA: Value(nearA),
+      label: label == null && nullToAbsent
+          ? const Value.absent()
+          : Value(label),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory Plane.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Plane(
+      id: serializer.fromJson<String>(json['id']),
+      layerId: serializer.fromJson<String>(json['layerId']),
+      aLat: serializer.fromJson<double>(json['aLat']),
+      aLng: serializer.fromJson<double>(json['aLng']),
+      bLat: serializer.fromJson<double>(json['bLat']),
+      bLng: serializer.fromJson<double>(json['bLng']),
+      nearA: serializer.fromJson<bool>(json['nearA']),
+      label: serializer.fromJson<String?>(json['label']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'layerId': serializer.toJson<String>(layerId),
+      'aLat': serializer.toJson<double>(aLat),
+      'aLng': serializer.toJson<double>(aLng),
+      'bLat': serializer.toJson<double>(bLat),
+      'bLng': serializer.toJson<double>(bLng),
+      'nearA': serializer.toJson<bool>(nearA),
+      'label': serializer.toJson<String?>(label),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  Plane copyWith({
+    String? id,
+    String? layerId,
+    double? aLat,
+    double? aLng,
+    double? bLat,
+    double? bLng,
+    bool? nearA,
+    Value<String?> label = const Value.absent(),
+    DateTime? createdAt,
+  }) => Plane(
+    id: id ?? this.id,
+    layerId: layerId ?? this.layerId,
+    aLat: aLat ?? this.aLat,
+    aLng: aLng ?? this.aLng,
+    bLat: bLat ?? this.bLat,
+    bLng: bLng ?? this.bLng,
+    nearA: nearA ?? this.nearA,
+    label: label.present ? label.value : this.label,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  Plane copyWithCompanion(PlanesCompanion data) {
+    return Plane(
+      id: data.id.present ? data.id.value : this.id,
+      layerId: data.layerId.present ? data.layerId.value : this.layerId,
+      aLat: data.aLat.present ? data.aLat.value : this.aLat,
+      aLng: data.aLng.present ? data.aLng.value : this.aLng,
+      bLat: data.bLat.present ? data.bLat.value : this.bLat,
+      bLng: data.bLng.present ? data.bLng.value : this.bLng,
+      nearA: data.nearA.present ? data.nearA.value : this.nearA,
+      label: data.label.present ? data.label.value : this.label,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Plane(')
+          ..write('id: $id, ')
+          ..write('layerId: $layerId, ')
+          ..write('aLat: $aLat, ')
+          ..write('aLng: $aLng, ')
+          ..write('bLat: $bLat, ')
+          ..write('bLng: $bLng, ')
+          ..write('nearA: $nearA, ')
+          ..write('label: $label, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, layerId, aLat, aLng, bLat, bLng, nearA, label, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Plane &&
+          other.id == this.id &&
+          other.layerId == this.layerId &&
+          other.aLat == this.aLat &&
+          other.aLng == this.aLng &&
+          other.bLat == this.bLat &&
+          other.bLng == this.bLng &&
+          other.nearA == this.nearA &&
+          other.label == this.label &&
+          other.createdAt == this.createdAt);
+}
+
+class PlanesCompanion extends UpdateCompanion<Plane> {
+  final Value<String> id;
+  final Value<String> layerId;
+  final Value<double> aLat;
+  final Value<double> aLng;
+  final Value<double> bLat;
+  final Value<double> bLng;
+  final Value<bool> nearA;
+  final Value<String?> label;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const PlanesCompanion({
+    this.id = const Value.absent(),
+    this.layerId = const Value.absent(),
+    this.aLat = const Value.absent(),
+    this.aLng = const Value.absent(),
+    this.bLat = const Value.absent(),
+    this.bLng = const Value.absent(),
+    this.nearA = const Value.absent(),
+    this.label = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PlanesCompanion.insert({
+    required String id,
+    required String layerId,
+    required double aLat,
+    required double aLng,
+    required double bLat,
+    required double bLng,
+    this.nearA = const Value.absent(),
+    this.label = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       layerId = Value(layerId),
+       aLat = Value(aLat),
+       aLng = Value(aLng),
+       bLat = Value(bLat),
+       bLng = Value(bLng);
+  static Insertable<Plane> custom({
+    Expression<String>? id,
+    Expression<String>? layerId,
+    Expression<double>? aLat,
+    Expression<double>? aLng,
+    Expression<double>? bLat,
+    Expression<double>? bLng,
+    Expression<bool>? nearA,
+    Expression<String>? label,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (layerId != null) 'layer_id': layerId,
+      if (aLat != null) 'a_lat': aLat,
+      if (aLng != null) 'a_lng': aLng,
+      if (bLat != null) 'b_lat': bLat,
+      if (bLng != null) 'b_lng': bLng,
+      if (nearA != null) 'near_a': nearA,
+      if (label != null) 'label': label,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PlanesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? layerId,
+    Value<double>? aLat,
+    Value<double>? aLng,
+    Value<double>? bLat,
+    Value<double>? bLng,
+    Value<bool>? nearA,
+    Value<String?>? label,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return PlanesCompanion(
+      id: id ?? this.id,
+      layerId: layerId ?? this.layerId,
+      aLat: aLat ?? this.aLat,
+      aLng: aLng ?? this.aLng,
+      bLat: bLat ?? this.bLat,
+      bLng: bLng ?? this.bLng,
+      nearA: nearA ?? this.nearA,
+      label: label ?? this.label,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (layerId.present) {
+      map['layer_id'] = Variable<String>(layerId.value);
+    }
+    if (aLat.present) {
+      map['a_lat'] = Variable<double>(aLat.value);
+    }
+    if (aLng.present) {
+      map['a_lng'] = Variable<double>(aLng.value);
+    }
+    if (bLat.present) {
+      map['b_lat'] = Variable<double>(bLat.value);
+    }
+    if (bLng.present) {
+      map['b_lng'] = Variable<double>(bLng.value);
+    }
+    if (nearA.present) {
+      map['near_a'] = Variable<bool>(nearA.value);
+    }
+    if (label.present) {
+      map['label'] = Variable<String>(label.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PlanesCompanion(')
+          ..write('id: $id, ')
+          ..write('layerId: $layerId, ')
+          ..write('aLat: $aLat, ')
+          ..write('aLng: $aLng, ')
+          ..write('bLat: $bLat, ')
+          ..write('bLng: $bLng, ')
+          ..write('nearA: $nearA, ')
+          ..write('label: $label, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $AppSettingsTable extends AppSettings
+    with TableInfo<$AppSettingsTable, AppSetting> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AppSettingsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _uncertaintyMetersMeta = const VerificationMeta(
+    'uncertaintyMeters',
+  );
+  @override
+  late final GeneratedColumn<double> uncertaintyMeters =
+      GeneratedColumn<double>(
+        'uncertainty_meters',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0),
+      );
+  @override
+  List<GeneratedColumn> get $columns => [id, uncertaintyMeters];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'app_settings';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<AppSetting> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('uncertainty_meters')) {
+      context.handle(
+        _uncertaintyMetersMeta,
+        uncertaintyMeters.isAcceptableOrUnknown(
+          data['uncertainty_meters']!,
+          _uncertaintyMetersMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AppSetting map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AppSetting(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      uncertaintyMeters: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}uncertainty_meters'],
+      )!,
+    );
+  }
+
+  @override
+  $AppSettingsTable createAlias(String alias) {
+    return $AppSettingsTable(attachedDatabase, alias);
+  }
+}
+
+class AppSetting extends DataClass implements Insertable<AppSetting> {
+  final int id;
+
+  /// Global measurement uncertainty in metres; rendered as a lighter band.
+  final double uncertaintyMeters;
+  const AppSetting({required this.id, required this.uncertaintyMeters});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['uncertainty_meters'] = Variable<double>(uncertaintyMeters);
+    return map;
+  }
+
+  AppSettingsCompanion toCompanion(bool nullToAbsent) {
+    return AppSettingsCompanion(
+      id: Value(id),
+      uncertaintyMeters: Value(uncertaintyMeters),
+    );
+  }
+
+  factory AppSetting.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AppSetting(
+      id: serializer.fromJson<int>(json['id']),
+      uncertaintyMeters: serializer.fromJson<double>(json['uncertaintyMeters']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'uncertaintyMeters': serializer.toJson<double>(uncertaintyMeters),
+    };
+  }
+
+  AppSetting copyWith({int? id, double? uncertaintyMeters}) => AppSetting(
+    id: id ?? this.id,
+    uncertaintyMeters: uncertaintyMeters ?? this.uncertaintyMeters,
+  );
+  AppSetting copyWithCompanion(AppSettingsCompanion data) {
+    return AppSetting(
+      id: data.id.present ? data.id.value : this.id,
+      uncertaintyMeters: data.uncertaintyMeters.present
+          ? data.uncertaintyMeters.value
+          : this.uncertaintyMeters,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AppSetting(')
+          ..write('id: $id, ')
+          ..write('uncertaintyMeters: $uncertaintyMeters')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, uncertaintyMeters);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AppSetting &&
+          other.id == this.id &&
+          other.uncertaintyMeters == this.uncertaintyMeters);
+}
+
+class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
+  final Value<int> id;
+  final Value<double> uncertaintyMeters;
+  const AppSettingsCompanion({
+    this.id = const Value.absent(),
+    this.uncertaintyMeters = const Value.absent(),
+  });
+  AppSettingsCompanion.insert({
+    this.id = const Value.absent(),
+    this.uncertaintyMeters = const Value.absent(),
+  });
+  static Insertable<AppSetting> custom({
+    Expression<int>? id,
+    Expression<double>? uncertaintyMeters,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (uncertaintyMeters != null) 'uncertainty_meters': uncertaintyMeters,
+    });
+  }
+
+  AppSettingsCompanion copyWith({
+    Value<int>? id,
+    Value<double>? uncertaintyMeters,
+  }) {
+    return AppSettingsCompanion(
+      id: id ?? this.id,
+      uncertaintyMeters: uncertaintyMeters ?? this.uncertaintyMeters,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (uncertaintyMeters.present) {
+      map['uncertainty_meters'] = Variable<double>(uncertaintyMeters.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AppSettingsCompanion(')
+          ..write('id: $id, ')
+          ..write('uncertaintyMeters: $uncertaintyMeters')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $LayersTable layers = $LayersTable(this);
   late final $CirclesTable circles = $CirclesTable(this);
+  late final $PlanesTable planes = $PlanesTable(this);
+  late final $AppSettingsTable appSettings = $AppSettingsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
-  List<DatabaseSchemaEntity> get allSchemaEntities => [layers, circles];
+  List<DatabaseSchemaEntity> get allSchemaEntities => [
+    layers,
+    circles,
+    planes,
+    appSettings,
+  ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
     WritePropagation(
@@ -897,6 +1756,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('circles', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'layers',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('planes', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -908,6 +1774,8 @@ typedef $$LayersTableCreateCompanionBuilder =
       required int colorArgb,
       Value<bool> isVisible,
       required int sortOrder,
+      Value<String> type,
+      Value<bool> isInverted,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -918,6 +1786,8 @@ typedef $$LayersTableUpdateCompanionBuilder =
       Value<int> colorArgb,
       Value<bool> isVisible,
       Value<int> sortOrder,
+      Value<String> type,
+      Value<bool> isInverted,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -940,6 +1810,25 @@ final class $$LayersTableReferences
     ).filter((f) => f.layerId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_circlesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$PlanesTable, List<Plane>> _planesRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.planes,
+    aliasName: $_aliasNameGenerator(db.layers.id, db.planes.layerId),
+  );
+
+  $$PlanesTableProcessedTableManager get planesRefs {
+    final manager = $$PlanesTableTableManager(
+      $_db,
+      $_db.planes,
+    ).filter((f) => f.layerId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_planesRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -980,6 +1869,16 @@ class $$LayersTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get type => $composableBuilder(
+    column: $table.type,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isInverted => $composableBuilder(
+    column: $table.isInverted,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnFilters(column),
@@ -1001,6 +1900,31 @@ class $$LayersTableFilterComposer
           }) => $$CirclesTableFilterComposer(
             $db: $db,
             $table: $db.circles,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> planesRefs(
+    Expression<bool> Function($$PlanesTableFilterComposer f) f,
+  ) {
+    final $$PlanesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.planes,
+      getReferencedColumn: (t) => t.layerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PlanesTableFilterComposer(
+            $db: $db,
+            $table: $db.planes,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -1045,6 +1969,16 @@ class $$LayersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get type => $composableBuilder(
+    column: $table.type,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isInverted => $composableBuilder(
+    column: $table.isInverted,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -1075,6 +2009,14 @@ class $$LayersTableAnnotationComposer
   GeneratedColumn<int> get sortOrder =>
       $composableBuilder(column: $table.sortOrder, builder: (column) => column);
 
+  GeneratedColumn<String> get type =>
+      $composableBuilder(column: $table.type, builder: (column) => column);
+
+  GeneratedColumn<bool> get isInverted => $composableBuilder(
+    column: $table.isInverted,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -1102,6 +2044,31 @@ class $$LayersTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> planesRefs<T extends Object>(
+    Expression<T> Function($$PlanesTableAnnotationComposer a) f,
+  ) {
+    final $$PlanesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.planes,
+      getReferencedColumn: (t) => t.layerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PlanesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.planes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LayersTableTableManager
@@ -1117,7 +2084,7 @@ class $$LayersTableTableManager
           $$LayersTableUpdateCompanionBuilder,
           (Layer, $$LayersTableReferences),
           Layer,
-          PrefetchHooks Function({bool circlesRefs})
+          PrefetchHooks Function({bool circlesRefs, bool planesRefs})
         > {
   $$LayersTableTableManager(_$AppDatabase db, $LayersTable table)
     : super(
@@ -1137,6 +2104,8 @@ class $$LayersTableTableManager
                 Value<int> colorArgb = const Value.absent(),
                 Value<bool> isVisible = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
+                Value<String> type = const Value.absent(),
+                Value<bool> isInverted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LayersCompanion(
@@ -1145,6 +2114,8 @@ class $$LayersTableTableManager
                 colorArgb: colorArgb,
                 isVisible: isVisible,
                 sortOrder: sortOrder,
+                type: type,
+                isInverted: isInverted,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -1155,6 +2126,8 @@ class $$LayersTableTableManager
                 required int colorArgb,
                 Value<bool> isVisible = const Value.absent(),
                 required int sortOrder,
+                Value<String> type = const Value.absent(),
+                Value<bool> isInverted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LayersCompanion.insert(
@@ -1163,6 +2136,8 @@ class $$LayersTableTableManager
                 colorArgb: colorArgb,
                 isVisible: isVisible,
                 sortOrder: sortOrder,
+                type: type,
+                isInverted: isInverted,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -1172,10 +2147,13 @@ class $$LayersTableTableManager
                     (e.readTable(table), $$LayersTableReferences(db, table, e)),
               )
               .toList(),
-          prefetchHooksCallback: ({circlesRefs = false}) {
+          prefetchHooksCallback: ({circlesRefs = false, planesRefs = false}) {
             return PrefetchHooks(
               db: db,
-              explicitlyWatchedTables: [if (circlesRefs) db.circles],
+              explicitlyWatchedTables: [
+                if (circlesRefs) db.circles,
+                if (planesRefs) db.planes,
+              ],
               addJoins: null,
               getPrefetchedDataCallback: (items) async {
                 return [
@@ -1186,6 +2164,18 @@ class $$LayersTableTableManager
                           ._circlesRefsTable(db),
                       managerFromTypedResult: (p0) =>
                           $$LayersTableReferences(db, table, p0).circlesRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where((e) => e.layerId == item.id),
+                      typedResults: items,
+                    ),
+                  if (planesRefs)
+                    await $_getPrefetchedData<Layer, $LayersTable, Plane>(
+                      currentTable: table,
+                      referencedTable: $$LayersTableReferences._planesRefsTable(
+                        db,
+                      ),
+                      managerFromTypedResult: (p0) =>
+                          $$LayersTableReferences(db, table, p0).planesRefs,
                       referencedItemsForCurrentItem: (item, referencedItems) =>
                           referencedItems.where((e) => e.layerId == item.id),
                       typedResults: items,
@@ -1210,7 +2200,7 @@ typedef $$LayersTableProcessedTableManager =
       $$LayersTableUpdateCompanionBuilder,
       (Layer, $$LayersTableReferences),
       Layer,
-      PrefetchHooks Function({bool circlesRefs})
+      PrefetchHooks Function({bool circlesRefs, bool planesRefs})
     >;
 typedef $$CirclesTableCreateCompanionBuilder =
     CirclesCompanion Function({
@@ -1570,6 +2560,537 @@ typedef $$CirclesTableProcessedTableManager =
       Circle,
       PrefetchHooks Function({bool layerId})
     >;
+typedef $$PlanesTableCreateCompanionBuilder =
+    PlanesCompanion Function({
+      required String id,
+      required String layerId,
+      required double aLat,
+      required double aLng,
+      required double bLat,
+      required double bLng,
+      Value<bool> nearA,
+      Value<String?> label,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$PlanesTableUpdateCompanionBuilder =
+    PlanesCompanion Function({
+      Value<String> id,
+      Value<String> layerId,
+      Value<double> aLat,
+      Value<double> aLng,
+      Value<double> bLat,
+      Value<double> bLng,
+      Value<bool> nearA,
+      Value<String?> label,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$PlanesTableReferences
+    extends BaseReferences<_$AppDatabase, $PlanesTable, Plane> {
+  $$PlanesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $LayersTable _layerIdTable(_$AppDatabase db) => db.layers.createAlias(
+    $_aliasNameGenerator(db.planes.layerId, db.layers.id),
+  );
+
+  $$LayersTableProcessedTableManager get layerId {
+    final $_column = $_itemColumn<String>('layer_id')!;
+
+    final manager = $$LayersTableTableManager(
+      $_db,
+      $_db.layers,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_layerIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$PlanesTableFilterComposer
+    extends Composer<_$AppDatabase, $PlanesTable> {
+  $$PlanesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get aLat => $composableBuilder(
+    column: $table.aLat,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get aLng => $composableBuilder(
+    column: $table.aLng,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get bLat => $composableBuilder(
+    column: $table.bLat,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get bLng => $composableBuilder(
+    column: $table.bLng,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get nearA => $composableBuilder(
+    column: $table.nearA,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$LayersTableFilterComposer get layerId {
+    final $$LayersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.layerId,
+      referencedTable: $db.layers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LayersTableFilterComposer(
+            $db: $db,
+            $table: $db.layers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PlanesTableOrderingComposer
+    extends Composer<_$AppDatabase, $PlanesTable> {
+  $$PlanesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get aLat => $composableBuilder(
+    column: $table.aLat,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get aLng => $composableBuilder(
+    column: $table.aLng,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get bLat => $composableBuilder(
+    column: $table.bLat,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get bLng => $composableBuilder(
+    column: $table.bLng,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get nearA => $composableBuilder(
+    column: $table.nearA,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$LayersTableOrderingComposer get layerId {
+    final $$LayersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.layerId,
+      referencedTable: $db.layers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LayersTableOrderingComposer(
+            $db: $db,
+            $table: $db.layers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PlanesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PlanesTable> {
+  $$PlanesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<double> get aLat =>
+      $composableBuilder(column: $table.aLat, builder: (column) => column);
+
+  GeneratedColumn<double> get aLng =>
+      $composableBuilder(column: $table.aLng, builder: (column) => column);
+
+  GeneratedColumn<double> get bLat =>
+      $composableBuilder(column: $table.bLat, builder: (column) => column);
+
+  GeneratedColumn<double> get bLng =>
+      $composableBuilder(column: $table.bLng, builder: (column) => column);
+
+  GeneratedColumn<bool> get nearA =>
+      $composableBuilder(column: $table.nearA, builder: (column) => column);
+
+  GeneratedColumn<String> get label =>
+      $composableBuilder(column: $table.label, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$LayersTableAnnotationComposer get layerId {
+    final $$LayersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.layerId,
+      referencedTable: $db.layers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LayersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.layers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PlanesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PlanesTable,
+          Plane,
+          $$PlanesTableFilterComposer,
+          $$PlanesTableOrderingComposer,
+          $$PlanesTableAnnotationComposer,
+          $$PlanesTableCreateCompanionBuilder,
+          $$PlanesTableUpdateCompanionBuilder,
+          (Plane, $$PlanesTableReferences),
+          Plane,
+          PrefetchHooks Function({bool layerId})
+        > {
+  $$PlanesTableTableManager(_$AppDatabase db, $PlanesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PlanesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PlanesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PlanesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> layerId = const Value.absent(),
+                Value<double> aLat = const Value.absent(),
+                Value<double> aLng = const Value.absent(),
+                Value<double> bLat = const Value.absent(),
+                Value<double> bLng = const Value.absent(),
+                Value<bool> nearA = const Value.absent(),
+                Value<String?> label = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PlanesCompanion(
+                id: id,
+                layerId: layerId,
+                aLat: aLat,
+                aLng: aLng,
+                bLat: bLat,
+                bLng: bLng,
+                nearA: nearA,
+                label: label,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String layerId,
+                required double aLat,
+                required double aLng,
+                required double bLat,
+                required double bLng,
+                Value<bool> nearA = const Value.absent(),
+                Value<String?> label = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PlanesCompanion.insert(
+                id: id,
+                layerId: layerId,
+                aLat: aLat,
+                aLng: aLng,
+                bLat: bLat,
+                bLng: bLng,
+                nearA: nearA,
+                label: label,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) =>
+                    (e.readTable(table), $$PlanesTableReferences(db, table, e)),
+              )
+              .toList(),
+          prefetchHooksCallback: ({layerId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (layerId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.layerId,
+                                referencedTable: $$PlanesTableReferences
+                                    ._layerIdTable(db),
+                                referencedColumn: $$PlanesTableReferences
+                                    ._layerIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$PlanesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PlanesTable,
+      Plane,
+      $$PlanesTableFilterComposer,
+      $$PlanesTableOrderingComposer,
+      $$PlanesTableAnnotationComposer,
+      $$PlanesTableCreateCompanionBuilder,
+      $$PlanesTableUpdateCompanionBuilder,
+      (Plane, $$PlanesTableReferences),
+      Plane,
+      PrefetchHooks Function({bool layerId})
+    >;
+typedef $$AppSettingsTableCreateCompanionBuilder =
+    AppSettingsCompanion Function({
+      Value<int> id,
+      Value<double> uncertaintyMeters,
+    });
+typedef $$AppSettingsTableUpdateCompanionBuilder =
+    AppSettingsCompanion Function({
+      Value<int> id,
+      Value<double> uncertaintyMeters,
+    });
+
+class $$AppSettingsTableFilterComposer
+    extends Composer<_$AppDatabase, $AppSettingsTable> {
+  $$AppSettingsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get uncertaintyMeters => $composableBuilder(
+    column: $table.uncertaintyMeters,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$AppSettingsTableOrderingComposer
+    extends Composer<_$AppDatabase, $AppSettingsTable> {
+  $$AppSettingsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get uncertaintyMeters => $composableBuilder(
+    column: $table.uncertaintyMeters,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AppSettingsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AppSettingsTable> {
+  $$AppSettingsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<double> get uncertaintyMeters => $composableBuilder(
+    column: $table.uncertaintyMeters,
+    builder: (column) => column,
+  );
+}
+
+class $$AppSettingsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AppSettingsTable,
+          AppSetting,
+          $$AppSettingsTableFilterComposer,
+          $$AppSettingsTableOrderingComposer,
+          $$AppSettingsTableAnnotationComposer,
+          $$AppSettingsTableCreateCompanionBuilder,
+          $$AppSettingsTableUpdateCompanionBuilder,
+          (
+            AppSetting,
+            BaseReferences<_$AppDatabase, $AppSettingsTable, AppSetting>,
+          ),
+          AppSetting,
+          PrefetchHooks Function()
+        > {
+  $$AppSettingsTableTableManager(_$AppDatabase db, $AppSettingsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AppSettingsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AppSettingsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AppSettingsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<double> uncertaintyMeters = const Value.absent(),
+              }) => AppSettingsCompanion(
+                id: id,
+                uncertaintyMeters: uncertaintyMeters,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<double> uncertaintyMeters = const Value.absent(),
+              }) => AppSettingsCompanion.insert(
+                id: id,
+                uncertaintyMeters: uncertaintyMeters,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$AppSettingsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AppSettingsTable,
+      AppSetting,
+      $$AppSettingsTableFilterComposer,
+      $$AppSettingsTableOrderingComposer,
+      $$AppSettingsTableAnnotationComposer,
+      $$AppSettingsTableCreateCompanionBuilder,
+      $$AppSettingsTableUpdateCompanionBuilder,
+      (
+        AppSetting,
+        BaseReferences<_$AppDatabase, $AppSettingsTable, AppSetting>,
+      ),
+      AppSetting,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -1578,4 +3099,8 @@ class $AppDatabaseManager {
       $$LayersTableTableManager(_db, _db.layers);
   $$CirclesTableTableManager get circles =>
       $$CirclesTableTableManager(_db, _db.circles);
+  $$PlanesTableTableManager get planes =>
+      $$PlanesTableTableManager(_db, _db.planes);
+  $$AppSettingsTableTableManager get appSettings =>
+      $$AppSettingsTableTableManager(_db, _db.appSettings);
 }

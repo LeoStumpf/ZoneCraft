@@ -26,7 +26,11 @@ slots in without rework.
 
 ---
 
-## Milestone 0 — Data model & settings foundation
+## Milestone 0 — Data model & settings foundation ✅ DONE
+
+**Status:** complete (2026-06-09). Schema migrated v1→v2 and verified on device
+(`user_version=2`, tables `layers/circles/planes/app_settings`, existing data
+preserved). DB/repository tests in `test/database_test.dart`.
 
 **Goal:** schema + state that later milestones depend on. No visible change yet.
 
@@ -45,7 +49,14 @@ slots in without rework.
 - **Verify:** `dart run build_runner build`, `flutter analyze`, a Drift migration test
   (open v1 DB → upgrade → assert columns/tables exist and old circles survive).
 
-## Milestone 1 — Rendering engine (core + band + union + inverse)
+## Milestone 1 — Rendering engine (core + band + union + inverse) ✅ DONE
+
+**Status:** complete (2026-06-09). `lib/ui/region_layer.dart` composites each layer via
+screen-space `Path.combine` (union → flat fill, `outer-core` → lighter band,
+`viewport-outer` → inverse). `map_screen.dart` now renders one `RegionLayer` per visible
+layer and selects circles with Haversine hit testing (the old `PolygonLayer`/`hitNotifier`
+path is removed). Engine reads uncertainty from `settingsProvider`. UI to *toggle* inverse
+and *set* uncertainty arrives in M2/M3.
 
 **Goal:** replace the translucent `PolygonLayer` with a composited region layer; ship it
 for circles first.
