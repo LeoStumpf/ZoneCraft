@@ -4,7 +4,9 @@ import 'package:latlong2/latlong.dart';
 import 'package:zonecraft/geo/geodesic.dart';
 
 void main() {
-  const distance = Distance();
+  // Measure with the same calculator geodesicCircle uses, so the radius check
+  // stays tight (Haversine vs the default Vincenty would differ by ~0.3%).
+  const distance = Distance(calculator: Haversine());
 
   group('geodesicCircle', () {
     test('returns the requested number of points', () {
@@ -33,6 +35,23 @@ void main() {
     test('ring is open (first point not repeated at the end)', () {
       final ring = geodesicCircle(const LatLng(10, 10), 1000, points: 36);
       expect(ring.first, isNot(equals(ring.last)));
+    });
+
+    test('returns empty for invalid input instead of NaN points', () {
+      expect(geodesicCircle(const LatLng(0, 0), double.nan), isEmpty);
+      expect(geodesicCircle(const LatLng(0, 0), double.infinity), isEmpty);
+      expect(geodesicCircle(const LatLng(0, 0), 0), isEmpty);
+      expect(geodesicCircle(const LatLng(0, 0), -100), isEmpty);
+      expect(geodesicCircle(LatLng(double.nan, 0), 1000), isEmpty);
+    });
+
+    test('all points are finite for a large radius', () {
+      final ring = geodesicCircle(const LatLng(0, 0), 2000000, points: 90);
+      expect(ring, isNotEmpty);
+      expect(
+        ring.every((p) => p.latitude.isFinite && p.longitude.isFinite),
+        isTrue,
+      );
     });
   });
 }

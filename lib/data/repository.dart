@@ -130,8 +130,11 @@ class Repository {
   // --- Seed -----------------------------------------------------------------
 
   /// Ensures at least one layer exists so the user can place circles right away.
-  /// Returns the id of an existing or freshly created layer.
+  /// Also removes any circles with non-finite coordinates/radius left over from
+  /// older builds (which would crash map projection). Returns the id of an
+  /// existing or freshly created layer.
   Future<String> ensureDefaultLayer() async {
+    await deleteInvalidCircles();
     final existing = await (_db.select(_db.layers)
           ..orderBy([(l) => OrderingTerm(expression: l.sortOrder)])
           ..limit(1))
@@ -139,4 +142,28 @@ class Repository {
     if (existing != null) return existing.id;
     return createLayer(name: 'Layer 1', colorArgb: 0xFF2196F3);
   }
+
+  /// Deletes circles whose centre or radius is NULL or non-finite (NaN/∞).
+  /// Read via a raw query so a bad value can't throw during row mapping; NaN is
+  /// detected in Dart (SQL comparisons against NaN are all false).
+  Future<void> deleteInvalidCircles() async {
+    final rows = await _db
+        .customSelect(
+          'SELECT id, center_lat, center_lng, radius_meters FROM circles',
+        )
+        .get();
+    final badIds = <String>[
+      for (final r in rows)
+        if (!_isFinite(r.read<double?>('center_lat')) ||
+            !_isFinite(r.read<double?>('center_lng')) ||
+            !_isFinite(r.read<double?>('radius_meters')) ||
+            (r.read<double?>('radius_meters') ?? 0) <= 0)
+          r.read<String>('id'),
+    ];
+    if (badIds.isNotEmpty) {
+      await (_db.delete(_db.circles)..where((c) => c.id.isIn(badIds))).go();
+    }
+  }
+
+  static bool _isFinite(double? v) => v != null && v.isFinite;
 }

@@ -32,14 +32,20 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   /// A default radius (metres) scaled so a new circle is visible at the current
   /// zoom: roughly 15% of the visible map width.
+  ///
+  /// Uses Haversine (not the default Vincenty, which returns NaN for the
+  /// near-antipodal edges of a zoomed-out viewport) and guards the result so a
+  /// circle is never created with a non-finite radius.
   double _defaultRadius() {
+    const fallback = 1000.0;
     final cam = _mapController.camera;
     final bounds = cam.visibleBounds;
-    final widthMeters = const Distance().as(
+    final widthMeters = const Distance(calculator: Haversine()).as(
       LengthUnit.Meter,
       LatLng(cam.center.latitude, bounds.west),
       LatLng(cam.center.latitude, bounds.east),
     );
+    if (!widthMeters.isFinite || widthMeters <= 0) return fallback;
     return (widthMeters * 0.15).clamp(10.0, 2000000.0);
   }
 
@@ -136,12 +142,14 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       if (!layer.isVisible) continue;
       final color = Color(layer.colorArgb);
       for (final c in circles.where((c) => c.layerId == layer.id)) {
+        final ring = geodesicCircle(
+          LatLng(c.centerLat, c.centerLng),
+          c.radiusMeters,
+        );
+        if (ring.isEmpty) continue; // skip invalid circles instead of crashing
         polygons.add(
           Polygon<String>(
-            points: geodesicCircle(
-              LatLng(c.centerLat, c.centerLng),
-              c.radiusMeters,
-            ),
+            points: ring,
             color: color.withValues(alpha: 0.22),
             borderColor: color,
             borderStrokeWidth: 2,

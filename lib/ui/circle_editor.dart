@@ -78,7 +78,7 @@ class _CircleEditorDialogState extends ConsumerState<_CircleEditorDialog> {
   String? _validateNum(String? v, {double? min, double? max}) {
     if (v == null || v.trim().isEmpty) return 'Required';
     final n = double.tryParse(v);
-    if (n == null) return 'Not a number';
+    if (n == null || !n.isFinite) return 'Not a number';
     if (min != null && n < min) return '≥ $min';
     if (max != null && n > max) return '≤ $max';
     return null;
