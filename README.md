@@ -54,10 +54,27 @@ lib/
   ui/          map_screen, layers_panel (drawer), circle_editor & plane_editor
                (sheets), settings_screen, region_layer (rendering engine)
 assets/icon/   app-icon source art (transparent PNG + adaptive foreground)
+scripts/       build.sh — build / install / run helper
 test/          geodesic_test, plane_test, coords_test, database_test
 ```
 
 ## Develop
+
+### Build script (recommended)
+
+`scripts/build.sh` runs the checks and builds the APK in one step (it puts `flutter` on
+`PATH` itself, so it works even when the SDK isn't installed globally):
+
+```bash
+./scripts/build.sh                 # flutter analyze + test, then build a debug APK
+./scripts/build.sh --install       # also install on the connected Android device (-r, keeps data)
+./scripts/build.sh --install --run # install, then launch the app
+./scripts/build.sh --release       # build a release APK instead of debug
+./scripts/build.sh --skip-checks   # skip analyze/test (faster rebuilds)
+DEVICE=<adb-serial> ./scripts/build.sh --install   # target a specific device
+```
+
+### Manual commands
 
 ```bash
 flutter pub get

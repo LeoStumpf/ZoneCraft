@@ -26,6 +26,9 @@ Track in `IMPLEMENTATION_PLAN.md` (milestone status) and `PLAN.md` (feature back
 
 ## Workflow rule (required)
 
+- **Build & verify with the script:** before wrapping up a task, run
+  `./scripts/build.sh --install --run` (analyze + test + build + install + launch) and check
+  the change on the device. Use `--skip-checks` only for quick iteration.
 - After completing **all** the steps of a task/milestone, **update the plan docs**
   (`PLAN.md` and `IMPLEMENTATION_PLAN.md`) — tick off the items that are now done —
   and then **commit and push to `main`**. Do plan-update + commit/push once at the end,
@@ -33,14 +36,19 @@ Track in `IMPLEMENTATION_PLAN.md` (milestone status) and `PLAN.md` (feature back
 
 ## Toolchain
 
-- `flutter`/`dart` are NOT on PATH. Prefix commands with:
+- **Build / install / run — use the script** (`scripts/build.sh`; it puts `flutter` on
+  `PATH` itself):
+  - `./scripts/build.sh` — `flutter analyze` + `flutter test`, then build a **debug** APK.
+  - `./scripts/build.sh --install` — also install on the device with `-r` (preserves data,
+    exercises migrations).
+  - `./scripts/build.sh --install --run` — install, then launch the app.
+  - `./scripts/build.sh --skip-checks` — skip analyze/test for faster rebuilds;
+    `--release` for a release APK; `DEVICE=<serial>` to target another device.
+- `flutter`/`dart` are otherwise NOT on PATH — prefix manual commands with:
   `export PATH="$PATH:/home/leo/development/flutter/bin"`
-- After Drift schema changes: `dart run build_runner build`
-- Checks: `flutter analyze` && `flutter test`
-- Android build/run: device `09291JEC226042` (Pixel 4a). `adb` at `/usr/bin/adb`.
-  Build: `flutter build apk --debug`; install preserving data (exercises migrations):
-  `adb -s <dev> install -r build/app/outputs/flutter-apk/app-debug.apk`.
-  No Android emulator is available, so on-device is the only interactive run.
+- After Drift schema changes: `dart run build_runner build` (then `scripts/build.sh`).
+- Device `09291JEC226042` (Pixel 4a), `adb` at `/usr/bin/adb`. No Android emulator is
+  available, so on-device is the only interactive run.
 
 ## Layout
 
