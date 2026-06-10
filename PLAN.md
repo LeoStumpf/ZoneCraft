@@ -118,7 +118,7 @@ across close/relaunch by construction.
 
 ### Map chrome
 
-- [ ] **Compass control (M7).** A small button in the lower-right stack whose needle always
+- [x] **Compass control (M7).** A small button in the lower-right stack whose needle always
   points to map-north; tapping it snaps the map back to north-up (rotation = 0).
 
 ### Settings

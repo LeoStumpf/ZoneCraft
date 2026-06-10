@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -29,6 +31,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
   LatLng? _myPosition;
   bool _locating = false;
   bool _mapReady = false;
+
+  /// Current map rotation in degrees (clockwise). Drives the compass needle.
+  double _rotation = 0;
 
   @override
   void initState() {
@@ -356,6 +361,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         : const LatLng(48.137, 11.575), // Munich
                     initialZoom: hasSavedCamera ? savedZoom : 5,
                     onMapReady: () => _mapReady = true,
+                    onPositionChanged: (camera, _) {
+                      // Keep the compass needle in sync with map rotation.
+                      if (camera.rotation != _rotation) {
+                        setState(() => _rotation = camera.rotation);
+                      }
+                    },
                     onTap: (_, latlng) =>
                         _handleTap(latlng, layers, circles, planes),
                   ),
@@ -456,6 +467,17 @@ class _MapScreenState extends ConsumerState<MapScreen>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
+                FloatingActionButton.small(
+                  heroTag: 'compass',
+                  tooltip: 'Reset to north-up',
+                  onPressed: () => _mapController.rotate(0),
+                  child: Transform.rotate(
+                    // Counter-rotate so the needle always points to map-north.
+                    angle: -_rotation * math.pi / 180,
+                    child: const Icon(Icons.navigation, color: Colors.red),
+                  ),
+                ),
+                const SizedBox(height: 12),
                 FloatingActionButton.small(
                   heroTag: 'locate',
                   tooltip: 'Locate me',

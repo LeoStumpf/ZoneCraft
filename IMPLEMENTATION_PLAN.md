@@ -203,7 +203,15 @@ These build on the completed v1 engine. Numbered M7+; independent unless noted. 
 green (`flutter analyze`, `flutter test`, on-device check) and persists every new setting in
 `AppSettings`.
 
-## Milestone 7 — Compass & north-up reset
+## Milestone 7 — Compass & north-up reset ✅ DONE
+
+**Status:** complete (2026-06-10). `map_screen.dart` tracks map rotation via
+`MapOptions.onPositionChanged` (`_rotation`, degrees) and adds a `FloatingActionButton.small`
+at the top of the lower-right FAB column: a red `Icons.navigation` needle wrapped in
+`Transform.rotate(-_rotation·π/180)` so it always points to map-north; tapping it calls
+`_mapController.rotate(0)`. It's hidden while an editor sheet is open (shares the FAB column).
+Verified on device: rotating the map tilts the needle to keep pointing north, and tapping
+snaps the map back to north-up with the needle upright.
 
 **Goal:** a compass control that reflects map rotation and snaps the map back to north-up.
 
