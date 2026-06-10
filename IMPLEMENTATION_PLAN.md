@@ -107,7 +107,13 @@ circles render as one flat union.
 - **Verify:** add/edit/remove a circle entirely from the drawer + bottom sheet without a
   floating dialog; map stays pannable while editing.
 
-## Milestone 3 — Settings screen + uncertainty wiring
+## Milestone 3 — Settings screen + uncertainty wiring ✅ DONE
+
+**Status:** complete (2026-06-10). `lib/ui/settings_screen.dart` is a routed screen
+reached from a **Settings** entry in the layers drawer footer. It sets
+`uncertaintyMeters` via a linked slider (0–2000 m) + metres text field, persisted live
+through `updateUncertainty`. The engine already watches `settingsProvider` (M1 wiring), so
+changes re-render every layer's band immediately. `flutter analyze`/`flutter test` green.
 
 **Goal:** global settings, starting with uncertainty.
 

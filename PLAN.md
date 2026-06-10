@@ -4,12 +4,12 @@ Backlog of planned features beyond v1. Grouped by area; check items off as they 
 Notes under each item are implementation hints, not final decisions. Open design
 questions are collected at the bottom.
 
-> **Progress:** M0 (data model + settings), M1 (rendering engine) and M2 (UI restructure)
-> are **done** — see `IMPLEMENTATION_PLAN.md`. The engine handles union/flat-colour, the
-> uncertainty band, and inverse rendering for circles; the layers **left drawer** (with
-> visibility/reorder/colour/rename/**invert**/delete), the docked **bottom editor**, and
-> **add/remove** are in. Remaining: settings screen (uncertainty value UI), locate-me,
-> planes, and the app icon.
+> **Progress:** M0 (data model + settings), M1 (rendering engine), M2 (UI restructure) and
+> M3 (settings screen + uncertainty UI) are **done** — see `IMPLEMENTATION_PLAN.md`. The
+> engine handles union/flat-colour, the uncertainty band, and inverse rendering for
+> circles; the layers **left drawer** (with visibility/reorder/colour/rename/**invert**/
+> delete), the docked **bottom editor**, **add/remove**, and a **Settings screen** (global
+> uncertainty radius) are in. Remaining: locate-me, planes, and the app icon.
 
 ---
 
@@ -51,11 +51,11 @@ questions are collected at the bottom.
 
 ## Settings & uncertainty
 
-- [ ] **Add a general Settings screen.**
+- [x] **Add a general Settings screen.**
   - A place for app-wide options (persisted locally, e.g. a `Settings` table or
     key/value store via Drift / `shared_preferences`).
 
-- [ ] **Uncertainty radius as a global setting (e.g. 500 m).**
+- [x] **Uncertainty radius as a global setting (e.g. 500 m).**
   - Configurable in Settings. Applied to objects so the **outer band** of the object
     is drawn lighter than the inner core, representing measurement uncertainty.
   - For a circle of radius `R` and uncertainty `u`: render an inner solid region and
