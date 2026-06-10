@@ -218,6 +218,18 @@ class Repository {
         );
   }
 
+  /// Persists the last map camera so the app reopens on the same view.
+  Future<void> saveCamera(double lat, double lng, double zoom) {
+    return _db.into(_db.appSettings).insertOnConflictUpdate(
+          AppSettingsCompanion.insert(
+            id: const Value(1),
+            lastLat: Value(lat),
+            lastLng: Value(lng),
+            lastZoom: Value(zoom),
+          ),
+        );
+  }
+
   // --- Seed -----------------------------------------------------------------
 
   /// Ensures at least one layer exists so the user can place circles right away.

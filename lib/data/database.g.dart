@@ -1554,8 +1554,47 @@ class $AppSettingsTable extends AppSettings
         requiredDuringInsert: false,
         defaultValue: const Constant(0),
       );
+  static const VerificationMeta _lastLatMeta = const VerificationMeta(
+    'lastLat',
+  );
   @override
-  List<GeneratedColumn> get $columns => [id, uncertaintyMeters];
+  late final GeneratedColumn<double> lastLat = GeneratedColumn<double>(
+    'last_lat',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastLngMeta = const VerificationMeta(
+    'lastLng',
+  );
+  @override
+  late final GeneratedColumn<double> lastLng = GeneratedColumn<double>(
+    'last_lng',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastZoomMeta = const VerificationMeta(
+    'lastZoom',
+  );
+  @override
+  late final GeneratedColumn<double> lastZoom = GeneratedColumn<double>(
+    'last_zoom',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    uncertaintyMeters,
+    lastLat,
+    lastLng,
+    lastZoom,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -1580,6 +1619,24 @@ class $AppSettingsTable extends AppSettings
         ),
       );
     }
+    if (data.containsKey('last_lat')) {
+      context.handle(
+        _lastLatMeta,
+        lastLat.isAcceptableOrUnknown(data['last_lat']!, _lastLatMeta),
+      );
+    }
+    if (data.containsKey('last_lng')) {
+      context.handle(
+        _lastLngMeta,
+        lastLng.isAcceptableOrUnknown(data['last_lng']!, _lastLngMeta),
+      );
+    }
+    if (data.containsKey('last_zoom')) {
+      context.handle(
+        _lastZoomMeta,
+        lastZoom.isAcceptableOrUnknown(data['last_zoom']!, _lastZoomMeta),
+      );
+    }
     return context;
   }
 
@@ -1597,6 +1654,18 @@ class $AppSettingsTable extends AppSettings
         DriftSqlType.double,
         data['${effectivePrefix}uncertainty_meters'],
       )!,
+      lastLat: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}last_lat'],
+      ),
+      lastLng: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}last_lng'],
+      ),
+      lastZoom: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}last_zoom'],
+      ),
     );
   }
 
@@ -1611,12 +1680,32 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
 
   /// Global measurement uncertainty in metres; rendered as a lighter band.
   final double uncertaintyMeters;
-  const AppSetting({required this.id, required this.uncertaintyMeters});
+
+  /// Last map camera, restored on launch. Null until the user has moved the map.
+  final double? lastLat;
+  final double? lastLng;
+  final double? lastZoom;
+  const AppSetting({
+    required this.id,
+    required this.uncertaintyMeters,
+    this.lastLat,
+    this.lastLng,
+    this.lastZoom,
+  });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['uncertainty_meters'] = Variable<double>(uncertaintyMeters);
+    if (!nullToAbsent || lastLat != null) {
+      map['last_lat'] = Variable<double>(lastLat);
+    }
+    if (!nullToAbsent || lastLng != null) {
+      map['last_lng'] = Variable<double>(lastLng);
+    }
+    if (!nullToAbsent || lastZoom != null) {
+      map['last_zoom'] = Variable<double>(lastZoom);
+    }
     return map;
   }
 
@@ -1624,6 +1713,15 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     return AppSettingsCompanion(
       id: Value(id),
       uncertaintyMeters: Value(uncertaintyMeters),
+      lastLat: lastLat == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastLat),
+      lastLng: lastLng == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastLng),
+      lastZoom: lastZoom == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastZoom),
     );
   }
 
@@ -1635,6 +1733,9 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     return AppSetting(
       id: serializer.fromJson<int>(json['id']),
       uncertaintyMeters: serializer.fromJson<double>(json['uncertaintyMeters']),
+      lastLat: serializer.fromJson<double?>(json['lastLat']),
+      lastLng: serializer.fromJson<double?>(json['lastLng']),
+      lastZoom: serializer.fromJson<double?>(json['lastZoom']),
     );
   }
   @override
@@ -1643,12 +1744,24 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'uncertaintyMeters': serializer.toJson<double>(uncertaintyMeters),
+      'lastLat': serializer.toJson<double?>(lastLat),
+      'lastLng': serializer.toJson<double?>(lastLng),
+      'lastZoom': serializer.toJson<double?>(lastZoom),
     };
   }
 
-  AppSetting copyWith({int? id, double? uncertaintyMeters}) => AppSetting(
+  AppSetting copyWith({
+    int? id,
+    double? uncertaintyMeters,
+    Value<double?> lastLat = const Value.absent(),
+    Value<double?> lastLng = const Value.absent(),
+    Value<double?> lastZoom = const Value.absent(),
+  }) => AppSetting(
     id: id ?? this.id,
     uncertaintyMeters: uncertaintyMeters ?? this.uncertaintyMeters,
+    lastLat: lastLat.present ? lastLat.value : this.lastLat,
+    lastLng: lastLng.present ? lastLng.value : this.lastLng,
+    lastZoom: lastZoom.present ? lastZoom.value : this.lastZoom,
   );
   AppSetting copyWithCompanion(AppSettingsCompanion data) {
     return AppSetting(
@@ -1656,6 +1769,9 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       uncertaintyMeters: data.uncertaintyMeters.present
           ? data.uncertaintyMeters.value
           : this.uncertaintyMeters,
+      lastLat: data.lastLat.present ? data.lastLat.value : this.lastLat,
+      lastLng: data.lastLng.present ? data.lastLng.value : this.lastLng,
+      lastZoom: data.lastZoom.present ? data.lastZoom.value : this.lastZoom,
     );
   }
 
@@ -1663,49 +1779,77 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
   String toString() {
     return (StringBuffer('AppSetting(')
           ..write('id: $id, ')
-          ..write('uncertaintyMeters: $uncertaintyMeters')
+          ..write('uncertaintyMeters: $uncertaintyMeters, ')
+          ..write('lastLat: $lastLat, ')
+          ..write('lastLng: $lastLng, ')
+          ..write('lastZoom: $lastZoom')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, uncertaintyMeters);
+  int get hashCode =>
+      Object.hash(id, uncertaintyMeters, lastLat, lastLng, lastZoom);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is AppSetting &&
           other.id == this.id &&
-          other.uncertaintyMeters == this.uncertaintyMeters);
+          other.uncertaintyMeters == this.uncertaintyMeters &&
+          other.lastLat == this.lastLat &&
+          other.lastLng == this.lastLng &&
+          other.lastZoom == this.lastZoom);
 }
 
 class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
   final Value<int> id;
   final Value<double> uncertaintyMeters;
+  final Value<double?> lastLat;
+  final Value<double?> lastLng;
+  final Value<double?> lastZoom;
   const AppSettingsCompanion({
     this.id = const Value.absent(),
     this.uncertaintyMeters = const Value.absent(),
+    this.lastLat = const Value.absent(),
+    this.lastLng = const Value.absent(),
+    this.lastZoom = const Value.absent(),
   });
   AppSettingsCompanion.insert({
     this.id = const Value.absent(),
     this.uncertaintyMeters = const Value.absent(),
+    this.lastLat = const Value.absent(),
+    this.lastLng = const Value.absent(),
+    this.lastZoom = const Value.absent(),
   });
   static Insertable<AppSetting> custom({
     Expression<int>? id,
     Expression<double>? uncertaintyMeters,
+    Expression<double>? lastLat,
+    Expression<double>? lastLng,
+    Expression<double>? lastZoom,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (uncertaintyMeters != null) 'uncertainty_meters': uncertaintyMeters,
+      if (lastLat != null) 'last_lat': lastLat,
+      if (lastLng != null) 'last_lng': lastLng,
+      if (lastZoom != null) 'last_zoom': lastZoom,
     });
   }
 
   AppSettingsCompanion copyWith({
     Value<int>? id,
     Value<double>? uncertaintyMeters,
+    Value<double?>? lastLat,
+    Value<double?>? lastLng,
+    Value<double?>? lastZoom,
   }) {
     return AppSettingsCompanion(
       id: id ?? this.id,
       uncertaintyMeters: uncertaintyMeters ?? this.uncertaintyMeters,
+      lastLat: lastLat ?? this.lastLat,
+      lastLng: lastLng ?? this.lastLng,
+      lastZoom: lastZoom ?? this.lastZoom,
     );
   }
 
@@ -1718,6 +1862,15 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     if (uncertaintyMeters.present) {
       map['uncertainty_meters'] = Variable<double>(uncertaintyMeters.value);
     }
+    if (lastLat.present) {
+      map['last_lat'] = Variable<double>(lastLat.value);
+    }
+    if (lastLng.present) {
+      map['last_lng'] = Variable<double>(lastLng.value);
+    }
+    if (lastZoom.present) {
+      map['last_zoom'] = Variable<double>(lastZoom.value);
+    }
     return map;
   }
 
@@ -1725,7 +1878,10 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
   String toString() {
     return (StringBuffer('AppSettingsCompanion(')
           ..write('id: $id, ')
-          ..write('uncertaintyMeters: $uncertaintyMeters')
+          ..write('uncertaintyMeters: $uncertaintyMeters, ')
+          ..write('lastLat: $lastLat, ')
+          ..write('lastLng: $lastLng, ')
+          ..write('lastZoom: $lastZoom')
           ..write(')'))
         .toString();
   }
@@ -2956,11 +3112,17 @@ typedef $$AppSettingsTableCreateCompanionBuilder =
     AppSettingsCompanion Function({
       Value<int> id,
       Value<double> uncertaintyMeters,
+      Value<double?> lastLat,
+      Value<double?> lastLng,
+      Value<double?> lastZoom,
     });
 typedef $$AppSettingsTableUpdateCompanionBuilder =
     AppSettingsCompanion Function({
       Value<int> id,
       Value<double> uncertaintyMeters,
+      Value<double?> lastLat,
+      Value<double?> lastLng,
+      Value<double?> lastZoom,
     });
 
 class $$AppSettingsTableFilterComposer
@@ -2979,6 +3141,21 @@ class $$AppSettingsTableFilterComposer
 
   ColumnFilters<double> get uncertaintyMeters => $composableBuilder(
     column: $table.uncertaintyMeters,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get lastLat => $composableBuilder(
+    column: $table.lastLat,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get lastLng => $composableBuilder(
+    column: $table.lastLng,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get lastZoom => $composableBuilder(
+    column: $table.lastZoom,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -3001,6 +3178,21 @@ class $$AppSettingsTableOrderingComposer
     column: $table.uncertaintyMeters,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<double> get lastLat => $composableBuilder(
+    column: $table.lastLat,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get lastLng => $composableBuilder(
+    column: $table.lastLng,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get lastZoom => $composableBuilder(
+    column: $table.lastZoom,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$AppSettingsTableAnnotationComposer
@@ -3019,6 +3211,15 @@ class $$AppSettingsTableAnnotationComposer
     column: $table.uncertaintyMeters,
     builder: (column) => column,
   );
+
+  GeneratedColumn<double> get lastLat =>
+      $composableBuilder(column: $table.lastLat, builder: (column) => column);
+
+  GeneratedColumn<double> get lastLng =>
+      $composableBuilder(column: $table.lastLng, builder: (column) => column);
+
+  GeneratedColumn<double> get lastZoom =>
+      $composableBuilder(column: $table.lastZoom, builder: (column) => column);
 }
 
 class $$AppSettingsTableTableManager
@@ -3054,17 +3255,29 @@ class $$AppSettingsTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 Value<double> uncertaintyMeters = const Value.absent(),
+                Value<double?> lastLat = const Value.absent(),
+                Value<double?> lastLng = const Value.absent(),
+                Value<double?> lastZoom = const Value.absent(),
               }) => AppSettingsCompanion(
                 id: id,
                 uncertaintyMeters: uncertaintyMeters,
+                lastLat: lastLat,
+                lastLng: lastLng,
+                lastZoom: lastZoom,
               ),
           createCompanionCallback:
               ({
                 Value<int> id = const Value.absent(),
                 Value<double> uncertaintyMeters = const Value.absent(),
+                Value<double?> lastLat = const Value.absent(),
+                Value<double?> lastLng = const Value.absent(),
+                Value<double?> lastZoom = const Value.absent(),
               }) => AppSettingsCompanion.insert(
                 id: id,
                 uncertaintyMeters: uncertaintyMeters,
+                lastLat: lastLat,
+                lastLng: lastLng,
+                lastZoom: lastZoom,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))

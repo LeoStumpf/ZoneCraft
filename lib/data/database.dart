@@ -71,6 +71,11 @@ class AppSettings extends Table {
   RealColumn get uncertaintyMeters =>
       real().withDefault(const Constant(0))();
 
+  /// Last map camera, restored on launch. Null until the user has moved the map.
+  RealColumn get lastLat => real().nullable()();
+  RealColumn get lastLng => real().nullable()();
+  RealColumn get lastZoom => real().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -83,7 +88,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -94,6 +99,11 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(layers, layers.isInverted);
             await m.createTable(planes);
             await m.createTable(appSettings);
+          }
+          if (from < 3) {
+            await m.addColumn(appSettings, appSettings.lastLat);
+            await m.addColumn(appSettings, appSettings.lastLng);
+            await m.addColumn(appSettings, appSettings.lastZoom);
           }
         },
         beforeOpen: (details) async {

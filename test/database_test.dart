@@ -56,4 +56,20 @@ void main() {
     await repo.updateUncertainty(500);
     expect((await repo.watchSettings().first).uncertaintyMeters, 500);
   });
+
+  test('camera is null by default and persists, independent of uncertainty',
+      () async {
+    final initial = await repo.watchSettings().first;
+    expect(initial.lastLat, isNull);
+    expect(initial.lastZoom, isNull);
+
+    await repo.updateUncertainty(500);
+    await repo.saveCamera(48.137, 11.575, 12.5);
+    final saved = await repo.watchSettings().first;
+    expect(saved.lastLat, 48.137);
+    expect(saved.lastLng, 11.575);
+    expect(saved.lastZoom, 12.5);
+    // saveCamera must not clobber the uncertainty (both live in the same row).
+    expect(saved.uncertaintyMeters, 500);
+  });
 }

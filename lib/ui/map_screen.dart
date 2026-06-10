@@ -18,19 +18,52 @@ class MapScreen extends ConsumerStatefulWidget {
   ConsumerState<MapScreen> createState() => _MapScreenState();
 }
 
-class _MapScreenState extends ConsumerState<MapScreen> {
+class _MapScreenState extends ConsumerState<MapScreen>
+    with WidgetsBindingObserver {
   final _mapController = MapController();
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
   static const _hitTest = Distance(calculator: Haversine());
 
   /// The user's last known position, shown as a marker. Null until the user
   /// opts in via the "Locate me" button. We never request location at launch.
   LatLng? _myPosition;
   bool _locating = false;
+  bool _mapReady = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Persist the view when the app is backgrounded/closed so it reopens here.
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _saveCamera();
+    }
+  }
 
   @override
   void dispose() {
+    _saveCamera();
+    WidgetsBinding.instance.removeObserver(this);
     _mapController.dispose();
     super.dispose();
+  }
+
+  /// Writes the current camera (centre + zoom) to settings. No-op until the map
+  /// is ready or if the camera is somehow non-finite.
+  void _saveCamera() {
+    if (!_mapReady) return;
+    final cam = _mapController.camera;
+    final c = cam.center;
+    if (!c.latitude.isFinite || !c.longitude.isFinite || !cam.zoom.isFinite) {
+      return;
+    }
+    ref.read(repositoryProvider).saveCamera(c.latitude, c.longitude, cam.zoom);
   }
 
   /// Opt-in location. Only ever runs on an explicit button tap. Requests
@@ -157,8 +190,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   }
 
   Layer? _activeLayer(List<Layer> layers) {
-    final activeId =
-        effectiveActiveLayerId(layers, ref.read(activeLayerProvider));
+    final activeId = effectiveActiveLayerId(
+      layers,
+      ref.read(activeLayerProvider),
+    );
     return layers.where((l) => l.id == activeId).firstOrNull;
   }
 
@@ -179,7 +214,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   }
 
   Future<void> _addCircleAt(LatLng latlng, Layer layer) async {
-    final id = await ref.read(repositoryProvider).createCircle(
+    final id = await ref
+        .read(repositoryProvider)
+        .createCircle(
           layerId: layer.id,
           centerLat: latlng.latitude,
           centerLng: latlng.longitude,
@@ -194,7 +231,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final dist = _defaultRadius();
     final a = _hitTest.offset(center, dist, -90); // west
     final b = _hitTest.offset(center, dist, 90); // east
-    final id = await ref.read(repositoryProvider).createPlane(
+    final id = await ref
+        .read(repositoryProvider)
+        .createPlane(
           layerId: layer.id,
           aLat: a.latitude,
           aLng: a.longitude,
@@ -216,11 +255,17 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     if (armed != null && selPlaneId != null) {
       final repo = ref.read(repositoryProvider);
       if (armed == 'A') {
-        await repo.updatePlane(selPlaneId,
-            aLat: latlng.latitude, aLng: latlng.longitude);
+        await repo.updatePlane(
+          selPlaneId,
+          aLat: latlng.latitude,
+          aLng: latlng.longitude,
+        );
       } else {
-        await repo.updatePlane(selPlaneId,
-            bLat: latlng.latitude, bLng: latlng.longitude);
+        await repo.updatePlane(
+          selPlaneId,
+          bLat: latlng.latitude,
+          bLng: latlng.longitude,
+        );
       }
       ref.read(planePlacementProvider.notifier).arm(null);
       return;
@@ -263,103 +308,146 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     ref.watch(seedProvider);
 
     final layers = ref.watch(layersProvider).asData?.value ?? const <Layer>[];
-    final circles = ref.watch(circlesProvider).asData?.value ?? const <Circle>[];
+    final circles =
+        ref.watch(circlesProvider).asData?.value ?? const <Circle>[];
     final planes = ref.watch(planesProvider).asData?.value ?? const <Plane>[];
-    final uncertainty =
-        ref.watch(settingsProvider).asData?.value.uncertaintyMeters ?? 0;
+    final settings = ref.watch(settingsProvider).asData?.value;
+    final uncertainty = settings?.uncertaintyMeters ?? 0;
     final selectedCircle = circles
         .where((c) => c.id == ref.watch(selectedCircleProvider))
         .firstOrNull;
-    final selectedPlane =
-        planes.where((p) => p.id == ref.watch(selectedPlaneProvider)).firstOrNull;
-    final activeId = effectiveActiveLayerId(layers, ref.watch(activeLayerProvider));
+    final selectedPlane = planes
+        .where((p) => p.id == ref.watch(selectedPlaneProvider))
+        .firstOrNull;
+    final activeId = effectiveActiveLayerId(
+      layers,
+      ref.watch(activeLayerProvider),
+    );
     final activeLayer = layers.where((l) => l.id == activeId).firstOrNull;
     final isPlaneLayer = activeLayer?.type == 'planes';
 
+    // Restore the last camera; fall back to Munich on first launch. Resolved
+    // once, when settings first load — FlutterMap ignores these after creation.
+    final savedLat = settings?.lastLat;
+    final savedLng = settings?.lastLng;
+    final savedZoom = settings?.lastZoom;
+    final hasSavedCamera =
+        savedLat != null &&
+        savedLng != null &&
+        savedZoom != null &&
+        savedLat.isFinite &&
+        savedLng.isFinite &&
+        savedZoom.isFinite;
+
     return Scaffold(
+      key: _scaffoldKey,
       drawer: const LayersDrawer(),
-      appBar: AppBar(
-        title: const Text('ZoneCraft'),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(28),
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Text(
-              activeLayer == null
-                  ? 'Add a layer to start'
-                  : isPlaneLayer
-                      ? 'Active: ${activeLayer.name}  ·  use ＋ to add a plane'
-                      : 'Active: ${activeLayer.name}  ·  tap to add, tap a circle to edit',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ),
-        ),
-      ),
-      body: FlutterMap(
-        mapController: _mapController,
-        options: MapOptions(
-          initialCenter: const LatLng(48.137, 11.575), // Munich
-          initialZoom: 5,
-          onTap: (_, latlng) => _handleTap(latlng, layers, circles, planes),
-        ),
-        children: [
-          TileLayer(
-            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-            userAgentPackageName: 'com.zonecraft.zonecraft',
-            maxZoom: 19,
-          ),
-          // One composited region per visible layer, bottom-to-top.
-          for (final layer in layers)
-            if (layer.isVisible)
-              RegionLayer(
-                key: ValueKey(layer.id),
-                layer: layer,
-                circles: layer.type == 'circles'
-                    ? circles.where((c) => c.layerId == layer.id).toList()
-                    : const <Circle>[],
-                planes: layer.type == 'planes'
-                    ? planes.where((p) => p.layerId == layer.id).toList()
-                    : const <Plane>[],
-                uncertaintyMeters: uncertainty,
-              ),
-          if (_myPosition != null)
-            MarkerLayer(
-              markers: [
-                Marker(
-                  point: _myPosition!,
-                  width: 24,
-                  height: 24,
-                  child: const Icon(
-                    Icons.my_location,
-                    color: Colors.blue,
-                    size: 24,
+      // No app bar: the map is full-bleed and the only chrome is the menu
+      // button floating at the top-left (below).
+      body: settings == null
+          ? const SizedBox.shrink() // loads instantly from the local database
+          : Stack(
+              children: [
+                FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: hasSavedCamera
+                        ? LatLng(savedLat, savedLng)
+                        : const LatLng(48.137, 11.575), // Munich
+                    initialZoom: hasSavedCamera ? savedZoom : 5,
+                    onMapReady: () => _mapReady = true,
+                    onTap: (_, latlng) =>
+                        _handleTap(latlng, layers, circles, planes),
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate:
+                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.zonecraft.zonecraft',
+                      maxZoom: 19,
+                    ),
+                    // One composited region per visible layer, bottom-to-top.
+                    for (final layer in layers)
+                      if (layer.isVisible)
+                        RegionLayer(
+                          key: ValueKey(layer.id),
+                          layer: layer,
+                          circles: layer.type == 'circles'
+                              ? circles
+                                    .where((c) => c.layerId == layer.id)
+                                    .toList()
+                              : const <Circle>[],
+                          planes: layer.type == 'planes'
+                              ? planes
+                                    .where((p) => p.layerId == layer.id)
+                                    .toList()
+                              : const <Plane>[],
+                          uncertaintyMeters: uncertainty,
+                        ),
+                    if (_myPosition != null)
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: _myPosition!,
+                            width: 24,
+                            height: 24,
+                            child: const Icon(
+                              Icons.my_location,
+                              color: Colors.blue,
+                              size: 24,
+                            ),
+                          ),
+                        ],
+                      ),
+                    // Visual handles for the object being edited: the circle's centre, or
+                    // the plane's two points.
+                    if (selectedCircle != null || selectedPlane != null)
+                      MarkerLayer(
+                        markers: [
+                          if (selectedCircle != null)
+                            _editPointMarker(
+                              LatLng(
+                                selectedCircle.centerLat,
+                                selectedCircle.centerLng,
+                              ),
+                            ),
+                          if (selectedPlane != null) ...[
+                            _editPointMarker(
+                              LatLng(selectedPlane.aLat, selectedPlane.aLng),
+                            ),
+                            _editPointMarker(
+                              LatLng(selectedPlane.bLat, selectedPlane.bLng),
+                            ),
+                          ],
+                        ],
+                      ),
+                    const RichAttributionWidget(
+                      attributions: [
+                        TextSourceAttribution('© OpenStreetMap contributors'),
+                      ],
+                    ),
+                  ],
+                ),
+                // The only chrome over the map: a menu button at the top-left.
+                SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Material(
+                      color: Theme.of(context).colorScheme.surface,
+                      elevation: 2,
+                      shape: const CircleBorder(),
+                      clipBehavior: Clip.antiAlias,
+                      child: IconButton(
+                        icon: const Icon(Icons.menu),
+                        tooltip: 'Layers',
+                        onPressed: () =>
+                            _scaffoldKey.currentState?.openDrawer(),
+                      ),
+                    ),
                   ),
                 ),
               ],
             ),
-          // Visual handles for the object being edited: the circle's centre, or
-          // the plane's two points.
-          if (selectedCircle != null || selectedPlane != null)
-            MarkerLayer(
-              markers: [
-                if (selectedCircle != null)
-                  _editPointMarker(
-                      LatLng(selectedCircle.centerLat, selectedCircle.centerLng)),
-                if (selectedPlane != null) ...[
-                  _editPointMarker(
-                      LatLng(selectedPlane.aLat, selectedPlane.aLng)),
-                  _editPointMarker(
-                      LatLng(selectedPlane.bLat, selectedPlane.bLng)),
-                ],
-              ],
-            ),
-          const RichAttributionWidget(
-            attributions: [
-              TextSourceAttribution('© OpenStreetMap contributors'),
-            ],
-          ),
-        ],
-      ),
       // While an editor sheet is open it provides its own delete/close, and the
       // FABs would overlap it — so show them only when nothing is selected.
       floatingActionButton: (selectedCircle != null || selectedPlane != null)
@@ -396,9 +484,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   backgroundColor: activeLayer == null
                       ? Theme.of(context).disabledColor
                       : null,
-                  icon: Icon(isPlaneLayer
-                      ? Icons.change_history
-                      : Icons.add_location_alt_outlined),
+                  icon: Icon(
+                    isPlaneLayer
+                        ? Icons.change_history
+                        : Icons.add_location_alt_outlined,
+                  ),
                   label: Text(isPlaneLayer ? 'Add plane' : 'Add circle'),
                 ),
               ],
@@ -410,12 +500,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               layers: layers,
             )
           : selectedPlane != null
-              ? PlaneEditorSheet(
-                  key: ValueKey(selectedPlane.id),
-                  plane: selectedPlane,
-                  layers: layers,
-                )
-              : null,
+          ? PlaneEditorSheet(
+              key: ValueKey(selectedPlane.id),
+              plane: selectedPlane,
+              layers: layers,
+            )
+          : null,
     );
   }
 }
