@@ -18,6 +18,10 @@ edit-point markers (circle centre / plane endpoints) while editing; **persisted 
 (centre + zoom in `AppSettings`, **schema now v3**); **full-bleed map** with no app bar —
 just a floating top-left menu button opens the drawer.
 
+**Next (v2, planned — not yet built):** M7 compass/north-up, M8 settings (500 m default,
+persistence, clear-data), M9 "closest subspace" multi-point plane, M10 public-transport
+overlay, M11 OSMAnd-style POI toggles. See `IMPLEMENTATION_PLAN.md`.
+
 Track in `IMPLEMENTATION_PLAN.md` (milestone status) and `PLAN.md` (feature backlog).
 
 ## Workflow rule (required)

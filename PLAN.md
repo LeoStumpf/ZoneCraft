@@ -111,14 +111,52 @@ questions are collected at the bottom.
 
 ---
 
+## v2 backlog (planned — see `IMPLEMENTATION_PLAN.md` M7–M11)
+
+The next batch of features. Each general setting is stored in `AppSettings` and so persists
+across close/relaunch by construction.
+
+### Map chrome
+
+- [ ] **Compass control (M7).** A small button in the lower-right stack whose needle always
+  points to map-north; tapping it snaps the map back to north-up (rotation = 0).
+
+### Settings
+
+- [ ] **Default uncertainty = 500 m (M8)**, not 0. Migration bumps an existing stored `0` to
+  `500`.
+- [ ] **All general settings persist (M8)** across app close/start (stored in `AppSettings`).
+- [ ] **"Clear all data" button (M8)** in Settings, behind a confirmation dialog — wipes
+  layers/objects, resets settings, re-seeds an empty default layer.
+
+### Map data overlays (toggled in Settings)
+
+- [ ] **Public-transport overlay (M10).** Load the train/bus network and stops — as an
+  optional OSM-based tile overlay (ÖPNVKarte for buses/stops, OpenRailwayMap for rail).
+- [ ] **OSMAnd-style POIs (M11).** Toggle OSM POI categories (park benches, post boxes, …),
+  fetched from Overpass and shown as markers, **only at high zoom** to match OSMAnd's
+  behaviour (no clutter when zoomed out).
+
+### New geometry type
+
+- [ ] **"Closest subspace" object (M9).** Like the two-point plane but with **N points**: one
+  object holds all points, one is the **main** point, and the filled region is everywhere
+  closer to the main point than to any other (its Voronoi cell). In a subspace layer the
+  **Add** button adds *points* to the single object. Uncertainty band along the internal
+  divides, and the per-layer **inverse** fills everything except the main cell.
+
+---
+
 ## Data model impact (Drift — `lib/data/database.dart`)
 
-- `Layers`: add `isInverted` (bool) and `type` (enum: circles | planes | …).
-- New object representation: either extend `Circles` into a generic `Objects` table
-  with a `type` + type-specific columns, or add a separate `Planes` table
-  (two points: `aLat,aLng,bLat,bLng`). Decide during design.
-- New `Settings` storage for the global uncertainty value (+ future options).
-- Remember to bump `schemaVersion` and add migrations.
+- `Layers`: `isInverted` (bool) and `type` ✅ done (circles | planes); **add `subspace`** to
+  the `type` set (M9).
+- `Circles` ✅ and `Planes` ✅ (two points). **Add `Subspaces` + `SubspacePoints`** (one
+  object, N points, one `isMain`) for M9.
+- `AppSettings` ✅ holds uncertainty + camera; **add columns** for the transport-overlay
+  toggle (M10) and the enabled-POI-category set (M11); **default uncertainty → 500** (M8).
+- `Repository.clearAll()` for the clear-data button (M8).
+- Remember to bump `schemaVersion` and add migrations for each (M8 → v4, then M9, M10/M11).
 
 ## Open questions / decisions (all resolved during v1)
 
@@ -129,6 +167,21 @@ questions are collected at the bottom.
    layers still composite (blend) over each other.
 4. **Single source of truth for object type:** ✅ per-layer `type`, chosen at layer
    creation; a layer holds one object kind.
+
+### v2 open questions
+
+5. **Default-500 migration:** bumping a stored `0` to `500` also overrides a user who
+   deliberately set `0`. Accepted (one tap to change) — confirm if a smarter "only if never
+   touched" check is wanted instead.
+6. **Transport data source:** rendered tile overlay (ÖPNVKarte / OpenRailwayMap — chosen for
+   v1 simplicity) vs. interactive vector stops via Overpass (tappable, heavier). Start tiles.
+7. **POI source & limits:** Overpass API at high zoom with debounce + caching. Which Overpass
+   instance, how aggressive the cache/zoom-gate, and the initial category list?
+8. **Subspace storage:** separate `Subspaces` + `SubspacePoints` tables (chosen) vs. a JSON
+   point list on one row. Tables keep it relational and queryable.
+9. **Subspace "main" + inverse:** exactly one main point per object; inverse fills the
+   complement of the main cell. Confirm whether multiple "shown" cells are ever wanted (no —
+   spec says one shown region).
 
 ---
 

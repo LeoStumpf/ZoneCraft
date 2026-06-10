@@ -197,10 +197,122 @@ opening the app.
 
 ---
 
+# v2 — post-v1 features
+
+These build on the completed v1 engine. Numbered M7+; independent unless noted. Each ends
+green (`flutter analyze`, `flutter test`, on-device check) and persists every new setting in
+`AppSettings`.
+
+## Milestone 7 — Compass & north-up reset
+
+**Goal:** a compass control that reflects map rotation and snaps the map back to north-up.
+
+- `lib/ui/map_screen.dart`: add a `FloatingActionButton.small` to the lower-right FAB column
+  (above "Locate me"), hidden while an editor sheet is open (same rule as the others).
+- The child is a compass needle (e.g. `Icons.navigation`) wrapped in
+  `Transform.rotate(angle: -camera.rotationRad)` so it always points to map-north.
+- Rebuild the needle on rotation change: listen to `_mapController.mapEventStream`
+  (or `onPositionChanged`) and `setState` the current rotation.
+- On tap: `_mapController.rotate(0)` (optionally animated) to reset the bearing to north-up.
+- **Decision:** always visible (at rotation 0 the needle simply points up), matching the
+  "always points to map-north" request — no auto-hide.
+- **Verify:** two-finger-rotate the map → the needle rotates to keep pointing north; tap →
+  the map snaps north-up and the needle points straight up.
+
+## Milestone 8 — Settings: 500 m default, persistence, clear-data
+
+**Goal:** sensible defaults, durable settings, and a safe reset.
+
+- **Default uncertainty 500 m:** change `AppSettings.uncertaintyMeters` column default to
+  `500` and the `watchSettings()` empty-row fallback to `500`. Add migration **v3 → v4**
+  that sets the existing settings row's `uncertaintyMeters` to `500` *iff* it is still the
+  old default `0` (a row already exists for anyone who has moved the map, since `saveCamera`
+  creates it). **Decision/tradeoff:** a user who deliberately chose `0` is reset to `500`;
+  acceptable as it's one tap to change. Bump `schemaVersion` to 4.
+- **Persistence audit:** every general setting lives as a column in `AppSettings` (or a small
+  key/value settings table), written immediately on change and read via `settingsProvider`,
+  so all settings survive close/relaunch by construction. New toggles (M10/M11) follow this.
+- **Clear database:** `Repository.clearAll()` deletes all layers (cascade removes
+  circles/planes/subspaces), resets `AppSettings` to defaults (uncertainty 500, camera null,
+  overlays off), then re-seeds the default layer. A "Clear all data" button in
+  `settings_screen.dart` shows an `AlertDialog` confirmation before calling it.
+- **Verify:** fresh install shows 500 m (and a 500 m band on objects); a toggle survives a
+  force-stop/relaunch; "Clear all data" → confirm → app returns to first-run state (one empty
+  layer, default settings) without crashing.
+
+## Milestone 9 — "Closest subspace" multi-point plane
+
+**Goal:** a new object type — the region closest to a chosen "main" point among N points
+(the main point's Voronoi cell) — with the same union/band/inverse behaviour as planes.
+
+- **Concept:** for points P₁…Pₙ with main `Pₘ`, the filled region is
+  `{ q : dist(q,Pₘ) ≤ dist(q,Pⱼ) ∀ j }` — the **intersection** of the half-planes "closer to
+  main than to Pⱼ". Reuses the bisector/half-plane already in `geo/plane.dart`.
+- **Data model** (`lib/data/database.dart`, schema bump): a `Subspaces` table (id, layerId,
+  label?, createdAt) — one row = one object — and a `SubspacePoints` table (id, subspaceId
+  FK-cascade, lat, lng, sortOrder, isMain). Exactly one point per subspace has `isMain`. A
+  `subspace` layer holds a **single** `Subspaces` object.
+- **Layer type:** add `'subspace'` to the layer `type` set and the drawer's add-type chooser.
+  When a subspace layer is active, the **Add** button adds a *point* to its single object
+  (creating the object on the first add) — not a new object.
+- **Geometry** (`lib/geo/subspace.dart`): build the main cell by starting from the (inflated)
+  viewport rect and successively clipping by each `main-vs-Pⱼ` half-plane — the same
+  `_clipRectByHalfPlane` used for planes, applied in sequence. `outer` pushes each bisector
+  `+u/2` toward the others, `core` pulls `−u/2`; band = `outer − core`. Degenerate
+  (n < 2 / coincident main) → empty.
+- **Engine:** `RegionLayer`/`_RegionPainter` composite the (convex) cell exactly like a plane
+  — fill/band, and inverse = viewport − outer.
+- **Editor** (`lib/ui/subspace_editor.dart`): list points (each a single "lat, lng" field + a
+  "main" radio + delete), an add-point button, place-by-tap per point (reuse the
+  placement-arming pattern), layer/label, delete-object. Show every point as a marker, the
+  main one distinct.
+- **Hit-testing:** a tap selects the subspace iff its main point is the nearest of its points
+  to the tap (Haversine) — i.e. inside the main cell.
+- **Decision:** planar (screen-space) bisectors as with planes; geodesic refinement deferred.
+- **Verify:** add ≥3 points and pick a main → the main's nearest-region fills; moving/adding
+  points reshapes it live; a lighter band hugs the internal divides; invert fills the
+  complement; two such layers composite correctly.
+
+## Milestone 10 — Public-transport overlay
+
+**Goal:** an optional overlay of the public train/bus network and stops.
+
+- **Approach (tile-based, pragmatic):** a persistent settings toggle "Public transport" that
+  adds overlay `TileLayer`(s) above the base map — ÖPNVKarte
+  (`https://tile.memomaps.de/tilegen/{z}/{x}/{y}.png`, buses/trams/stops) and/or
+  OpenRailwayMap (`https://tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png`, rail lines).
+  Both are transparent OSM-based overlays — no Overpass querying, fast to ship.
+- Render the overlay layer(s) in `map_screen.dart` **below** the region layers (zones stay on
+  top); add the required attributions.
+- **Decision:** ship a rendered tile overlay first; tappable/interactive vector stops (via
+  Overpass) are a heavier follow-up.
+- **Verify:** toggle on → rail/bus lines and stops appear and follow pan/zoom; toggle off →
+  gone; attribution shown; setting persists.
+
+## Milestone 11 — Toggleable map POIs (OSMAnd-style)
+
+**Goal:** optionally show OSM POI categories (benches, post boxes, …) like OSMAnd.
+
+- **Settings:** a "Map points of interest" section with per-category toggles (benches
+  `amenity=bench`, post boxes `amenity=post_box`, drinking water, toilets, waste baskets, …).
+  Enabled categories persisted in `AppSettings` (a packed set / bitmask).
+- **Data** (`lib/data/overpass.dart`, new dep `http`): query the Overpass API for the enabled
+  categories within the current viewport bbox, **only at high zoom** (≥ ~15, matching
+  OSMAnd's detail level) and **debounced on map-idle**; cache by (bbox, category) and cap the
+  result count to respect Overpass usage limits.
+- **Render:** a `MarkerLayer` of small category icons, built only above the zoom threshold so
+  the map stays consistent with OSMAnd (no clutter when zoomed out). Fail silently (show no
+  POIs rather than errors).
+- **Verify:** enable "benches" and zoom past the threshold → bench markers appear; pan →
+  refresh (debounced); zoom out → hide; toggle off → gone; choices persist across relaunch.
+
+---
+
 ## New dependencies (by milestone)
 
 - M4: `geolocator`, `permission_handler`
 - M6: `flutter_launcher_icons` (dev)
+- M11: `http` (Overpass POI queries)
 
 ## Cross-cutting risks
 
@@ -211,10 +323,22 @@ opening the app.
 - **Inverse + uncertainty interaction** — define the band side precisely for inverted
   layers (band sits just outside the object boundary).
 - **Plane accuracy** — planar bisector is an approximation; acceptable at city scale,
-  revisit for geodesic correctness if needed.
+  revisit for geodesic correctness if needed (also applies to the M9 subspace cell).
+- **Default-uncertainty migration (M8)** — bumping a stored `0` to `500` also resets a
+  deliberately-chosen `0`; judged acceptable.
+- **Subspace cell (M9)** — the main cell is the intersection of half-planes (always convex);
+  iterate the clip carefully and offset each bisector edge for the band.
+- **Overpass usage (M11)** — third-party rate limits and latency; zoom-gate, debounce, cache,
+  cap results, and fail silently. Use a polite user-agent / a public instance.
+- **Overlay tile sources (M10)** — third-party tiles (memomaps / OpenRailwayMap) need correct
+  attribution and may have their own usage policies.
 
 ## Suggested order & checkpoints
 
-M0 → M1 are the backbone (do first, they unblock everything). M2/M3 are UX and can go in
-parallel after M0. M4 and M6 are independent and can land any time. M5 depends on M0 + M1.
-Each milestone ends green: `flutter analyze`, `flutter test`, and an on-device check.
+**v1:** M0 → M1 are the backbone (do first, they unblock everything). M2/M3 are UX and can go
+in parallel after M0. M4 and M6 are independent and can land any time. M5 depends on M0 + M1.
+
+**v2:** M7 (compass) and M8 (settings) are small and independent — do them first. M10
+(transport overlay) is independent and cheap. M9 (subspace) builds on the M5 plane geometry.
+M11 (POIs) is the heaviest (Overpass + caching) — last. Every milestone ends green:
+`flutter analyze`, `flutter test`, and an on-device check.
