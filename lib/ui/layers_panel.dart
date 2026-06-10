@@ -17,8 +17,18 @@ class LayersDrawer extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final layersAsync = ref.watch(layersProvider);
     final circles = ref.watch(circlesProvider).asData?.value ?? const <Circle>[];
+    final planes = ref.watch(planesProvider).asData?.value ?? const <Plane>[];
     final selected = ref.watch(activeLayerProvider);
     final repo = ref.read(repositoryProvider);
+
+    Future<void> addLayer(int count, String type) async {
+      final id = await repo.createLayer(
+        name: 'Layer ${count + 1}',
+        colorArgb: _palette[count % _palette.length].toARGB32(),
+        type: type,
+      );
+      ref.read(activeLayerProvider.notifier).select(id);
+    }
 
     return Drawer(
       child: SafeArea(
@@ -39,18 +49,36 @@ class LayersDrawer extends ConsumerWidget {
                       Text('Layers',
                           style: Theme.of(context).textTheme.titleLarge),
                       const Spacer(),
-                      TextButton.icon(
-                        onPressed: () async {
-                          final id = await repo.createLayer(
-                            name: 'Layer ${layers.length + 1}',
-                            colorArgb:
-                                _palette[layers.length % _palette.length]
-                                    .toARGB32(),
-                          );
-                          ref.read(activeLayerProvider.notifier).select(id);
-                        },
-                        icon: const Icon(Icons.add),
-                        label: const Text('Add'),
+                      PopupMenuButton<String>(
+                        tooltip: 'Add layer',
+                        onSelected: (type) => addLayer(layers.length, type),
+                        itemBuilder: (_) => [
+                          const PopupMenuItem(
+                            value: 'circles',
+                            child: ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(Icons.circle_outlined),
+                              title: Text('Circles layer'),
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'planes',
+                            child: ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(Icons.change_history),
+                              title: Text('Planes layer'),
+                            ),
+                          ),
+                        ],
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [Icon(Icons.add), SizedBox(width: 4), Text('Add')],
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -70,12 +98,13 @@ class LayersDrawer extends ConsumerWidget {
                     },
                     itemBuilder: (context, index) {
                       final layer = display[index];
-                      final count =
-                          circles.where((c) => c.layerId == layer.id).length;
+                      final count = layer.type == 'planes'
+                          ? planes.where((p) => p.layerId == layer.id).length
+                          : circles.where((c) => c.layerId == layer.id).length;
                       return _LayerTile(
                         key: ValueKey(layer.id),
                         layer: layer,
-                        circleCount: count,
+                        objectCount: count,
                         isActive: layer.id == activeId,
                         canDelete: layers.length > 1,
                       );
@@ -111,20 +140,22 @@ class _LayerTile extends ConsumerWidget {
   const _LayerTile({
     super.key,
     required this.layer,
-    required this.circleCount,
+    required this.objectCount,
     required this.isActive,
     required this.canDelete,
   });
 
   final Layer layer;
-  final int circleCount;
+  final int objectCount;
   final bool isActive;
   final bool canDelete;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final repo = ref.read(repositoryProvider);
-    final subtitle = StringBuffer('$circleCount circle${circleCount == 1 ? '' : 's'}');
+    final noun = layer.type == 'planes' ? 'plane' : 'circle';
+    final subtitle =
+        StringBuffer('$objectCount $noun${objectCount == 1 ? '' : 's'}');
     if (layer.isInverted) subtitle.write(' · inverted');
 
     return ListTile(

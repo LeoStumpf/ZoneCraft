@@ -5,12 +5,13 @@ Notes under each item are implementation hints, not final decisions. Open design
 questions are collected at the bottom.
 
 > **Progress:** M0 (data model + settings), M1 (rendering engine), M2 (UI restructure) and
-> M3 (settings screen + uncertainty UI) and M4 (opt-in locate-me) are **done** — see
-> `IMPLEMENTATION_PLAN.md`. The engine handles union/flat-colour, the uncertainty band, and
-> inverse rendering for circles; the layers **left drawer** (with visibility/reorder/
-> colour/rename/**invert**/delete), the docked **bottom editor**, **add/remove**, a
-> **Settings screen** (global uncertainty radius), and an opt-in **Locate me** button are
-> in. Remaining: planes and the app icon.
+> M3 (settings screen + uncertainty UI), M4 (opt-in locate-me) and M5 (plane object type)
+> are **done** — see `IMPLEMENTATION_PLAN.md`. The engine handles union/flat-colour, the
+> uncertainty band, and inverse rendering for **circles and planes**; the layers **left
+> drawer** (with visibility/reorder/colour/rename/**invert**/delete and a circles|planes
+> **type chooser**), the docked **bottom editor**, **add/remove**, a **Settings screen**
+> (global uncertainty radius), and an opt-in **Locate me** button are in. Remaining: the
+> app icon.
 
 ---
 
@@ -82,12 +83,12 @@ questions are collected at the bottom.
 
 ## New geometry types
 
-- [ ] **Layers are single-type: a layer holds circles **or** planes (or future types),
+- [x] **Layers are single-type: a layer holds circles **or** planes (or future types),
       not a mix.**
   - Add an object/layer `type` to the data model. The add button and editor adapt to
     the layer's type.
 
-- [ ] **"Plane" object: closer-to-one-of-two-points region.**
+- [x] **"Plane" object: closer-to-one-of-two-points region.**
   - Defined by **two points**; the enabled region is all points **closer to one point
     than the other** — i.e. the half-plane on one side of the two points'
     perpendicular bisector. (Geodesic equivalent on the sphere.)

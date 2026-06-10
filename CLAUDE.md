@@ -5,11 +5,12 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
 
 ## Current status
 
-Milestones **M0–M4 done** (data model + settings schema; composited rendering engine with
-union/band/inverse; UI restructure: layers left drawer, docked live editor, add/remove;
-settings screen with global uncertainty; opt-in locate-me via `geolocator`).
-Next: **M5** planes, then M6 app icon. Track in `IMPLEMENTATION_PLAN.md` (milestone status)
-and `PLAN.md` (feature backlog).
+Milestones **M0–M5 done** (data model + settings schema; composited rendering engine with
+union/band/inverse for circles **and planes**; UI restructure: layers left drawer, docked
+live editor, add/remove; settings screen with global uncertainty; opt-in locate-me via
+`geolocator`; plane "closer-to-one-of-two-points" object with a circles|planes layer type
+chooser). Next: **M6** app icon. Track in `IMPLEMENTATION_PLAN.md` (milestone status) and
+`PLAN.md` (feature backlog).
 
 ## Workflow rule (required)
 

@@ -146,7 +146,23 @@ shows the hint instead of crashing.
 - **Verify:** fresh install never prompts for location until the button is tapped;
   denying leaves the app fully usable.
 
-## Milestone 5 — Plane object type
+## Milestone 5 — Plane object type ✅ DONE
+
+**Status:** complete (2026-06-10). `lib/geo/plane.dart` builds the half-plane closer to the
+near point as a viewport-clipped polygon (planar bisector in screen space, single-edge
+Sutherland–Hodgman). To reuse the engine's `band = outer − core` model, the uncertainty band
+straddles the bisector: `outer` is the near side pushed `u/2` onto the far side, `core` is it
+pulled `u/2` back. `RegionLayer`/`_RegionPainter` now composite planes alongside circles
+(union/band/inverse identical); `canvas.clipRect` hides the half-plane's viewport-edge stroke.
+`PlaneEditorSheet` edits A/B (typed or placed by map taps via `planePlacementProvider`),
+near-side toggle, layer, label, delete. The drawer's **Add** is a type chooser (circles |
+planes); layers are single-type and the add FAB / map-tap adapt. Selection is unified
+(topmost object across layers; `selectedPlaneProvider`). Plane hit-testing is geographic
+(closer-to-near). **Fixed** a latent overlap: the floating Add/remove FABs sat over the
+editor sheet's controls (taps hit the FAB) — FABs now hide while an editor is open. Plane
+geometry unit-tested (`test/plane_test.dart`); `flutter analyze`/`flutter test` (13) green.
+Verified on device: a plane fills the half nearer its point, the near-side toggle flips it,
+a lighter band straddles the divide when uncertainty > 0, and inverse fills the complement.
 
 **Goal:** "closer to one of two points" regions with uncertainty, inverse, union.
 

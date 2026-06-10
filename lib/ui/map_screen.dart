@@ -8,6 +8,7 @@ import '../data/database.dart';
 import '../state/providers.dart';
 import 'circle_editor.dart';
 import 'layers_panel.dart';
+import 'plane_editor.dart';
 import 'region_layer.dart';
 
 class MapScreen extends ConsumerStatefulWidget {
@@ -99,68 +100,144 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     return (widthMeters * 0.15).clamp(10.0, 2000000.0);
   }
 
-  /// The smallest circle (in the top-most visible layer) that contains [latlng],
-  /// or null. Hit testing is geographic (Haversine), independent of rendering.
-  Circle? _circleAt(LatLng latlng, List<Layer> layers, List<Circle> circles) {
-    for (final layer in layers.reversed) {
-      if (!layer.isVisible) continue;
-      Circle? best;
-      for (final c in circles.where((c) => c.layerId == layer.id)) {
-        if (!c.radiusMeters.isFinite || c.radiusMeters <= 0) continue;
-        final d = _hitTest.as(
-          LengthUnit.Meter,
-          LatLng(c.centerLat, c.centerLng),
-          latlng,
-        );
-        if (d <= c.radiusMeters &&
-            (best == null || c.radiusMeters < best.radiusMeters)) {
-          best = c;
-        }
+  /// The smallest circle in [layerId] that contains [latlng], or null. Hit
+  /// testing is geographic (Haversine), independent of rendering.
+  Circle? _circleInLayer(LatLng latlng, String layerId, List<Circle> circles) {
+    Circle? best;
+    for (final c in circles.where((c) => c.layerId == layerId)) {
+      if (!c.radiusMeters.isFinite || c.radiusMeters <= 0) continue;
+      final d = _hitTest.as(
+        LengthUnit.Meter,
+        LatLng(c.centerLat, c.centerLng),
+        latlng,
+      );
+      if (d <= c.radiusMeters &&
+          (best == null || c.radiusMeters < best.radiusMeters)) {
+        best = c;
       }
-      if (best != null) return best;
+    }
+    return best;
+  }
+
+  /// A plane in [layerId] whose near side contains [latlng] (i.e. [latlng] is
+  /// closer to its near point than its far point), or null.
+  Plane? _planeInLayer(LatLng latlng, String layerId, List<Plane> planes) {
+    for (final p in planes.where((p) => p.layerId == layerId)) {
+      if (!p.aLat.isFinite ||
+          !p.aLng.isFinite ||
+          !p.bLat.isFinite ||
+          !p.bLng.isFinite) {
+        continue;
+      }
+      final near = p.nearA ? LatLng(p.aLat, p.aLng) : LatLng(p.bLat, p.bLng);
+      final far = p.nearA ? LatLng(p.bLat, p.bLng) : LatLng(p.aLat, p.aLng);
+      if (_hitTest.as(LengthUnit.Meter, near, latlng) <=
+          _hitTest.as(LengthUnit.Meter, far, latlng)) {
+        return p;
+      }
     }
     return null;
   }
 
-  String? _activeCirclesLayerId(List<Layer> layers) {
+  Layer? _activeLayer(List<Layer> layers) {
     final activeId =
         effectiveActiveLayerId(layers, ref.read(activeLayerProvider));
-    final layer = layers.where((l) => l.id == activeId).firstOrNull;
-    return (layer != null && layer.type == 'circles') ? layer.id : null;
+    return layers.where((l) => l.id == activeId).firstOrNull;
   }
 
-  Future<void> _addCircleAt(LatLng latlng, List<Layer> layers) async {
-    final layerId = _activeCirclesLayerId(layers);
-    if (layerId == null) return;
+  void _clearSelection() {
+    ref.read(selectedCircleProvider.notifier).select(null);
+    ref.read(selectedPlaneProvider.notifier).select(null);
+    ref.read(planePlacementProvider.notifier).arm(null);
+  }
+
+  void _selectCircle(String id) {
+    _clearSelection();
+    ref.read(selectedCircleProvider.notifier).select(id);
+  }
+
+  void _selectPlane(String id) {
+    _clearSelection();
+    ref.read(selectedPlaneProvider.notifier).select(id);
+  }
+
+  Future<void> _addCircleAt(LatLng latlng, Layer layer) async {
     final id = await ref.read(repositoryProvider).createCircle(
-          layerId: layerId,
+          layerId: layer.id,
           centerLat: latlng.latitude,
           centerLng: latlng.longitude,
           radiusMeters: _defaultRadius(),
         );
-    ref.read(selectedCircleProvider.notifier).select(id);
+    _selectCircle(id);
+  }
+
+  Future<void> _addPlaneAt(LatLng center, Layer layer) async {
+    // Seed A and B offset west/east of the map centre, so the new plane is
+    // immediately visible with its dividing line through the centre.
+    final dist = _defaultRadius();
+    final a = _hitTest.offset(center, dist, -90); // west
+    final b = _hitTest.offset(center, dist, 90); // east
+    final id = await ref.read(repositoryProvider).createPlane(
+          layerId: layer.id,
+          aLat: a.latitude,
+          aLng: a.longitude,
+          bLat: b.latitude,
+          bLng: b.longitude,
+        );
+    _selectPlane(id);
   }
 
   Future<void> _handleTap(
     LatLng latlng,
     List<Layer> layers,
     List<Circle> circles,
+    List<Plane> planes,
   ) async {
-    final selNotifier = ref.read(selectedCircleProvider.notifier);
-
-    // Tapped an existing circle -> select it for editing.
-    final hit = _circleAt(latlng, layers, circles);
-    if (hit != null) {
-      selNotifier.select(hit.id);
+    // Placement mode: relocate the armed endpoint of the selected plane.
+    final armed = ref.read(planePlacementProvider);
+    final selPlaneId = ref.read(selectedPlaneProvider);
+    if (armed != null && selPlaneId != null) {
+      final repo = ref.read(repositoryProvider);
+      if (armed == 'A') {
+        await repo.updatePlane(selPlaneId,
+            aLat: latlng.latitude, aLng: latlng.longitude);
+      } else {
+        await repo.updatePlane(selPlaneId,
+            bLat: latlng.latitude, bLng: latlng.longitude);
+      }
+      ref.read(planePlacementProvider.notifier).arm(null);
       return;
     }
 
-    // Tapped empty space: close the editor if open, otherwise add a circle.
-    if (ref.read(selectedCircleProvider) != null) {
-      selNotifier.select(null);
+    // Topmost object across visible layers (regardless of type) wins.
+    for (final layer in layers.reversed) {
+      if (!layer.isVisible) continue;
+      if (layer.type == 'circles') {
+        final hit = _circleInLayer(latlng, layer.id, circles);
+        if (hit != null) {
+          _selectCircle(hit.id);
+          return;
+        }
+      } else if (layer.type == 'planes') {
+        final hit = _planeInLayer(latlng, layer.id, planes);
+        if (hit != null) {
+          _selectPlane(hit.id);
+          return;
+        }
+      }
+    }
+
+    // No hit: deselect if something is selected, else add to the active layer.
+    if (ref.read(selectedCircleProvider) != null ||
+        ref.read(selectedPlaneProvider) != null) {
+      _clearSelection();
       return;
     }
-    await _addCircleAt(latlng, layers);
+    final active = _activeLayer(layers);
+    if (active != null && active.type == 'circles') {
+      await _addCircleAt(latlng, active);
+    }
+    // Planes need two points, so they're added via the FAB, not a single tap.
   }
 
   @override
@@ -170,14 +247,17 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
     final layers = ref.watch(layersProvider).asData?.value ?? const <Layer>[];
     final circles = ref.watch(circlesProvider).asData?.value ?? const <Circle>[];
+    final planes = ref.watch(planesProvider).asData?.value ?? const <Plane>[];
     final uncertainty =
         ref.watch(settingsProvider).asData?.value.uncertaintyMeters ?? 0;
-    final selectedId = ref.watch(selectedCircleProvider);
-    final selectedCircle =
-        circles.where((c) => c.id == selectedId).firstOrNull;
+    final selectedCircle = circles
+        .where((c) => c.id == ref.watch(selectedCircleProvider))
+        .firstOrNull;
+    final selectedPlane =
+        planes.where((p) => p.id == ref.watch(selectedPlaneProvider)).firstOrNull;
     final activeId = effectiveActiveLayerId(layers, ref.watch(activeLayerProvider));
     final activeLayer = layers.where((l) => l.id == activeId).firstOrNull;
-    final canAdd = activeLayer != null && activeLayer.type == 'circles';
+    final isPlaneLayer = activeLayer?.type == 'planes';
 
     return Scaffold(
       drawer: const LayersDrawer(),
@@ -189,8 +269,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             padding: const EdgeInsets.only(bottom: 6),
             child: Text(
               activeLayer == null
-                  ? 'Tap the map to add a circle'
-                  : 'Active: ${activeLayer.name}  ·  tap to add, tap a circle to edit',
+                  ? 'Add a layer to start'
+                  : isPlaneLayer
+                      ? 'Active: ${activeLayer.name}  ·  use ＋ to add a plane'
+                      : 'Active: ${activeLayer.name}  ·  tap to add, tap a circle to edit',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
@@ -201,7 +283,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         options: MapOptions(
           initialCenter: const LatLng(48.137, 11.575), // Munich
           initialZoom: 5,
-          onTap: (_, latlng) => _handleTap(latlng, layers, circles),
+          onTap: (_, latlng) => _handleTap(latlng, layers, circles, planes),
         ),
         children: [
           TileLayer(
@@ -211,12 +293,16 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           ),
           // One composited region per visible layer, bottom-to-top.
           for (final layer in layers)
-            if (layer.isVisible && layer.type == 'circles')
+            if (layer.isVisible)
               RegionLayer(
                 key: ValueKey(layer.id),
                 layer: layer,
-                circles:
-                    circles.where((c) => c.layerId == layer.id).toList(),
+                circles: layer.type == 'circles'
+                    ? circles.where((c) => c.layerId == layer.id).toList()
+                    : const <Circle>[],
+                planes: layer.type == 'planes'
+                    ? planes.where((p) => p.layerId == layer.id).toList()
+                    : const <Plane>[],
                 uncertaintyMeters: uncertainty,
               ),
           if (_myPosition != null)
@@ -241,54 +327,62 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           ),
         ],
       ),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          FloatingActionButton.small(
-            heroTag: 'locate',
-            tooltip: 'Locate me',
-            onPressed: _locating ? null : _locateMe,
-            child: _locating
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.my_location),
-          ),
-          const SizedBox(height: 12),
-          if (selectedCircle != null)
-            FloatingActionButton.small(
-              heroTag: 'remove',
-              tooltip: 'Remove selected circle',
-              onPressed: () async {
-                await ref
-                    .read(repositoryProvider)
-                    .deleteCircle(selectedCircle.id);
-                ref.read(selectedCircleProvider.notifier).select(null);
-              },
-              child: const Icon(Icons.delete_outline),
-            ),
-          const SizedBox(height: 12),
-          FloatingActionButton.extended(
-            heroTag: 'add',
-            onPressed: canAdd
-                ? () => _addCircleAt(_mapController.camera.center, layers)
-                : null,
-            backgroundColor: canAdd ? null : Theme.of(context).disabledColor,
-            icon: const Icon(Icons.add_location_alt_outlined),
-            label: const Text('Add circle'),
-          ),
-        ],
-      ),
-      bottomSheet: selectedCircle == null
+      // While an editor sheet is open it provides its own delete/close, and the
+      // FABs would overlap it — so show them only when nothing is selected.
+      floatingActionButton: (selectedCircle != null || selectedPlane != null)
           ? null
-          : CircleEditorSheet(
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                FloatingActionButton.small(
+                  heroTag: 'locate',
+                  tooltip: 'Locate me',
+                  onPressed: _locating ? null : _locateMe,
+                  child: _locating
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.my_location),
+                ),
+                const SizedBox(height: 12),
+                FloatingActionButton.extended(
+                  heroTag: 'add',
+                  onPressed: activeLayer == null
+                      ? null
+                      : () {
+                          final c = _mapController.camera.center;
+                          if (isPlaneLayer) {
+                            _addPlaneAt(c, activeLayer);
+                          } else {
+                            _addCircleAt(c, activeLayer);
+                          }
+                        },
+                  backgroundColor: activeLayer == null
+                      ? Theme.of(context).disabledColor
+                      : null,
+                  icon: Icon(isPlaneLayer
+                      ? Icons.change_history
+                      : Icons.add_location_alt_outlined),
+                  label: Text(isPlaneLayer ? 'Add plane' : 'Add circle'),
+                ),
+              ],
+            ),
+      bottomSheet: selectedCircle != null
+          ? CircleEditorSheet(
               key: ValueKey(selectedCircle.id),
               circle: selectedCircle,
               layers: layers,
-            ),
+            )
+          : selectedPlane != null
+              ? PlaneEditorSheet(
+                  key: ValueKey(selectedPlane.id),
+                  plane: selectedPlane,
+                  layers: layers,
+                )
+              : null,
     );
   }
 }

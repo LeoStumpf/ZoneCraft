@@ -63,6 +63,31 @@ final selectedCircleProvider =
     NotifierProvider<SelectedCircleNotifier, String?>(
         SelectedCircleNotifier.new);
 
+/// Id of the currently selected plane, or null. Mutually exclusive with
+/// [selectedCircleProvider] (an object of one type is selected at a time).
+class SelectedPlaneNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void select(String? id) => state = id;
+}
+
+final selectedPlaneProvider =
+    NotifierProvider<SelectedPlaneNotifier, String?>(SelectedPlaneNotifier.new);
+
+/// While a plane is selected, which endpoint the next map tap relocates —
+/// `'A'`, `'B'`, or null for "no placement armed".
+class PlanePlacementNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void arm(String? point) => state = point;
+}
+
+final planePlacementProvider =
+    NotifierProvider<PlanePlacementNotifier, String?>(
+        PlanePlacementNotifier.new);
+
 /// Resolves the effective active layer id given the current layer list,
 /// falling back to the top-most layer when nothing is explicitly selected.
 String? effectiveActiveLayerId(List<Layer> layers, String? selected) {
