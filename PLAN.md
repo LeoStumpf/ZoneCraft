@@ -5,11 +5,12 @@ Notes under each item are implementation hints, not final decisions. Open design
 questions are collected at the bottom.
 
 > **Progress:** M0 (data model + settings), M1 (rendering engine), M2 (UI restructure) and
-> M3 (settings screen + uncertainty UI) are **done** — see `IMPLEMENTATION_PLAN.md`. The
-> engine handles union/flat-colour, the uncertainty band, and inverse rendering for
-> circles; the layers **left drawer** (with visibility/reorder/colour/rename/**invert**/
-> delete), the docked **bottom editor**, **add/remove**, and a **Settings screen** (global
-> uncertainty radius) are in. Remaining: locate-me, planes, and the app icon.
+> M3 (settings screen + uncertainty UI) and M4 (opt-in locate-me) are **done** — see
+> `IMPLEMENTATION_PLAN.md`. The engine handles union/flat-colour, the uncertainty band, and
+> inverse rendering for circles; the layers **left drawer** (with visibility/reorder/
+> colour/rename/**invert**/delete), the docked **bottom editor**, **add/remove**, a
+> **Settings screen** (global uncertainty radius), and an opt-in **Locate me** button are
+> in. Remaining: planes and the app icon.
 
 ---
 
@@ -43,7 +44,7 @@ questions are collected at the bottom.
 
 ## Location
 
-- [ ] **"Locate me" button to centre the map on the phone's position.**
+- [x] **"Locate me" button to centre the map on the phone's position.**
   - **Strictly optional** — never force it. Only request location permission when the
     user taps the button; degrade gracefully if denied. No background location.
   - Likely `geolocator` + `permission_handler`. Show the current position marker only

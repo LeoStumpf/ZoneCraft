@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart' hide Circle;
 
 import '../data/database.dart';
@@ -20,10 +21,63 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   final _mapController = MapController();
   static const _hitTest = Distance(calculator: Haversine());
 
+  /// The user's last known position, shown as a marker. Null until the user
+  /// opts in via the "Locate me" button. We never request location at launch.
+  LatLng? _myPosition;
+  bool _locating = false;
+
   @override
   void dispose() {
     _mapController.dispose();
     super.dispose();
+  }
+
+  /// Opt-in location. Only ever runs on an explicit button tap. Requests
+  /// permission *now* (not at launch); on grant, centres the map and drops a
+  /// position marker; on denial or disabled services, shows a dismissible hint
+  /// and changes nothing else.
+  Future<void> _locateMe() async {
+    if (_locating) return;
+    setState(() => _locating = true);
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        _hint('Location services are off. Enable them to use Locate me.');
+        return;
+      }
+
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        _hint('Location permission denied. Zonecraft works fine without it.');
+        return;
+      }
+
+      final pos = await Geolocator.getCurrentPosition();
+      // Guard against a non-finite fix: a NaN LatLng would corrupt the map
+      // camera and crash every subsequent projection.
+      if (!pos.latitude.isFinite || !pos.longitude.isFinite) {
+        _hint('Could not get a valid location fix. Try again outdoors.');
+        return;
+      }
+      final here = LatLng(pos.latitude, pos.longitude);
+      if (!mounted) return;
+      setState(() => _myPosition = here);
+      _mapController.move(here, 14);
+    } catch (e) {
+      _hint('Could not get your location.');
+    } finally {
+      if (mounted) setState(() => _locating = false);
+    }
+  }
+
+  void _hint(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   /// A default radius (metres) scaled so a new circle is visible at the current
@@ -165,6 +219,21 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     circles.where((c) => c.layerId == layer.id).toList(),
                 uncertaintyMeters: uncertainty,
               ),
+          if (_myPosition != null)
+            MarkerLayer(
+              markers: [
+                Marker(
+                  point: _myPosition!,
+                  width: 24,
+                  height: 24,
+                  child: const Icon(
+                    Icons.my_location,
+                    color: Colors.blue,
+                    size: 24,
+                  ),
+                ),
+              ],
+            ),
           const RichAttributionWidget(
             attributions: [
               TextSourceAttribution('© OpenStreetMap contributors'),
@@ -176,6 +245,19 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
+          FloatingActionButton.small(
+            heroTag: 'locate',
+            tooltip: 'Locate me',
+            onPressed: _locating ? null : _locateMe,
+            child: _locating
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.my_location),
+          ),
+          const SizedBox(height: 12),
           if (selectedCircle != null)
             FloatingActionButton.small(
               heroTag: 'remove',

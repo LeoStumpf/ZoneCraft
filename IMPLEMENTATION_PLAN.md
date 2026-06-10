@@ -124,7 +124,17 @@ changes re-render every layer's band immediately. `flutter analyze`/`flutter tes
 - **Verify:** set uncertainty to 500 m → every object gains a lighter 500 m inner band;
   set 0 → bands disappear.
 
-## Milestone 4 — "Locate me" (strictly opt-in)
+## Milestone 4 — "Locate me" (strictly opt-in) ✅ DONE
+
+**Status:** complete (2026-06-10). Added `geolocator` only (it covers the permission flow,
+so `permission_handler` was unnecessary). Manifest declares fine/coarse location;
+iOS has `NSLocationWhenInUseUsageDescription`. A small `my_location` FAB runs `_locateMe`
+**only on tap**: checks services, requests permission *then*, and on grant centres the map
+(zoom 14) + drops a marker; denial/disabled services show a dismissible SnackBar and change
+nothing. A non-finite fix is guarded (returns a hint) so a NaN position can't corrupt the
+map camera. Verified on device: no permission prompt at launch (`granted=false`); prompt
+appears only on the button tap; grant centres on the real position with a marker; a bad fix
+shows the hint instead of crashing.
 
 **Goal:** optional current-location centring.
 
