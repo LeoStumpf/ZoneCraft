@@ -179,7 +179,17 @@ a lighter band straddles the divide when uncertainty > 0, and inverse fills the 
 - **Verify:** a plane fills the half nearer its chosen point, with a lighter band along
   the divide; inverse flips it; two planes in a layer union flat.
 
-## Milestone 6 — App icon / branding
+## Milestone 6 — App icon / branding ✅ DONE
+
+**Status:** complete (2026-06-10). Source art (`assets/icon/zonecraft.png`, a transparent
+rounded-square; white background removed via morphological reconstruction so interior
+white roads/outlines survive) plus a padded adaptive foreground
+(`assets/icon/zonecraft_foreground.png`). `flutter_launcher_icons` generates Android
+(adaptive: white bg + foreground) and iOS icons (alpha flattened to white); the app label
+is "Zonecraft". `flutter_native_splash` shows the icon centred on white at launch
+(incl. the Android-12 splash API). Both configured in `pubspec.yaml`. Verified on device:
+launcher shows the new circle-masked icon labelled "Zonecraft", and the splash shows the
+icon when opening the app.
 
 - Add `flutter_launcher_icons`; supply one source icon (`assets/icon/zonecraft.png`),
   generate Android/iOS launcher icons, replace the default Flutter icon.

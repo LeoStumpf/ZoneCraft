@@ -5,13 +5,13 @@ Notes under each item are implementation hints, not final decisions. Open design
 questions are collected at the bottom.
 
 > **Progress:** M0 (data model + settings), M1 (rendering engine), M2 (UI restructure) and
-> M3 (settings screen + uncertainty UI), M4 (opt-in locate-me) and M5 (plane object type)
-> are **done** — see `IMPLEMENTATION_PLAN.md`. The engine handles union/flat-colour, the
-> uncertainty band, and inverse rendering for **circles and planes**; the layers **left
-> drawer** (with visibility/reorder/colour/rename/**invert**/delete and a circles|planes
-> **type chooser**), the docked **bottom editor**, **add/remove**, a **Settings screen**
-> (global uncertainty radius), and an opt-in **Locate me** button are in. Remaining: the
-> app icon.
+> **All milestones M0–M6 are done** — see `IMPLEMENTATION_PLAN.md`. The engine handles
+> union/flat-colour, the uncertainty band, and inverse rendering for **circles and
+> planes**; the layers **left drawer** (with visibility/reorder/colour/rename/**invert**/
+> delete and a circles|planes **type chooser**), the docked **bottom editor**,
+> **add/remove**, a **Settings screen** (global uncertainty radius), an opt-in **Locate
+> me** button, and the **app icon + launch splash** are in. The v1 roadmap is complete;
+> remaining items below are future polish.
 
 ---
 
@@ -29,10 +29,11 @@ questions are collected at the bottom.
   - Decide how it pairs with the bottom edit menu below (e.g. add → object becomes
     selected → bottom menu opens for placement/tuning).
 
-- [ ] **Add a nice app icon / symbol.**
+- [x] **Add a nice app icon / symbol.**
   - Replace the default Flutter launcher icon (`android/app/src/main/res/mipmap-*`,
     `ios/.../AppIcon.appiconset`). Use `flutter_launcher_icons` to generate all sizes
-    from one source asset.
+    from one source asset. Done: transparent rounded-square at `assets/icon/zonecraft.png`
+    (+ adaptive foreground); also shown as the launch splash via `flutter_native_splash`.
 
 ## Object editing
 
