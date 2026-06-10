@@ -5,11 +5,11 @@
 		<key>CADisableMinimumFrameDurationOnPhone</key>
 		<true/>
 		<key>NSLocationWhenInUseUsageDescription</key>
-		<string>Zonecraft uses your location only when you tap "Locate me", to centre the map on where you are. It is never used in the background.</string>
+		<string>ZoneCraft uses your location only when you tap "Locate me", to centre the map on where you are. It is never used in the background.</string>
 		<key>CFBundleDevelopmentRegion</key>
 		<string>$(DEVELOPMENT_LANGUAGE)</string>
 		<key>CFBundleDisplayName</key>
-		<string>Zonecraft</string>
+		<string>ZoneCraft</string>
 		<key>CFBundleExecutable</key>
 		<string>$(EXECUTABLE_NAME)</string>
 		<key>CFBundleIdentifier</key>

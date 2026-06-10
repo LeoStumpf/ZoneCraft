@@ -1,4 +1,4 @@
-# Zonecraft — working notes for Claude
+# ZoneCraft — working notes for Claude
 
 Flutter app: geodesic circle/zone layers on OpenStreetMap, stored locally (Drift/SQLite),
 no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.

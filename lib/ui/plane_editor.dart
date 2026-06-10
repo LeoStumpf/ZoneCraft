@@ -1,9 +1,11 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:latlong2/latlong.dart' hide Path;
 
 import '../data/database.dart';
 import '../data/repository.dart';
+import '../geo/coords.dart';
 import '../state/providers.dart';
 
 /// Docked bottom-sheet editor for a plane ("closer to one of two points").
@@ -25,11 +27,11 @@ class PlaneEditorSheet extends ConsumerStatefulWidget {
 }
 
 class _PlaneEditorSheetState extends ConsumerState<PlaneEditorSheet> {
-  late final TextEditingController _aLat;
-  late final TextEditingController _aLng;
-  late final TextEditingController _bLat;
-  late final TextEditingController _bLng;
+  late final TextEditingController _a;
+  late final TextEditingController _b;
   late final TextEditingController _label;
+  final _aFocus = FocusNode();
+  final _bFocus = FocusNode();
 
   Repository get _repo => ref.read(repositoryProvider);
 
@@ -37,27 +39,35 @@ class _PlaneEditorSheetState extends ConsumerState<PlaneEditorSheet> {
   void initState() {
     super.initState();
     final p = widget.plane;
-    _aLat = TextEditingController(text: p.aLat.toStringAsFixed(6));
-    _aLng = TextEditingController(text: p.aLng.toStringAsFixed(6));
-    _bLat = TextEditingController(text: p.bLat.toStringAsFixed(6));
-    _bLng = TextEditingController(text: p.bLng.toStringAsFixed(6));
+    _a = TextEditingController(text: formatLatLng(p.aLat, p.aLng));
+    _b = TextEditingController(text: formatLatLng(p.bLat, p.bLng));
     _label = TextEditingController(text: p.label ?? '');
   }
 
   @override
-  void dispose() {
-    _aLat.dispose();
-    _aLng.dispose();
-    _bLat.dispose();
-    _bLng.dispose();
-    _label.dispose();
-    super.dispose();
+  void didUpdateWidget(PlaneEditorSheet old) {
+    super.didUpdateWidget(old);
+    // Reflect external changes (e.g. placing a point by map tap) in the field,
+    // but never while the user is editing it.
+    _syncIfUnfocused(_a, _aFocus, widget.plane.aLat, widget.plane.aLng);
+    _syncIfUnfocused(_b, _bFocus, widget.plane.bLat, widget.plane.bLng);
   }
 
-  double? _parse(String s, {required double min, required double max}) {
-    final n = double.tryParse(s);
-    if (n == null || !n.isFinite || n < min || n > max) return null;
-    return n;
+  void _syncIfUnfocused(
+      TextEditingController c, FocusNode f, double lat, double lng) {
+    if (f.hasFocus) return;
+    final target = formatLatLng(lat, lng);
+    if (c.text != target) c.text = target;
+  }
+
+  @override
+  void dispose() {
+    _a.dispose();
+    _b.dispose();
+    _label.dispose();
+    _aFocus.dispose();
+    _bFocus.dispose();
+    super.dispose();
   }
 
   void _armPlacement(String point) {
@@ -138,11 +148,11 @@ class _PlaneEditorSheetState extends ConsumerState<PlaneEditorSheet> {
                   ),
                 ],
               ),
-              _pointRow('A', _aLat, _aLng, armed == 'A',
-                  (lat, lng) => _repo.updatePlane(id, aLat: lat, aLng: lng)),
+              _pointRow('A', _a, _aFocus, armed == 'A',
+                  (p) => _repo.updatePlane(id, aLat: p.latitude, aLng: p.longitude)),
               const SizedBox(height: 8),
-              _pointRow('B', _bLat, _bLng, armed == 'B',
-                  (lat, lng) => _repo.updatePlane(id, bLat: lat, bLng: lng)),
+              _pointRow('B', _b, _bFocus, armed == 'B',
+                  (p) => _repo.updatePlane(id, bLat: p.latitude, bLng: p.longitude)),
               const SizedBox(height: 8),
               TextField(
                 controller: _label,
@@ -160,42 +170,30 @@ class _PlaneEditorSheetState extends ConsumerState<PlaneEditorSheet> {
     );
   }
 
-  /// One point's lat/lng fields plus a "Move by map tap" button.
+  /// One point's single "lat, lng" field plus a "Move by map tap" button.
   Widget _pointRow(
     String point,
-    TextEditingController lat,
-    TextEditingController lng,
+    TextEditingController controller,
+    FocusNode focus,
     bool armed,
-    void Function(double lat, double lng) onLatLng,
+    void Function(LatLng) onChanged,
   ) {
     return Row(
       children: [
         Expanded(
           child: TextField(
-            controller: lat,
+            controller: controller,
+            focusNode: focus,
             decoration: InputDecoration(
-                labelText: '$point lat', isDense: true),
+              labelText: '$point (lat, lng)',
+              hintText: '48.137154, 11.575382',
+              isDense: true,
+            ),
             keyboardType: const TextInputType.numberWithOptions(
                 decimal: true, signed: true),
             onChanged: (s) {
-              final n = _parse(s, min: -90, max: 90);
-              final other = double.tryParse(lng.text);
-              if (n != null && other != null) onLatLng(n, other);
-            },
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: TextField(
-            controller: lng,
-            decoration: InputDecoration(
-                labelText: '$point lng', isDense: true),
-            keyboardType: const TextInputType.numberWithOptions(
-                decimal: true, signed: true),
-            onChanged: (s) {
-              final n = _parse(s, min: -180, max: 180);
-              final other = double.tryParse(lat.text);
-              if (n != null && other != null) onLatLng(other, n);
+              final p = parseLatLng(s);
+              if (p != null) onChanged(p);
             },
           ),
         ),

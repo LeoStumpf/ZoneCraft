@@ -4,16 +4,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'ui/map_screen.dart';
 
 void main() {
-  runApp(const ProviderScope(child: ZonecraftApp()));
+  runApp(const ProviderScope(child: ZoneCraftApp()));
 }
 
-class ZonecraftApp extends StatelessWidget {
-  const ZonecraftApp({super.key});
+class ZoneCraftApp extends StatelessWidget {
+  const ZoneCraftApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Zonecraft',
+      title: 'ZoneCraft',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2196F3)),

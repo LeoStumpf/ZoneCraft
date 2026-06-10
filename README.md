@@ -1,4 +1,4 @@
-# Zonecraft
+# ZoneCraft
 
 A map app for placing **geodesic circles** on OpenStreetMap, organised into stackable
 **overlay layers**. No login, no account — everything is stored locally on the device.

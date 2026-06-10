@@ -52,7 +52,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       }
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
-        _hint('Location permission denied. Zonecraft works fine without it.');
+        _hint('Location permission denied. ZoneCraft works fine without it.');
         return;
       }
 
@@ -79,6 +79,23 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
       ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// A small non-interactive dot marking an edit point (circle centre / plane
+  /// endpoint). The white ring keeps it visible over any map colour.
+  Marker _editPointMarker(LatLng point) {
+    return Marker(
+      point: point,
+      width: 18,
+      height: 18,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.black87,
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 2.5),
+        ),
+      ),
+    );
   }
 
   /// A default radius (metres) scaled so a new circle is visible at the current
@@ -262,7 +279,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     return Scaffold(
       drawer: const LayersDrawer(),
       appBar: AppBar(
-        title: const Text('Zonecraft'),
+        title: const Text('ZoneCraft'),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(28),
           child: Padding(
@@ -318,6 +335,22 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     size: 24,
                   ),
                 ),
+              ],
+            ),
+          // Visual handles for the object being edited: the circle's centre, or
+          // the plane's two points.
+          if (selectedCircle != null || selectedPlane != null)
+            MarkerLayer(
+              markers: [
+                if (selectedCircle != null)
+                  _editPointMarker(
+                      LatLng(selectedCircle.centerLat, selectedCircle.centerLng)),
+                if (selectedPlane != null) ...[
+                  _editPointMarker(
+                      LatLng(selectedPlane.aLat, selectedPlane.aLng)),
+                  _editPointMarker(
+                      LatLng(selectedPlane.bLat, selectedPlane.bLng)),
+                ],
               ],
             ),
           const RichAttributionWidget(

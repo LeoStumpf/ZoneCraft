@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/database.dart';
 import '../data/repository.dart';
+import '../geo/coords.dart';
 import '../state/providers.dart';
 
 /// Docked bottom-sheet editor for a circle. Unlike a dialog, this sits below the
@@ -31,8 +32,7 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
   static const _minRadius = 10.0;
   static const _maxRadius = 1000000.0;
 
-  late final TextEditingController _lat;
-  late final TextEditingController _lng;
+  late final TextEditingController _center;
   late final TextEditingController _label;
   late double _radius;
 
@@ -42,24 +42,17 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
   void initState() {
     super.initState();
     final c = widget.circle;
-    _lat = TextEditingController(text: c.centerLat.toStringAsFixed(6));
-    _lng = TextEditingController(text: c.centerLng.toStringAsFixed(6));
+    _center =
+        TextEditingController(text: formatLatLng(c.centerLat, c.centerLng));
     _label = TextEditingController(text: c.label ?? '');
     _radius = c.radiusMeters;
   }
 
   @override
   void dispose() {
-    _lat.dispose();
-    _lng.dispose();
+    _center.dispose();
     _label.dispose();
     super.dispose();
-  }
-
-  double? _parse(String s, {required double min, required double max}) {
-    final n = double.tryParse(s);
-    if (n == null || !n.isFinite || n < min || n > max) return null;
-    return n;
   }
 
   void _setRadius(double meters) {
@@ -136,40 +129,22 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
                 value: sliderValue.toDouble(),
                 onChanged: (v) => _setRadius(math.pow(10, v).toDouble()),
               ),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _lat,
-                      decoration: const InputDecoration(
-                          labelText: 'Latitude', isDense: true),
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true, signed: true),
-                      onChanged: (s) {
-                        final n = _parse(s, min: -90, max: 90);
-                        if (n != null) {
-                          _repo.updateCircle(widget.circle.id, centerLat: n);
-                        }
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: _lng,
-                      decoration: const InputDecoration(
-                          labelText: 'Longitude', isDense: true),
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true, signed: true),
-                      onChanged: (s) {
-                        final n = _parse(s, min: -180, max: 180);
-                        if (n != null) {
-                          _repo.updateCircle(widget.circle.id, centerLng: n);
-                        }
-                      },
-                    ),
-                  ),
-                ],
+              TextField(
+                controller: _center,
+                decoration: const InputDecoration(
+                  labelText: 'Centre (lat, lng)',
+                  hintText: '48.137154, 11.575382',
+                  isDense: true,
+                ),
+                keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true, signed: true),
+                onChanged: (s) {
+                  final p = parseLatLng(s);
+                  if (p != null) {
+                    _repo.updateCircle(widget.circle.id,
+                        centerLat: p.latitude, centerLng: p.longitude);
+                  }
+                },
               ),
               const SizedBox(height: 8),
               TextField(
