@@ -10,8 +10,15 @@ with union/band/inverse for circles **and planes**; UI restructure: layers left 
 docked live editor, add/remove; settings screen with global uncertainty; opt-in locate-me
 via `geolocator`; plane "closer-to-one-of-two-points" object with a circles|planes layer
 type chooser; app icon + launch splash via `flutter_launcher_icons`/`flutter_native_splash`,
-source art at `assets/icon/`). The v1 roadmap is complete. Track in `IMPLEMENTATION_PLAN.md`
-(milestone status) and `PLAN.md` (feature backlog).
+source art at `assets/icon/`). The v1 roadmap is complete.
+
+**Post-v1 refinements (done):** app renamed to **ZoneCraft**; single "lat, lng" coordinate
+field per point in the editors (pastes Google Maps coords; parser in `geo/coords.dart`);
+edit-point markers (circle centre / plane endpoints) while editing; **persisted map camera**
+(centre + zoom in `AppSettings`, **schema now v3**); **full-bleed map** with no app bar —
+just a floating top-left menu button opens the drawer.
+
+Track in `IMPLEMENTATION_PLAN.md` (milestone status) and `PLAN.md` (feature backlog).
 
 ## Workflow rule (required)
 
@@ -36,9 +43,10 @@ source art at `assets/icon/`). The v1 roadmap is complete. Track in `IMPLEMENTAT
 ```
 lib/
   data/        Drift database (Layers, Circles, Planes, AppSettings) + repository
-  geo/         geodesicCircle() and geometry helpers
-  state/       Riverpod providers
-  ui/          map_screen, layers_panel, circle_editor, region_layer
+  geo/         geodesicCircle(), plane half-plane geometry, lat/lng parsing
+  state/       Riverpod providers (layers, circles, planes, settings, selection)
+  ui/          map_screen, layers_panel, circle_editor, plane_editor,
+               settings_screen, region_layer
 ```
 
 ## Plans

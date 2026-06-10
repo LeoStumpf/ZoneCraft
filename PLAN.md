@@ -1,17 +1,29 @@
-# Zonecraft — Roadmap / TODO
+# ZoneCraft — Roadmap / TODO
 
 Backlog of planned features beyond v1. Grouped by area; check items off as they land.
 Notes under each item are implementation hints, not final decisions. Open design
 questions are collected at the bottom.
 
-> **Progress:** M0 (data model + settings), M1 (rendering engine), M2 (UI restructure) and
-> **All milestones M0–M6 are done** — see `IMPLEMENTATION_PLAN.md`. The engine handles
-> union/flat-colour, the uncertainty band, and inverse rendering for **circles and
-> planes**; the layers **left drawer** (with visibility/reorder/colour/rename/**invert**/
-> delete and a circles|planes **type chooser**), the docked **bottom editor**,
-> **add/remove**, a **Settings screen** (global uncertainty radius), an opt-in **Locate
-> me** button, and the **app icon + launch splash** are in. The v1 roadmap is complete;
-> remaining items below are future polish.
+> **Progress:** **All milestones M0–M6 are done** — see `IMPLEMENTATION_PLAN.md`. The
+> engine handles union/flat-colour, the uncertainty band, and inverse rendering for
+> **circles and planes**; the layers **left drawer** (with visibility/reorder/colour/
+> rename/**invert**/delete and a circles|planes **type chooser**), the docked **bottom
+> editor**, **add/remove**, a **Settings screen** (global uncertainty radius), an opt-in
+> **Locate me** button, and the **app icon + launch splash** are in. The v1 roadmap is
+> complete; a round of **post-v1 refinements** (below) has also landed. Remaining items are
+> future polish.
+
+## Post-v1 refinements (done)
+
+- [x] **Renamed the app to "ZoneCraft"** (launcher label, iOS display name, in-app title).
+- [x] **Single coordinate field per point** ("lat, lng") in the circle/plane editors,
+  accepting coordinates pasted straight from Google Maps. Shared parser `geo/coords.dart`.
+- [x] **Edit-point markers:** while editing, the circle's centre / a plane's two endpoints
+  show as dots on the map.
+- [x] **Persisted map camera:** centre + zoom are saved (AppSettings, schema v3) and the
+  app reopens on the same view.
+- [x] **Full-bleed map:** removed the app bar; a single floating menu button (top-left)
+  opens the layers drawer.
 
 ---
 
@@ -108,19 +120,15 @@ questions are collected at the bottom.
 - New `Settings` storage for the global uncertainty value (+ future options).
 - Remember to bump `schemaVersion` and add migrations.
 
-## Open questions / decisions
+## Open questions / decisions (all resolved during v1)
 
-1. **Uncertainty band geometry:** is the lighter band the *inner* ring `R-u..R`
-   (uncertainty eats into the circle), or an *extra outer* ring `R..R+u` (uncertainty
-   extends beyond)? The note says "outer 500 m of the circle" → leaning inner band
-   `R-u..R`. Confirm.
-2. **Plane region:** which of the two points' side is "enabled" — fixed, or
-   user-toggleable per plane?
-3. **Union across layers vs per layer:** does "overlaps don't darken" apply only
-   within a layer, or also between different layers of the same colour? (Different
-   colours presumably still blend where they overlap.)
-4. **Single source of truth for object type:** per-layer `type` (chosen here) vs
-   per-object — confirm a layer is locked to one type once it has objects.
+1. **Uncertainty band geometry:** ✅ inner band `R-u..R` for circles (the band eats into
+   the object); for planes the band straddles the dividing bisector.
+2. **Plane region:** ✅ user-toggleable per plane (the "Nearer side: A | B" switch).
+3. **Union across layers vs per layer:** ✅ flat union applies *within* a layer; different
+   layers still composite (blend) over each other.
+4. **Single source of truth for object type:** ✅ per-layer `type`, chosen at layer
+   creation; a layer holds one object kind.
 
 ---
 

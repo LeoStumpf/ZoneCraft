@@ -1,4 +1,4 @@
-# Zonecraft — Implementation Plan
+# ZoneCraft — Implementation Plan
 
 Sequenced plan to deliver the features in [PLAN.md](PLAN.md). Ordered so the pieces
 many features depend on (data model + rendering engine) come first and later work
@@ -186,14 +186,14 @@ rounded-square; white background removed via morphological reconstruction so int
 white roads/outlines survive) plus a padded adaptive foreground
 (`assets/icon/zonecraft_foreground.png`). `flutter_launcher_icons` generates Android
 (adaptive: white bg + foreground) and iOS icons (alpha flattened to white); the app label
-is "Zonecraft". `flutter_native_splash` shows the icon centred on white at launch
-(incl. the Android-12 splash API). Both configured in `pubspec.yaml`. Verified on device:
-launcher shows the new circle-masked icon labelled "Zonecraft", and the splash shows the
-icon when opening the app.
+is "ZoneCraft" (renamed post-M6). `flutter_native_splash` shows the icon centred on white at
+launch (incl. the Android-12 splash API). Both configured in `pubspec.yaml`. Verified on
+device: launcher shows the new circle-masked icon, and the splash shows the icon when
+opening the app.
 
 - Add `flutter_launcher_icons`; supply one source icon (`assets/icon/zonecraft.png`),
   generate Android/iOS launcher icons, replace the default Flutter icon.
-- **Verify:** installed app shows the new icon and label "Zonecraft".
+- **Verify:** installed app shows the new icon and label "ZoneCraft".
 
 ---
 
