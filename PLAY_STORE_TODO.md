@@ -111,9 +111,63 @@ app**, so back it up.
   # (set up a nice map view first; repeat for a couple of screens)
   ```
 
-> 💡 Want a starting point for the descriptions? I drafted store text on request — ask and I'll add
-> it here. For the icon/feature graphic, any image editor (or even an online resizer) is fine;
-> they just have to hit the exact pixel sizes.
+> 💡 For the icon/feature graphic, any image editor (or even an online resizer) is fine; they just
+> have to hit the exact pixel sizes. Draft store text below — tweak the voice to taste.
+
+### Draft: short description (73/80 chars)
+
+```
+Draw map zones, combine them, and narrow down an area. Offline, no login.
+```
+
+Alternatives if you want a different angle:
+
+```
+Stack map zones — radius, bisector, nearest-point — to pin down an area.
+```
+```
+A private, offline map tool for drawing and combining deduction zones.
+```
+
+### Draft: full description (~1,900/4,000 chars)
+
+```
+ZoneCraft turns a map into a deduction board. Draw zones, stack them up, and watch
+the possible area shrink to exactly where it has to be — perfect for hide-and-seek
+style games, geography puzzles, or any "where could it be?" question.
+
+Each layer holds one kind of zone, and you can combine as many as you like:
+
+• Circle — everything within a set distance of a point (true geodesic radius).
+• Half-plane — the side of a line that's closer to one point than another.
+• Nearest-point cell — the area closest to your chosen point out of several.
+• Freehand line — split the map along a line you draw.
+• Freehand area — fill any shape you draw.
+
+Overlapping zones merge into one clean colour instead of getting muddier, every
+layer can be inverted ("everywhere EXCEPT this"), and an adjustable uncertainty
+band shows the fuzzy edge when your information isn't exact.
+
+FEATURES
+• Five composable zone types, each on its own colour-coded layer.
+• Show/hide, reorder, recolour, rename and invert layers.
+• Optional overlays: public-transport lines, points of interest, and
+  administrative borders, straight from OpenStreetMap.
+• "Locate me" centres the map on your position (only when you tap it).
+• The map remembers where you left off.
+
+WORKS OFFLINE
+Map tiles you view are cached on your device, and a "Download this area" button
+grabs the current view for guaranteed coverage with no signal — handy on the move,
+underground, or out of range.
+
+PRIVATE BY DESIGN
+No account. No sign-up. Everything you create stays in local storage on your
+device — it's never uploaded. Location is only ever used on-device, and only when
+you ask for it.
+
+Map data © OpenStreetMap contributors.
+```
 
 ---
 
