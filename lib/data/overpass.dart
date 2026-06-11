@@ -165,10 +165,13 @@ List<PoiResult> parseOverpassResponse(
 }
 
 /// Queries the Overpass API for the enabled [categories] within the bbox.
-/// Zoom-gating/debouncing are the caller's responsibility. Fails silently
-/// (returns an empty list) on any network/HTTP/parse error so POIs never crash
-/// or interrupt the map.
-Future<List<PoiResult>> fetchPois({
+/// Zoom-gating/debouncing are the caller's responsibility.
+///
+/// Returns the POIs on success (an empty list means "none here"), or **null**
+/// on any network/HTTP/timeout error — so the caller can keep the previous
+/// markers instead of clearing them when a request is rate-limited or fails.
+/// Never throws.
+Future<List<PoiResult>?> fetchPois({
   required double south,
   required double west,
   required double north,
@@ -198,10 +201,10 @@ Future<List<PoiResult>> fetchPois({
           body: {'data': query},
         )
         .timeout(const Duration(seconds: 30));
-    if (resp.statusCode != 200) return const [];
+    if (resp.statusCode != 200) return null; // rate-limited / server error
     return parseOverpassResponse(resp.body, cats);
   } catch (_) {
-    return const [];
+    return null; // network/timeout
   } finally {
     if (owned) c.close();
   }

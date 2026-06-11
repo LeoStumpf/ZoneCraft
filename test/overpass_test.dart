@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:zonecraft/data/overpass.dart';
 
 void main() {
@@ -71,6 +73,46 @@ void main() {
       expect(parseOverpassResponse('not json', poiCategories), isEmpty);
       expect(parseOverpassResponse('{"elements":"oops"}', poiCategories),
           isEmpty);
+    });
+  });
+
+  group('fetchPois', () {
+    test('returns the parsed list on HTTP 200', () async {
+      final client = MockClient((_) async => http.Response(
+            '{"elements":[{"type":"node","lat":1,"lon":2,"tags":{"amenity":"bench"}}]}',
+            200,
+          ));
+      final r = await fetchPois(
+        south: 0,
+        west: 0,
+        north: 1,
+        east: 1,
+        categories: [cat('bench')],
+        client: client,
+      );
+      expect(r, isNotNull);
+      expect(r!.single.categoryKey, 'bench');
+    });
+
+    test('returns null (not empty) on a non-200, so markers are kept', () async {
+      final client = MockClient((_) async => http.Response('slow down', 429));
+      final r = await fetchPois(
+        south: 0,
+        west: 0,
+        north: 1,
+        east: 1,
+        categories: [cat('bench')],
+        client: client,
+      );
+      expect(r, isNull);
+    });
+
+    test('short-circuits to empty when no categories are enabled', () async {
+      expect(
+        await fetchPois(
+            south: 0, west: 0, north: 1, east: 1, categories: const []),
+        isEmpty,
+      );
     });
   });
 }

@@ -46,9 +46,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
   Set<PoiCategory> _enabledPois = const {};
   int _poiMask = 0;
   Timer? _poiDebounce;
-  String? _lastPoiKey;
-  // Small in-memory cache keyed by (rounded bbox + category bits).
-  final Map<String, List<PoiResult>> _poiCache = {};
+  // The (inflated) area the current markers were fetched for, and the category
+  // mask they were fetched with. While the viewport stays inside this area and
+  // the categories are unchanged, no refetch happens — so markers don't churn.
+  LatLngBounds? _poiFetchedBounds;
+  int _poiFetchedMask = -1;
 
   @override
   void initState() {
@@ -83,43 +85,61 @@ class _MapScreenState extends ConsumerState<MapScreen>
   }
 
   /// Fetches POIs for the current view if enabled and zoomed in enough; clears
-  /// them otherwise. Serves the in-memory cache first, and only applies a fetch
-  /// result if the view/categories haven't changed since it started.
+  /// them otherwise. Skips the request while the viewport stays inside the
+  /// already-fetched area (no churn), fetches an inflated area so small pans
+  /// don't re-query, and on a failed/rate-limited request keeps the existing
+  /// markers rather than clearing them.
   Future<void> _refreshPois() async {
     if (!_mapReady || !mounted) return;
     final cam = _mapController.camera;
     if (_enabledPois.isEmpty || cam.zoom < _poiMinZoom) {
+      _poiFetchedBounds = null;
       if (_pois.isNotEmpty) setState(() => _pois = const []);
       return;
     }
-    final b = cam.visibleBounds;
-    final key = _poiKey(b, _enabledPois);
-    if (key == _lastPoiKey) return; // same view+categories already handled
-    _lastPoiKey = key;
-
-    final cached = _poiCache[key];
-    if (cached != null) {
-      setState(() => _pois = cached);
+    final vp = cam.visibleBounds;
+    // Still covered by the last fetch (same categories)? keep the markers.
+    if (_poiFetchedMask == _poiMask &&
+        _poiFetchedBounds != null &&
+        _boundsContain(_poiFetchedBounds!, vp)) {
       return;
     }
 
+    final q = _inflateBounds(vp, 0.4); // ~40% margin each side
     final results = await fetchPois(
-      south: b.south,
-      west: b.west,
-      north: b.north,
-      east: b.east,
+      south: q.south,
+      west: q.west,
+      north: q.north,
+      east: q.east,
       categories: _enabledPois,
     );
     if (!mounted) return;
-    if (_poiCache.length > 32) _poiCache.clear(); // keep the cache bounded
-    _poiCache[key] = results;
-    if (key == _lastPoiKey) setState(() => _pois = results);
+    if (results == null) {
+      // Failed/rate-limited: keep current markers and retry after a short
+      // backoff (a later pan/zoom reschedules this and cancels the backoff).
+      _poiFetchedBounds = null;
+      _poiDebounce?.cancel();
+      _poiDebounce = Timer(const Duration(seconds: 4), _refreshPois);
+      return;
+    }
+    _poiFetchedBounds = q;
+    _poiFetchedMask = _poiMask;
+    setState(() => _pois = results);
   }
 
-  String _poiKey(LatLngBounds b, Set<PoiCategory> cats) {
-    String r(double v) => v.toStringAsFixed(3); // ~100 m bbox buckets
-    final bits = cats.fold<int>(0, (acc, c) => acc | c.bit);
-    return '${r(b.south)},${r(b.west)},${r(b.north)},${r(b.east)}|$bits';
+  static bool _boundsContain(LatLngBounds outer, LatLngBounds inner) =>
+      inner.south >= outer.south &&
+      inner.north <= outer.north &&
+      inner.west >= outer.west &&
+      inner.east <= outer.east;
+
+  static LatLngBounds _inflateBounds(LatLngBounds b, double margin) {
+    final dLat = (b.north - b.south) * margin;
+    final dLng = (b.east - b.west) * margin;
+    return LatLngBounds(
+      LatLng(b.south - dLat, b.west - dLng),
+      LatLng(b.north + dLat, b.east + dLng),
+    );
   }
 
   /// Writes the current camera (centre + zoom) to settings. No-op until the map
@@ -317,14 +337,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
     return null;
   }
 
-  Layer? _activeLayer(List<Layer> layers) {
-    final activeId = effectiveActiveLayerId(
-      layers,
-      ref.read(activeLayerProvider),
-    );
-    return layers.where((l) => l.id == activeId).firstOrNull;
-  }
-
   void _clearSelection() {
     ref.read(selectedCircleProvider.notifier).select(null);
     ref.read(selectedPlaneProvider.notifier).select(null);
@@ -484,19 +496,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
       }
     }
 
-    // No hit: deselect if something is selected, else add to the active layer.
+    // No object hit: just deselect anything selected. Objects are created with
+    // the Add button — tapping empty map never adds one.
     if (ref.read(selectedCircleProvider) != null ||
         ref.read(selectedPlaneProvider) != null ||
         ref.read(selectedSubspaceProvider) != null) {
       _clearSelection();
-      return;
     }
-    final active = _activeLayer(layers);
-    if (active != null && active.type == 'circles') {
-      await _addCircleAt(latlng, active);
-    }
-    // Planes and subspaces need several points, so they're added via the FAB,
-    // not a single tap.
   }
 
   @override
@@ -521,7 +527,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (poiMask != _poiMask) {
       _poiMask = poiMask;
       _enabledPois = poiCategoriesFromMask(poiMask);
-      _lastPoiKey = null; // force a refetch for the new categories
+      // _poiFetchedMask now differs, so the next refresh refetches.
       _schedulePoiRefresh();
     }
     final selectedCircle = circles
@@ -582,6 +588,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         ? LatLng(savedLat, savedLng)
                         : const LatLng(48.137, 11.575), // Munich
                     initialZoom: hasSavedCamera ? savedZoom : 5,
+                    // OSM tiles exist up to z19; cap here so zooming further
+                    // doesn't leave a blank (tile-less) screen.
+                    maxZoom: 19,
                     onMapReady: () {
                       _mapReady = true;
                       _schedulePoiRefresh();
