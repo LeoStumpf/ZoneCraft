@@ -18,7 +18,8 @@ import '../geo/subspace.dart';
 /// the solid fill becomes the complement (everything outside the objects),
 /// while the band still hugs the boundary.
 ///
-/// Projection is done in screen space via [MapCamera.latLngToScreenOffset], and
+/// Every object type builds its boundary in **lat/lng** (geodesically) and the
+/// painter projects those rings to screen with [MapCamera.latLngToScreenOffset];
 /// the unions use `dart:ui` `Path.combine`.
 class RegionLayer extends StatelessWidget {
   const RegionLayer({
@@ -120,172 +121,117 @@ class _RegionPainter extends CustomPainter {
     Path? outerUnion;
     Path? coreUnion;
 
+    void addOuter(List<LatLng> ring) {
+      if (ring.length < 3) return;
+      final path = _ringToPath(ring);
+      outerUnion = outerUnion == null
+          ? path
+          : Path.combine(PathOperation.union, outerUnion!, path);
+    }
+
+    void addCore(List<LatLng> ring) {
+      if (ring.length < 3) return;
+      final path = _ringToPath(ring);
+      coreUnion = coreUnion == null
+          ? path
+          : Path.combine(PathOperation.union, coreUnion!, path);
+    }
+
     for (final c in circles) {
       final center = LatLng(c.centerLat, c.centerLng);
-      final outerRing = geodesicCircle(center, c.radiusMeters, points: _ringPoints);
+      final outerRing =
+          geodesicCircle(center, c.radiusMeters, points: _ringPoints);
       if (outerRing.isEmpty) continue; // invalid geometry -> skip
-      final outerPath = _ringToPath(outerRing);
-      outerUnion = outerUnion == null
-          ? outerPath
-          : Path.combine(PathOperation.union, outerUnion, outerPath);
-
+      addOuter(outerRing);
       final coreRadius = c.radiusMeters - uncertaintyMeters;
       if (coreRadius > 0) {
-        final coreRing = geodesicCircle(center, coreRadius, points: _ringPoints);
-        if (coreRing.isNotEmpty) {
-          final corePath = _ringToPath(coreRing);
-          coreUnion = coreUnion == null
-              ? corePath
-              : Path.combine(PathOperation.union, coreUnion, corePath);
-        }
+        addCore(geodesicCircle(center, coreRadius, points: _ringPoints));
       }
     }
 
-    if (planes.isNotEmpty) {
-      // Inflate so the half-plane's viewport-edge runs just outside the canvas
-      // (clipped away above), leaving only the dividing edge stroked.
-      final bounds = (Offset.zero & size).inflate(8);
+    // The band straddles each divide; its half-width on the ground is half the
+    // global uncertainty (matching the circle's full-width core inset).
+    final band = uncertaintyMeters > 0 ? uncertaintyMeters / 2 : 0.0;
+    // Plane/subspace clip to the viewport as a spherical quad; unproject its
+    // (slightly inflated) corners once. Null at extreme zoom / near-pole.
+    final corners = _viewportCorners(size);
+
+    if (planes.isNotEmpty && corners != null) {
       for (final p in planes) {
-        final a = camera.latLngToScreenOffset(LatLng(p.aLat, p.aLng));
-        final b = camera.latLngToScreenOffset(LatLng(p.bLat, p.bLng));
-        if (!a.dx.isFinite ||
-            !a.dy.isFinite ||
-            !b.dx.isFinite ||
-            !b.dy.isFinite) {
-          continue;
-        }
         final region = planeRegion(
-          a: a,
-          b: b,
+          a: LatLng(p.aLat, p.aLng),
+          b: LatLng(p.bLat, p.bLng),
           nearA: p.nearA,
-          halfBandPx: _halfBandPx(p),
-          bounds: bounds,
+          bandMeters: band,
+          viewportCorners: corners,
         );
-        if (region.outer.length >= 3) {
-          final outerPath = _polyToPath(region.outer);
-          outerUnion = outerUnion == null
-              ? outerPath
-              : Path.combine(PathOperation.union, outerUnion, outerPath);
-        }
-        if (region.core.length >= 3) {
-          final corePath = _polyToPath(region.core);
-          coreUnion = coreUnion == null
-              ? corePath
-              : Path.combine(PathOperation.union, coreUnion, corePath);
-        }
+        addOuter(region.outer);
+        addCore(region.core);
       }
     }
 
-    if (subspaces.isNotEmpty) {
-      final bounds = (Offset.zero & size).inflate(8);
+    if (subspaces.isNotEmpty && corners != null) {
       for (final s in subspaces) {
         final pts = subspacePoints.where((p) => p.subspaceId == s.id).toList();
         final mainPt = pts.where((p) => p.isMain).firstOrNull;
         if (mainPt == null) continue; // no main point -> nothing to fill
-        final main = camera.latLngToScreenOffset(LatLng(mainPt.lat, mainPt.lng));
-        final others = <Offset>[
+        final others = <LatLng>[
           for (final p in pts)
-            if (p.id != mainPt.id)
-              camera.latLngToScreenOffset(LatLng(p.lat, p.lng)),
+            if (p.id != mainPt.id) LatLng(p.lat, p.lng),
         ];
         final region = subspaceRegion(
-          main: main,
+          main: LatLng(mainPt.lat, mainPt.lng),
           others: others,
-          halfBandPx: _subspaceHalfBandPx(mainPt),
-          bounds: bounds,
+          bandMeters: band,
+          viewportCorners: corners,
         );
-        if (region.outer.length >= 3) {
-          final outerPath = _polyToPath(region.outer);
-          outerUnion = outerUnion == null
-              ? outerPath
-              : Path.combine(PathOperation.union, outerUnion, outerPath);
-        }
-        if (region.core.length >= 3) {
-          final corePath = _polyToPath(region.core);
-          coreUnion = coreUnion == null
-              ? corePath
-              : Path.combine(PathOperation.union, coreUnion, corePath);
-        }
+        addOuter(region.outer);
+        addCore(region.core);
       }
     }
 
     if (freeLines.isNotEmpty) {
-      final bounds = (Offset.zero & size).inflate(8);
+      final span = _spanMeters(corners);
       for (final l in freeLines) {
-        final pts =
-            freeLinePoints.where((p) => p.freeLineId == l.id).toList();
+        final pts = freeLinePoints.where((p) => p.freeLineId == l.id).toList();
         if (pts.length < 2) continue;
-        final screen = <Offset>[
-          for (final p in pts)
-            camera.latLngToScreenOffset(LatLng(p.lat, p.lng)),
-        ];
-        final ref = LatLng(pts.first.lat, pts.first.lng);
-        final ppm = _pxPerMeter(ref);
         final region = freeLineRegion(
-          points: screen,
-          offsetPx: l.offsetMeters * ppm,
-          halfBandPx: uncertaintyMeters > 0 ? uncertaintyMeters * ppm / 2 : 0,
-          bounds: bounds,
+          points: <LatLng>[for (final p in pts) LatLng(p.lat, p.lng)],
+          offsetMeters: l.offsetMeters,
+          bandMeters: band,
+          spanMeters: span,
         );
-        if (region.outer.length >= 3) {
-          final outerPath = _polyToPath(region.outer);
-          outerUnion = outerUnion == null
-              ? outerPath
-              : Path.combine(PathOperation.union, outerUnion, outerPath);
-        }
-        if (region.core.length >= 3) {
-          final corePath = _polyToPath(region.core);
-          coreUnion = coreUnion == null
-              ? corePath
-              : Path.combine(PathOperation.union, coreUnion, corePath);
-        }
+        addOuter(region.outer);
+        addCore(region.core);
       }
     }
 
     if (freeAreas.isNotEmpty) {
-      final bounds = (Offset.zero & size).inflate(8);
       for (final a in freeAreas) {
-        final pts =
-            freeAreaPoints.where((p) => p.freeAreaId == a.id).toList();
+        final pts = freeAreaPoints.where((p) => p.freeAreaId == a.id).toList();
         if (pts.length < 3) continue;
-        final ring = <Offset>[
-          for (final p in pts)
-            camera.latLngToScreenOffset(LatLng(p.lat, p.lng)),
-        ];
-        final ref = LatLng(pts.first.lat, pts.first.lng);
-        final ppm = _pxPerMeter(ref);
         final region = freeAreaRegion(
-          ring: ring,
-          offsetPx: a.offsetMeters * ppm,
-          halfBandPx: uncertaintyMeters > 0 ? uncertaintyMeters * ppm / 2 : 0,
-          bounds: bounds,
+          ring: <LatLng>[for (final p in pts) LatLng(p.lat, p.lng)],
+          offsetMeters: a.offsetMeters,
+          bandMeters: band,
         );
-        if (region.outer.length >= 3) {
-          final outerPath = _polyToPath(region.outer);
-          outerUnion = outerUnion == null
-              ? outerPath
-              : Path.combine(PathOperation.union, outerUnion, outerPath);
-        }
-        if (region.core.length >= 3) {
-          final corePath = _polyToPath(region.core);
-          coreUnion = coreUnion == null
-              ? corePath
-              : Path.combine(PathOperation.union, coreUnion, corePath);
-        }
+        addOuter(region.outer);
+        addCore(region.core);
       }
     }
 
-    if (outerUnion == null) return; // nothing valid to draw
+    final outer = outerUnion;
+    if (outer == null) return; // nothing valid to draw
     final core = coreUnion ?? Path();
 
     // Band is always the ring between core and outline.
-    final band = Path.combine(PathOperation.difference, outerUnion, core);
+    final bandPath = Path.combine(PathOperation.difference, outer, core);
 
     // Solid fill: the core normally, or the complement when inverted.
     final Path solid;
     if (inverted) {
       final viewport = Path()..addRect(Offset.zero & size);
-      solid = Path.combine(PathOperation.difference, viewport, outerUnion);
+      solid = Path.combine(PathOperation.difference, viewport, outer);
     } else {
       solid = core;
     }
@@ -303,56 +249,31 @@ class _RegionPainter extends CustomPainter {
 
     // Regions are disjoint, so paint order is irrelevant.
     canvas.drawPath(solid, solidPaint);
-    canvas.drawPath(band, bandPaint);
-    canvas.drawPath(outerUnion, strokePaint);
+    canvas.drawPath(bandPath, bandPaint);
+    canvas.drawPath(outer, strokePaint);
   }
 
-  /// Half the uncertainty-band width, in pixels, measured at the plane's
-  /// midpoint (where the dividing edge sits). 0 when uncertainty is off or the
-  /// midpoint is non-finite.
-  double _halfBandPx(Plane p) {
-    if (uncertaintyMeters <= 0) return 0;
-    final mid = LatLng((p.aLat + p.bLat) / 2, (p.aLng + p.bLng) / 2);
-    if (!mid.latitude.isFinite || !mid.longitude.isFinite) return 0;
-    final off = _distance.offset(mid, uncertaintyMeters, 0); // u metres north
-    final px = (camera.latLngToScreenOffset(mid) -
-            camera.latLngToScreenOffset(off))
-        .distance;
-    return px.isFinite ? px / 2 : 0;
-  }
-
-  /// Half the uncertainty-band width in pixels, measured at the subspace's main
-  /// point. 0 when uncertainty is off or the point is non-finite.
-  double _subspaceHalfBandPx(SubspacePoint main) {
-    if (uncertaintyMeters <= 0) return 0;
-    if (!main.lat.isFinite || !main.lng.isFinite) return 0;
-    final at = LatLng(main.lat, main.lng);
-    final off = _distance.offset(at, uncertaintyMeters, 0); // u metres north
-    final px = (camera.latLngToScreenOffset(at) -
-            camera.latLngToScreenOffset(off))
-        .distance;
-    return px.isFinite ? px / 2 : 0;
-  }
-
-  /// Screen pixels per real-world metre at [at], used to convert a freehand
-  /// object's offset and the global uncertainty into pixels. 0 when [at] is
-  /// non-finite.
-  double _pxPerMeter(LatLng at) {
-    if (!at.latitude.isFinite || !at.longitude.isFinite) return 0;
-    final off = _distance.offset(at, 1000, 0); // 1 km north
-    final px = (camera.latLngToScreenOffset(at) -
-            camera.latLngToScreenOffset(off))
-        .distance;
-    return px.isFinite ? px / 1000 : 0;
-  }
-
-  Path _polyToPath(List<Offset> poly) {
-    final path = Path()..moveTo(poly.first.dx, poly.first.dy);
-    for (var i = 1; i < poly.length; i++) {
-      path.lineTo(poly[i].dx, poly[i].dy);
+  /// The four corners of the (slightly inflated) viewport as lat/lng, in ring
+  /// order, for use as the spherical clip quad. Null when a corner unprojects to
+  /// a non-finite coordinate (extreme zoom-out / near-pole).
+  List<LatLng>? _viewportCorners(Size size) {
+    final r = (Offset.zero & size).inflate(8);
+    final offs = <Offset>[r.topLeft, r.topRight, r.bottomRight, r.bottomLeft];
+    final out = <LatLng>[];
+    for (final o in offs) {
+      final ll = camera.screenOffsetToLatLng(o);
+      if (!ll.latitude.isFinite || !ll.longitude.isFinite) return null;
+      out.add(ll);
     }
-    path.close();
-    return path;
+    return out;
+  }
+
+  /// A characteristic viewport size in metres (its diagonal), used to extend
+  /// freehand lines and their fill cap well past the view. Falls back to a
+  /// globe-scale value when the corners are unavailable.
+  double _spanMeters(List<LatLng>? corners) {
+    if (corners == null) return 40000000;
+    return _distance.distance(corners[0], corners[2]);
   }
 
   Path _ringToPath(List<LatLng> ring) {

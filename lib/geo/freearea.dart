@@ -1,120 +1,126 @@
-import 'dart:ui';
+import 'dart:math';
 
-/// Screen-space geometry for a "freehand area": a user-drawn closed polygon
-/// (ring). The region returned fills the inside; the layer's invert fills the
-/// outside via the engine's `viewport − outer` complement.
+import 'package:latlong2/latlong.dart';
+
+/// Lat/lng geometry for a "freehand area": a user-drawn closed polygon (ring).
+/// The region returned fills the inside; the layer's invert fills the outside
+/// via the engine's `viewport − outer` complement.
 ///
-/// Like the other region types this is a planar approximation in projected
-/// screen space. To match the engine's `band = outer − core` model, the ring is
-/// inset by the signed `offsetPx`: [outer] insets by `offsetPx − halfBandPx`,
-/// [core] by `offsetPx + halfBandPx`. A positive offset shrinks the filled
-/// interior inward (e.g. "inside the city and >5 km from the border"); a negative
-/// one grows it outward past the drawn ring.
+/// The ring is drawn in lat/lng (correct); only the offset/inset is made
+/// geodesic here, by moving each vertex on the ground with [Distance] along its
+/// inward normal bearing — so a fixed `offsetMeters` holds a constant real-world
+/// width regardless of latitude. To match the engine's `band = outer − core`
+/// model the ring is inset by the signed `offsetMeters`: [outer] insets by
+/// `offsetMeters − bandMeters`, [core] by `offsetMeters + bandMeters`. A positive
+/// offset shrinks the filled interior inward; a negative one grows it outward.
 class FreeAreaRegion {
   const FreeAreaRegion(this.outer, this.core);
 
-  /// The interior enlarged by half the band. Empty when fewer than three finite
-  /// points are given or an inset collapses the ring.
-  final List<Offset> outer;
+  /// The interior enlarged by half the band, as a lat/lng ring. Empty when fewer
+  /// than three finite points are given or an inset collapses the ring.
+  final List<LatLng> outer;
 
   /// The interior shrunk by half the band.
-  final List<Offset> core;
+  final List<LatLng> core;
 }
 
-/// Builds the interior polygons for the closed ring [ring] (projected to
-/// screen). [halfBandPx] is half the uncertainty band width in pixels (0
-/// disables it); [offsetPx] is the signed inward offset in pixels. [bounds] is
-/// unused for now (the painter clips), kept for signature symmetry.
+const Distance _distance = Distance(calculator: Haversine());
+
+/// Builds the interior rings for the closed ring [ring]. [offsetMeters] is the
+/// signed inward offset and [bandMeters] the uncertainty half-band, both on the
+/// ground.
 FreeAreaRegion freeAreaRegion({
-  required List<Offset> ring,
-  required double offsetPx,
-  required double halfBandPx,
-  required Rect bounds,
+  required List<LatLng> ring,
+  required double offsetMeters,
+  required double bandMeters,
 }) {
-  final pts = <Offset>[
+  final pts = <LatLng>[
     for (final p in ring)
-      if (p.dx.isFinite && p.dy.isFinite) p,
+      if (p.latitude.isFinite && p.longitude.isFinite) p,
   ];
-  if (pts.length < 3) return const FreeAreaRegion(<Offset>[], <Offset>[]);
-  final hb = halfBandPx.isFinite && halfBandPx > 0 ? halfBandPx : 0.0;
-  final off = offsetPx.isFinite ? offsetPx : 0.0;
-  final outer = _inset(pts, off - hb);
-  final core = _inset(pts, off + hb);
-  return FreeAreaRegion(outer, core);
+  if (pts.length < 3) return const FreeAreaRegion(<LatLng>[], <LatLng>[]);
+  return FreeAreaRegion(
+    _inset(pts, offsetMeters - bandMeters),
+    _inset(pts, offsetMeters + bandMeters),
+  );
 }
 
-/// Insets the simple polygon [p] inward by signed distance [d] (positive shrinks,
-/// negative grows) via per-edge offset and miter intersection. Returns empty if
-/// the polygon degenerates or the inset collapses/inverts it.
-List<Offset> _inset(List<Offset> p, double d) {
+/// Insets the simple ring [p] inward by signed metres [d] (positive shrinks,
+/// negative grows) by moving each vertex along its inward normal bearing.
+/// Returns empty if the inset collapses or inverts the ring.
+List<LatLng> _inset(List<LatLng> p, double d) {
+  if (d == 0) return List<LatLng>.of(p);
   final n = p.length;
-  if (d == 0) return List<Offset>.of(p);
   final orient0 = _signedArea(p);
-  if (orient0 == 0) return <Offset>[];
+  if (orient0 == 0) return <LatLng>[];
 
-  var cx = 0.0, cy = 0.0;
-  for (final q in p) {
-    cx += q.dx;
-    cy += q.dy;
-  }
-  final centroid = Offset(cx / n, cy / n);
+  final centroid = LatLng(
+    p.map((q) => q.latitude).reduce((a, b) => a + b) / n,
+    p.map((q) => q.longitude).reduce((a, b) => a + b) / n,
+  );
 
-  // Each edge offset inward by d: a reference point [base] and its direction.
-  final base = <Offset>[];
-  final dir = <Offset>[];
-  for (var i = 0; i < n; i++) {
-    final a = p[i];
-    final b = p[(i + 1) % n];
-    final e = _unit(b - a);
-    if (e == Offset.zero) return <Offset>[]; // degenerate edge
-    var inward = Offset(-e.dy, e.dx);
-    final mid = Offset((a.dx + b.dx) / 2, (a.dy + b.dy) / 2);
-    if ((centroid.dx - mid.dx) * inward.dx +
-            (centroid.dy - mid.dy) * inward.dy <
-        0) {
-      inward = -inward; // orient toward the interior
-    }
-    base.add(a + inward * d);
-    dir.add(e);
-  }
+  // Inward normal bearing of each edge (perpendicular pointing toward centroid).
+  final edgeIn = <double>[
+    for (var i = 0; i < n; i++) _inwardBearing(p[i], p[(i + 1) % n], centroid),
+  ];
 
-  // New vertex i is where the offset edges (i-1) and i meet.
-  final out = <Offset>[];
-  for (var i = 0; i < n; i++) {
-    final prev = (i - 1 + n) % n;
-    final x = _intersect(base[prev], dir[prev], base[i], dir[i]);
-    out.add(x ?? base[i]);
-  }
+  final out = <LatLng>[
+    for (var i = 0; i < n; i++)
+      () {
+        // Vertex i sits between edge (i-1) and edge i; average their inward normals.
+        final b = _avgBearing(edgeIn[(i - 1 + n) % n], edgeIn[i]);
+        return _off(p[i], d.abs(), d > 0 ? b : b + 180);
+      }(),
+  ];
 
-  // Reject a collapsed inset: a flipped orientation, or — for a shrink that
-  // overshot the inradius — a polygon that mirrored through its centre (same
-  // orientation but grown rather than shrunk).
+  // Reject a collapsed inset: flipped orientation, or a shrink that overshot the
+  // inradius (same orientation but grew rather than shrank).
   final orient1 = _signedArea(out);
-  if (orient0 * orient1 <= 0) return <Offset>[];
-  if (d > 0 && orient1.abs() >= orient0.abs()) return <Offset>[];
+  if (orient0 * orient1 <= 0) return <LatLng>[];
+  if (d > 0 && orient1.abs() >= orient0.abs()) return <LatLng>[];
   return out;
 }
 
-double _signedArea(List<Offset> p) {
+/// The perpendicular of edge `a→b` that points toward [centroid] (degrees).
+double _inwardBearing(LatLng a, LatLng b, LatLng centroid) {
+  final edge = _distance.bearing(a, b);
+  final mid = LatLng((a.latitude + b.latitude) / 2,
+      (a.longitude + b.longitude) / 2);
+  final left = edge - 90;
+  final pLeft = _off(mid, 1, left);
+  final pRight = _off(mid, 1, edge + 90);
+  return _distance.distance(pLeft, centroid) <=
+          _distance.distance(pRight, centroid)
+      ? left
+      : edge + 90;
+}
+
+/// Planar signed area in lat/lng degrees — adequate for orientation sign and the
+/// relative-size collapse check at the scales these polygons live at.
+double _signedArea(List<LatLng> p) {
   var a = 0.0;
   for (var i = 0; i < p.length; i++) {
     final q = p[i];
     final r = p[(i + 1) % p.length];
-    a += q.dx * r.dy - r.dx * q.dy;
+    a += q.longitude * r.latitude - r.longitude * q.latitude;
   }
   return a / 2;
 }
 
-/// Intersection of lines `base1 + t·dir1` and `base2 + s·dir2`; null if parallel.
-Offset? _intersect(Offset base1, Offset dir1, Offset base2, Offset dir2) {
-  final denom = dir1.dx * dir2.dy - dir1.dy * dir2.dx;
-  if (denom.abs() < 1e-9) return null;
-  final t = ((base2.dx - base1.dx) * dir2.dy - (base2.dy - base1.dy) * dir2.dx) /
-      denom;
-  return base1 + dir1 * t;
+LatLng _off(LatLng from, double meters, double bearing) =>
+    _distance.offset(from, meters, _norm180(bearing));
+
+double _norm180(double deg) {
+  var d = deg % 360;
+  if (d > 180) d -= 360;
+  if (d < -180) d += 360;
+  return d;
 }
 
-Offset _unit(Offset d) {
-  final l = d.distance;
-  return l == 0 ? Offset.zero : Offset(d.dx / l, d.dy / l);
+double _avgBearing(double a, double b) {
+  final ar = a * pi / 180, br = b * pi / 180;
+  final x = cos(ar) + cos(br);
+  final y = sin(ar) + sin(br);
+  if (x == 0 && y == 0) return a;
+  return atan2(y, x) * 180 / pi;
 }

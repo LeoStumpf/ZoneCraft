@@ -8,8 +8,10 @@ design reference, not a task log — the feature backlog lives in [PLAN.md](PLAN
 - **One rendering engine** handles core fill, the uncertainty band, union (no
   darkening), and inversion uniformly for every object type. Adding a new object
   type = providing its geometry; the engine does fill / band / union / inverse.
-- **Geometry is computed in Dart, composited as screen-space `Path`s** via `dart:ui`
-  `Path.combine`, painted by a single `CustomPainter` map layer. This is what makes
+- **Geometry is built geodesically in lat/lng, then projected** to screen-space `Path`s
+  and composited via `dart:ui` `Path.combine`, painted by a single `CustomPainter` map
+  layer. Every object type produces lat/lng `outer`/`core` rings the painter projects with
+  `latLngToScreenOffset` — never bisecting or offsetting in pixel space. This is what makes
   "overlaps stay one flat colour" and "invert a layer" tractable.
 - **Schema changes are migrated, never destructive.** Bump `schemaVersion` and add an
   append-only `if (from < N)` block each step; installing with `-r` exercises it.
@@ -18,32 +20,40 @@ design reference, not a task log — the feature backlog lives in [PLAN.md](PLAN
 
 ## Rendering contract (`lib/ui/region_layer.dart`)
 
-- Each object yields **two screen-space polygons**: an `outer` and a shrunk `core`.
-  Per layer, all objects' `outer`s union together and all `core`s union together
-  (`Path.combine`).
+- Each object yields **two lat/lng rings**: an `outer` and a shrunk `core`. The painter
+  projects them (`_ringToPath`) and, per layer, unions all `outer`s together and all
+  `core`s together (`Path.combine`).
 - Paint order per layer: **core** solid → **band** (`outer − core`) lighter → outline
   stroke. When the layer is **inverted**, paint `viewport − outer` instead.
 - The **global uncertainty** (metres, in `AppSettings`) widens the band; the two
   freehand types add a signed per-object `offsetMeters` that shifts the boundary
-  (`outer = offset − halfBand`, `core = offset + halfBand`). Metres→pixels is
-  converted at the object's reference point (`_pxPerMeter`).
+  (`outer = offset − halfBand`, `core = offset + halfBand`). All widths are **metres on
+  the ground**, applied geodesically by the geometry builders — no per-reference-point
+  pixel conversion. The plane/subspace band half-width is half the global uncertainty (so
+  the band straddling a divide is `uncertainty` wide), matching the circle's core inset.
 - This single `outer`/`core` contract is shared by all five object types, so invert
   and the band work the same everywhere. A new object type only has to emit `outer`
-  and `core` for the current camera.
+  and `core` lat/lng rings; the painter projects to the current camera.
 
 ## Geometry (`lib/geo/`)
 
 - `geodesic.dart` — true geodesic circle ring (real-world metres).
-- `plane.dart` — half-plane on one side of two points' perpendicular bisector.
-- `subspace.dart` — Voronoi cell of a chosen *main* point (intersection of half-planes;
-  always convex).
-- `freeline.dart` / `freearea.dart` — drawn polyline splitting the view (ends extended
-  straight) / drawn closed ring filled inside; both apply the signed offset.
+- `spherical.dart` — ECEF (unit-vector) helpers + spherical Sutherland–Hodgman clipping
+  (`sphericalCell`): the shared geodesic core of plane and subspace. The equidistant locus
+  of two points is the **great circle** with pole `ecef(main) − ecef(other)`; the band is a
+  small-circle threshold `sin(band/R)`; results densify along great-circle arcs.
+- `plane.dart` / `subspace.dart` — thin lat/lng wrappers over `sphericalCell` (a plane is a
+  subspace with one "other"). Bisectors are geodesic, returned as densified lat/lng rings.
+- `freeline.dart` / `freearea.dart` — drawn polyline splitting the view (ends extended along
+  their end **bearings**) / drawn closed ring filled inside; both offset each vertex on the
+  ground with `Distance.offset` along its normal bearing (constant real-world width at any
+  latitude). `freearea` insets per-vertex along the inward bisector, with collapse rejection.
 - `coords.dart` — `parseLatLng` / `formatLatLng` ("lat, lng", pastes from Google Maps).
 - `tiles.dart` — Web-Mercator slippy-tile maths (`tileXFor`/`tileYFor`) for prefetch.
 
-The bisector/offset maths are **planar approximations** — accurate at city scale,
-not geodesically exact (see [PLAN.md](PLAN.md) for the refinement backlog item).
+The bisector/offset maths are **geodesically accurate** (great-circle bisectors, ground-metre
+offsets); the only approximations left are the per-edge densification count and treating the
+viewport as a spherical quad (the painter still `clipRect`s to the true screen rectangle).
 
 ## Data model (`lib/data/database.dart`, schema **v10**)
 
@@ -73,7 +83,10 @@ not geodesically exact (see [PLAN.md](PLAN.md) for the refinement backlog item).
 
 ## Known approximations / risks
 
-- **Planar geometry** — bisectors/offsets aren't geodesic; revisit for global accuracy.
+- **Densification cost** — geodesic plane/subspace rings densify each edge (~20 segments)
+  along great-circle arcs; raise for smoother curves at the cost of `Path.combine` work.
+- **Spherical quad clip** — the viewport is unprojected to four lat/lng corners and treated
+  as a spherical quad; non-finite corners (extreme zoom-out / near-pole) skip plane/subspace.
 - **`Path.combine` cost** with many objects — union once per layer per frame; cull
   off-screen objects; cache when the camera is idle if it ever bites.
 - **Degenerate cameras** — zoom-out gestures can briefly yield a NaN camera; guard

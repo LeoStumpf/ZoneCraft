@@ -32,17 +32,7 @@ Save layers and objects to a file and load them back. The most-requested next st
   conventions. Decide on a sharing mechanism (share sheet vs. file picker) and whether
   import merges into existing layers or creates new ones.
 
-### 2. Geodesic geometry refinement
-
-Make the plane/subspace bisectors and the freehand offsets **geodesically accurate**
-instead of the current planar approximation (fine at city scale, drifts at large extents
-or high latitude).
-
-- Affects `geo/plane.dart`, `geo/subspace.dart`, `geo/freeline.dart`, `geo/freearea.dart`.
-- Keep the `outer`/`core` rendering contract unchanged — only the geometry that produces
-  those polygons changes. Add unit tests comparing against known great-circle results.
-
-### 3. Offline — "download this area"
+### 2. Offline — "download this area"
 
 Add an explicit bulk-download for guaranteed offline coverage beyond the automatic browse
 cache + one-tile prefetch ring.

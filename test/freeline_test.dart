@@ -1,94 +1,74 @@
-import 'dart:math';
-import 'dart:ui';
-
 import 'package:flutter_test/flutter_test.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:zonecraft/geo/freeline.dart';
 
 void main() {
-  final bounds = const Rect.fromLTWH(0, 0, 100, 100);
+  const distance = Distance(calculator: Haversine());
 
-  double minY(List<Offset> p) => p.map((o) => o.dy).reduce(min);
+  bool inside(List<LatLng> poly, LatLng q) {
+    var hit = false;
+    for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      final xi = poly[i].longitude, yi = poly[i].latitude;
+      final xj = poly[j].longitude, yj = poly[j].latitude;
+      final intersect = (yi > q.latitude) != (yj > q.latitude) &&
+          q.longitude < (xj - xi) * (q.latitude - yi) / (yj - yi) + xi;
+      if (intersect) hit = !hit;
+    }
+    return hit;
+  }
 
-  // A horizontal line left→right fills the +90° side, which (screen y-down) is
-  // below the line.
-  const horizontal = [Offset(20, 50), Offset(80, 50)];
-
-  test('fills the side below a horizontal line', () {
+  test('returns empty for fewer than two finite points', () {
     final r = freeLineRegion(
-      points: horizontal,
-      offsetPx: 0,
-      halfBandPx: 0,
-      bounds: bounds,
-    );
-    expect(r.outer.length, greaterThanOrEqualTo(3));
-    expect(_contains(r.outer, const Offset(50, 90)), isTrue); // below
-    expect(_contains(r.outer, const Offset(50, 10)), isFalse); // above
-    // With no band the two are identical.
-    expect(minY(r.core), closeTo(50, 1e-6));
-    expect(minY(r.outer), closeTo(50, 1e-6));
-  });
-
-  test('uncertainty band straddles the line', () {
-    final r = freeLineRegion(
-      points: horizontal,
-      offsetPx: 0,
-      halfBandPx: 10,
-      bounds: bounds,
-    );
-    // outer reaches 10px above the line, core only down to 10px below.
-    expect(minY(r.outer), closeTo(40, 1e-6));
-    expect(minY(r.core), closeTo(60, 1e-6));
-  });
-
-  test('positive offset pushes the boundary into the filled side', () {
-    final r = freeLineRegion(
-      points: horizontal,
-      offsetPx: 20,
-      halfBandPx: 0,
-      bounds: bounds,
-    );
-    // Boundary moves down (into the filled side); the fill starts further away.
-    expect(minY(r.outer), closeTo(70, 1e-6));
-    expect(_contains(r.outer, const Offset(50, 60)), isFalse);
-    expect(_contains(r.outer, const Offset(50, 80)), isTrue);
-  });
-
-  test('negative offset extends the fill past the line', () {
-    final r = freeLineRegion(
-      points: horizontal,
-      offsetPx: -20,
-      halfBandPx: 0,
-      bounds: bounds,
-    );
-    // Boundary moves up past the line; points just above the line are filled.
-    expect(minY(r.outer), closeTo(30, 1e-6));
-    expect(_contains(r.outer, const Offset(50, 40)), isTrue);
-  });
-
-  test('empty with fewer than two points', () {
-    final r = freeLineRegion(
-      points: const [Offset(20, 50)],
-      offsetPx: 0,
-      halfBandPx: 0,
-      bounds: bounds,
+      points: const <LatLng>[LatLng(0, 0)],
+      offsetMeters: 0,
+      bandMeters: 0,
+      spanMeters: 20000,
     );
     expect(r.outer, isEmpty);
     expect(r.core, isEmpty);
   });
-}
 
-/// Is [q] inside the convex polygon [poly]? (Test-only; the straight-line region
-/// is convex.)
-bool _contains(List<Offset> poly, Offset q) {
-  int? sign;
-  for (var i = 0; i < poly.length; i++) {
-    final a = poly[i];
-    final b = poly[(i + 1) % poly.length];
-    final cross = (b.dx - a.dx) * (q.dy - a.dy) - (b.dy - a.dy) * (q.dx - a.dx);
-    if (cross.abs() < 1e-9) continue;
-    final s = cross > 0 ? 1 : -1;
-    sign ??= s;
-    if (s != sign) return false;
-  }
-  return true;
+  test('fills the right-hand side of the travel direction', () {
+    // West→east at the equator: travel bearing 90°, filled side bearing 180°
+    // (south), so points south of the line are inside, north are outside.
+    final r = freeLineRegion(
+      points: const <LatLng>[LatLng(0, -0.05), LatLng(0, 0.05)],
+      offsetMeters: 0,
+      bandMeters: 0,
+      spanMeters: 20000,
+    );
+    expect(inside(r.outer, const LatLng(-0.02, 0)), isTrue); // south
+    expect(inside(r.outer, const LatLng(0.02, 0)), isFalse); // north
+  });
+
+  test('offset moves the boundary a constant ground distance at latitude', () {
+    // At 60°N the old single-reference pixel scale would mis-size the offset;
+    // the geodesic version offsets each vertex by exactly offsetMeters.
+    const p0 = LatLng(60, -0.05);
+    final r = freeLineRegion(
+      points: const <LatLng>[p0, LatLng(60, 0.05)],
+      offsetMeters: 1000,
+      bandMeters: 0,
+      spanMeters: 20000,
+    );
+    var minD = double.infinity;
+    for (final v in r.outer) {
+      final d = distance(p0, v);
+      if (d < minD) minD = d;
+    }
+    expect(minD, closeTo(1000, 30));
+  });
+
+  test('band makes outer enclose a strictly wider side than core', () {
+    final r = freeLineRegion(
+      points: const <LatLng>[LatLng(0, -0.05), LatLng(0, 0.05)],
+      offsetMeters: 0,
+      bandMeters: 1000, // half-band 1 km
+      spanMeters: 20000,
+    );
+    // 500 m north of the line: inside the enlarged outer, outside the shrunk core.
+    const justNorth = LatLng(0.0045, 0);
+    expect(inside(r.outer, justNorth), isTrue);
+    expect(inside(r.core, justNorth), isFalse);
+  });
 }
