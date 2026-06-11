@@ -1,23 +1,26 @@
 #!/usr/bin/env bash
 #
-# Build (and optionally install) the ZoneCraft APK.
+# Build (and optionally install) the ZoneCraft app.
 #
 # Usage:
 #   scripts/build.sh                     analyze + test, then build a debug APK
 #   scripts/build.sh --install           also install on the connected device
 #   scripts/build.sh --install --run     install, then launch the app
 #   scripts/build.sh --release           build a release APK instead of debug
+#   scripts/build.sh --bundle            build a release App Bundle (.aab) for Play
 #   scripts/build.sh --skip-checks       skip `flutter analyze` and `flutter test`
 #
 # Env overrides:
 #   DEVICE=<adb-serial>   target a specific device (default: Pixel 4a below)
+#   SENTRY_DSN=<dsn>      baked into release/bundle builds for crash reporting
+#                         (omit for debug; the app skips Sentry when it's empty)
 #
 set -euo pipefail
 
 # --- config (machine-specific; safe fallbacks below) -------------------------
 FLUTTER_BIN="/home/leo/development/flutter/bin"
 DEVICE="${DEVICE:-09291JEC226042}" # Pixel 4a
-APP_ID="com.zonecraft.zonecraft"
+APP_ID="com.leostumpf.zonecraft"
 MAIN_ACTIVITY="$APP_ID/.MainActivity"
 
 # --- locate repo root, flutter, adb ------------------------------------------
@@ -27,6 +30,7 @@ ADB="$(command -v adb || echo /usr/bin/adb)"
 
 # --- parse args --------------------------------------------------------------
 MODE="debug"
+BUNDLE=0
 INSTALL=0
 RUN=0
 SKIP_CHECKS=0
@@ -34,13 +38,20 @@ for arg in "$@"; do
   case "$arg" in
     --debug)       MODE="debug" ;;
     --release)     MODE="release" ;;
+    --bundle|--aab) BUNDLE=1; MODE="release" ;; # App Bundle is always release
     --install)     INSTALL=1 ;;
     --run)         INSTALL=1; RUN=1 ;; # running implies installing first
     --skip-checks) SKIP_CHECKS=1 ;;
-    -h|--help)     sed -n '2,14p' "$0"; exit 0 ;;
+    -h|--help)     sed -n '2,16p' "$0"; exit 0 ;;
     *) echo "Unknown option: $arg (try --help)" >&2; exit 1 ;;
   esac
 done
+
+# Bake the Sentry DSN into release artifacts when one is provided.
+DART_DEFINES=()
+if [ "$MODE" = "release" ] && [ -n "${SENTRY_DSN:-}" ]; then
+  DART_DEFINES+=(--dart-define=SENTRY_DSN="$SENTRY_DSN")
+fi
 
 # --- checks ------------------------------------------------------------------
 if [ "$SKIP_CHECKS" -eq 0 ]; then
@@ -51,8 +62,17 @@ if [ "$SKIP_CHECKS" -eq 0 ]; then
 fi
 
 # --- build -------------------------------------------------------------------
+if [ "$BUNDLE" -eq 1 ]; then
+  echo "==> flutter build appbundle --release"
+  flutter build appbundle --release "${DART_DEFINES[@]}"
+  AAB="build/app/outputs/bundle/release/app-release.aab"
+  echo "==> built $AAB (upload this to Play Console)"
+  echo "Done."
+  exit 0
+fi
+
 echo "==> flutter build apk --$MODE"
-flutter build apk --"$MODE"
+flutter build apk --"$MODE" "${DART_DEFINES[@]}"
 APK="build/app/outputs/flutter-apk/app-$MODE.apk"
 echo "==> built $APK"
 

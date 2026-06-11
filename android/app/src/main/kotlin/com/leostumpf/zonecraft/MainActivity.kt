@@ -1,4 +1,4 @@
-package com.zonecraft.zonecraft
+package com.leostumpf.zonecraft
 
 import io.flutter.embedding.android.FlutterActivity
 

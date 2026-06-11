@@ -125,8 +125,22 @@ viewport as a spherical quad (the painter still `clipRect`s to the true screen r
   warning is forward-compat only — the build succeeds — and clears once those packages migrate
   to Flutter's "Built-in Kotlin". Don't bother re-trying a version bump; re-check upstream.
 
+## Release / Play Store
+
+- **App id** `com.leostumpf.zonecraft` (namespace + `applicationId` in
+  `android/app/build.gradle.kts`, Kotlin package, `scripts/build.sh`). Don't change it again —
+  it's the published identity.
+- **Signing:** release builds read `android/key.properties` (gitignored) for the upload key and
+  **fall back to the debug key when it's absent**, so dev/CI without secrets still build.
+- **Bundle:** `scripts/build.sh --bundle` → a release `.aab` (Play requires App Bundles).
+- **Crash reporting:** `lib/main.dart` initialises Sentry only when a `SENTRY_DSN` is baked in via
+  `--dart-define`; empty DSN (dev) skips it. Crash data is off-device → disclosed in `PRIVACY.md`.
+- **Manifest:** `INTERNET` is declared in the **main** manifest (not just the debug overlay), or
+  release builds can't load tiles/Overpass.
+- Full step-by-step (keystore, Play Console, data-safety, internal testing) lives in `RELEASE.md`.
+
 ## Toolchain reminders
 
 - Build/verify with `./scripts/build.sh` (`--install --run` to deploy; `--skip-checks`
-  for quick rebuilds). `flutter`/`dart` aren't on `PATH` otherwise.
+  for quick rebuilds; `--bundle` for a Play App Bundle). `flutter`/`dart` aren't on `PATH` otherwise.
 - After schema changes: `dart run build_runner build`, then the build script.

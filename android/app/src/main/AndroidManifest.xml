@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Map tiles + Overpass overlays. Declared here (not only in the debug
+         overlay) so the release build can reach the network. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Foreground-only location, requested at runtime when the user taps
          "Locate me" (never at launch). No background location. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
