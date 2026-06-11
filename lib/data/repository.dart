@@ -311,6 +311,7 @@ class Repository {
                   id: 1,
                   uncertaintyMeters: 500,
                   transportOverlay: false,
+                  poiCategories: 0,
                 )
               : rows.first,
         );
@@ -332,6 +333,16 @@ class Repository {
           AppSettingsCompanion.insert(
             id: const Value(1),
             transportOverlay: Value(enabled),
+          ),
+        );
+  }
+
+  /// Upserts the enabled-POI-category bitmask into the single settings row.
+  Future<void> updatePoiCategories(int mask) {
+    return _db.into(_db.appSettings).insertOnConflictUpdate(
+          AppSettingsCompanion.insert(
+            id: const Value(1),
+            poiCategories: Value(mask),
           ),
         );
   }

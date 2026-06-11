@@ -345,7 +345,25 @@ toggling off removes them; the setting persists.
 - **Verify:** toggle on → rail/bus lines and stops appear and follow pan/zoom; toggle off →
   gone; attribution shown; setting persists.
 
-## Milestone 11 — Toggleable map POIs (OSMAnd-style)
+## Milestone 11 — Toggleable map POIs (OSMAnd-style) ✅ DONE
+
+**Status:** complete (2026-06-11). New dep `http`. `lib/data/overpass.dart` (pure Dart) defines a
+fixed `poiCategories` catalogue (benches, post boxes, drinking water, toilets, waste baskets,
+cafés, restaurants, pharmacies) — each an OSM `amenity` tag with a positional `bit` — plus
+`buildOverpassQuery`, `parseOverpassResponse` (nodes + way/relation `center`, tagged by category,
+fail-silent), and `fetchPois` (POSTs to overpass-api.de with a polite User-Agent, `out center
+$overpassResultCap`, 30 s timeout, returns `[]` on any error). The enabled set persists as a
+packed bitmask in **`AppSettings.poiCategories`** (schema **v7**, `from < 7` migration;
+`Repository.updatePoiCategories`). `map_screen` watches the mask, and on map-idle (debounced
+600 ms) / zoom / category change fetches POIs **only at zoom ≥ 15**, caches by rounded-bbox+bits
+(bounded), and renders a `MarkerLayer` of small category-icon markers above the zones; below the
+threshold or with no categories it clears them. Settings gained a "Map points of interest"
+section of per-category checkboxes; `clearAll` resets the mask to 0. Tests:
+`test/overpass_test.dart` (bitmask round-trip, distinct single bits, query building, response
+parsing incl. malformed/unknown) and DB default/persist/reset; `flutter analyze`/`flutter test`
+(34) green. Verified on device (migrated to `user_version=7`): enabling Benches and zooming past
+the threshold shows bench markers that follow the view; they were absent when zoomed out (gate)
+and disappear when the category is toggled off; the choice persists in `AppSettings`.
 
 **Goal:** optionally show OSM POI categories (benches, post boxes, …) like OSMAnd.
 

@@ -112,6 +112,10 @@ class AppSettings extends Table {
   BoolColumn get transportOverlay =>
       boolean().withDefault(const Constant(false))();
 
+  /// Packed bitmask of enabled map-POI categories (see `poiCategories` in
+  /// `overpass.dart`). 0 = none shown.
+  IntColumn get poiCategories => integer().withDefault(const Constant(0))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -126,7 +130,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -159,6 +163,9 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 6) {
             await m.addColumn(appSettings, appSettings.transportOverlay);
+          }
+          if (from < 7) {
+            await m.addColumn(appSettings, appSettings.poiCategories);
           }
         },
         beforeOpen: (details) async {

@@ -95,6 +95,12 @@ void main() {
     expect(saved.uncertaintyMeters, 750);
   });
 
+  test('POI category mask defaults to 0 and persists', () async {
+    expect((await repo.watchSettings().first).poiCategories, 0);
+    await repo.updatePoiCategories(0x05); // bench + drinking_water
+    expect((await repo.watchSettings().first).poiCategories, 0x05);
+  });
+
   test('clearAll wipes objects, resets settings, re-seeds a layer', () async {
     final layerId = await repo.createLayer(name: 'L', colorArgb: 0xFF0000FF);
     await repo.createCircle(
@@ -105,6 +111,7 @@ void main() {
     );
     await repo.updateUncertainty(0);
     await repo.updateTransportOverlay(true);
+    await repo.updatePoiCategories(0x0F);
     await repo.saveCamera(48.1, 11.5, 12);
 
     final seededId = await repo.clearAll();
@@ -120,6 +127,7 @@ void main() {
     final settings = await repo.watchSettings().first;
     expect(settings.uncertaintyMeters, 500);
     expect(settings.transportOverlay, isFalse);
+    expect(settings.poiCategories, 0);
     expect(settings.lastLat, isNull);
     expect(settings.lastZoom, isNull);
   });

@@ -133,7 +133,7 @@ across close/relaunch by construction.
 
 - [x] **Public-transport overlay (M10).** Load the train/bus network and stops — as an
   optional OSM-based tile overlay (ÖPNVKarte for buses/stops, OpenRailwayMap for rail).
-- [ ] **OSMAnd-style POIs (M11).** Toggle OSM POI categories (park benches, post boxes, …),
+- [x] **OSMAnd-style POIs (M11).** Toggle OSM POI categories (park benches, post boxes, …),
   fetched from Overpass and shown as markers, **only at high zoom** to match OSMAnd's
   behaviour (no clutter when zoomed out).
 
@@ -152,8 +152,8 @@ across close/relaunch by construction.
 - `Layers`: `isInverted` (bool) and `type` ✅ done (circles | planes | **subspace** ✅ M9).
 - `Circles` ✅ and `Planes` ✅ (two points). `Subspaces` + `SubspacePoints` ✅ (one object, N
   points, one `isMain`) added in M9 (schema v5).
-- `AppSettings` ✅ holds uncertainty + camera + transport-overlay toggle ✅ (M10, schema v6);
-  **add columns** for the enabled-POI-category set (M11); **default uncertainty → 500** ✅ (M8).
+- `AppSettings` ✅ holds uncertainty + camera + transport-overlay toggle ✅ (M10, schema v6) +
+  enabled-POI-category bitmask ✅ (M11, schema v7); **default uncertainty → 500** ✅ (M8).
 - `Repository.clearAll()` for the clear-data button (M8).
 - Remember to bump `schemaVersion` and add migrations for each (M8 → v4, then M9, M10/M11).
 

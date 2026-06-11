@@ -22,8 +22,10 @@ just a floating top-left menu button opens the drawer.
 schema **v4** migration, `clearAll`/"Clear all data") **done**; M9 "closest subspace"
 multi-point object (new `subspace` layer type, `Subspaces`+`SubspacePoints`, schema **v5**,
 `geo/subspace.dart`, `ui/subspace_editor.dart`) **done**; M10 public-transport tile overlay
-(ÖPNVKarte + OpenRailwayMap, `AppSettings.transportOverlay`, schema **v6**) **done**. Next
-(planned, not yet built): M11 OSMAnd-style POI toggles. See `IMPLEMENTATION_PLAN.md`.
+(ÖPNVKarte + OpenRailwayMap, `AppSettings.transportOverlay`, schema **v6**) **done**; M11
+OSMAnd-style POI toggles (Overpass via `data/overpass.dart` + `http`, packed
+`AppSettings.poiCategories`, schema **v7**, debounced/zoom-gated marker fetch) **done**.
+**The v2 roadmap (M7–M11) is complete.** See `IMPLEMENTATION_PLAN.md`.
 
 Track in `IMPLEMENTATION_PLAN.md` (milestone status) and `PLAN.md` (feature backlog).
 
@@ -58,7 +60,8 @@ Track in `IMPLEMENTATION_PLAN.md` (milestone status) and `PLAN.md` (feature back
 ```
 lib/
   data/        Drift database (Layers, Circles, Planes, Subspaces,
-               SubspacePoints, AppSettings) + repository
+               SubspacePoints, AppSettings) + repository; Overpass POI client
+               (overpass.dart)
   geo/         geodesicCircle(), plane half-plane + subspace Voronoi-cell
                geometry, lat/lng parsing
   state/       Riverpod providers (layers, circles, planes, subspaces,

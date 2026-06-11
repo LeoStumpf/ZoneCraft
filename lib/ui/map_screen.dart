@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart' hide Circle;
 
 import '../data/database.dart';
+import '../data/overpass.dart';
 import '../state/providers.dart';
 import 'circle_editor.dart';
 import 'layers_panel.dart';
@@ -36,6 +38,18 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// Current map rotation in degrees (clockwise). Drives the compass needle.
   double _rotation = 0;
 
+  // --- Map POIs (Overpass) --------------------------------------------------
+  /// Only fetch/show POIs at this zoom or closer (matches OSMAnd's detail
+  /// level; avoids clutter and heavy queries when zoomed out).
+  static const double _poiMinZoom = 15;
+  List<PoiResult> _pois = const [];
+  Set<PoiCategory> _enabledPois = const {};
+  int _poiMask = 0;
+  Timer? _poiDebounce;
+  String? _lastPoiKey;
+  // Small in-memory cache keyed by (rounded bbox + category bits).
+  final Map<String, List<PoiResult>> _poiCache = {};
+
   @override
   void initState() {
     super.initState();
@@ -55,9 +69,57 @@ class _MapScreenState extends ConsumerState<MapScreen>
   @override
   void dispose() {
     _saveCamera();
+    _poiDebounce?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _mapController.dispose();
     super.dispose();
+  }
+
+  /// Debounced POI refresh: coalesces rapid pan/zoom into one fetch when the
+  /// map settles.
+  void _schedulePoiRefresh() {
+    _poiDebounce?.cancel();
+    _poiDebounce = Timer(const Duration(milliseconds: 600), _refreshPois);
+  }
+
+  /// Fetches POIs for the current view if enabled and zoomed in enough; clears
+  /// them otherwise. Serves the in-memory cache first, and only applies a fetch
+  /// result if the view/categories haven't changed since it started.
+  Future<void> _refreshPois() async {
+    if (!_mapReady || !mounted) return;
+    final cam = _mapController.camera;
+    if (_enabledPois.isEmpty || cam.zoom < _poiMinZoom) {
+      if (_pois.isNotEmpty) setState(() => _pois = const []);
+      return;
+    }
+    final b = cam.visibleBounds;
+    final key = _poiKey(b, _enabledPois);
+    if (key == _lastPoiKey) return; // same view+categories already handled
+    _lastPoiKey = key;
+
+    final cached = _poiCache[key];
+    if (cached != null) {
+      setState(() => _pois = cached);
+      return;
+    }
+
+    final results = await fetchPois(
+      south: b.south,
+      west: b.west,
+      north: b.north,
+      east: b.east,
+      categories: _enabledPois,
+    );
+    if (!mounted) return;
+    if (_poiCache.length > 32) _poiCache.clear(); // keep the cache bounded
+    _poiCache[key] = results;
+    if (key == _lastPoiKey) setState(() => _pois = results);
+  }
+
+  String _poiKey(LatLngBounds b, Set<PoiCategory> cats) {
+    String r(double v) => v.toStringAsFixed(3); // ~100 m bbox buckets
+    final bits = cats.fold<int>(0, (acc, c) => acc | c.bit);
+    return '${r(b.south)},${r(b.west)},${r(b.north)},${r(b.east)}|$bits';
   }
 
   /// Writes the current camera (centre + zoom) to settings. No-op until the map
@@ -141,6 +203,35 @@ class _MapScreenState extends ConsumerState<MapScreen>
       ),
     );
   }
+
+  /// A small icon marker for one POI, coloured by category.
+  Marker _poiMarker(PoiResult p) {
+    return Marker(
+      point: LatLng(p.lat, p.lng),
+      width: 26,
+      height: 26,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.black26),
+        ),
+        child: Icon(_poiIcon(p.categoryKey), size: 16, color: Colors.black87),
+      ),
+    );
+  }
+
+  static IconData _poiIcon(String categoryKey) => switch (categoryKey) {
+        'bench' => Icons.chair_outlined,
+        'post_box' => Icons.markunread_mailbox_outlined,
+        'drinking_water' => Icons.water_drop_outlined,
+        'toilets' => Icons.wc_outlined,
+        'waste_basket' => Icons.delete_outline,
+        'cafe' => Icons.local_cafe_outlined,
+        'restaurant' => Icons.restaurant_outlined,
+        'pharmacy' => Icons.local_pharmacy_outlined,
+        _ => Icons.place_outlined,
+      };
 
   /// A default radius (metres) scaled so a new circle is visible at the current
   /// zoom: roughly 15% of the visible map width.
@@ -425,6 +516,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final settings = ref.watch(settingsProvider).asData?.value;
     final uncertainty = settings?.uncertaintyMeters ?? 0;
     final transportOverlay = settings?.transportOverlay ?? false;
+    // React to POI-category changes: update the enabled set and refetch.
+    final poiMask = settings?.poiCategories ?? 0;
+    if (poiMask != _poiMask) {
+      _poiMask = poiMask;
+      _enabledPois = poiCategoriesFromMask(poiMask);
+      _lastPoiKey = null; // force a refetch for the new categories
+      _schedulePoiRefresh();
+    }
     final selectedCircle = circles
         .where((c) => c.id == ref.watch(selectedCircleProvider))
         .firstOrNull;
@@ -483,12 +582,17 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         ? LatLng(savedLat, savedLng)
                         : const LatLng(48.137, 11.575), // Munich
                     initialZoom: hasSavedCamera ? savedZoom : 5,
-                    onMapReady: () => _mapReady = true,
+                    onMapReady: () {
+                      _mapReady = true;
+                      _schedulePoiRefresh();
+                    },
                     onPositionChanged: (camera, _) {
                       // Keep the compass needle in sync with map rotation.
                       if (camera.rotation != _rotation) {
                         setState(() => _rotation = camera.rotation);
                       }
+                      // Refresh POIs once the map settles.
+                      _schedulePoiRefresh();
                     },
                     onTap: (_, latlng) => _handleTap(
                       latlng,
@@ -549,6 +653,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               : const <SubspacePoint>[],
                           uncertaintyMeters: uncertainty,
                         ),
+                    // Map POIs (Overpass), above the zones. Only present when
+                    // enabled and zoomed in past the threshold.
+                    if (_pois.isNotEmpty)
+                      MarkerLayer(
+                        markers: [for (final p in _pois) _poiMarker(p)],
+                      ),
                     if (_myPosition != null)
                       MarkerLayer(
                         markers: [
