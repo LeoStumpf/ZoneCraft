@@ -101,6 +101,12 @@ void main() {
     expect((await repo.watchSettings().first).poiCategories, 0x05);
   });
 
+  test('border-levels mask defaults to 0 and persists', () async {
+    expect((await repo.watchSettings().first).borderLevels, 0);
+    await repo.updateBorderLevels(0x09); // country + city
+    expect((await repo.watchSettings().first).borderLevels, 0x09);
+  });
+
   test('clearAll wipes objects, resets settings, re-seeds a layer', () async {
     final layerId = await repo.createLayer(name: 'L', colorArgb: 0xFF0000FF);
     await repo.createCircle(
@@ -112,6 +118,7 @@ void main() {
     await repo.updateUncertainty(0);
     await repo.updateTransportOverlay(true);
     await repo.updatePoiCategories(0x0F);
+    await repo.updateBorderLevels(0x0F);
     await repo.saveCamera(48.1, 11.5, 12);
 
     final seededId = await repo.clearAll();
@@ -128,6 +135,7 @@ void main() {
     expect(settings.uncertaintyMeters, 500);
     expect(settings.transportOverlay, isFalse);
     expect(settings.poiCategories, 0);
+    expect(settings.borderLevels, 0);
     expect(settings.lastLat, isNull);
     expect(settings.lastZoom, isNull);
   });

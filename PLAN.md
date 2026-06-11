@@ -136,6 +136,11 @@ across close/relaunch by construction.
 - [x] **OSMAnd-style POIs (M11).** Toggle OSM POI categories (park benches, post boxes, …),
   fetched from Overpass and shown as markers, **only at high zoom** to match OSMAnd's
   behaviour (no clutter when zoomed out).
+- [x] **Administrative borders (post-v2).** Toggle OSM `admin_level` boundaries individually
+  (countries → states → counties → cities → districts → suburbs), each its own colour, fetched
+  from Overpass (relations → member ways clipped to the viewport, tagged via `convert`) and
+  drawn as polylines. Per-level zoom gating keeps queries bounded. Stored in
+  `AppSettings.borderLevels` (bitmask, schema v8).
 
 ### New geometry type
 
@@ -153,7 +158,8 @@ across close/relaunch by construction.
 - `Circles` ✅ and `Planes` ✅ (two points). `Subspaces` + `SubspacePoints` ✅ (one object, N
   points, one `isMain`) added in M9 (schema v5).
 - `AppSettings` ✅ holds uncertainty + camera + transport-overlay toggle ✅ (M10, schema v6) +
-  enabled-POI-category bitmask ✅ (M11, schema v7); **default uncertainty → 500** ✅ (M8).
+  enabled-POI-category bitmask ✅ (M11, schema v7) + enabled-border-levels bitmask ✅
+  (post-v2, schema v8); **default uncertainty → 500** ✅ (M8).
 - `Repository.clearAll()` for the clear-data button (M8).
 - Remember to bump `schemaVersion` and add migrations for each (M8 → v4, then M9, M10/M11).
 

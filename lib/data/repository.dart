@@ -312,6 +312,7 @@ class Repository {
                   uncertaintyMeters: 500,
                   transportOverlay: false,
                   poiCategories: 0,
+                  borderLevels: 0,
                 )
               : rows.first,
         );
@@ -343,6 +344,16 @@ class Repository {
           AppSettingsCompanion.insert(
             id: const Value(1),
             poiCategories: Value(mask),
+          ),
+        );
+  }
+
+  /// Upserts the enabled-border-levels bitmask into the single settings row.
+  Future<void> updateBorderLevels(int mask) {
+    return _db.into(_db.appSettings).insertOnConflictUpdate(
+          AppSettingsCompanion.insert(
+            id: const Value(1),
+            borderLevels: Value(mask),
           ),
         );
   }

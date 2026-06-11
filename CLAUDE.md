@@ -27,6 +27,12 @@ OSMAnd-style POI toggles (Overpass via `data/overpass.dart` + `http`, packed
 `AppSettings.poiCategories`, schema **v7**, debounced/zoom-gated marker fetch) **done**.
 **The v2 roadmap (M7–M11) is complete.** See `IMPLEMENTATION_PLAN.md`.
 
+**Post-v2 additions:** toggleable **administrative borders** (OSM `admin_level` 2–10,
+per-level on/off + colour, `data/borders.dart` via Overpass, packed
+`AppSettings.borderLevels`, schema **v8**, per-level zoom gating, rendered as
+`PolylineLayer`). Overpass `convert ::geom=geom()` returns GeoJSON `LineString`
+(`[lon,lat]`), parsed in `parseBordersResponse`.
+
 Track in `IMPLEMENTATION_PLAN.md` (milestone status) and `PLAN.md` (feature backlog).
 
 ## Workflow rule (required)
@@ -61,7 +67,7 @@ Track in `IMPLEMENTATION_PLAN.md` (milestone status) and `PLAN.md` (feature back
 lib/
   data/        Drift database (Layers, Circles, Planes, Subspaces,
                SubspacePoints, AppSettings) + repository; Overpass POI client
-               (overpass.dart)
+               (overpass.dart) + admin-border client (borders.dart)
   geo/         geodesicCircle(), plane half-plane + subspace Voronoi-cell
                geometry, lat/lng parsing
   state/       Riverpod providers (layers, circles, planes, subspaces,

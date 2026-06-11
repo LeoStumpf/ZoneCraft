@@ -1614,6 +1614,18 @@ class $AppSettingsTable extends AppSettings
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _borderLevelsMeta = const VerificationMeta(
+    'borderLevels',
+  );
+  @override
+  late final GeneratedColumn<int> borderLevels = GeneratedColumn<int>(
+    'border_levels',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1623,6 +1635,7 @@ class $AppSettingsTable extends AppSettings
     lastZoom,
     transportOverlay,
     poiCategories,
+    borderLevels,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1684,6 +1697,15 @@ class $AppSettingsTable extends AppSettings
         ),
       );
     }
+    if (data.containsKey('border_levels')) {
+      context.handle(
+        _borderLevelsMeta,
+        borderLevels.isAcceptableOrUnknown(
+          data['border_levels']!,
+          _borderLevelsMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1721,6 +1743,10 @@ class $AppSettingsTable extends AppSettings
         DriftSqlType.int,
         data['${effectivePrefix}poi_categories'],
       )!,
+      borderLevels: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}border_levels'],
+      )!,
     );
   }
 
@@ -1748,6 +1774,10 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
   /// Packed bitmask of enabled map-POI categories (see `poiCategories` in
   /// `overpass.dart`). 0 = none shown.
   final int poiCategories;
+
+  /// Packed bitmask of enabled administrative-border levels (see `borderLevels`
+  /// in `borders.dart`). 0 = none shown.
+  final int borderLevels;
   const AppSetting({
     required this.id,
     required this.uncertaintyMeters,
@@ -1756,6 +1786,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     this.lastZoom,
     required this.transportOverlay,
     required this.poiCategories,
+    required this.borderLevels,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1773,6 +1804,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     }
     map['transport_overlay'] = Variable<bool>(transportOverlay);
     map['poi_categories'] = Variable<int>(poiCategories);
+    map['border_levels'] = Variable<int>(borderLevels);
     return map;
   }
 
@@ -1791,6 +1823,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
           : Value(lastZoom),
       transportOverlay: Value(transportOverlay),
       poiCategories: Value(poiCategories),
+      borderLevels: Value(borderLevels),
     );
   }
 
@@ -1807,6 +1840,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       lastZoom: serializer.fromJson<double?>(json['lastZoom']),
       transportOverlay: serializer.fromJson<bool>(json['transportOverlay']),
       poiCategories: serializer.fromJson<int>(json['poiCategories']),
+      borderLevels: serializer.fromJson<int>(json['borderLevels']),
     );
   }
   @override
@@ -1820,6 +1854,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       'lastZoom': serializer.toJson<double?>(lastZoom),
       'transportOverlay': serializer.toJson<bool>(transportOverlay),
       'poiCategories': serializer.toJson<int>(poiCategories),
+      'borderLevels': serializer.toJson<int>(borderLevels),
     };
   }
 
@@ -1831,6 +1866,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     Value<double?> lastZoom = const Value.absent(),
     bool? transportOverlay,
     int? poiCategories,
+    int? borderLevels,
   }) => AppSetting(
     id: id ?? this.id,
     uncertaintyMeters: uncertaintyMeters ?? this.uncertaintyMeters,
@@ -1839,6 +1875,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     lastZoom: lastZoom.present ? lastZoom.value : this.lastZoom,
     transportOverlay: transportOverlay ?? this.transportOverlay,
     poiCategories: poiCategories ?? this.poiCategories,
+    borderLevels: borderLevels ?? this.borderLevels,
   );
   AppSetting copyWithCompanion(AppSettingsCompanion data) {
     return AppSetting(
@@ -1855,6 +1892,9 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       poiCategories: data.poiCategories.present
           ? data.poiCategories.value
           : this.poiCategories,
+      borderLevels: data.borderLevels.present
+          ? data.borderLevels.value
+          : this.borderLevels,
     );
   }
 
@@ -1867,7 +1907,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
           ..write('lastLng: $lastLng, ')
           ..write('lastZoom: $lastZoom, ')
           ..write('transportOverlay: $transportOverlay, ')
-          ..write('poiCategories: $poiCategories')
+          ..write('poiCategories: $poiCategories, ')
+          ..write('borderLevels: $borderLevels')
           ..write(')'))
         .toString();
   }
@@ -1881,6 +1922,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     lastZoom,
     transportOverlay,
     poiCategories,
+    borderLevels,
   );
   @override
   bool operator ==(Object other) =>
@@ -1892,7 +1934,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
           other.lastLng == this.lastLng &&
           other.lastZoom == this.lastZoom &&
           other.transportOverlay == this.transportOverlay &&
-          other.poiCategories == this.poiCategories);
+          other.poiCategories == this.poiCategories &&
+          other.borderLevels == this.borderLevels);
 }
 
 class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
@@ -1903,6 +1946,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
   final Value<double?> lastZoom;
   final Value<bool> transportOverlay;
   final Value<int> poiCategories;
+  final Value<int> borderLevels;
   const AppSettingsCompanion({
     this.id = const Value.absent(),
     this.uncertaintyMeters = const Value.absent(),
@@ -1911,6 +1955,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     this.lastZoom = const Value.absent(),
     this.transportOverlay = const Value.absent(),
     this.poiCategories = const Value.absent(),
+    this.borderLevels = const Value.absent(),
   });
   AppSettingsCompanion.insert({
     this.id = const Value.absent(),
@@ -1920,6 +1965,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     this.lastZoom = const Value.absent(),
     this.transportOverlay = const Value.absent(),
     this.poiCategories = const Value.absent(),
+    this.borderLevels = const Value.absent(),
   });
   static Insertable<AppSetting> custom({
     Expression<int>? id,
@@ -1929,6 +1975,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     Expression<double>? lastZoom,
     Expression<bool>? transportOverlay,
     Expression<int>? poiCategories,
+    Expression<int>? borderLevels,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1938,6 +1985,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
       if (lastZoom != null) 'last_zoom': lastZoom,
       if (transportOverlay != null) 'transport_overlay': transportOverlay,
       if (poiCategories != null) 'poi_categories': poiCategories,
+      if (borderLevels != null) 'border_levels': borderLevels,
     });
   }
 
@@ -1949,6 +1997,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     Value<double?>? lastZoom,
     Value<bool>? transportOverlay,
     Value<int>? poiCategories,
+    Value<int>? borderLevels,
   }) {
     return AppSettingsCompanion(
       id: id ?? this.id,
@@ -1958,6 +2007,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
       lastZoom: lastZoom ?? this.lastZoom,
       transportOverlay: transportOverlay ?? this.transportOverlay,
       poiCategories: poiCategories ?? this.poiCategories,
+      borderLevels: borderLevels ?? this.borderLevels,
     );
   }
 
@@ -1985,6 +2035,9 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     if (poiCategories.present) {
       map['poi_categories'] = Variable<int>(poiCategories.value);
     }
+    if (borderLevels.present) {
+      map['border_levels'] = Variable<int>(borderLevels.value);
+    }
     return map;
   }
 
@@ -1997,7 +2050,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
           ..write('lastLng: $lastLng, ')
           ..write('lastZoom: $lastZoom, ')
           ..write('transportOverlay: $transportOverlay, ')
-          ..write('poiCategories: $poiCategories')
+          ..write('poiCategories: $poiCategories, ')
+          ..write('borderLevels: $borderLevels')
           ..write(')'))
         .toString();
   }
@@ -4126,6 +4180,7 @@ typedef $$AppSettingsTableCreateCompanionBuilder =
       Value<double?> lastZoom,
       Value<bool> transportOverlay,
       Value<int> poiCategories,
+      Value<int> borderLevels,
     });
 typedef $$AppSettingsTableUpdateCompanionBuilder =
     AppSettingsCompanion Function({
@@ -4136,6 +4191,7 @@ typedef $$AppSettingsTableUpdateCompanionBuilder =
       Value<double?> lastZoom,
       Value<bool> transportOverlay,
       Value<int> poiCategories,
+      Value<int> borderLevels,
     });
 
 class $$AppSettingsTableFilterComposer
@@ -4179,6 +4235,11 @@ class $$AppSettingsTableFilterComposer
 
   ColumnFilters<int> get poiCategories => $composableBuilder(
     column: $table.poiCategories,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get borderLevels => $composableBuilder(
+    column: $table.borderLevels,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -4226,6 +4287,11 @@ class $$AppSettingsTableOrderingComposer
     column: $table.poiCategories,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get borderLevels => $composableBuilder(
+    column: $table.borderLevels,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$AppSettingsTableAnnotationComposer
@@ -4261,6 +4327,11 @@ class $$AppSettingsTableAnnotationComposer
 
   GeneratedColumn<int> get poiCategories => $composableBuilder(
     column: $table.poiCategories,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get borderLevels => $composableBuilder(
+    column: $table.borderLevels,
     builder: (column) => column,
   );
 }
@@ -4303,6 +4374,7 @@ class $$AppSettingsTableTableManager
                 Value<double?> lastZoom = const Value.absent(),
                 Value<bool> transportOverlay = const Value.absent(),
                 Value<int> poiCategories = const Value.absent(),
+                Value<int> borderLevels = const Value.absent(),
               }) => AppSettingsCompanion(
                 id: id,
                 uncertaintyMeters: uncertaintyMeters,
@@ -4311,6 +4383,7 @@ class $$AppSettingsTableTableManager
                 lastZoom: lastZoom,
                 transportOverlay: transportOverlay,
                 poiCategories: poiCategories,
+                borderLevels: borderLevels,
               ),
           createCompanionCallback:
               ({
@@ -4321,6 +4394,7 @@ class $$AppSettingsTableTableManager
                 Value<double?> lastZoom = const Value.absent(),
                 Value<bool> transportOverlay = const Value.absent(),
                 Value<int> poiCategories = const Value.absent(),
+                Value<int> borderLevels = const Value.absent(),
               }) => AppSettingsCompanion.insert(
                 id: id,
                 uncertaintyMeters: uncertaintyMeters,
@@ -4329,6 +4403,7 @@ class $$AppSettingsTableTableManager
                 lastZoom: lastZoom,
                 transportOverlay: transportOverlay,
                 poiCategories: poiCategories,
+                borderLevels: borderLevels,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))

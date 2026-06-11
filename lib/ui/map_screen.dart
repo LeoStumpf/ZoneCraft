@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart' hide Circle;
 
+import '../data/borders.dart';
 import '../data/database.dart';
 import '../data/overpass.dart';
 import '../state/providers.dart';
@@ -60,6 +61,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
   LatLngBounds? _poiFetchedBounds;
   int _poiFetchedMask = -1;
 
+  // --- Administrative borders (Overpass) ------------------------------------
+  List<BorderLine> _borders = const [];
+  Set<BorderLevel> _enabledBorders = const {};
+  int _borderMask = 0;
+  Timer? _bordersDebounce;
+  LatLngBounds? _bordersFetchedBounds;
+  // The set of levels (by bits) the current borders were fetched with. The
+  // active set depends on zoom (coarse levels show out, fine ones only in).
+  int _bordersFetchedActiveBits = -1;
+
   @override
   void initState() {
     super.initState();
@@ -80,6 +91,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   void dispose() {
     _saveCamera();
     _poiDebounce?.cancel();
+    _bordersDebounce?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _mapController.dispose();
     super.dispose();
@@ -160,6 +172,61 @@ class _MapScreenState extends ConsumerState<MapScreen>
       LatLng(b.south - dLat, b.west - dLng),
       LatLng(b.north + dLat, b.east + dLng),
     );
+  }
+
+  /// Debounced administrative-borders refresh (same coalescing as POIs).
+  void _scheduleBordersRefresh() {
+    _bordersDebounce?.cancel();
+    _bordersDebounce = Timer(const Duration(milliseconds: 600), _refreshBorders);
+  }
+
+  /// Fetches border lines for the enabled levels that are visible at the
+  /// current zoom (coarse levels show when zoomed out, fine ones only when
+  /// zoomed in). Same view-coverage cache, inflated fetch, and keep-on-failure
+  /// behaviour as POIs.
+  Future<void> _refreshBorders() async {
+    if (!_mapReady || !mounted) return;
+    final cam = _mapController.camera;
+    if (!cam.center.latitude.isFinite ||
+        !cam.center.longitude.isFinite ||
+        !cam.zoom.isFinite) {
+      return;
+    }
+    final active = {
+      for (final l in _enabledBorders)
+        if (cam.zoom >= l.minZoom) l,
+    };
+    if (active.isEmpty) {
+      _bordersFetchedBounds = null;
+      if (_borders.isNotEmpty) setState(() => _borders = const []);
+      return;
+    }
+    final activeBits = active.fold<int>(0, (acc, l) => acc | l.bit);
+    final vp = cam.visibleBounds;
+    if (_bordersFetchedActiveBits == activeBits &&
+        _bordersFetchedBounds != null &&
+        _boundsContain(_bordersFetchedBounds!, vp)) {
+      return;
+    }
+
+    final q = _inflateBounds(vp, 0.3);
+    final results = await fetchBorders(
+      south: q.south,
+      west: q.west,
+      north: q.north,
+      east: q.east,
+      levels: active,
+    );
+    if (!mounted) return;
+    if (results == null) {
+      _bordersFetchedBounds = null;
+      _bordersDebounce?.cancel();
+      _bordersDebounce = Timer(const Duration(seconds: 4), _refreshBorders);
+      return;
+    }
+    _bordersFetchedBounds = q;
+    _bordersFetchedActiveBits = activeBits;
+    setState(() => _borders = results);
   }
 
   /// Writes the current camera (centre + zoom) to settings. No-op until the map
@@ -550,6 +617,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
       // _poiFetchedMask now differs, so the next refresh refetches.
       _schedulePoiRefresh();
     }
+    // React to border-level changes.
+    final borderMask = settings?.borderLevels ?? 0;
+    if (borderMask != _borderMask) {
+      _borderMask = borderMask;
+      _enabledBorders = borderLevelsFromMask(borderMask);
+      _scheduleBordersRefresh();
+    }
     final selectedCircle = circles
         .where((c) => c.id == ref.watch(selectedCircleProvider))
         .firstOrNull;
@@ -616,6 +690,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     onMapReady: () {
                       _mapReady = true;
                       _schedulePoiRefresh();
+                      _scheduleBordersRefresh();
                     },
                     onPositionChanged: (camera, _) {
                       // Recover from a degenerate gesture that produced a
@@ -635,8 +710,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       if (camera.rotation != _rotation) {
                         setState(() => _rotation = camera.rotation);
                       }
-                      // Refresh POIs once the map settles.
+                      // Refresh overlays once the map settles.
                       _schedulePoiRefresh();
+                      _scheduleBordersRefresh();
                     },
                     onTap: (_, latlng) => _handleTap(
                       latlng,
@@ -697,6 +773,19 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               : const <SubspacePoint>[],
                           uncertaintyMeters: uncertainty,
                         ),
+                    // Administrative borders (Overpass), above the zones so the
+                    // lines stay crisp. Present only when enabled at this zoom.
+                    if (_borders.isNotEmpty)
+                      PolylineLayer(
+                        polylines: [
+                          for (final b in _borders)
+                            Polyline(
+                              points: b.points,
+                              color: Color(b.colorArgb),
+                              strokeWidth: 2.5,
+                            ),
+                        ],
+                      ),
                     // Map POIs (Overpass), above the zones. Only present when
                     // enabled and zoomed in past the threshold.
                     if (_pois.isNotEmpty)

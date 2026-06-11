@@ -116,6 +116,10 @@ class AppSettings extends Table {
   /// `overpass.dart`). 0 = none shown.
   IntColumn get poiCategories => integer().withDefault(const Constant(0))();
 
+  /// Packed bitmask of enabled administrative-border levels (see `borderLevels`
+  /// in `borders.dart`). 0 = none shown.
+  IntColumn get borderLevels => integer().withDefault(const Constant(0))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -130,7 +134,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -166,6 +170,9 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 7) {
             await m.addColumn(appSettings, appSettings.poiCategories);
+          }
+          if (from < 8) {
+            await m.addColumn(appSettings, appSettings.borderLevels);
           }
         },
         beforeOpen: (details) async {
