@@ -117,6 +117,13 @@ viewport as a spherical quad (the painter still `clipRect`s to the true screen r
 - **Third-party tile/Overpass usage** — respect attribution and rate limits; keep
   zoom-gating and debouncing in place.
 - **iOS** — only the Android build has been run on a device; the iOS path is unverified.
+- **KGP build warning (upstream, non-actionable)** — the Android build prints "plugins that
+  apply Kotlin Gradle Plugin (KGP): package_info_plus, share_plus". Both are already at their
+  latest published versions (share_plus 13.1.0, package_info_plus 10.1.0) and *still* apply
+  `kotlin-android` the legacy way, so there's no upgrade that silences it. `package_info_plus`
+  is transitive via `geolocator` (Locate me); `share_plus` is used by import/export. The
+  warning is forward-compat only — the build succeeds — and clears once those packages migrate
+  to Flutter's "Built-in Kotlin". Don't bother re-trying a version bump; re-check upstream.
 
 ## Toolchain reminders
 
