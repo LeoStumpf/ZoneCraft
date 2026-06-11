@@ -38,10 +38,18 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// Current map rotation in degrees (clockwise). Drives the compass needle.
   double _rotation = 0;
 
+  /// Last finite camera, used to snap back if a gesture produces a NaN camera.
+  LatLng _lastGoodCenter = const LatLng(48.137, 11.575);
+  double _lastGoodZoom = 5;
+
   // --- Map POIs (Overpass) --------------------------------------------------
-  /// Only fetch/show POIs at this zoom or closer (matches OSMAnd's detail
-  /// level; avoids clutter and heavy queries when zoomed out).
-  static const double _poiMinZoom = 15;
+  /// Only fetch POIs at this zoom or closer (matches OSMAnd's detail level;
+  /// avoids clutter and heavy queries when zoomed out).
+  static const double _poiFetchZoom = 15;
+
+  /// Keep already-shown POIs until the zoom drops below this (hysteresis), so
+  /// markers don't flicker when the zoom hovers around the fetch threshold.
+  static const double _poiHideZoom = 13.5;
   List<PoiResult> _pois = const [];
   Set<PoiCategory> _enabledPois = const {};
   int _poiMask = 0;
@@ -92,9 +100,21 @@ class _MapScreenState extends ConsumerState<MapScreen>
   Future<void> _refreshPois() async {
     if (!_mapReady || !mounted) return;
     final cam = _mapController.camera;
-    if (_enabledPois.isEmpty || cam.zoom < _poiMinZoom) {
+    // Bail on a non-finite camera (a degenerate gesture can briefly produce a
+    // NaN centre/zoom). Reading visibleBounds would throw; recovery happens in
+    // onPositionChanged.
+    if (!cam.center.latitude.isFinite ||
+        !cam.center.longitude.isFinite ||
+        !cam.zoom.isFinite) {
+      return;
+    }
+    if (_enabledPois.isEmpty || cam.zoom < _poiHideZoom) {
       _poiFetchedBounds = null;
       if (_pois.isNotEmpty) setState(() => _pois = const []);
+      return;
+    }
+    if (cam.zoom < _poiFetchZoom) {
+      // Hysteresis band: keep whatever is shown, but don't fetch more yet.
       return;
     }
     final vp = cam.visibleBounds;
@@ -589,13 +609,28 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         : const LatLng(48.137, 11.575), // Munich
                     initialZoom: hasSavedCamera ? savedZoom : 5,
                     // OSM tiles exist up to z19; cap here so zooming further
-                    // doesn't leave a blank (tile-less) screen.
+                    // doesn't leave a blank (tile-less) screen. A minZoom keeps
+                    // zoom-out gestures from degenerating into a NaN camera.
                     maxZoom: 19,
+                    minZoom: 2,
                     onMapReady: () {
                       _mapReady = true;
                       _schedulePoiRefresh();
                     },
                     onPositionChanged: (camera, _) {
+                      // Recover from a degenerate gesture that produced a
+                      // non-finite camera: snap back to the last valid view so
+                      // flutter_map's tile layer (and our code) don't throw
+                      // "LatLng is not finite".
+                      final c = camera.center;
+                      if (!c.latitude.isFinite ||
+                          !c.longitude.isFinite ||
+                          !camera.zoom.isFinite) {
+                        _mapController.move(_lastGoodCenter, _lastGoodZoom);
+                        return;
+                      }
+                      _lastGoodCenter = c;
+                      _lastGoodZoom = camera.zoom;
                       // Keep the compass needle in sync with map rotation.
                       if (camera.rotation != _rotation) {
                         setState(() => _rotation = camera.rotation);
