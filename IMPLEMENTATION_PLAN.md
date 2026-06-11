@@ -422,6 +422,39 @@ and Riverpod stream/selection/placement providers mirror subspace.
 
 ---
 
+# v3 — offline resilience
+
+## Milestone 14 — Offline map caching ✅ DONE
+
+**Status:** complete (2026-06-11). The map now keeps working for a few minutes with no
+reception (subway/underground) and stops re-downloading areas you revisit. Two new tables
+(schema **v10**, `from < 10` migration creating both):
+
+- **`TileCache`** (`url` PK, `bytes`, `etag?`, `sizeBytes`, `fetchedAt`, `lastUsedAt`) — an
+  on-disk cache of tile images shared by the base OSM layer and the transport overlays
+  (distinct URLs coexist in one table). A custom **`CachedTileProvider`**
+  (`data/cached_tile_provider.dart`) serves tiles cache-first, then network, writing fresh
+  tiles back; the screen owns a single `http.Client` shared across all layers + prefetching
+  (provider `dispose` deliberately does **not** close it, so toggling a transport overlay off
+  can't kill the base map). LRU eviction (`Repository.evictTilesDownTo`) keeps the cache under
+  a 200 MB soft cap. Not wiped by "Clear all data"; it has its own **"Clear cached map tiles"**
+  button + size readout in Settings.
+- **Viewport prefetch** (`map_screen._prefetchTiles`, debounced like the overlays): on each
+  settled camera move at zoom ≥ 10 it caches the visible tiles plus a one-tile ring (and the
+  overlay tiles when enabled), capped at 60 coordinates/pass, sequential and failure-safe.
+  Slippy-tile maths in `geo/tiles.dart` (`tileXFor`/`tileYFor`, pure + unit-tested).
+- **`OverpassCache`** (`kind` PK 'poi'|'border', `payload` JSON, bounds, `maskBits`,
+  `fetchedAt`) — persists the last successful POI/border results so the overlays reappear
+  instantly on launch (including offline). Saved on each successful `_refreshPois` /
+  `_refreshBorders`, reloaded into the in-memory coverage state in `initState`. `clearAll`
+  drops it. JSON round-trips via `encode/decode{Poi,BorderLines}` in `overpass.dart`/`borders.dart`.
+- **Verify:** `flutter analyze` + `flutter test` (65) green. On device (migrated to
+  `user_version=10`, existing data preserved): browsing populated `tile_cache` to 105 tiles /
+  2.5 MB including prefetched ring + transport-overlay tiles; no exceptions; the Settings
+  readout and clear button work.
+
+---
+
 ## New dependencies (by milestone)
 
 - M4: `geolocator`, `permission_handler`

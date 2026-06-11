@@ -18,7 +18,13 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   clear-all, and the overlay toggles below).
 - **Optional overlays** (Overpass / tiles, all in Settings): public-transport tiles, OSMAnd
   POIs, administrative borders.
-- **Drift schema is at v9**; migrations are append-only `if (from < N)` blocks.
+- **Offline caching:** a Drift-backed `TileCache` + custom `CachedTileProvider`
+  (`data/cached_tile_provider.dart`) serve map tiles cache-first then network, plus a
+  one-tile-ring **viewport prefetch** (`map_screen._prefetchTiles`, slippy maths in
+  `geo/tiles.dart`), so the map survives a few minutes with no reception; `OverpassCache`
+  persists the last POI/border results. LRU eviction (200 MB cap) + a Settings size readout /
+  "Clear cached map tiles" button.
+- **Drift schema is at v10**; migrations are append-only `if (from < N)` blocks.
 
 ## Current status
 
@@ -59,6 +65,11 @@ signed per-object `offsetMeters` (schema **v9**). Both mirror the `subspace` pat
 the per-layer **invert** to flip side/inside-outside, and feed `outer`/`core` polygons into
 the existing compositor. **The v3 freehand types are complete.**
 
+**Offline resilience:** M14 **offline map caching** — Drift `TileCache` + `CachedTileProvider`
+(cache-first map tiles), viewport prefetch (one-tile ring, `geo/tiles.dart`), LRU eviction
+(200 MB cap), Settings size/clear controls; plus `OverpassCache` persisting POI/border results
+(instant, offline-safe). Schema **v10**. **Done.**
+
 Track in `IMPLEMENTATION_PLAN.md` (milestone status) and `PLAN.md` (feature backlog).
 
 ## Workflow rule (required)
@@ -93,11 +104,12 @@ Track in `IMPLEMENTATION_PLAN.md` (milestone status) and `PLAN.md` (feature back
 lib/
   data/        Drift database (Layers, Circles, Planes, Subspaces,
                SubspacePoints, FreeLines, FreeLinePoints, FreeAreas,
-               FreeAreaPoints, AppSettings) + repository; Overpass POI client
-               (overpass.dart) + admin-border client (borders.dart)
+               FreeAreaPoints, TileCache, OverpassCache, AppSettings) +
+               repository; Overpass POI client (overpass.dart) + admin-border
+               client (borders.dart); offline tile cache (cached_tile_provider.dart)
   geo/         geodesicCircle(), plane half-plane + subspace Voronoi-cell
                geometry, freehand line/area region geometry (freeline.dart,
-               freearea.dart), lat/lng parsing
+               freearea.dart), slippy-tile maths (tiles.dart), lat/lng parsing
   state/       Riverpod providers (layers, circles, planes, subspaces,
                freehand lines/areas, settings, selection)
   ui/          map_screen, layers_panel, circle_editor, plane_editor,

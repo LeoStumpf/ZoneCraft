@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:zonecraft/data/borders.dart';
 
 void main() {
@@ -129,6 +130,31 @@ void main() {
         client: client,
       );
       expect(r, isNull);
+    });
+  });
+
+  group('persistent cache JSON', () {
+    test('encode/decode round-trips border lines', () {
+      final lines = [
+        BorderLine(
+          points: const [LatLng(48.0, 11.0), LatLng(48.1, 11.2)],
+          colorArgb: 0xFFD32F2F,
+        ),
+      ];
+      final back = decodeBorderLines(encodeBorderLines(lines));
+      expect(back.length, 1);
+      expect(back.single.colorArgb, 0xFFD32F2F);
+      expect(back.single.points.length, 2);
+      expect(back.single.points.first.latitude, closeTo(48.0, 1e-9));
+      expect(back.single.points.last.longitude, closeTo(11.2, 1e-9));
+    });
+
+    test('drops degenerate lines (<2 points) and survives garbage', () {
+      final lines = [
+        BorderLine(points: const [LatLng(1, 1)], colorArgb: 0xFF000000),
+      ];
+      expect(decodeBorderLines(encodeBorderLines(lines)), isEmpty);
+      expect(decodeBorderLines('nope'), isEmpty);
     });
   });
 }

@@ -5,11 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart' hide Circle;
 
 import '../data/borders.dart';
+import '../data/cached_tile_provider.dart';
 import '../data/database.dart';
 import '../data/overpass.dart';
+import '../geo/tiles.dart';
 import '../state/providers.dart';
 import 'circle_editor.dart';
 import 'freearea_editor.dart';
@@ -37,6 +40,29 @@ class _MapScreenState extends ConsumerState<MapScreen>
   LatLng? _myPosition;
   bool _locating = false;
   bool _mapReady = false;
+
+  // --- Offline tile cache ---------------------------------------------------
+  /// Tile URL templates, shared by the [TileLayer]s and the offline prefetcher
+  /// so the two never drift apart.
+  static const _baseTileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+  static const _opnvTileUrl = 'https://tile.memomaps.de/tilegen/{z}/{x}/{y}.png';
+  static const _railTileUrl =
+      'https://tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png';
+  static const _tileUserAgent =
+      'ZoneCraft/1.0 (https://github.com/LeoStumpf/zonecraft)';
+
+  /// HTTP client owned by this screen and shared by [_tileProvider] for both
+  /// browse-caching and prefetching. Closed in [dispose].
+  late final http.Client _tileClient;
+  late final CachedTileProvider _tileProvider;
+
+  /// Don't prefetch when zoomed far out — a 1-tile ring then spans a huge area
+  /// and the tiles are rarely useful.
+  static const double _prefetchMinZoom = 10;
+
+  /// Cap on tile coordinates prefetched per settle, to bound network/disk use.
+  static const int _prefetchMaxTiles = 60;
+  Timer? _prefetchDebounce;
 
   /// Current map rotation in degrees (clockwise). Drives the compass needle.
   double _rotation = 0;
@@ -77,6 +103,38 @@ class _MapScreenState extends ConsumerState<MapScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _tileClient = http.Client();
+    _tileProvider = CachedTileProvider(
+      ref.read(repositoryProvider),
+      _tileClient,
+      headers: {'User-Agent': _tileUserAgent},
+    );
+    _loadCachedOverlays();
+  }
+
+  /// Seeds the POI/border overlays from their last-persisted results so they
+  /// appear instantly on launch — including offline — until a fresh fetch (if
+  /// any) replaces them. Mirrors the in-memory coverage state so a redundant
+  /// refetch is suppressed while the view stays inside the cached bounds.
+  Future<void> _loadCachedOverlays() async {
+    final repo = ref.read(repositoryProvider);
+    final poi = await repo.loadOverpassCache('poi');
+    final border = await repo.loadOverpassCache('border');
+    if (!mounted) return;
+    setState(() {
+      if (poi != null) {
+        _pois = decodePoiResults(poi.payload);
+        _poiFetchedBounds = LatLngBounds(
+            LatLng(poi.south, poi.west), LatLng(poi.north, poi.east));
+        _poiFetchedMask = poi.maskBits;
+      }
+      if (border != null) {
+        _borders = decodeBorderLines(border.payload);
+        _bordersFetchedBounds = LatLngBounds(
+            LatLng(border.south, border.west), LatLng(border.north, border.east));
+        _bordersFetchedActiveBits = border.maskBits;
+      }
+    });
   }
 
   @override
@@ -94,6 +152,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
     _saveCamera();
     _poiDebounce?.cancel();
     _bordersDebounce?.cancel();
+    _prefetchDebounce?.cancel();
+    _tileClient.close();
     WidgetsBinding.instance.removeObserver(this);
     _mapController.dispose();
     super.dispose();
@@ -159,6 +219,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
     _poiFetchedBounds = q;
     _poiFetchedMask = _poiMask;
     setState(() => _pois = results);
+    unawaited(ref.read(repositoryProvider).saveOverpassCache(
+          'poi',
+          encodePoiResults(results),
+          south: q.south,
+          west: q.west,
+          north: q.north,
+          east: q.east,
+          maskBits: _poiMask,
+        ));
   }
 
   static bool _boundsContain(LatLngBounds outer, LatLngBounds inner) =>
@@ -229,7 +298,74 @@ class _MapScreenState extends ConsumerState<MapScreen>
     _bordersFetchedBounds = q;
     _bordersFetchedActiveBits = activeBits;
     setState(() => _borders = results);
+    unawaited(ref.read(repositoryProvider).saveOverpassCache(
+          'border',
+          encodeBorderLines(results),
+          south: q.south,
+          west: q.west,
+          north: q.north,
+          east: q.east,
+          maskBits: activeBits,
+        ));
   }
+
+  /// Debounced offline-tile prefetch (same coalescing as the overlays).
+  void _schedulePrefetch() {
+    _prefetchDebounce?.cancel();
+    _prefetchDebounce = Timer(const Duration(milliseconds: 600), _prefetchTiles);
+  }
+
+  /// Best-effort: caches the tiles covering the current viewport plus a one-tile
+  /// ring around it (and the transport overlays when enabled), so a short pan or
+  /// scroll while offline still has tiles. Capped, sequential, and failure-safe
+  /// so it never blocks the UI or hammers the tile servers.
+  Future<void> _prefetchTiles() async {
+    if (!_mapReady || !mounted) return;
+    final cam = _mapController.camera;
+    if (!cam.center.latitude.isFinite ||
+        !cam.center.longitude.isFinite ||
+        !cam.zoom.isFinite) {
+      return;
+    }
+    final z = cam.zoom.round().clamp(0, 19);
+    if (z < _prefetchMinZoom) return;
+
+    final vp = cam.visibleBounds;
+    final n = 1 << z;
+    // Visible tile span, widened by a one-tile ring. North maps to the smaller
+    // tile-Y, south to the larger.
+    final minX = tileXFor(vp.west, z) - 1;
+    final maxX = tileXFor(vp.east, z) + 1;
+    final minY = tileYFor(vp.north, z) - 1;
+    final maxY = tileYFor(vp.south, z) + 1;
+    final transport =
+        ref.read(settingsProvider).asData?.value.transportOverlay ?? false;
+
+    var budget = _prefetchMaxTiles;
+    outer:
+    for (var x = minX; x <= maxX; x++) {
+      // Wrap longitude tiles; skip rows off the top/bottom of the map.
+      final cx = ((x % n) + n) % n;
+      for (var y = minY; y <= maxY; y++) {
+        if (y < 0 || y >= n) continue;
+        await _tileProvider.prefetch(_fillTileUrl(_baseTileUrl, z, cx, y));
+        if (transport) {
+          await _tileProvider.prefetch(_fillTileUrl(_opnvTileUrl, z, cx, y));
+          await _tileProvider.prefetch(_fillTileUrl(_railTileUrl, z, cx, y));
+        }
+        if (--budget <= 0) break outer;
+      }
+    }
+    if (!mounted) return;
+    await ref
+        .read(repositoryProvider)
+        .evictTilesDownTo(CachedTileProvider.maxCacheBytes);
+  }
+
+  static String _fillTileUrl(String template, int z, int x, int y) => template
+      .replaceAll('{z}', '$z')
+      .replaceAll('{x}', '$x')
+      .replaceAll('{y}', '$y');
 
   /// Writes the current camera (centre + zoom) to settings. No-op until the map
   /// is ready or if the camera is somehow non-finite.
@@ -910,6 +1046,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       _mapReady = true;
                       _schedulePoiRefresh();
                       _scheduleBordersRefresh();
+                      _schedulePrefetch();
                     },
                     onPositionChanged: (camera, _) {
                       // Recover from a degenerate gesture that produced a
@@ -929,9 +1066,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       if (camera.rotation != _rotation) {
                         setState(() => _rotation = camera.rotation);
                       }
-                      // Refresh overlays once the map settles.
+                      // Refresh overlays + prefetch tiles once the map settles.
                       _schedulePoiRefresh();
                       _scheduleBordersRefresh();
+                      _schedulePrefetch();
                     },
                     onTap: (_, latlng) => _handleTap(
                       latlng,
@@ -948,9 +1086,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   ),
                   children: [
                     TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      urlTemplate: _baseTileUrl,
                       userAgentPackageName: 'com.zonecraft.zonecraft',
+                      tileProvider: _tileProvider,
                       maxZoom: 19,
                     ),
                     // Optional transparent public-transport overlays, above the
@@ -958,15 +1096,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     // buses/trams/stops; OpenRailwayMap the rail network.
                     if (transportOverlay) ...[
                       TileLayer(
-                        urlTemplate:
-                            'https://tile.memomaps.de/tilegen/{z}/{x}/{y}.png',
+                        urlTemplate: _opnvTileUrl,
                         userAgentPackageName: 'com.zonecraft.zonecraft',
+                        tileProvider: _tileProvider,
                         maxZoom: 18,
                       ),
                       TileLayer(
-                        urlTemplate:
-                            'https://tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png',
+                        urlTemplate: _railTileUrl,
                         userAgentPackageName: 'com.zonecraft.zonecraft',
+                        tileProvider: _tileProvider,
                         maxZoom: 19,
                       ),
                     ],

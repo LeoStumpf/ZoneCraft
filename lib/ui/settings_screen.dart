@@ -26,6 +26,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _field = TextEditingController();
   bool _initialised = false;
 
+  /// Bumped after clearing the tile cache to re-run the size [FutureBuilder].
+  int _cacheTick = 0;
+
   Repository get _repo => ref.read(repositoryProvider);
 
   @override
@@ -73,6 +76,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('All data cleared')),
     );
+  }
+
+  Future<void> _clearTileCache() async {
+    await _repo.clearTileCache();
+    if (!mounted) return;
+    setState(() => _cacheTick++); // refresh the size readout
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Cached map tiles cleared')),
+    );
+  }
+
+  static String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(0)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
   @override
@@ -209,6 +227,35 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   : (v) => _repo.updateBorderLevels(
                       borderMaskWith(borderMask, l, v ?? false)),
             ),
+          const Divider(height: 48),
+          Text('Offline map cache',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          Text(
+            'Map tiles you view (and a ring around them) are stored on the '
+            'device so the map keeps working briefly with no reception, and '
+            "doesn't re-download areas you revisit.",
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 8),
+          FutureBuilder<int>(
+            // Keyed on _cacheTick so it re-queries after a clear.
+            key: ValueKey(_cacheTick),
+            future: _repo.tileCacheBytes(),
+            builder: (context, snap) => Text(
+              'Cached map tiles: ${_formatBytes(snap.data ?? 0)}',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: _clearTileCache,
+              icon: const Icon(Icons.cleaning_services),
+              label: const Text('Clear cached map tiles'),
+            ),
+          ),
           const Divider(height: 48),
           Text('Data', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 4),

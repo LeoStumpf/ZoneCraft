@@ -115,4 +115,24 @@ void main() {
       );
     });
   });
+
+  group('persistent cache JSON', () {
+    test('encode/decode round-trips POI results', () {
+      const pois = [
+        PoiResult(lat: 48.137, lng: 11.575, categoryKey: 'cafe'),
+        PoiResult(lat: -33.86, lng: 151.21, categoryKey: 'bench'),
+      ];
+      final back = decodePoiResults(encodePoiResults(pois));
+      expect(back.length, 2);
+      expect(back[0].lat, closeTo(48.137, 1e-9));
+      expect(back[0].lng, closeTo(11.575, 1e-9));
+      expect(back[0].categoryKey, 'cafe');
+      expect(back[1].categoryKey, 'bench');
+    });
+
+    test('decode returns empty on garbage rather than throwing', () {
+      expect(decodePoiResults('not json'), isEmpty);
+      expect(decodePoiResults('{"oops": true}'), isEmpty);
+    });
+  });
 }

@@ -95,6 +95,44 @@ class BorderLine {
   final int colorArgb;
 }
 
+/// Encodes [lines] to a compact JSON string for the persistent overlay cache.
+String encodeBorderLines(Iterable<BorderLine> lines) => jsonEncode([
+      for (final l in lines)
+        {
+          'c': l.colorArgb,
+          'p': [for (final pt in l.points) [pt.latitude, pt.longitude]],
+        },
+    ]);
+
+/// Decodes the string produced by [encodeBorderLines]. Returns empty on any
+/// structural surprise rather than throwing.
+List<BorderLine> decodeBorderLines(String json) {
+  final List<BorderLine> out = [];
+  final dynamic decoded;
+  try {
+    decoded = jsonDecode(json);
+  } catch (_) {
+    return out;
+  }
+  if (decoded is! List) return out;
+  for (final e in decoded) {
+    if (e is! Map) continue;
+    final c = (e['c'] as num?)?.toInt();
+    final p = e['p'];
+    if (c == null || p is! List) continue;
+    final pts = <LatLng>[];
+    for (final pair in p) {
+      if (pair is! List || pair.length < 2) continue;
+      final la = (pair[0] as num?)?.toDouble();
+      final lo = (pair[1] as num?)?.toDouble();
+      if (la == null || lo == null || !la.isFinite || !lo.isFinite) continue;
+      pts.add(LatLng(la, lo));
+    }
+    if (pts.length >= 2) out.add(BorderLine(points: pts, colorArgb: c));
+  }
+  return out;
+}
+
 /// Builds the Overpass QL for [levels] within the bbox. For each level it picks
 /// the admin-boundary relations overlapping the bbox, takes their member ways
 /// clipped to the bbox (so only the segments in view are returned), and tags

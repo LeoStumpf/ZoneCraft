@@ -175,6 +175,18 @@ User-drawn (freehand) regions, as opposed to the geometric primitives above.
   the border"); negative extends the fill past the drawn boundary. The uncertainty band
   straddles the shifted boundary as before.
 
+## Offline resilience (see `IMPLEMENTATION_PLAN.md` M14)
+
+- [x] **Offline map tile caching (M14).** A Drift-backed `TileCache` + custom
+  `CachedTileProvider` serve map tiles cache-first then network, so revisited areas don't
+  re-download and the map survives a few minutes with no reception. **Viewport prefetch**
+  caches a one-tile ring around the view (and the transport overlays) so a short offline pan
+  still has tiles. LRU eviction under a 200 MB cap; a Settings size readout + "Clear cached
+  map tiles" button (separate from "Clear all data"). Slippy-tile maths in `geo/tiles.dart`.
+- [x] **Persisted POI/border overlays (M14).** An `OverpassCache` table stores the last
+  successful POI/border results so they reappear instantly on launch, including offline.
+- Schema **v10** (`TileCache` + `OverpassCache`).
+
 ---
 
 ## Data model impact (Drift — `lib/data/database.dart`)
@@ -187,6 +199,8 @@ User-drawn (freehand) regions, as opposed to the geometric primitives above.
   (post-v2, schema v8); **default uncertainty → 500** ✅ (M8).
 - `FreeLines` + `FreeLinePoints` and `FreeAreas` + `FreeAreaPoints` ✅ (one object, N ordered
   points, signed `offsetMeters` on the parent) added in M12/M13 (schema v9).
+- `TileCache` (offline map tiles) + `OverpassCache` (persisted POI/border overlays) ✅
+  added in M14 (schema v10).
 - `Repository.clearAll()` for the clear-data button (M8).
 - Remember to bump `schemaVersion` and add migrations for each (M8 → v4, then M9, M10/M11).
 

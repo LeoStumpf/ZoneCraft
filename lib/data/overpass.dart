@@ -97,6 +97,34 @@ class PoiResult {
   final String categoryKey;
 }
 
+/// Encodes [pois] to a compact JSON string for the persistent overlay cache.
+String encodePoiResults(Iterable<PoiResult> pois) => jsonEncode([
+      for (final p in pois) {'lat': p.lat, 'lng': p.lng, 'k': p.categoryKey},
+    ]);
+
+/// Decodes the string produced by [encodePoiResults]. Returns empty on any
+/// structural surprise rather than throwing.
+List<PoiResult> decodePoiResults(String json) {
+  final List<PoiResult> out = [];
+  final dynamic decoded;
+  try {
+    decoded = jsonDecode(json);
+  } catch (_) {
+    return out;
+  }
+  if (decoded is! List) return out;
+  for (final e in decoded) {
+    if (e is! Map) continue;
+    final lat = (e['lat'] as num?)?.toDouble();
+    final lng = (e['lng'] as num?)?.toDouble();
+    final k = e['k'];
+    if (lat == null || lng == null || k is! String) continue;
+    if (!lat.isFinite || !lng.isFinite) continue;
+    out.add(PoiResult(lat: lat, lng: lng, categoryKey: k));
+  }
+  return out;
+}
+
 /// Caps how many elements Overpass returns, to respect usage limits and keep
 /// the marker layer light.
 const int overpassResultCap = 400;

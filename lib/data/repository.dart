@@ -542,15 +542,122 @@ class Repository {
         );
   }
 
+  // --- Tile cache -----------------------------------------------------------
+
+  /// Returns the cached bytes for [url] (bumping its last-used time so eviction
+  /// keeps it), or null if the tile isn't cached.
+  Future<Uint8List?> getTile(String url) async {
+    final row = await (_db.select(_db.tileCache)
+          ..where((t) => t.url.equals(url)))
+        .getSingleOrNull();
+    if (row == null) return null;
+    await (_db.update(_db.tileCache)..where((t) => t.url.equals(url))).write(
+      TileCacheCompanion(lastUsedAt: Value(DateTime.now().millisecondsSinceEpoch)),
+    );
+    return row.bytes;
+  }
+
+  /// Inserts/updates the cached bytes for [url].
+  Future<void> putTile(String url, Uint8List bytes, {String? etag}) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    return _db.into(_db.tileCache).insertOnConflictUpdate(
+          TileCacheCompanion.insert(
+            url: url,
+            bytes: bytes,
+            etag: Value(etag),
+            sizeBytes: bytes.length,
+            fetchedAt: now,
+            lastUsedAt: now,
+          ),
+        );
+  }
+
+  /// True if [url] is already cached (used by prefetch to avoid refetching).
+  Future<bool> hasTile(String url) async {
+    final row = await (_db.selectOnly(_db.tileCache)
+          ..addColumns([_db.tileCache.url])
+          ..where(_db.tileCache.url.equals(url))
+          ..limit(1))
+        .getSingleOrNull();
+    return row != null;
+  }
+
+  /// Total bytes currently held in the tile cache (for the Settings readout).
+  Future<int> tileCacheBytes() async {
+    final sum = _db.tileCache.sizeBytes.sum();
+    final row = await (_db.selectOnly(_db.tileCache)..addColumns([sum]))
+        .getSingle();
+    return row.read(sum) ?? 0;
+  }
+
+  /// Evicts least-recently-used tiles until the cache total is at or below
+  /// [maxBytes]. Cheap no-op when already under the cap.
+  Future<void> evictTilesDownTo(int maxBytes) async {
+    var total = await tileCacheBytes();
+    if (total <= maxBytes) return;
+    // Walk oldest-first in batches, deleting until under the cap.
+    while (total > maxBytes) {
+      final batch = await (_db.select(_db.tileCache)
+            ..orderBy([(t) => OrderingTerm(expression: t.lastUsedAt)])
+            ..limit(64))
+          .get();
+      if (batch.isEmpty) break;
+      final urls = <String>[];
+      for (final row in batch) {
+        urls.add(row.url);
+        total -= row.sizeBytes;
+        if (total <= maxBytes) break;
+      }
+      await (_db.delete(_db.tileCache)..where((t) => t.url.isIn(urls))).go();
+    }
+  }
+
+  /// Empties the tile cache (the Settings "Clear cached map tiles" button).
+  Future<void> clearTileCache() => _db.delete(_db.tileCache).go();
+
+  // --- Overpass overlay cache ----------------------------------------------
+
+  /// Persists the last successful Overpass result for [kind] ('poi'|'border').
+  Future<void> saveOverpassCache(
+    String kind,
+    String payload, {
+    required double south,
+    required double west,
+    required double north,
+    required double east,
+    required int maskBits,
+  }) {
+    return _db.into(_db.overpassCache).insertOnConflictUpdate(
+          OverpassCacheCompanion.insert(
+            kind: kind,
+            payload: payload,
+            south: south,
+            west: west,
+            north: north,
+            east: east,
+            maskBits: maskBits,
+            fetchedAt: DateTime.now().millisecondsSinceEpoch,
+          ),
+        );
+  }
+
+  /// Loads the persisted Overpass result for [kind], or null if none.
+  Future<OverpassCacheData?> loadOverpassCache(String kind) {
+    return (_db.select(_db.overpassCache)..where((c) => c.kind.equals(kind)))
+        .getSingleOrNull();
+  }
+
   // --- Clear ----------------------------------------------------------------
 
   /// Wipes all user data: deletes every layer (cascading to circles/planes),
   /// resets settings to defaults (uncertainty 500, camera null) by dropping the
   /// settings row, then re-seeds an empty default layer. Used by the Settings
-  /// "Clear all data" button. Returns the id of the freshly seeded layer.
+  /// "Clear all data" button. Returns the id of the freshly seeded layer. The
+  /// tile cache is left intact (it's not user data — it has its own button).
   Future<String> clearAll() async {
     await _db.delete(_db.layers).go(); // cascades to circles/planes
     await _db.delete(_db.appSettings).go(); // reverts to column defaults on read
+    await _db.delete(_db.overpassCache).go(); // persisted POI/border overlays
     return ensureDefaultLayer();
   }
 

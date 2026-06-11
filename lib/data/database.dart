@@ -162,6 +162,64 @@ class FreeAreaPoints extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// On-disk cache of map tile images, keyed by their full fetch [url] (so the base
+/// OSM layer and the transport overlays — which have distinct URLs — share one
+/// table). Filled as tiles are browsed/prefetched; evicted least-recently-used
+/// first once the total exceeds a size cap. This is *cache*, not user data:
+/// "Clear all data" leaves it alone; it has its own "Clear cached map tiles"
+/// button. Lets the map keep rendering already-seen/prefetched tiles offline.
+class TileCache extends Table {
+  /// Full resolved tile URL (`{z}/{x}/{y}` already substituted).
+  TextColumn get url => text()();
+
+  /// Raw image bytes (PNG) as returned by the tile server.
+  BlobColumn get bytes => blob()();
+
+  /// HTTP ETag if the server sent one (currently stored, not yet revalidated).
+  TextColumn get etag => text().nullable()();
+
+  /// Byte length of [bytes], denormalised so the size cap can sum cheaply.
+  IntColumn get sizeBytes => integer()();
+
+  /// When the tile was fetched (ms since epoch).
+  IntColumn get fetchedAt => integer()();
+
+  /// When the tile was last served from cache (ms since epoch). Drives LRU
+  /// eviction.
+  IntColumn get lastUsedAt => integer()();
+
+  @override
+  Set<Column> get primaryKey => {url};
+}
+
+/// Persisted last-successful Overpass overlay result, one row per [kind]
+/// ('poi' or 'border'). Stores the parsed results as [payload] JSON plus the
+/// bounds and filter mask they were fetched for, so the overlays reappear
+/// instantly on launch (including offline) and the in-memory coverage check can
+/// suppress a redundant refetch while the view stays inside [south]…[east].
+class OverpassCache extends Table {
+  /// 'poi' or 'border'.
+  TextColumn get kind => text()();
+
+  /// JSON-encoded list of results (see toJson helpers in overpass/borders.dart).
+  TextColumn get payload => text()();
+
+  RealColumn get south => real()();
+  RealColumn get west => real()();
+  RealColumn get north => real()();
+  RealColumn get east => real()();
+
+  /// The category/level bitmask (POI categories or active border-level bits)
+  /// the payload was fetched with.
+  IntColumn get maskBits => integer()();
+
+  /// When the payload was fetched (ms since epoch).
+  IntColumn get fetchedAt => integer()();
+
+  @override
+  Set<Column> get primaryKey => {kind};
+}
+
 /// App-wide settings, stored as a single row (id == 1).
 class AppSettings extends Table {
   IntColumn get id => integer().withDefault(const Constant(1))();
@@ -204,6 +262,8 @@ class AppSettings extends Table {
     FreeLinePoints,
     FreeAreas,
     FreeAreaPoints,
+    TileCache,
+    OverpassCache,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -213,7 +273,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -258,6 +318,10 @@ class AppDatabase extends _$AppDatabase {
             await m.createTable(freeLinePoints);
             await m.createTable(freeAreas);
             await m.createTable(freeAreaPoints);
+          }
+          if (from < 10) {
+            await m.createTable(tileCache);
+            await m.createTable(overpassCache);
           }
         },
         beforeOpen: (details) async {

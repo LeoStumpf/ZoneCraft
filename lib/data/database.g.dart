@@ -4380,6 +4380,945 @@ class FreeAreaPointsCompanion extends UpdateCompanion<FreeAreaPoint> {
   }
 }
 
+class $TileCacheTable extends TileCache
+    with TableInfo<$TileCacheTable, TileCacheData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $TileCacheTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _urlMeta = const VerificationMeta('url');
+  @override
+  late final GeneratedColumn<String> url = GeneratedColumn<String>(
+    'url',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _bytesMeta = const VerificationMeta('bytes');
+  @override
+  late final GeneratedColumn<Uint8List> bytes = GeneratedColumn<Uint8List>(
+    'bytes',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _etagMeta = const VerificationMeta('etag');
+  @override
+  late final GeneratedColumn<String> etag = GeneratedColumn<String>(
+    'etag',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sizeBytesMeta = const VerificationMeta(
+    'sizeBytes',
+  );
+  @override
+  late final GeneratedColumn<int> sizeBytes = GeneratedColumn<int>(
+    'size_bytes',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _fetchedAtMeta = const VerificationMeta(
+    'fetchedAt',
+  );
+  @override
+  late final GeneratedColumn<int> fetchedAt = GeneratedColumn<int>(
+    'fetched_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _lastUsedAtMeta = const VerificationMeta(
+    'lastUsedAt',
+  );
+  @override
+  late final GeneratedColumn<int> lastUsedAt = GeneratedColumn<int>(
+    'last_used_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    url,
+    bytes,
+    etag,
+    sizeBytes,
+    fetchedAt,
+    lastUsedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'tile_cache';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<TileCacheData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('url')) {
+      context.handle(
+        _urlMeta,
+        url.isAcceptableOrUnknown(data['url']!, _urlMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_urlMeta);
+    }
+    if (data.containsKey('bytes')) {
+      context.handle(
+        _bytesMeta,
+        bytes.isAcceptableOrUnknown(data['bytes']!, _bytesMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bytesMeta);
+    }
+    if (data.containsKey('etag')) {
+      context.handle(
+        _etagMeta,
+        etag.isAcceptableOrUnknown(data['etag']!, _etagMeta),
+      );
+    }
+    if (data.containsKey('size_bytes')) {
+      context.handle(
+        _sizeBytesMeta,
+        sizeBytes.isAcceptableOrUnknown(data['size_bytes']!, _sizeBytesMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sizeBytesMeta);
+    }
+    if (data.containsKey('fetched_at')) {
+      context.handle(
+        _fetchedAtMeta,
+        fetchedAt.isAcceptableOrUnknown(data['fetched_at']!, _fetchedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_fetchedAtMeta);
+    }
+    if (data.containsKey('last_used_at')) {
+      context.handle(
+        _lastUsedAtMeta,
+        lastUsedAt.isAcceptableOrUnknown(
+          data['last_used_at']!,
+          _lastUsedAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_lastUsedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {url};
+  @override
+  TileCacheData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return TileCacheData(
+      url: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}url'],
+      )!,
+      bytes: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}bytes'],
+      )!,
+      etag: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}etag'],
+      ),
+      sizeBytes: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}size_bytes'],
+      )!,
+      fetchedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}fetched_at'],
+      )!,
+      lastUsedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}last_used_at'],
+      )!,
+    );
+  }
+
+  @override
+  $TileCacheTable createAlias(String alias) {
+    return $TileCacheTable(attachedDatabase, alias);
+  }
+}
+
+class TileCacheData extends DataClass implements Insertable<TileCacheData> {
+  /// Full resolved tile URL (`{z}/{x}/{y}` already substituted).
+  final String url;
+
+  /// Raw image bytes (PNG) as returned by the tile server.
+  final Uint8List bytes;
+
+  /// HTTP ETag if the server sent one (currently stored, not yet revalidated).
+  final String? etag;
+
+  /// Byte length of [bytes], denormalised so the size cap can sum cheaply.
+  final int sizeBytes;
+
+  /// When the tile was fetched (ms since epoch).
+  final int fetchedAt;
+
+  /// When the tile was last served from cache (ms since epoch). Drives LRU
+  /// eviction.
+  final int lastUsedAt;
+  const TileCacheData({
+    required this.url,
+    required this.bytes,
+    this.etag,
+    required this.sizeBytes,
+    required this.fetchedAt,
+    required this.lastUsedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['url'] = Variable<String>(url);
+    map['bytes'] = Variable<Uint8List>(bytes);
+    if (!nullToAbsent || etag != null) {
+      map['etag'] = Variable<String>(etag);
+    }
+    map['size_bytes'] = Variable<int>(sizeBytes);
+    map['fetched_at'] = Variable<int>(fetchedAt);
+    map['last_used_at'] = Variable<int>(lastUsedAt);
+    return map;
+  }
+
+  TileCacheCompanion toCompanion(bool nullToAbsent) {
+    return TileCacheCompanion(
+      url: Value(url),
+      bytes: Value(bytes),
+      etag: etag == null && nullToAbsent ? const Value.absent() : Value(etag),
+      sizeBytes: Value(sizeBytes),
+      fetchedAt: Value(fetchedAt),
+      lastUsedAt: Value(lastUsedAt),
+    );
+  }
+
+  factory TileCacheData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return TileCacheData(
+      url: serializer.fromJson<String>(json['url']),
+      bytes: serializer.fromJson<Uint8List>(json['bytes']),
+      etag: serializer.fromJson<String?>(json['etag']),
+      sizeBytes: serializer.fromJson<int>(json['sizeBytes']),
+      fetchedAt: serializer.fromJson<int>(json['fetchedAt']),
+      lastUsedAt: serializer.fromJson<int>(json['lastUsedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'url': serializer.toJson<String>(url),
+      'bytes': serializer.toJson<Uint8List>(bytes),
+      'etag': serializer.toJson<String?>(etag),
+      'sizeBytes': serializer.toJson<int>(sizeBytes),
+      'fetchedAt': serializer.toJson<int>(fetchedAt),
+      'lastUsedAt': serializer.toJson<int>(lastUsedAt),
+    };
+  }
+
+  TileCacheData copyWith({
+    String? url,
+    Uint8List? bytes,
+    Value<String?> etag = const Value.absent(),
+    int? sizeBytes,
+    int? fetchedAt,
+    int? lastUsedAt,
+  }) => TileCacheData(
+    url: url ?? this.url,
+    bytes: bytes ?? this.bytes,
+    etag: etag.present ? etag.value : this.etag,
+    sizeBytes: sizeBytes ?? this.sizeBytes,
+    fetchedAt: fetchedAt ?? this.fetchedAt,
+    lastUsedAt: lastUsedAt ?? this.lastUsedAt,
+  );
+  TileCacheData copyWithCompanion(TileCacheCompanion data) {
+    return TileCacheData(
+      url: data.url.present ? data.url.value : this.url,
+      bytes: data.bytes.present ? data.bytes.value : this.bytes,
+      etag: data.etag.present ? data.etag.value : this.etag,
+      sizeBytes: data.sizeBytes.present ? data.sizeBytes.value : this.sizeBytes,
+      fetchedAt: data.fetchedAt.present ? data.fetchedAt.value : this.fetchedAt,
+      lastUsedAt: data.lastUsedAt.present
+          ? data.lastUsedAt.value
+          : this.lastUsedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TileCacheData(')
+          ..write('url: $url, ')
+          ..write('bytes: $bytes, ')
+          ..write('etag: $etag, ')
+          ..write('sizeBytes: $sizeBytes, ')
+          ..write('fetchedAt: $fetchedAt, ')
+          ..write('lastUsedAt: $lastUsedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    url,
+    $driftBlobEquality.hash(bytes),
+    etag,
+    sizeBytes,
+    fetchedAt,
+    lastUsedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is TileCacheData &&
+          other.url == this.url &&
+          $driftBlobEquality.equals(other.bytes, this.bytes) &&
+          other.etag == this.etag &&
+          other.sizeBytes == this.sizeBytes &&
+          other.fetchedAt == this.fetchedAt &&
+          other.lastUsedAt == this.lastUsedAt);
+}
+
+class TileCacheCompanion extends UpdateCompanion<TileCacheData> {
+  final Value<String> url;
+  final Value<Uint8List> bytes;
+  final Value<String?> etag;
+  final Value<int> sizeBytes;
+  final Value<int> fetchedAt;
+  final Value<int> lastUsedAt;
+  final Value<int> rowid;
+  const TileCacheCompanion({
+    this.url = const Value.absent(),
+    this.bytes = const Value.absent(),
+    this.etag = const Value.absent(),
+    this.sizeBytes = const Value.absent(),
+    this.fetchedAt = const Value.absent(),
+    this.lastUsedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  TileCacheCompanion.insert({
+    required String url,
+    required Uint8List bytes,
+    this.etag = const Value.absent(),
+    required int sizeBytes,
+    required int fetchedAt,
+    required int lastUsedAt,
+    this.rowid = const Value.absent(),
+  }) : url = Value(url),
+       bytes = Value(bytes),
+       sizeBytes = Value(sizeBytes),
+       fetchedAt = Value(fetchedAt),
+       lastUsedAt = Value(lastUsedAt);
+  static Insertable<TileCacheData> custom({
+    Expression<String>? url,
+    Expression<Uint8List>? bytes,
+    Expression<String>? etag,
+    Expression<int>? sizeBytes,
+    Expression<int>? fetchedAt,
+    Expression<int>? lastUsedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (url != null) 'url': url,
+      if (bytes != null) 'bytes': bytes,
+      if (etag != null) 'etag': etag,
+      if (sizeBytes != null) 'size_bytes': sizeBytes,
+      if (fetchedAt != null) 'fetched_at': fetchedAt,
+      if (lastUsedAt != null) 'last_used_at': lastUsedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  TileCacheCompanion copyWith({
+    Value<String>? url,
+    Value<Uint8List>? bytes,
+    Value<String?>? etag,
+    Value<int>? sizeBytes,
+    Value<int>? fetchedAt,
+    Value<int>? lastUsedAt,
+    Value<int>? rowid,
+  }) {
+    return TileCacheCompanion(
+      url: url ?? this.url,
+      bytes: bytes ?? this.bytes,
+      etag: etag ?? this.etag,
+      sizeBytes: sizeBytes ?? this.sizeBytes,
+      fetchedAt: fetchedAt ?? this.fetchedAt,
+      lastUsedAt: lastUsedAt ?? this.lastUsedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (url.present) {
+      map['url'] = Variable<String>(url.value);
+    }
+    if (bytes.present) {
+      map['bytes'] = Variable<Uint8List>(bytes.value);
+    }
+    if (etag.present) {
+      map['etag'] = Variable<String>(etag.value);
+    }
+    if (sizeBytes.present) {
+      map['size_bytes'] = Variable<int>(sizeBytes.value);
+    }
+    if (fetchedAt.present) {
+      map['fetched_at'] = Variable<int>(fetchedAt.value);
+    }
+    if (lastUsedAt.present) {
+      map['last_used_at'] = Variable<int>(lastUsedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TileCacheCompanion(')
+          ..write('url: $url, ')
+          ..write('bytes: $bytes, ')
+          ..write('etag: $etag, ')
+          ..write('sizeBytes: $sizeBytes, ')
+          ..write('fetchedAt: $fetchedAt, ')
+          ..write('lastUsedAt: $lastUsedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $OverpassCacheTable extends OverpassCache
+    with TableInfo<$OverpassCacheTable, OverpassCacheData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $OverpassCacheTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _payloadMeta = const VerificationMeta(
+    'payload',
+  );
+  @override
+  late final GeneratedColumn<String> payload = GeneratedColumn<String>(
+    'payload',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _southMeta = const VerificationMeta('south');
+  @override
+  late final GeneratedColumn<double> south = GeneratedColumn<double>(
+    'south',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _westMeta = const VerificationMeta('west');
+  @override
+  late final GeneratedColumn<double> west = GeneratedColumn<double>(
+    'west',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _northMeta = const VerificationMeta('north');
+  @override
+  late final GeneratedColumn<double> north = GeneratedColumn<double>(
+    'north',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _eastMeta = const VerificationMeta('east');
+  @override
+  late final GeneratedColumn<double> east = GeneratedColumn<double>(
+    'east',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _maskBitsMeta = const VerificationMeta(
+    'maskBits',
+  );
+  @override
+  late final GeneratedColumn<int> maskBits = GeneratedColumn<int>(
+    'mask_bits',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _fetchedAtMeta = const VerificationMeta(
+    'fetchedAt',
+  );
+  @override
+  late final GeneratedColumn<int> fetchedAt = GeneratedColumn<int>(
+    'fetched_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    kind,
+    payload,
+    south,
+    west,
+    north,
+    east,
+    maskBits,
+    fetchedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'overpass_cache';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<OverpassCacheData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('payload')) {
+      context.handle(
+        _payloadMeta,
+        payload.isAcceptableOrUnknown(data['payload']!, _payloadMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_payloadMeta);
+    }
+    if (data.containsKey('south')) {
+      context.handle(
+        _southMeta,
+        south.isAcceptableOrUnknown(data['south']!, _southMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_southMeta);
+    }
+    if (data.containsKey('west')) {
+      context.handle(
+        _westMeta,
+        west.isAcceptableOrUnknown(data['west']!, _westMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_westMeta);
+    }
+    if (data.containsKey('north')) {
+      context.handle(
+        _northMeta,
+        north.isAcceptableOrUnknown(data['north']!, _northMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_northMeta);
+    }
+    if (data.containsKey('east')) {
+      context.handle(
+        _eastMeta,
+        east.isAcceptableOrUnknown(data['east']!, _eastMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_eastMeta);
+    }
+    if (data.containsKey('mask_bits')) {
+      context.handle(
+        _maskBitsMeta,
+        maskBits.isAcceptableOrUnknown(data['mask_bits']!, _maskBitsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_maskBitsMeta);
+    }
+    if (data.containsKey('fetched_at')) {
+      context.handle(
+        _fetchedAtMeta,
+        fetchedAt.isAcceptableOrUnknown(data['fetched_at']!, _fetchedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_fetchedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {kind};
+  @override
+  OverpassCacheData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return OverpassCacheData(
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      payload: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}payload'],
+      )!,
+      south: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}south'],
+      )!,
+      west: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}west'],
+      )!,
+      north: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}north'],
+      )!,
+      east: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}east'],
+      )!,
+      maskBits: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}mask_bits'],
+      )!,
+      fetchedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}fetched_at'],
+      )!,
+    );
+  }
+
+  @override
+  $OverpassCacheTable createAlias(String alias) {
+    return $OverpassCacheTable(attachedDatabase, alias);
+  }
+}
+
+class OverpassCacheData extends DataClass
+    implements Insertable<OverpassCacheData> {
+  /// 'poi' or 'border'.
+  final String kind;
+
+  /// JSON-encoded list of results (see toJson helpers in overpass/borders.dart).
+  final String payload;
+  final double south;
+  final double west;
+  final double north;
+  final double east;
+
+  /// The category/level bitmask (POI categories or active border-level bits)
+  /// the payload was fetched with.
+  final int maskBits;
+
+  /// When the payload was fetched (ms since epoch).
+  final int fetchedAt;
+  const OverpassCacheData({
+    required this.kind,
+    required this.payload,
+    required this.south,
+    required this.west,
+    required this.north,
+    required this.east,
+    required this.maskBits,
+    required this.fetchedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['kind'] = Variable<String>(kind);
+    map['payload'] = Variable<String>(payload);
+    map['south'] = Variable<double>(south);
+    map['west'] = Variable<double>(west);
+    map['north'] = Variable<double>(north);
+    map['east'] = Variable<double>(east);
+    map['mask_bits'] = Variable<int>(maskBits);
+    map['fetched_at'] = Variable<int>(fetchedAt);
+    return map;
+  }
+
+  OverpassCacheCompanion toCompanion(bool nullToAbsent) {
+    return OverpassCacheCompanion(
+      kind: Value(kind),
+      payload: Value(payload),
+      south: Value(south),
+      west: Value(west),
+      north: Value(north),
+      east: Value(east),
+      maskBits: Value(maskBits),
+      fetchedAt: Value(fetchedAt),
+    );
+  }
+
+  factory OverpassCacheData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return OverpassCacheData(
+      kind: serializer.fromJson<String>(json['kind']),
+      payload: serializer.fromJson<String>(json['payload']),
+      south: serializer.fromJson<double>(json['south']),
+      west: serializer.fromJson<double>(json['west']),
+      north: serializer.fromJson<double>(json['north']),
+      east: serializer.fromJson<double>(json['east']),
+      maskBits: serializer.fromJson<int>(json['maskBits']),
+      fetchedAt: serializer.fromJson<int>(json['fetchedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'kind': serializer.toJson<String>(kind),
+      'payload': serializer.toJson<String>(payload),
+      'south': serializer.toJson<double>(south),
+      'west': serializer.toJson<double>(west),
+      'north': serializer.toJson<double>(north),
+      'east': serializer.toJson<double>(east),
+      'maskBits': serializer.toJson<int>(maskBits),
+      'fetchedAt': serializer.toJson<int>(fetchedAt),
+    };
+  }
+
+  OverpassCacheData copyWith({
+    String? kind,
+    String? payload,
+    double? south,
+    double? west,
+    double? north,
+    double? east,
+    int? maskBits,
+    int? fetchedAt,
+  }) => OverpassCacheData(
+    kind: kind ?? this.kind,
+    payload: payload ?? this.payload,
+    south: south ?? this.south,
+    west: west ?? this.west,
+    north: north ?? this.north,
+    east: east ?? this.east,
+    maskBits: maskBits ?? this.maskBits,
+    fetchedAt: fetchedAt ?? this.fetchedAt,
+  );
+  OverpassCacheData copyWithCompanion(OverpassCacheCompanion data) {
+    return OverpassCacheData(
+      kind: data.kind.present ? data.kind.value : this.kind,
+      payload: data.payload.present ? data.payload.value : this.payload,
+      south: data.south.present ? data.south.value : this.south,
+      west: data.west.present ? data.west.value : this.west,
+      north: data.north.present ? data.north.value : this.north,
+      east: data.east.present ? data.east.value : this.east,
+      maskBits: data.maskBits.present ? data.maskBits.value : this.maskBits,
+      fetchedAt: data.fetchedAt.present ? data.fetchedAt.value : this.fetchedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('OverpassCacheData(')
+          ..write('kind: $kind, ')
+          ..write('payload: $payload, ')
+          ..write('south: $south, ')
+          ..write('west: $west, ')
+          ..write('north: $north, ')
+          ..write('east: $east, ')
+          ..write('maskBits: $maskBits, ')
+          ..write('fetchedAt: $fetchedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(kind, payload, south, west, north, east, maskBits, fetchedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is OverpassCacheData &&
+          other.kind == this.kind &&
+          other.payload == this.payload &&
+          other.south == this.south &&
+          other.west == this.west &&
+          other.north == this.north &&
+          other.east == this.east &&
+          other.maskBits == this.maskBits &&
+          other.fetchedAt == this.fetchedAt);
+}
+
+class OverpassCacheCompanion extends UpdateCompanion<OverpassCacheData> {
+  final Value<String> kind;
+  final Value<String> payload;
+  final Value<double> south;
+  final Value<double> west;
+  final Value<double> north;
+  final Value<double> east;
+  final Value<int> maskBits;
+  final Value<int> fetchedAt;
+  final Value<int> rowid;
+  const OverpassCacheCompanion({
+    this.kind = const Value.absent(),
+    this.payload = const Value.absent(),
+    this.south = const Value.absent(),
+    this.west = const Value.absent(),
+    this.north = const Value.absent(),
+    this.east = const Value.absent(),
+    this.maskBits = const Value.absent(),
+    this.fetchedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  OverpassCacheCompanion.insert({
+    required String kind,
+    required String payload,
+    required double south,
+    required double west,
+    required double north,
+    required double east,
+    required int maskBits,
+    required int fetchedAt,
+    this.rowid = const Value.absent(),
+  }) : kind = Value(kind),
+       payload = Value(payload),
+       south = Value(south),
+       west = Value(west),
+       north = Value(north),
+       east = Value(east),
+       maskBits = Value(maskBits),
+       fetchedAt = Value(fetchedAt);
+  static Insertable<OverpassCacheData> custom({
+    Expression<String>? kind,
+    Expression<String>? payload,
+    Expression<double>? south,
+    Expression<double>? west,
+    Expression<double>? north,
+    Expression<double>? east,
+    Expression<int>? maskBits,
+    Expression<int>? fetchedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (kind != null) 'kind': kind,
+      if (payload != null) 'payload': payload,
+      if (south != null) 'south': south,
+      if (west != null) 'west': west,
+      if (north != null) 'north': north,
+      if (east != null) 'east': east,
+      if (maskBits != null) 'mask_bits': maskBits,
+      if (fetchedAt != null) 'fetched_at': fetchedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  OverpassCacheCompanion copyWith({
+    Value<String>? kind,
+    Value<String>? payload,
+    Value<double>? south,
+    Value<double>? west,
+    Value<double>? north,
+    Value<double>? east,
+    Value<int>? maskBits,
+    Value<int>? fetchedAt,
+    Value<int>? rowid,
+  }) {
+    return OverpassCacheCompanion(
+      kind: kind ?? this.kind,
+      payload: payload ?? this.payload,
+      south: south ?? this.south,
+      west: west ?? this.west,
+      north: north ?? this.north,
+      east: east ?? this.east,
+      maskBits: maskBits ?? this.maskBits,
+      fetchedAt: fetchedAt ?? this.fetchedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (payload.present) {
+      map['payload'] = Variable<String>(payload.value);
+    }
+    if (south.present) {
+      map['south'] = Variable<double>(south.value);
+    }
+    if (west.present) {
+      map['west'] = Variable<double>(west.value);
+    }
+    if (north.present) {
+      map['north'] = Variable<double>(north.value);
+    }
+    if (east.present) {
+      map['east'] = Variable<double>(east.value);
+    }
+    if (maskBits.present) {
+      map['mask_bits'] = Variable<int>(maskBits.value);
+    }
+    if (fetchedAt.present) {
+      map['fetched_at'] = Variable<int>(fetchedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('OverpassCacheCompanion(')
+          ..write('kind: $kind, ')
+          ..write('payload: $payload, ')
+          ..write('south: $south, ')
+          ..write('west: $west, ')
+          ..write('north: $north, ')
+          ..write('east: $east, ')
+          ..write('maskBits: $maskBits, ')
+          ..write('fetchedAt: $fetchedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -4393,6 +5332,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $FreeLinePointsTable freeLinePoints = $FreeLinePointsTable(this);
   late final $FreeAreasTable freeAreas = $FreeAreasTable(this);
   late final $FreeAreaPointsTable freeAreaPoints = $FreeAreaPointsTable(this);
+  late final $TileCacheTable tileCache = $TileCacheTable(this);
+  late final $OverpassCacheTable overpassCache = $OverpassCacheTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -4408,6 +5349,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     freeLinePoints,
     freeAreas,
     freeAreaPoints,
+    tileCache,
+    overpassCache,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -8491,6 +9434,488 @@ typedef $$FreeAreaPointsTableProcessedTableManager =
       FreeAreaPoint,
       PrefetchHooks Function({bool freeAreaId})
     >;
+typedef $$TileCacheTableCreateCompanionBuilder =
+    TileCacheCompanion Function({
+      required String url,
+      required Uint8List bytes,
+      Value<String?> etag,
+      required int sizeBytes,
+      required int fetchedAt,
+      required int lastUsedAt,
+      Value<int> rowid,
+    });
+typedef $$TileCacheTableUpdateCompanionBuilder =
+    TileCacheCompanion Function({
+      Value<String> url,
+      Value<Uint8List> bytes,
+      Value<String?> etag,
+      Value<int> sizeBytes,
+      Value<int> fetchedAt,
+      Value<int> lastUsedAt,
+      Value<int> rowid,
+    });
+
+class $$TileCacheTableFilterComposer
+    extends Composer<_$AppDatabase, $TileCacheTable> {
+  $$TileCacheTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get url => $composableBuilder(
+    column: $table.url,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get bytes => $composableBuilder(
+    column: $table.bytes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get etag => $composableBuilder(
+    column: $table.etag,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sizeBytes => $composableBuilder(
+    column: $table.sizeBytes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get fetchedAt => $composableBuilder(
+    column: $table.fetchedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lastUsedAt => $composableBuilder(
+    column: $table.lastUsedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$TileCacheTableOrderingComposer
+    extends Composer<_$AppDatabase, $TileCacheTable> {
+  $$TileCacheTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get url => $composableBuilder(
+    column: $table.url,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get bytes => $composableBuilder(
+    column: $table.bytes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get etag => $composableBuilder(
+    column: $table.etag,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sizeBytes => $composableBuilder(
+    column: $table.sizeBytes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get fetchedAt => $composableBuilder(
+    column: $table.fetchedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lastUsedAt => $composableBuilder(
+    column: $table.lastUsedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$TileCacheTableAnnotationComposer
+    extends Composer<_$AppDatabase, $TileCacheTable> {
+  $$TileCacheTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get url =>
+      $composableBuilder(column: $table.url, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get bytes =>
+      $composableBuilder(column: $table.bytes, builder: (column) => column);
+
+  GeneratedColumn<String> get etag =>
+      $composableBuilder(column: $table.etag, builder: (column) => column);
+
+  GeneratedColumn<int> get sizeBytes =>
+      $composableBuilder(column: $table.sizeBytes, builder: (column) => column);
+
+  GeneratedColumn<int> get fetchedAt =>
+      $composableBuilder(column: $table.fetchedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get lastUsedAt => $composableBuilder(
+    column: $table.lastUsedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$TileCacheTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $TileCacheTable,
+          TileCacheData,
+          $$TileCacheTableFilterComposer,
+          $$TileCacheTableOrderingComposer,
+          $$TileCacheTableAnnotationComposer,
+          $$TileCacheTableCreateCompanionBuilder,
+          $$TileCacheTableUpdateCompanionBuilder,
+          (
+            TileCacheData,
+            BaseReferences<_$AppDatabase, $TileCacheTable, TileCacheData>,
+          ),
+          TileCacheData,
+          PrefetchHooks Function()
+        > {
+  $$TileCacheTableTableManager(_$AppDatabase db, $TileCacheTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$TileCacheTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$TileCacheTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$TileCacheTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> url = const Value.absent(),
+                Value<Uint8List> bytes = const Value.absent(),
+                Value<String?> etag = const Value.absent(),
+                Value<int> sizeBytes = const Value.absent(),
+                Value<int> fetchedAt = const Value.absent(),
+                Value<int> lastUsedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => TileCacheCompanion(
+                url: url,
+                bytes: bytes,
+                etag: etag,
+                sizeBytes: sizeBytes,
+                fetchedAt: fetchedAt,
+                lastUsedAt: lastUsedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String url,
+                required Uint8List bytes,
+                Value<String?> etag = const Value.absent(),
+                required int sizeBytes,
+                required int fetchedAt,
+                required int lastUsedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => TileCacheCompanion.insert(
+                url: url,
+                bytes: bytes,
+                etag: etag,
+                sizeBytes: sizeBytes,
+                fetchedAt: fetchedAt,
+                lastUsedAt: lastUsedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$TileCacheTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $TileCacheTable,
+      TileCacheData,
+      $$TileCacheTableFilterComposer,
+      $$TileCacheTableOrderingComposer,
+      $$TileCacheTableAnnotationComposer,
+      $$TileCacheTableCreateCompanionBuilder,
+      $$TileCacheTableUpdateCompanionBuilder,
+      (
+        TileCacheData,
+        BaseReferences<_$AppDatabase, $TileCacheTable, TileCacheData>,
+      ),
+      TileCacheData,
+      PrefetchHooks Function()
+    >;
+typedef $$OverpassCacheTableCreateCompanionBuilder =
+    OverpassCacheCompanion Function({
+      required String kind,
+      required String payload,
+      required double south,
+      required double west,
+      required double north,
+      required double east,
+      required int maskBits,
+      required int fetchedAt,
+      Value<int> rowid,
+    });
+typedef $$OverpassCacheTableUpdateCompanionBuilder =
+    OverpassCacheCompanion Function({
+      Value<String> kind,
+      Value<String> payload,
+      Value<double> south,
+      Value<double> west,
+      Value<double> north,
+      Value<double> east,
+      Value<int> maskBits,
+      Value<int> fetchedAt,
+      Value<int> rowid,
+    });
+
+class $$OverpassCacheTableFilterComposer
+    extends Composer<_$AppDatabase, $OverpassCacheTable> {
+  $$OverpassCacheTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get payload => $composableBuilder(
+    column: $table.payload,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get south => $composableBuilder(
+    column: $table.south,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get west => $composableBuilder(
+    column: $table.west,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get north => $composableBuilder(
+    column: $table.north,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get east => $composableBuilder(
+    column: $table.east,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get maskBits => $composableBuilder(
+    column: $table.maskBits,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get fetchedAt => $composableBuilder(
+    column: $table.fetchedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$OverpassCacheTableOrderingComposer
+    extends Composer<_$AppDatabase, $OverpassCacheTable> {
+  $$OverpassCacheTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get payload => $composableBuilder(
+    column: $table.payload,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get south => $composableBuilder(
+    column: $table.south,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get west => $composableBuilder(
+    column: $table.west,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get north => $composableBuilder(
+    column: $table.north,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get east => $composableBuilder(
+    column: $table.east,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get maskBits => $composableBuilder(
+    column: $table.maskBits,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get fetchedAt => $composableBuilder(
+    column: $table.fetchedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$OverpassCacheTableAnnotationComposer
+    extends Composer<_$AppDatabase, $OverpassCacheTable> {
+  $$OverpassCacheTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get payload =>
+      $composableBuilder(column: $table.payload, builder: (column) => column);
+
+  GeneratedColumn<double> get south =>
+      $composableBuilder(column: $table.south, builder: (column) => column);
+
+  GeneratedColumn<double> get west =>
+      $composableBuilder(column: $table.west, builder: (column) => column);
+
+  GeneratedColumn<double> get north =>
+      $composableBuilder(column: $table.north, builder: (column) => column);
+
+  GeneratedColumn<double> get east =>
+      $composableBuilder(column: $table.east, builder: (column) => column);
+
+  GeneratedColumn<int> get maskBits =>
+      $composableBuilder(column: $table.maskBits, builder: (column) => column);
+
+  GeneratedColumn<int> get fetchedAt =>
+      $composableBuilder(column: $table.fetchedAt, builder: (column) => column);
+}
+
+class $$OverpassCacheTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $OverpassCacheTable,
+          OverpassCacheData,
+          $$OverpassCacheTableFilterComposer,
+          $$OverpassCacheTableOrderingComposer,
+          $$OverpassCacheTableAnnotationComposer,
+          $$OverpassCacheTableCreateCompanionBuilder,
+          $$OverpassCacheTableUpdateCompanionBuilder,
+          (
+            OverpassCacheData,
+            BaseReferences<
+              _$AppDatabase,
+              $OverpassCacheTable,
+              OverpassCacheData
+            >,
+          ),
+          OverpassCacheData,
+          PrefetchHooks Function()
+        > {
+  $$OverpassCacheTableTableManager(_$AppDatabase db, $OverpassCacheTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$OverpassCacheTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$OverpassCacheTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$OverpassCacheTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> kind = const Value.absent(),
+                Value<String> payload = const Value.absent(),
+                Value<double> south = const Value.absent(),
+                Value<double> west = const Value.absent(),
+                Value<double> north = const Value.absent(),
+                Value<double> east = const Value.absent(),
+                Value<int> maskBits = const Value.absent(),
+                Value<int> fetchedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => OverpassCacheCompanion(
+                kind: kind,
+                payload: payload,
+                south: south,
+                west: west,
+                north: north,
+                east: east,
+                maskBits: maskBits,
+                fetchedAt: fetchedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String kind,
+                required String payload,
+                required double south,
+                required double west,
+                required double north,
+                required double east,
+                required int maskBits,
+                required int fetchedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => OverpassCacheCompanion.insert(
+                kind: kind,
+                payload: payload,
+                south: south,
+                west: west,
+                north: north,
+                east: east,
+                maskBits: maskBits,
+                fetchedAt: fetchedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$OverpassCacheTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $OverpassCacheTable,
+      OverpassCacheData,
+      $$OverpassCacheTableFilterComposer,
+      $$OverpassCacheTableOrderingComposer,
+      $$OverpassCacheTableAnnotationComposer,
+      $$OverpassCacheTableCreateCompanionBuilder,
+      $$OverpassCacheTableUpdateCompanionBuilder,
+      (
+        OverpassCacheData,
+        BaseReferences<_$AppDatabase, $OverpassCacheTable, OverpassCacheData>,
+      ),
+      OverpassCacheData,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -8515,4 +9940,8 @@ class $AppDatabaseManager {
       $$FreeAreasTableTableManager(_db, _db.freeAreas);
   $$FreeAreaPointsTableTableManager get freeAreaPoints =>
       $$FreeAreaPointsTableTableManager(_db, _db.freeAreaPoints);
+  $$TileCacheTableTableManager get tileCache =>
+      $$TileCacheTableTableManager(_db, _db.tileCache);
+  $$OverpassCacheTableTableManager get overpassCache =>
+      $$OverpassCacheTableTableManager(_db, _db.overpassCache);
 }
