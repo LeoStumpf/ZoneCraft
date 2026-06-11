@@ -69,6 +69,24 @@ viewport as a spherical quad (the painter still `clipRect`s to the true screen r
   (last POI/border results per kind) — caches, not user data.
 - `Repository` is the only CRUD surface; Riverpod providers (`lib/state/`) watch it.
 
+## Import / export (`lib/data/serialization.dart`)
+
+- A drift-free intermediate (`ExportData` → `ExportLayer` → `ExportObject`) decouples the
+  encoders from the database, so GeoJSON/KML codecs are pure and unit-testable.
+  `Repository.exportData()` snapshots the DB into it; `importData()` writes it back into
+  **new** layers (never merges) via the existing `create*` methods.
+- **GeoJSON** is the lossless round-trip format: a `FeatureCollection` where each object is a
+  `Feature` (circle→Point+`radiusMeters`, plane→LineString of the two foci+`nearA`,
+  subspace→MultiPoint+`mainIndex`, freeline→LineString, freearea→Polygon, both +`offsetMeters`).
+  Layer attributes (name/colour/type/invert) ride in a non-standard top-level `zonecraft`
+  member; each feature references its layer by index in `properties.zonecraftLayer`. Import
+  requires that extension (so foreign GeoJSON is cleanly rejected rather than half-parsed).
+- **KML** is export-only (Google Earth / Maps): one `<Folder>` per layer, source geometry per
+  object (circle as a geodesic ring polygon via `geodesicCircle`). Re-import via GeoJSON.
+- UI lives in Settings (`_export` shares a temp file via `share_plus`; `_import` reads a file via
+  `file_selector`). `path_provider` supplies the temp dir. `file_selector` is used instead of
+  `file_picker` to avoid a `win32` version clash with `share_plus`.
+
 ## Networking & caching
 
 - **Tiles:** `CachedTileProvider` (`lib/data/cached_tile_provider.dart`) serves

@@ -17,22 +17,13 @@ ZoneCraft is feature-complete for everything planned so far. It has:
 - **Optional overlays**: public-transport tiles, OSMAnd-style POIs, administrative borders.
 - **Offline resilience**: cache-first map tiles + viewport prefetch and persisted
   POI/border overlays, so the map survives a few minutes with no reception.
+- **Import / export**: share all layers + objects as **GeoJSON** (lossless round-trip) or
+  **KML** (Google Earth / Maps); import GeoJSON back as new layers (Settings → Import & export).
 - Fully local SQLite (Drift), **schema v10**.
 
 ## Open points
 
-### 1. Import / export (GeoJSON / KML)
-
-Save layers and objects to a file and load them back. The most-requested next step.
-
-- Serialise per object type (circle → point+radius, plane/subspace/freehand → point
-  lists, plus layer colour/type/invert/offset) to **GeoJSON** features; consider **KML**
-  for interop with Google Earth / Maps.
-- Round-trip through the existing `Repository` CRUD; reuse the `geo/coords.dart` parsing
-  conventions. Decide on a sharing mechanism (share sheet vs. file picker) and whether
-  import merges into existing layers or creates new ones.
-
-### 2. Offline — "download this area"
+### 1. Offline — "download this area"
 
 Add an explicit bulk-download for guaranteed offline coverage beyond the automatic browse
 cache + one-tile prefetch ring.

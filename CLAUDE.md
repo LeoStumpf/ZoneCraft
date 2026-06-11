@@ -72,7 +72,8 @@ lib/
                SubspacePoints, FreeLines, FreeLinePoints, FreeAreas,
                FreeAreaPoints, TileCache, OverpassCache, AppSettings) +
                repository; Overpass POI client (overpass.dart) + admin-border
-               client (borders.dart); offline tile cache (cached_tile_provider.dart)
+               client (borders.dart); offline tile cache (cached_tile_provider.dart);
+               GeoJSON/KML import-export (serialization.dart)
   geo/         geodesicCircle(), plane half-plane + subspace Voronoi-cell
                geometry, freehand line/area region geometry (freeline.dart,
                freearea.dart), slippy-tile maths (tiles.dart), lat/lng parsing

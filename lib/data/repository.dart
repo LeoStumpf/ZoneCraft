@@ -1,7 +1,9 @@
 import 'package:drift/drift.dart';
+import 'package:latlong2/latlong.dart' show LatLng;
 import 'package:uuid/uuid.dart';
 
 import 'database.dart';
+import 'serialization.dart';
 
 /// Thin CRUD/stream API over [AppDatabase] used by the Riverpod providers.
 class Repository {
@@ -659,6 +661,175 @@ class Repository {
     await _db.delete(_db.appSettings).go(); // reverts to column defaults on read
     await _db.delete(_db.overpassCache).go(); // persisted POI/border overlays
     return ensureDefaultLayer();
+  }
+
+  // --- Import / export ------------------------------------------------------
+
+  /// Snapshots every layer and its objects into a drift-free [ExportData] for
+  /// GeoJSON/KML serialisation. Layers come out in draw order; child points keep
+  /// their stored order.
+  Future<ExportData> exportData() async {
+    final layers = await (_db.select(_db.layers)
+          ..orderBy([(l) => OrderingTerm(expression: l.sortOrder)]))
+        .get();
+    final circles = await _db.select(_db.circles).get();
+    final planes = await _db.select(_db.planes).get();
+    final subspaces = await _db.select(_db.subspaces).get();
+    final subPoints = await (_db.select(_db.subspacePoints)
+          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
+        .get();
+    final freeLines = await _db.select(_db.freeLines).get();
+    final flPoints = await (_db.select(_db.freeLinePoints)
+          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
+        .get();
+    final freeAreas = await _db.select(_db.freeAreas).get();
+    final faPoints = await (_db.select(_db.freeAreaPoints)
+          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
+        .get();
+
+    final out = <ExportLayer>[];
+    for (final layer in layers) {
+      final objects = <ExportObject>[];
+      switch (layer.type) {
+        case 'circles':
+          for (final c in circles.where((c) => c.layerId == layer.id)) {
+            objects.add(ExportObject(
+              kind: 'circle',
+              coords: [LatLng(c.centerLat, c.centerLng)],
+              radiusMeters: c.radiusMeters,
+              label: c.label,
+            ));
+          }
+        case 'planes':
+          for (final p in planes.where((p) => p.layerId == layer.id)) {
+            objects.add(ExportObject(
+              kind: 'plane',
+              coords: [LatLng(p.aLat, p.aLng), LatLng(p.bLat, p.bLng)],
+              nearA: p.nearA,
+              label: p.label,
+            ));
+          }
+        case 'subspace':
+          for (final s in subspaces.where((s) => s.layerId == layer.id)) {
+            final pts = subPoints.where((p) => p.subspaceId == s.id).toList();
+            if (pts.isEmpty) continue;
+            var mainIndex = pts.indexWhere((p) => p.isMain);
+            if (mainIndex < 0) mainIndex = 0;
+            objects.add(ExportObject(
+              kind: 'subspace',
+              coords: [for (final p in pts) LatLng(p.lat, p.lng)],
+              mainIndex: mainIndex,
+              label: s.label,
+            ));
+          }
+        case 'freeline':
+          for (final l in freeLines.where((l) => l.layerId == layer.id)) {
+            final pts = flPoints.where((p) => p.freeLineId == l.id).toList();
+            objects.add(ExportObject(
+              kind: 'freeline',
+              coords: [for (final p in pts) LatLng(p.lat, p.lng)],
+              offsetMeters: l.offsetMeters,
+              label: l.label,
+            ));
+          }
+        case 'freearea':
+          for (final a in freeAreas.where((a) => a.layerId == layer.id)) {
+            final pts = faPoints.where((p) => p.freeAreaId == a.id).toList();
+            objects.add(ExportObject(
+              kind: 'freearea',
+              coords: [for (final p in pts) LatLng(p.lat, p.lng)],
+              offsetMeters: a.offsetMeters,
+              label: a.label,
+            ));
+          }
+      }
+      out.add(ExportLayer(
+        name: layer.name,
+        colorArgb: layer.colorArgb,
+        type: layer.type,
+        isInverted: layer.isInverted,
+        objects: objects,
+      ));
+    }
+    return ExportData(out);
+  }
+
+  /// Writes [data] into **new** layers (never merges), preserving order, colour,
+  /// type, invert and per-object attributes. Returns the number of objects
+  /// created. Objects with unusable geometry (e.g. a non-positive circle radius)
+  /// are skipped.
+  Future<int> importData(ExportData data) async {
+    var imported = 0;
+    for (final layer in data.layers) {
+      final layerId = await createLayer(
+        name: layer.name,
+        colorArgb: layer.colorArgb,
+        type: layer.type,
+      );
+      if (layer.isInverted) await updateLayer(layerId, isInverted: true);
+
+      for (final o in layer.objects) {
+        switch (o.kind) {
+          case 'circle':
+            final r = o.radiusMeters;
+            if (o.coords.isEmpty || r == null || !r.isFinite || r <= 0) {
+              continue;
+            }
+            await createCircle(
+              layerId: layerId,
+              centerLat: o.coords.first.latitude,
+              centerLng: o.coords.first.longitude,
+              radiusMeters: r,
+              label: o.label,
+            );
+          case 'plane':
+            if (o.coords.length < 2) continue;
+            await createPlane(
+              layerId: layerId,
+              aLat: o.coords[0].latitude,
+              aLng: o.coords[0].longitude,
+              bLat: o.coords[1].latitude,
+              bLng: o.coords[1].longitude,
+              nearA: o.nearA ?? true,
+              label: o.label,
+            );
+          case 'subspace':
+            if (o.coords.isEmpty) continue;
+            final sid = await createSubspace(layerId: layerId, label: o.label);
+            final main = (o.mainIndex ?? 0).clamp(0, o.coords.length - 1);
+            for (var i = 0; i < o.coords.length; i++) {
+              await addSubspacePoint(
+                subspaceId: sid,
+                lat: o.coords[i].latitude,
+                lng: o.coords[i].longitude,
+                isMain: i == main,
+              );
+            }
+          case 'freeline':
+            final lid = await createFreeLine(layerId: layerId, label: o.label);
+            if ((o.offsetMeters ?? 0) != 0) {
+              await updateFreeLine(lid, offsetMeters: o.offsetMeters);
+            }
+            for (final c in o.coords) {
+              await addFreeLinePoint(
+                  freeLineId: lid, lat: c.latitude, lng: c.longitude);
+            }
+          case 'freearea':
+            final aid = await createFreeArea(layerId: layerId, label: o.label);
+            if ((o.offsetMeters ?? 0) != 0) {
+              await updateFreeArea(aid, offsetMeters: o.offsetMeters);
+            }
+            for (final c in o.coords) {
+              await addFreeAreaPoint(
+                  freeAreaId: aid, lat: c.latitude, lng: c.longitude);
+            }
+          default:
+            continue;
+        }
+        imported++;
+      }
+    }
+    return imported;
   }
 
   // --- Seed -----------------------------------------------------------------

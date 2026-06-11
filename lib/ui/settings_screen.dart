@@ -1,9 +1,15 @@
+import 'dart:io';
+
+import 'package:file_selector/file_selector.dart' show XTypeGroup, openFile;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../data/borders.dart';
 import '../data/overpass.dart';
 import '../data/repository.dart';
+import '../data/serialization.dart';
 import '../state/providers.dart';
 
 /// App-wide settings. Currently just the global uncertainty radius, applied as
@@ -76,6 +82,89 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('All data cleared')),
     );
+  }
+
+  void _snack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Exports every layer + object to a file and opens the system share sheet.
+  /// GeoJSON is the lossless round-trip format; KML is for Google Earth / Maps.
+  Future<void> _export() async {
+    final data = await _repo.exportData();
+    if (!mounted) return;
+    if (data.objectCount == 0) {
+      _snack('Nothing to export yet');
+      return;
+    }
+    final fmt = await showDialog<String>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Export as'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 'geojson'),
+            child: const Text('GeoJSON (re-importable)'),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 'kml'),
+            child: const Text('KML (Google Earth / Maps)'),
+          ),
+        ],
+      ),
+    );
+    if (fmt == null) return;
+
+    try {
+      final isKml = fmt == 'kml';
+      final content = isKml ? exportToKml(data) : exportToGeoJson(data);
+      final stamp = DateTime.now()
+          .toIso8601String()
+          .split('.')
+          .first
+          .replaceAll(':', '-');
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/zonecraft-$stamp.$fmt');
+      await file.writeAsString(content);
+      await SharePlus.instance.share(ShareParams(
+        subject: 'ZoneCraft export',
+        files: [
+          XFile(
+            file.path,
+            mimeType: isKml
+                ? 'application/vnd.google-earth.kml+xml'
+                : 'application/geo+json',
+          ),
+        ],
+      ));
+    } catch (e) {
+      _snack('Export failed: $e');
+    }
+  }
+
+  /// Picks a ZoneCraft GeoJSON file and imports it as new layers (never merges).
+  Future<void> _import() async {
+    try {
+      const group = XTypeGroup(
+        label: 'ZoneCraft GeoJSON',
+        extensions: ['geojson', 'json'],
+      );
+      final picked = await openFile(acceptedTypeGroups: const [group]);
+      if (picked == null) return; // user cancelled
+      final text = await picked.readAsString();
+      final data = importFromGeoJson(text);
+      if (data == null) {
+        _snack("Couldn't read that file as a ZoneCraft GeoJSON export");
+        return;
+      }
+      final count = await _repo.importData(data);
+      _snack('Imported ${data.layers.length} '
+          'layer${data.layers.length == 1 ? '' : 's'} ($count objects)');
+    } catch (e) {
+      _snack('Import failed: $e');
+    }
   }
 
   Future<void> _clearTileCache() async {
@@ -255,6 +344,33 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               icon: const Icon(Icons.cleaning_services),
               label: const Text('Clear cached map tiles'),
             ),
+          ),
+          const Divider(height: 48),
+          Text('Import & export',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          Text(
+            'Save all layers and objects to a file to share or back up. GeoJSON '
+            'imports back into the app; KML is for Google Earth / Maps. Importing '
+            'adds the file’s layers alongside your existing ones.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: _export,
+                icon: const Icon(Icons.ios_share),
+                label: const Text('Export'),
+              ),
+              OutlinedButton.icon(
+                onPressed: _import,
+                icon: const Icon(Icons.file_open),
+                label: const Text('Import GeoJSON'),
+              ),
+            ],
           ),
           const Divider(height: 48),
           Text('Data', style: Theme.of(context).textTheme.titleMedium),
