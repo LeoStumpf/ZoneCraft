@@ -69,7 +69,7 @@ class AppSettings extends Table {
 
   /// Global measurement uncertainty in metres; rendered as a lighter band.
   RealColumn get uncertaintyMeters =>
-      real().withDefault(const Constant(0))();
+      real().withDefault(const Constant(500))();
 
   /// Last map camera, restored on launch. Null until the user has moved the map.
   RealColumn get lastLat => real().nullable()();
@@ -88,7 +88,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -104,6 +104,16 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(appSettings, appSettings.lastLat);
             await m.addColumn(appSettings, appSettings.lastLng);
             await m.addColumn(appSettings, appSettings.lastZoom);
+          }
+          if (from < 4) {
+            // New default uncertainty is 500 m. Bump an existing row that is
+            // still on the old default of 0 (the column default only governs
+            // freshly inserted rows). A user who deliberately chose 0 is reset
+            // to 500 — accepted as a one-tap change.
+            await customStatement(
+              'UPDATE app_settings SET uncertainty_meters = 500 '
+              'WHERE uncertainty_meters = 0',
+            );
           }
         },
         beforeOpen: (details) async {

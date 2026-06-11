@@ -37,6 +37,42 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _repo.updateUncertainty(clamped);
   }
 
+  Future<void> _clearAllData() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear all data?'),
+        content: const Text(
+          'This deletes every layer and object and resets all settings. '
+          'This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Clear all data'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    // Drop any selection that points at a now-deleted object before the wipe.
+    ref.read(selectedCircleProvider.notifier).select(null);
+    ref.read(selectedPlaneProvider.notifier).select(null);
+    ref.read(activeLayerProvider.notifier).select(null);
+    await _repo.clearAll();
+    if (!mounted) return;
+    // Resync the local field with the reset (default) uncertainty.
+    _initialised = false;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('All data cleared')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider).asData?.value;
@@ -100,6 +136,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               _field.text = v.round().toString();
               _setUncertainty(v);
             },
+          ),
+          const Divider(height: 48),
+          Text('Data', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          Text(
+            'Delete every layer and object and reset all settings to their '
+            'defaults.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: _clearAllData,
+              icon: const Icon(Icons.delete_forever),
+              label: const Text('Clear all data'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error,
+              ),
+            ),
           ),
         ],
       ),

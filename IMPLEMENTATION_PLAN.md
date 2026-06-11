@@ -227,7 +227,21 @@ snaps the map back to north-up with the needle upright.
 - **Verify:** two-finger-rotate the map → the needle rotates to keep pointing north; tap →
   the map snaps north-up and the needle points straight up.
 
-## Milestone 8 — Settings: 500 m default, persistence, clear-data
+## Milestone 8 — Settings: 500 m default, persistence, clear-data ✅ DONE
+
+**Status:** complete (2026-06-11). `AppSettings.uncertaintyMeters` now defaults to `500`
+(column default + `watchSettings()` empty-row fallback); **schema bumped to v4** with a
+`from < 4` migration that runs `UPDATE app_settings SET uncertainty_meters = 500 WHERE
+uncertainty_meters = 0` (only an untouched old default is bumped). `Repository.clearAll()`
+deletes every layer (cascading to circles/planes), drops the settings row (so it reverts to
+defaults — uncertainty 500, camera null), then re-seeds an empty default layer; the Settings
+screen gained a **Data** section with a red "Clear all data" button behind an `AlertDialog`
+confirmation (it also clears the selection/active-layer providers before wiping). Persistence
+already holds by construction — every general setting is a column in `AppSettings`, written
+live and read via `settingsProvider`. Tests updated (default → 500; new `clearAll` test);
+`flutter analyze`/`flutter test` (21) green. Verified on device: an existing install migrated
+to `user_version=4` with its non-zero uncertainty and camera **preserved** (non-destructive);
+Settings shows the new section; "Clear all data" → confirm dialog → Cancel leaves data intact.
 
 **Goal:** sensible defaults, durable settings, and a safe reset.
 

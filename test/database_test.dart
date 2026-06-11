@@ -51,10 +51,37 @@ void main() {
     expect(await repo.watchAllPlanes().first, isEmpty);
   });
 
-  test('settings default to 0 and persist updates', () async {
-    expect((await repo.watchSettings().first).uncertaintyMeters, 0);
-    await repo.updateUncertainty(500);
+  test('settings default to 500 and persist updates', () async {
     expect((await repo.watchSettings().first).uncertaintyMeters, 500);
+    await repo.updateUncertainty(250);
+    expect((await repo.watchSettings().first).uncertaintyMeters, 250);
+  });
+
+  test('clearAll wipes objects, resets settings, re-seeds a layer', () async {
+    final layerId = await repo.createLayer(name: 'L', colorArgb: 0xFF0000FF);
+    await repo.createCircle(
+      layerId: layerId,
+      centerLat: 48.1,
+      centerLng: 11.5,
+      radiusMeters: 100,
+    );
+    await repo.updateUncertainty(0);
+    await repo.saveCamera(48.1, 11.5, 12);
+
+    final seededId = await repo.clearAll();
+
+    // Exactly one fresh layer, no objects left.
+    final layers = await repo.watchLayers().first;
+    expect(layers, hasLength(1));
+    expect(layers.single.id, seededId);
+    expect(await repo.watchAllCircles().first, isEmpty);
+    expect(await repo.watchAllPlanes().first, isEmpty);
+
+    // Settings revert to defaults: uncertainty 500, camera null.
+    final settings = await repo.watchSettings().first;
+    expect(settings.uncertaintyMeters, 500);
+    expect(settings.lastLat, isNull);
+    expect(settings.lastZoom, isNull);
   });
 
   test('camera is null by default and persists, independent of uncertainty',

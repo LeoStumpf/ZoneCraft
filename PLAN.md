@@ -123,10 +123,10 @@ across close/relaunch by construction.
 
 ### Settings
 
-- [ ] **Default uncertainty = 500 m (M8)**, not 0. Migration bumps an existing stored `0` to
+- [x] **Default uncertainty = 500 m (M8)**, not 0. Migration bumps an existing stored `0` to
   `500`.
-- [ ] **All general settings persist (M8)** across app close/start (stored in `AppSettings`).
-- [ ] **"Clear all data" button (M8)** in Settings, behind a confirmation dialog — wipes
+- [x] **All general settings persist (M8)** across app close/start (stored in `AppSettings`).
+- [x] **"Clear all data" button (M8)** in Settings, behind a confirmation dialog — wipes
   layers/objects, resets settings, re-seeds an empty default layer.
 
 ### Map data overlays (toggled in Settings)

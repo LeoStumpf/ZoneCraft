@@ -203,7 +203,7 @@ class Repository {
         .watch()
         .map(
           (rows) => rows.isEmpty
-              ? const AppSetting(id: 1, uncertaintyMeters: 0)
+              ? const AppSetting(id: 1, uncertaintyMeters: 500)
               : rows.first,
         );
   }
@@ -228,6 +228,18 @@ class Repository {
             lastZoom: Value(zoom),
           ),
         );
+  }
+
+  // --- Clear ----------------------------------------------------------------
+
+  /// Wipes all user data: deletes every layer (cascading to circles/planes),
+  /// resets settings to defaults (uncertainty 500, camera null) by dropping the
+  /// settings row, then re-seeds an empty default layer. Used by the Settings
+  /// "Clear all data" button. Returns the id of the freshly seeded layer.
+  Future<String> clearAll() async {
+    await _db.delete(_db.layers).go(); // cascades to circles/planes
+    await _db.delete(_db.appSettings).go(); // reverts to column defaults on read
+    return ensureDefaultLayer();
   }
 
   // --- Seed -----------------------------------------------------------------

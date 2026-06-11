@@ -1552,7 +1552,7 @@ class $AppSettingsTable extends AppSettings
         false,
         type: DriftSqlType.double,
         requiredDuringInsert: false,
-        defaultValue: const Constant(0),
+        defaultValue: const Constant(500),
       );
   static const VerificationMeta _lastLatMeta = const VerificationMeta(
     'lastLat',
