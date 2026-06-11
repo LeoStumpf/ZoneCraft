@@ -317,7 +317,19 @@ the circle layers beneath), and the object/point counts show in the drawer.
   points reshapes it live; a lighter band hugs the internal divides; invert fills the
   complement; two such layers composite correctly.
 
-## Milestone 10 — Public-transport overlay
+## Milestone 10 — Public-transport overlay ✅ DONE
+
+**Status:** complete (2026-06-11). A persistent **Public transport** toggle (new
+`AppSettings.transportOverlay` bool, schema **v6** with a `from < 6` migration adding the
+column; `Repository.updateTransportOverlay`) lives in a "Map overlays" section of the settings
+screen. When on, `map_screen` renders two transparent `TileLayer`s **above the base map but
+below the zone layers** — ÖPNVKarte (`tile.memomaps.de`, buses/trams/stops) and OpenRailwayMap
+(`tiles.openrailwaymap.org/standard`, rail) — and adds their attributions to the
+`RichAttributionWidget`. `clearAll` already turns it off (it drops the settings row). Tests:
+overlay defaults off, persists independently of uncertainty, and resets on clear; `flutter
+analyze`/`flutter test` (27) green. Verified on device (migrated to `user_version=6`): toggling
+on overlays the transit network and rail (following pan/zoom) with the zone layers still on top;
+toggling off removes them; the setting persists.
 
 **Goal:** an optional overlay of the public train/bus network and stops.
 

@@ -107,6 +107,11 @@ class AppSettings extends Table {
   RealColumn get lastLng => real().nullable()();
   RealColumn get lastZoom => real().nullable()();
 
+  /// When true, transparent public-transport tile overlays (ÖPNVKarte +
+  /// OpenRailwayMap) are drawn above the base map.
+  BoolColumn get transportOverlay =>
+      boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -121,7 +126,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -151,6 +156,9 @@ class AppDatabase extends _$AppDatabase {
           if (from < 5) {
             await m.createTable(subspaces);
             await m.createTable(subspacePoints);
+          }
+          if (from < 6) {
+            await m.addColumn(appSettings, appSettings.transportOverlay);
           }
         },
         beforeOpen: (details) async {

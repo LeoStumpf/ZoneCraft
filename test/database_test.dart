@@ -85,6 +85,16 @@ void main() {
     expect((await repo.watchSettings().first).uncertaintyMeters, 250);
   });
 
+  test('transport overlay defaults off and persists independently', () async {
+    expect((await repo.watchSettings().first).transportOverlay, isFalse);
+    await repo.updateUncertainty(750);
+    await repo.updateTransportOverlay(true);
+    final saved = await repo.watchSettings().first;
+    expect(saved.transportOverlay, isTrue);
+    // Toggling the overlay must not clobber the uncertainty (same row).
+    expect(saved.uncertaintyMeters, 750);
+  });
+
   test('clearAll wipes objects, resets settings, re-seeds a layer', () async {
     final layerId = await repo.createLayer(name: 'L', colorArgb: 0xFF0000FF);
     await repo.createCircle(
@@ -94,6 +104,7 @@ void main() {
       radiusMeters: 100,
     );
     await repo.updateUncertainty(0);
+    await repo.updateTransportOverlay(true);
     await repo.saveCamera(48.1, 11.5, 12);
 
     final seededId = await repo.clearAll();
@@ -108,6 +119,7 @@ void main() {
     // Settings revert to defaults: uncertainty 500, camera null.
     final settings = await repo.watchSettings().first;
     expect(settings.uncertaintyMeters, 500);
+    expect(settings.transportOverlay, isFalse);
     expect(settings.lastLat, isNull);
     expect(settings.lastZoom, isNull);
   });

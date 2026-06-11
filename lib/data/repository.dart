@@ -307,7 +307,11 @@ class Repository {
         .watch()
         .map(
           (rows) => rows.isEmpty
-              ? const AppSetting(id: 1, uncertaintyMeters: 500)
+              ? const AppSetting(
+                  id: 1,
+                  uncertaintyMeters: 500,
+                  transportOverlay: false,
+                )
               : rows.first,
         );
   }
@@ -318,6 +322,16 @@ class Repository {
           AppSettingsCompanion.insert(
             id: const Value(1),
             uncertaintyMeters: Value(meters),
+          ),
+        );
+  }
+
+  /// Upserts the public-transport overlay toggle into the single settings row.
+  Future<void> updateTransportOverlay(bool enabled) {
+    return _db.into(_db.appSettings).insertOnConflictUpdate(
+          AppSettingsCompanion.insert(
+            id: const Value(1),
+            transportOverlay: Value(enabled),
           ),
         );
   }

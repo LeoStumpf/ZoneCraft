@@ -77,6 +77,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider).asData?.value;
     final uncertainty = settings?.uncertaintyMeters ?? 0;
+    final transportOverlay = settings?.transportOverlay ?? false;
 
     // Seed the text field once from the persisted value; afterwards the field
     // is the source of truth while editing (don't fight the user's cursor).
@@ -136,6 +137,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               _field.text = v.round().toString();
               _setUncertainty(v);
             },
+          ),
+          const Divider(height: 48),
+          Text('Map overlays', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          Text(
+            'Show the public-transport network on top of the map: bus/tram '
+            'lines and stops (ÖPNVKarte) plus railways (OpenRailwayMap).',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Public transport'),
+            value: transportOverlay,
+            onChanged: settings == null
+                ? null
+                : (v) => _repo.updateTransportOverlay(v),
           ),
           const Divider(height: 48),
           Text('Data', style: Theme.of(context).textTheme.titleMedium),

@@ -424,6 +424,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
         const <SubspacePoint>[];
     final settings = ref.watch(settingsProvider).asData?.value;
     final uncertainty = settings?.uncertaintyMeters ?? 0;
+    final transportOverlay = settings?.transportOverlay ?? false;
     final selectedCircle = circles
         .where((c) => c.id == ref.watch(selectedCircleProvider))
         .firstOrNull;
@@ -505,6 +506,23 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       userAgentPackageName: 'com.zonecraft.zonecraft',
                       maxZoom: 19,
                     ),
+                    // Optional transparent public-transport overlays, above the
+                    // base map but below the zone layers. ÖPNVKarte carries
+                    // buses/trams/stops; OpenRailwayMap the rail network.
+                    if (transportOverlay) ...[
+                      TileLayer(
+                        urlTemplate:
+                            'https://tile.memomaps.de/tilegen/{z}/{x}/{y}.png',
+                        userAgentPackageName: 'com.zonecraft.zonecraft',
+                        maxZoom: 18,
+                      ),
+                      TileLayer(
+                        urlTemplate:
+                            'https://tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png',
+                        userAgentPackageName: 'com.zonecraft.zonecraft',
+                        maxZoom: 19,
+                      ),
+                    ],
                     // One composited region per visible layer, bottom-to-top.
                     for (final layer in layers)
                       if (layer.isVisible)
@@ -574,9 +592,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             ),
                         ],
                       ),
-                    const RichAttributionWidget(
+                    RichAttributionWidget(
                       attributions: [
-                        TextSourceAttribution('© OpenStreetMap contributors'),
+                        const TextSourceAttribution(
+                            '© OpenStreetMap contributors'),
+                        if (transportOverlay) ...[
+                          const TextSourceAttribution('Transit: ÖPNVKarte'),
+                          const TextSourceAttribution(
+                              'Rail: OpenRailwayMap (CC-BY-SA)'),
+                        ],
                       ],
                     ),
                   ],

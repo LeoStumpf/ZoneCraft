@@ -21,8 +21,9 @@ just a floating top-left menu button opens the drawer.
 **v2 progress:** M7 compass/north-up **done**; M8 settings (500 m default uncertainty,
 schema **v4** migration, `clearAll`/"Clear all data") **done**; M9 "closest subspace"
 multi-point object (new `subspace` layer type, `Subspaces`+`SubspacePoints`, schema **v5**,
-`geo/subspace.dart`, `ui/subspace_editor.dart`) **done**. Next (planned, not yet built):
-M10 public-transport overlay, M11 OSMAnd-style POI toggles. See `IMPLEMENTATION_PLAN.md`.
+`geo/subspace.dart`, `ui/subspace_editor.dart`) **done**; M10 public-transport tile overlay
+(ÖPNVKarte + OpenRailwayMap, `AppSettings.transportOverlay`, schema **v6**) **done**. Next
+(planned, not yet built): M11 OSMAnd-style POI toggles. See `IMPLEMENTATION_PLAN.md`.
 
 Track in `IMPLEMENTATION_PLAN.md` (milestone status) and `PLAN.md` (feature backlog).
 
