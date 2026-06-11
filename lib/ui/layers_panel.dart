@@ -18,6 +18,11 @@ class LayersDrawer extends ConsumerWidget {
     final layersAsync = ref.watch(layersProvider);
     final circles = ref.watch(circlesProvider).asData?.value ?? const <Circle>[];
     final planes = ref.watch(planesProvider).asData?.value ?? const <Plane>[];
+    final subspaces =
+        ref.watch(subspacesProvider).asData?.value ?? const <Subspace>[];
+    final subspacePoints =
+        ref.watch(subspacePointsProvider).asData?.value ??
+        const <SubspacePoint>[];
     final selected = ref.watch(activeLayerProvider);
     final repo = ref.read(repositoryProvider);
 
@@ -71,6 +76,15 @@ class LayersDrawer extends ConsumerWidget {
                               title: Text('Planes layer'),
                             ),
                           ),
+                          const PopupMenuItem(
+                            value: 'subspace',
+                            child: ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(Icons.scatter_plot_outlined),
+                              title: Text('Subspace layer'),
+                            ),
+                          ),
                         ],
                         child: const Padding(
                           padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -98,9 +112,23 @@ class LayersDrawer extends ConsumerWidget {
                     },
                     itemBuilder: (context, index) {
                       final layer = display[index];
-                      final count = layer.type == 'planes'
-                          ? planes.where((p) => p.layerId == layer.id).length
-                          : circles.where((c) => c.layerId == layer.id).length;
+                      final int count;
+                      if (layer.type == 'planes') {
+                        count =
+                            planes.where((p) => p.layerId == layer.id).length;
+                      } else if (layer.type == 'subspace') {
+                        // A subspace layer holds one object; show its point count.
+                        final ids = subspaces
+                            .where((s) => s.layerId == layer.id)
+                            .map((s) => s.id)
+                            .toSet();
+                        count = subspacePoints
+                            .where((p) => ids.contains(p.subspaceId))
+                            .length;
+                      } else {
+                        count =
+                            circles.where((c) => c.layerId == layer.id).length;
+                      }
                       return _LayerTile(
                         key: ValueKey(layer.id),
                         layer: layer,
@@ -133,8 +161,11 @@ class LayersDrawer extends ConsumerWidget {
   }
 }
 
-IconData _typeIcon(String type) =>
-    type == 'planes' ? Icons.change_history : Icons.circle_outlined;
+IconData _typeIcon(String type) => switch (type) {
+      'planes' => Icons.change_history,
+      'subspace' => Icons.scatter_plot_outlined,
+      _ => Icons.circle_outlined,
+    };
 
 class _LayerTile extends ConsumerWidget {
   const _LayerTile({
@@ -153,7 +184,11 @@ class _LayerTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final repo = ref.read(repositoryProvider);
-    final noun = layer.type == 'planes' ? 'plane' : 'circle';
+    final noun = switch (layer.type) {
+      'planes' => 'plane',
+      'subspace' => 'point',
+      _ => 'circle',
+    };
     final subtitle =
         StringBuffer('$objectCount $noun${objectCount == 1 ? '' : 's'}');
     if (layer.isInverted) subtitle.write(' · inverted');

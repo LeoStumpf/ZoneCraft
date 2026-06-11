@@ -29,6 +29,16 @@ final planesProvider = StreamProvider<List<Plane>>((ref) {
   return ref.watch(repositoryProvider).watchAllPlanes();
 });
 
+/// Reactive list of every subspace object across all layers.
+final subspacesProvider = StreamProvider<List<Subspace>>((ref) {
+  return ref.watch(repositoryProvider).watchAllSubspaces();
+});
+
+/// Reactive list of every subspace point (across all subspaces), ordered.
+final subspacePointsProvider = StreamProvider<List<SubspacePoint>>((ref) {
+  return ref.watch(repositoryProvider).watchAllSubspacePoints();
+});
+
 /// App-wide settings (currently the global uncertainty radius).
 final settingsProvider = StreamProvider<AppSetting>((ref) {
   return ref.watch(repositoryProvider).watchSettings();
@@ -87,6 +97,32 @@ class PlanePlacementNotifier extends Notifier<String?> {
 final planePlacementProvider =
     NotifierProvider<PlanePlacementNotifier, String?>(
         PlanePlacementNotifier.new);
+
+/// Id of the currently selected subspace, or null. Mutually exclusive with the
+/// circle/plane selections (one object of one type is selected at a time).
+class SelectedSubspaceNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void select(String? id) => state = id;
+}
+
+final selectedSubspaceProvider =
+    NotifierProvider<SelectedSubspaceNotifier, String?>(
+        SelectedSubspaceNotifier.new);
+
+/// While a subspace is selected, the id of the point the next map tap relocates,
+/// or null for "no placement armed".
+class SubspacePlacementNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void arm(String? pointId) => state = pointId;
+}
+
+final subspacePlacementProvider =
+    NotifierProvider<SubspacePlacementNotifier, String?>(
+        SubspacePlacementNotifier.new);
 
 /// Resolves the effective active layer id given the current layer list,
 /// falling back to the top-most layer when nothing is explicitly selected.

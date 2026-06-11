@@ -1887,6 +1887,771 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
   }
 }
 
+class $SubspacesTable extends Subspaces
+    with TableInfo<$SubspacesTable, Subspace> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SubspacesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _layerIdMeta = const VerificationMeta(
+    'layerId',
+  );
+  @override
+  late final GeneratedColumn<String> layerId = GeneratedColumn<String>(
+    'layer_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES layers (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _labelMeta = const VerificationMeta('label');
+  @override
+  late final GeneratedColumn<String> label = GeneratedColumn<String>(
+    'label',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, layerId, label, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'subspaces';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Subspace> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('layer_id')) {
+      context.handle(
+        _layerIdMeta,
+        layerId.isAcceptableOrUnknown(data['layer_id']!, _layerIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_layerIdMeta);
+    }
+    if (data.containsKey('label')) {
+      context.handle(
+        _labelMeta,
+        label.isAcceptableOrUnknown(data['label']!, _labelMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Subspace map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Subspace(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      layerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}layer_id'],
+      )!,
+      label: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}label'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SubspacesTable createAlias(String alias) {
+    return $SubspacesTable(attachedDatabase, alias);
+  }
+}
+
+class Subspace extends DataClass implements Insertable<Subspace> {
+  final String id;
+  final String layerId;
+  final String? label;
+  final DateTime createdAt;
+  const Subspace({
+    required this.id,
+    required this.layerId,
+    this.label,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['layer_id'] = Variable<String>(layerId);
+    if (!nullToAbsent || label != null) {
+      map['label'] = Variable<String>(label);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  SubspacesCompanion toCompanion(bool nullToAbsent) {
+    return SubspacesCompanion(
+      id: Value(id),
+      layerId: Value(layerId),
+      label: label == null && nullToAbsent
+          ? const Value.absent()
+          : Value(label),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory Subspace.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Subspace(
+      id: serializer.fromJson<String>(json['id']),
+      layerId: serializer.fromJson<String>(json['layerId']),
+      label: serializer.fromJson<String?>(json['label']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'layerId': serializer.toJson<String>(layerId),
+      'label': serializer.toJson<String?>(label),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  Subspace copyWith({
+    String? id,
+    String? layerId,
+    Value<String?> label = const Value.absent(),
+    DateTime? createdAt,
+  }) => Subspace(
+    id: id ?? this.id,
+    layerId: layerId ?? this.layerId,
+    label: label.present ? label.value : this.label,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  Subspace copyWithCompanion(SubspacesCompanion data) {
+    return Subspace(
+      id: data.id.present ? data.id.value : this.id,
+      layerId: data.layerId.present ? data.layerId.value : this.layerId,
+      label: data.label.present ? data.label.value : this.label,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Subspace(')
+          ..write('id: $id, ')
+          ..write('layerId: $layerId, ')
+          ..write('label: $label, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, layerId, label, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Subspace &&
+          other.id == this.id &&
+          other.layerId == this.layerId &&
+          other.label == this.label &&
+          other.createdAt == this.createdAt);
+}
+
+class SubspacesCompanion extends UpdateCompanion<Subspace> {
+  final Value<String> id;
+  final Value<String> layerId;
+  final Value<String?> label;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const SubspacesCompanion({
+    this.id = const Value.absent(),
+    this.layerId = const Value.absent(),
+    this.label = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SubspacesCompanion.insert({
+    required String id,
+    required String layerId,
+    this.label = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       layerId = Value(layerId);
+  static Insertable<Subspace> custom({
+    Expression<String>? id,
+    Expression<String>? layerId,
+    Expression<String>? label,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (layerId != null) 'layer_id': layerId,
+      if (label != null) 'label': label,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SubspacesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? layerId,
+    Value<String?>? label,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return SubspacesCompanion(
+      id: id ?? this.id,
+      layerId: layerId ?? this.layerId,
+      label: label ?? this.label,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (layerId.present) {
+      map['layer_id'] = Variable<String>(layerId.value);
+    }
+    if (label.present) {
+      map['label'] = Variable<String>(label.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SubspacesCompanion(')
+          ..write('id: $id, ')
+          ..write('layerId: $layerId, ')
+          ..write('label: $label, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $SubspacePointsTable extends SubspacePoints
+    with TableInfo<$SubspacePointsTable, SubspacePoint> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SubspacePointsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _subspaceIdMeta = const VerificationMeta(
+    'subspaceId',
+  );
+  @override
+  late final GeneratedColumn<String> subspaceId = GeneratedColumn<String>(
+    'subspace_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES subspaces (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _latMeta = const VerificationMeta('lat');
+  @override
+  late final GeneratedColumn<double> lat = GeneratedColumn<double>(
+    'lat',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _lngMeta = const VerificationMeta('lng');
+  @override
+  late final GeneratedColumn<double> lng = GeneratedColumn<double>(
+    'lng',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _isMainMeta = const VerificationMeta('isMain');
+  @override
+  late final GeneratedColumn<bool> isMain = GeneratedColumn<bool>(
+    'is_main',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_main" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    subspaceId,
+    lat,
+    lng,
+    sortOrder,
+    isMain,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'subspace_points';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SubspacePoint> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('subspace_id')) {
+      context.handle(
+        _subspaceIdMeta,
+        subspaceId.isAcceptableOrUnknown(data['subspace_id']!, _subspaceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_subspaceIdMeta);
+    }
+    if (data.containsKey('lat')) {
+      context.handle(
+        _latMeta,
+        lat.isAcceptableOrUnknown(data['lat']!, _latMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_latMeta);
+    }
+    if (data.containsKey('lng')) {
+      context.handle(
+        _lngMeta,
+        lng.isAcceptableOrUnknown(data['lng']!, _lngMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_lngMeta);
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sortOrderMeta);
+    }
+    if (data.containsKey('is_main')) {
+      context.handle(
+        _isMainMeta,
+        isMain.isAcceptableOrUnknown(data['is_main']!, _isMainMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SubspacePoint map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SubspacePoint(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      subspaceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}subspace_id'],
+      )!,
+      lat: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}lat'],
+      )!,
+      lng: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}lng'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+      isMain: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_main'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SubspacePointsTable createAlias(String alias) {
+    return $SubspacePointsTable(attachedDatabase, alias);
+  }
+}
+
+class SubspacePoint extends DataClass implements Insertable<SubspacePoint> {
+  final String id;
+  final String subspaceId;
+  final double lat;
+  final double lng;
+  final int sortOrder;
+  final bool isMain;
+  final DateTime createdAt;
+  const SubspacePoint({
+    required this.id,
+    required this.subspaceId,
+    required this.lat,
+    required this.lng,
+    required this.sortOrder,
+    required this.isMain,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['subspace_id'] = Variable<String>(subspaceId);
+    map['lat'] = Variable<double>(lat);
+    map['lng'] = Variable<double>(lng);
+    map['sort_order'] = Variable<int>(sortOrder);
+    map['is_main'] = Variable<bool>(isMain);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  SubspacePointsCompanion toCompanion(bool nullToAbsent) {
+    return SubspacePointsCompanion(
+      id: Value(id),
+      subspaceId: Value(subspaceId),
+      lat: Value(lat),
+      lng: Value(lng),
+      sortOrder: Value(sortOrder),
+      isMain: Value(isMain),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory SubspacePoint.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SubspacePoint(
+      id: serializer.fromJson<String>(json['id']),
+      subspaceId: serializer.fromJson<String>(json['subspaceId']),
+      lat: serializer.fromJson<double>(json['lat']),
+      lng: serializer.fromJson<double>(json['lng']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      isMain: serializer.fromJson<bool>(json['isMain']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'subspaceId': serializer.toJson<String>(subspaceId),
+      'lat': serializer.toJson<double>(lat),
+      'lng': serializer.toJson<double>(lng),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+      'isMain': serializer.toJson<bool>(isMain),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  SubspacePoint copyWith({
+    String? id,
+    String? subspaceId,
+    double? lat,
+    double? lng,
+    int? sortOrder,
+    bool? isMain,
+    DateTime? createdAt,
+  }) => SubspacePoint(
+    id: id ?? this.id,
+    subspaceId: subspaceId ?? this.subspaceId,
+    lat: lat ?? this.lat,
+    lng: lng ?? this.lng,
+    sortOrder: sortOrder ?? this.sortOrder,
+    isMain: isMain ?? this.isMain,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  SubspacePoint copyWithCompanion(SubspacePointsCompanion data) {
+    return SubspacePoint(
+      id: data.id.present ? data.id.value : this.id,
+      subspaceId: data.subspaceId.present
+          ? data.subspaceId.value
+          : this.subspaceId,
+      lat: data.lat.present ? data.lat.value : this.lat,
+      lng: data.lng.present ? data.lng.value : this.lng,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      isMain: data.isMain.present ? data.isMain.value : this.isMain,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SubspacePoint(')
+          ..write('id: $id, ')
+          ..write('subspaceId: $subspaceId, ')
+          ..write('lat: $lat, ')
+          ..write('lng: $lng, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('isMain: $isMain, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, subspaceId, lat, lng, sortOrder, isMain, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SubspacePoint &&
+          other.id == this.id &&
+          other.subspaceId == this.subspaceId &&
+          other.lat == this.lat &&
+          other.lng == this.lng &&
+          other.sortOrder == this.sortOrder &&
+          other.isMain == this.isMain &&
+          other.createdAt == this.createdAt);
+}
+
+class SubspacePointsCompanion extends UpdateCompanion<SubspacePoint> {
+  final Value<String> id;
+  final Value<String> subspaceId;
+  final Value<double> lat;
+  final Value<double> lng;
+  final Value<int> sortOrder;
+  final Value<bool> isMain;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const SubspacePointsCompanion({
+    this.id = const Value.absent(),
+    this.subspaceId = const Value.absent(),
+    this.lat = const Value.absent(),
+    this.lng = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.isMain = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SubspacePointsCompanion.insert({
+    required String id,
+    required String subspaceId,
+    required double lat,
+    required double lng,
+    required int sortOrder,
+    this.isMain = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       subspaceId = Value(subspaceId),
+       lat = Value(lat),
+       lng = Value(lng),
+       sortOrder = Value(sortOrder);
+  static Insertable<SubspacePoint> custom({
+    Expression<String>? id,
+    Expression<String>? subspaceId,
+    Expression<double>? lat,
+    Expression<double>? lng,
+    Expression<int>? sortOrder,
+    Expression<bool>? isMain,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (subspaceId != null) 'subspace_id': subspaceId,
+      if (lat != null) 'lat': lat,
+      if (lng != null) 'lng': lng,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (isMain != null) 'is_main': isMain,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SubspacePointsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? subspaceId,
+    Value<double>? lat,
+    Value<double>? lng,
+    Value<int>? sortOrder,
+    Value<bool>? isMain,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return SubspacePointsCompanion(
+      id: id ?? this.id,
+      subspaceId: subspaceId ?? this.subspaceId,
+      lat: lat ?? this.lat,
+      lng: lng ?? this.lng,
+      sortOrder: sortOrder ?? this.sortOrder,
+      isMain: isMain ?? this.isMain,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (subspaceId.present) {
+      map['subspace_id'] = Variable<String>(subspaceId.value);
+    }
+    if (lat.present) {
+      map['lat'] = Variable<double>(lat.value);
+    }
+    if (lng.present) {
+      map['lng'] = Variable<double>(lng.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (isMain.present) {
+      map['is_main'] = Variable<bool>(isMain.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SubspacePointsCompanion(')
+          ..write('id: $id, ')
+          ..write('subspaceId: $subspaceId, ')
+          ..write('lat: $lat, ')
+          ..write('lng: $lng, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('isMain: $isMain, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -1894,6 +2659,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $CirclesTable circles = $CirclesTable(this);
   late final $PlanesTable planes = $PlanesTable(this);
   late final $AppSettingsTable appSettings = $AppSettingsTable(this);
+  late final $SubspacesTable subspaces = $SubspacesTable(this);
+  late final $SubspacePointsTable subspacePoints = $SubspacePointsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -1903,6 +2670,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     circles,
     planes,
     appSettings,
+    subspaces,
+    subspacePoints,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -1919,6 +2688,20 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('planes', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'layers',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('subspaces', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'subspaces',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('subspace_points', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -1985,6 +2768,24 @@ final class $$LayersTableReferences
     ).filter((f) => f.layerId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_planesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$SubspacesTable, List<Subspace>>
+  _subspacesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.subspaces,
+    aliasName: $_aliasNameGenerator(db.layers.id, db.subspaces.layerId),
+  );
+
+  $$SubspacesTableProcessedTableManager get subspacesRefs {
+    final manager = $$SubspacesTableTableManager(
+      $_db,
+      $_db.subspaces,
+    ).filter((f) => f.layerId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_subspacesRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -2081,6 +2882,31 @@ class $$LayersTableFilterComposer
           }) => $$PlanesTableFilterComposer(
             $db: $db,
             $table: $db.planes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> subspacesRefs(
+    Expression<bool> Function($$SubspacesTableFilterComposer f) f,
+  ) {
+    final $$SubspacesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.subspaces,
+      getReferencedColumn: (t) => t.layerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SubspacesTableFilterComposer(
+            $db: $db,
+            $table: $db.subspaces,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -2225,6 +3051,31 @@ class $$LayersTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> subspacesRefs<T extends Object>(
+    Expression<T> Function($$SubspacesTableAnnotationComposer a) f,
+  ) {
+    final $$SubspacesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.subspaces,
+      getReferencedColumn: (t) => t.layerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SubspacesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.subspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LayersTableTableManager
@@ -2240,7 +3091,11 @@ class $$LayersTableTableManager
           $$LayersTableUpdateCompanionBuilder,
           (Layer, $$LayersTableReferences),
           Layer,
-          PrefetchHooks Function({bool circlesRefs, bool planesRefs})
+          PrefetchHooks Function({
+            bool circlesRefs,
+            bool planesRefs,
+            bool subspacesRefs,
+          })
         > {
   $$LayersTableTableManager(_$AppDatabase db, $LayersTable table)
     : super(
@@ -2303,43 +3158,77 @@ class $$LayersTableTableManager
                     (e.readTable(table), $$LayersTableReferences(db, table, e)),
               )
               .toList(),
-          prefetchHooksCallback: ({circlesRefs = false, planesRefs = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [
-                if (circlesRefs) db.circles,
-                if (planesRefs) db.planes,
-              ],
-              addJoins: null,
-              getPrefetchedDataCallback: (items) async {
-                return [
-                  if (circlesRefs)
-                    await $_getPrefetchedData<Layer, $LayersTable, Circle>(
-                      currentTable: table,
-                      referencedTable: $$LayersTableReferences
-                          ._circlesRefsTable(db),
-                      managerFromTypedResult: (p0) =>
-                          $$LayersTableReferences(db, table, p0).circlesRefs,
-                      referencedItemsForCurrentItem: (item, referencedItems) =>
-                          referencedItems.where((e) => e.layerId == item.id),
-                      typedResults: items,
-                    ),
-                  if (planesRefs)
-                    await $_getPrefetchedData<Layer, $LayersTable, Plane>(
-                      currentTable: table,
-                      referencedTable: $$LayersTableReferences._planesRefsTable(
-                        db,
-                      ),
-                      managerFromTypedResult: (p0) =>
-                          $$LayersTableReferences(db, table, p0).planesRefs,
-                      referencedItemsForCurrentItem: (item, referencedItems) =>
-                          referencedItems.where((e) => e.layerId == item.id),
-                      typedResults: items,
-                    ),
-                ];
+          prefetchHooksCallback:
+              ({
+                circlesRefs = false,
+                planesRefs = false,
+                subspacesRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (circlesRefs) db.circles,
+                    if (planesRefs) db.planes,
+                    if (subspacesRefs) db.subspaces,
+                  ],
+                  addJoins: null,
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (circlesRefs)
+                        await $_getPrefetchedData<Layer, $LayersTable, Circle>(
+                          currentTable: table,
+                          referencedTable: $$LayersTableReferences
+                              ._circlesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LayersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).circlesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.layerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (planesRefs)
+                        await $_getPrefetchedData<Layer, $LayersTable, Plane>(
+                          currentTable: table,
+                          referencedTable: $$LayersTableReferences
+                              ._planesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LayersTableReferences(db, table, p0).planesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.layerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (subspacesRefs)
+                        await $_getPrefetchedData<
+                          Layer,
+                          $LayersTable,
+                          Subspace
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LayersTableReferences
+                              ._subspacesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LayersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).subspacesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.layerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
               },
-            );
-          },
         ),
       );
 }
@@ -2356,7 +3245,11 @@ typedef $$LayersTableProcessedTableManager =
       $$LayersTableUpdateCompanionBuilder,
       (Layer, $$LayersTableReferences),
       Layer,
-      PrefetchHooks Function({bool circlesRefs, bool planesRefs})
+      PrefetchHooks Function({
+        bool circlesRefs,
+        bool planesRefs,
+        bool subspacesRefs,
+      })
     >;
 typedef $$CirclesTableCreateCompanionBuilder =
     CirclesCompanion Function({
@@ -3304,6 +4197,765 @@ typedef $$AppSettingsTableProcessedTableManager =
       AppSetting,
       PrefetchHooks Function()
     >;
+typedef $$SubspacesTableCreateCompanionBuilder =
+    SubspacesCompanion Function({
+      required String id,
+      required String layerId,
+      Value<String?> label,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$SubspacesTableUpdateCompanionBuilder =
+    SubspacesCompanion Function({
+      Value<String> id,
+      Value<String> layerId,
+      Value<String?> label,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$SubspacesTableReferences
+    extends BaseReferences<_$AppDatabase, $SubspacesTable, Subspace> {
+  $$SubspacesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $LayersTable _layerIdTable(_$AppDatabase db) => db.layers.createAlias(
+    $_aliasNameGenerator(db.subspaces.layerId, db.layers.id),
+  );
+
+  $$LayersTableProcessedTableManager get layerId {
+    final $_column = $_itemColumn<String>('layer_id')!;
+
+    final manager = $$LayersTableTableManager(
+      $_db,
+      $_db.layers,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_layerIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$SubspacePointsTable, List<SubspacePoint>>
+  _subspacePointsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.subspacePoints,
+    aliasName: $_aliasNameGenerator(
+      db.subspaces.id,
+      db.subspacePoints.subspaceId,
+    ),
+  );
+
+  $$SubspacePointsTableProcessedTableManager get subspacePointsRefs {
+    final manager = $$SubspacePointsTableTableManager(
+      $_db,
+      $_db.subspacePoints,
+    ).filter((f) => f.subspaceId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_subspacePointsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$SubspacesTableFilterComposer
+    extends Composer<_$AppDatabase, $SubspacesTable> {
+  $$SubspacesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$LayersTableFilterComposer get layerId {
+    final $$LayersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.layerId,
+      referencedTable: $db.layers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LayersTableFilterComposer(
+            $db: $db,
+            $table: $db.layers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> subspacePointsRefs(
+    Expression<bool> Function($$SubspacePointsTableFilterComposer f) f,
+  ) {
+    final $$SubspacePointsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.subspacePoints,
+      getReferencedColumn: (t) => t.subspaceId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SubspacePointsTableFilterComposer(
+            $db: $db,
+            $table: $db.subspacePoints,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$SubspacesTableOrderingComposer
+    extends Composer<_$AppDatabase, $SubspacesTable> {
+  $$SubspacesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$LayersTableOrderingComposer get layerId {
+    final $$LayersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.layerId,
+      referencedTable: $db.layers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LayersTableOrderingComposer(
+            $db: $db,
+            $table: $db.layers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SubspacesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SubspacesTable> {
+  $$SubspacesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get label =>
+      $composableBuilder(column: $table.label, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$LayersTableAnnotationComposer get layerId {
+    final $$LayersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.layerId,
+      referencedTable: $db.layers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LayersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.layers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> subspacePointsRefs<T extends Object>(
+    Expression<T> Function($$SubspacePointsTableAnnotationComposer a) f,
+  ) {
+    final $$SubspacePointsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.subspacePoints,
+      getReferencedColumn: (t) => t.subspaceId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SubspacePointsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.subspacePoints,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$SubspacesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SubspacesTable,
+          Subspace,
+          $$SubspacesTableFilterComposer,
+          $$SubspacesTableOrderingComposer,
+          $$SubspacesTableAnnotationComposer,
+          $$SubspacesTableCreateCompanionBuilder,
+          $$SubspacesTableUpdateCompanionBuilder,
+          (Subspace, $$SubspacesTableReferences),
+          Subspace,
+          PrefetchHooks Function({bool layerId, bool subspacePointsRefs})
+        > {
+  $$SubspacesTableTableManager(_$AppDatabase db, $SubspacesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SubspacesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SubspacesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SubspacesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> layerId = const Value.absent(),
+                Value<String?> label = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SubspacesCompanion(
+                id: id,
+                layerId: layerId,
+                label: label,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String layerId,
+                Value<String?> label = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SubspacesCompanion.insert(
+                id: id,
+                layerId: layerId,
+                label: label,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$SubspacesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({layerId = false, subspacePointsRefs = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (subspacePointsRefs) db.subspacePoints,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (layerId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.layerId,
+                                    referencedTable: $$SubspacesTableReferences
+                                        ._layerIdTable(db),
+                                    referencedColumn: $$SubspacesTableReferences
+                                        ._layerIdTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (subspacePointsRefs)
+                        await $_getPrefetchedData<
+                          Subspace,
+                          $SubspacesTable,
+                          SubspacePoint
+                        >(
+                          currentTable: table,
+                          referencedTable: $$SubspacesTableReferences
+                              ._subspacePointsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$SubspacesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).subspacePointsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.subspaceId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$SubspacesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SubspacesTable,
+      Subspace,
+      $$SubspacesTableFilterComposer,
+      $$SubspacesTableOrderingComposer,
+      $$SubspacesTableAnnotationComposer,
+      $$SubspacesTableCreateCompanionBuilder,
+      $$SubspacesTableUpdateCompanionBuilder,
+      (Subspace, $$SubspacesTableReferences),
+      Subspace,
+      PrefetchHooks Function({bool layerId, bool subspacePointsRefs})
+    >;
+typedef $$SubspacePointsTableCreateCompanionBuilder =
+    SubspacePointsCompanion Function({
+      required String id,
+      required String subspaceId,
+      required double lat,
+      required double lng,
+      required int sortOrder,
+      Value<bool> isMain,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$SubspacePointsTableUpdateCompanionBuilder =
+    SubspacePointsCompanion Function({
+      Value<String> id,
+      Value<String> subspaceId,
+      Value<double> lat,
+      Value<double> lng,
+      Value<int> sortOrder,
+      Value<bool> isMain,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$SubspacePointsTableReferences
+    extends BaseReferences<_$AppDatabase, $SubspacePointsTable, SubspacePoint> {
+  $$SubspacePointsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $SubspacesTable _subspaceIdTable(_$AppDatabase db) =>
+      db.subspaces.createAlias(
+        $_aliasNameGenerator(db.subspacePoints.subspaceId, db.subspaces.id),
+      );
+
+  $$SubspacesTableProcessedTableManager get subspaceId {
+    final $_column = $_itemColumn<String>('subspace_id')!;
+
+    final manager = $$SubspacesTableTableManager(
+      $_db,
+      $_db.subspaces,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_subspaceIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$SubspacePointsTableFilterComposer
+    extends Composer<_$AppDatabase, $SubspacePointsTable> {
+  $$SubspacePointsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get lat => $composableBuilder(
+    column: $table.lat,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get lng => $composableBuilder(
+    column: $table.lng,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isMain => $composableBuilder(
+    column: $table.isMain,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$SubspacesTableFilterComposer get subspaceId {
+    final $$SubspacesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.subspaceId,
+      referencedTable: $db.subspaces,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SubspacesTableFilterComposer(
+            $db: $db,
+            $table: $db.subspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SubspacePointsTableOrderingComposer
+    extends Composer<_$AppDatabase, $SubspacePointsTable> {
+  $$SubspacePointsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get lat => $composableBuilder(
+    column: $table.lat,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get lng => $composableBuilder(
+    column: $table.lng,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isMain => $composableBuilder(
+    column: $table.isMain,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$SubspacesTableOrderingComposer get subspaceId {
+    final $$SubspacesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.subspaceId,
+      referencedTable: $db.subspaces,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SubspacesTableOrderingComposer(
+            $db: $db,
+            $table: $db.subspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SubspacePointsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SubspacePointsTable> {
+  $$SubspacePointsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<double> get lat =>
+      $composableBuilder(column: $table.lat, builder: (column) => column);
+
+  GeneratedColumn<double> get lng =>
+      $composableBuilder(column: $table.lng, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<bool> get isMain =>
+      $composableBuilder(column: $table.isMain, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$SubspacesTableAnnotationComposer get subspaceId {
+    final $$SubspacesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.subspaceId,
+      referencedTable: $db.subspaces,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SubspacesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.subspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SubspacePointsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SubspacePointsTable,
+          SubspacePoint,
+          $$SubspacePointsTableFilterComposer,
+          $$SubspacePointsTableOrderingComposer,
+          $$SubspacePointsTableAnnotationComposer,
+          $$SubspacePointsTableCreateCompanionBuilder,
+          $$SubspacePointsTableUpdateCompanionBuilder,
+          (SubspacePoint, $$SubspacePointsTableReferences),
+          SubspacePoint,
+          PrefetchHooks Function({bool subspaceId})
+        > {
+  $$SubspacePointsTableTableManager(
+    _$AppDatabase db,
+    $SubspacePointsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SubspacePointsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SubspacePointsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SubspacePointsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> subspaceId = const Value.absent(),
+                Value<double> lat = const Value.absent(),
+                Value<double> lng = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<bool> isMain = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SubspacePointsCompanion(
+                id: id,
+                subspaceId: subspaceId,
+                lat: lat,
+                lng: lng,
+                sortOrder: sortOrder,
+                isMain: isMain,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String subspaceId,
+                required double lat,
+                required double lng,
+                required int sortOrder,
+                Value<bool> isMain = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SubspacePointsCompanion.insert(
+                id: id,
+                subspaceId: subspaceId,
+                lat: lat,
+                lng: lng,
+                sortOrder: sortOrder,
+                isMain: isMain,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$SubspacePointsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({subspaceId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (subspaceId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.subspaceId,
+                                referencedTable: $$SubspacePointsTableReferences
+                                    ._subspaceIdTable(db),
+                                referencedColumn:
+                                    $$SubspacePointsTableReferences
+                                        ._subspaceIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$SubspacePointsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SubspacePointsTable,
+      SubspacePoint,
+      $$SubspacePointsTableFilterComposer,
+      $$SubspacePointsTableOrderingComposer,
+      $$SubspacePointsTableAnnotationComposer,
+      $$SubspacePointsTableCreateCompanionBuilder,
+      $$SubspacePointsTableUpdateCompanionBuilder,
+      (SubspacePoint, $$SubspacePointsTableReferences),
+      SubspacePoint,
+      PrefetchHooks Function({bool subspaceId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -3316,4 +4968,8 @@ class $AppDatabaseManager {
       $$PlanesTableTableManager(_db, _db.planes);
   $$AppSettingsTableTableManager get appSettings =>
       $$AppSettingsTableTableManager(_db, _db.appSettings);
+  $$SubspacesTableTableManager get subspaces =>
+      $$SubspacesTableTableManager(_db, _db.subspaces);
+  $$SubspacePointsTableTableManager get subspacePoints =>
+      $$SubspacePointsTableTableManager(_db, _db.subspacePoints);
 }

@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart' hide Circle, Path;
 import '../data/database.dart';
 import '../geo/geodesic.dart';
 import '../geo/plane.dart';
+import '../geo/subspace.dart';
 
 /// Renders one layer's objects as a single composited region.
 ///
@@ -23,12 +24,18 @@ class RegionLayer extends StatelessWidget {
     required this.layer,
     this.circles = const <Circle>[],
     this.planes = const <Plane>[],
+    this.subspaces = const <Subspace>[],
+    this.subspacePoints = const <SubspacePoint>[],
     required this.uncertaintyMeters,
   });
 
   final Layer layer;
   final List<Circle> circles;
   final List<Plane> planes;
+  final List<Subspace> subspaces;
+
+  /// Points belonging to [subspaces] (ordered); grouped per-subspace at paint.
+  final List<SubspacePoint> subspacePoints;
   final double uncertaintyMeters;
 
   @override
@@ -43,6 +50,8 @@ class RegionLayer extends StatelessWidget {
           inverted: layer.isInverted,
           circles: circles,
           planes: planes,
+          subspaces: subspaces,
+          subspacePoints: subspacePoints,
           uncertaintyMeters: uncertaintyMeters,
         ),
       ),
@@ -57,6 +66,8 @@ class _RegionPainter extends CustomPainter {
     required this.inverted,
     required this.circles,
     required this.planes,
+    required this.subspaces,
+    required this.subspacePoints,
     required this.uncertaintyMeters,
   });
 
@@ -65,6 +76,8 @@ class _RegionPainter extends CustomPainter {
   final bool inverted;
   final List<Circle> circles;
   final List<Plane> planes;
+  final List<Subspace> subspaces;
+  final List<SubspacePoint> subspacePoints;
   final double uncertaintyMeters;
 
   static const int _ringPoints = 90;
@@ -135,6 +148,39 @@ class _RegionPainter extends CustomPainter {
       }
     }
 
+    if (subspaces.isNotEmpty) {
+      final bounds = (Offset.zero & size).inflate(8);
+      for (final s in subspaces) {
+        final pts = subspacePoints.where((p) => p.subspaceId == s.id).toList();
+        final mainPt = pts.where((p) => p.isMain).firstOrNull;
+        if (mainPt == null) continue; // no main point -> nothing to fill
+        final main = camera.latLngToScreenOffset(LatLng(mainPt.lat, mainPt.lng));
+        final others = <Offset>[
+          for (final p in pts)
+            if (p.id != mainPt.id)
+              camera.latLngToScreenOffset(LatLng(p.lat, p.lng)),
+        ];
+        final region = subspaceRegion(
+          main: main,
+          others: others,
+          halfBandPx: _subspaceHalfBandPx(mainPt),
+          bounds: bounds,
+        );
+        if (region.outer.length >= 3) {
+          final outerPath = _polyToPath(region.outer);
+          outerUnion = outerUnion == null
+              ? outerPath
+              : Path.combine(PathOperation.union, outerUnion, outerPath);
+        }
+        if (region.core.length >= 3) {
+          final corePath = _polyToPath(region.core);
+          coreUnion = coreUnion == null
+              ? corePath
+              : Path.combine(PathOperation.union, coreUnion, corePath);
+        }
+      }
+    }
+
     if (outerUnion == null) return; // nothing valid to draw
     final core = coreUnion ?? Path();
 
@@ -181,6 +227,19 @@ class _RegionPainter extends CustomPainter {
     return px.isFinite ? px / 2 : 0;
   }
 
+  /// Half the uncertainty-band width in pixels, measured at the subspace's main
+  /// point. 0 when uncertainty is off or the point is non-finite.
+  double _subspaceHalfBandPx(SubspacePoint main) {
+    if (uncertaintyMeters <= 0) return 0;
+    if (!main.lat.isFinite || !main.lng.isFinite) return 0;
+    final at = LatLng(main.lat, main.lng);
+    final off = _distance.offset(at, uncertaintyMeters, 0); // u metres north
+    final px = (camera.latLngToScreenOffset(at) -
+            camera.latLngToScreenOffset(off))
+        .distance;
+    return px.isFinite ? px / 2 : 0;
+  }
+
   Path _polyToPath(List<Offset> poly) {
     final path = Path()..moveTo(poly.first.dx, poly.first.dy);
     for (var i = 1; i < poly.length; i++) {
@@ -213,6 +272,8 @@ class _RegionPainter extends CustomPainter {
         old.uncertaintyMeters != uncertaintyMeters ||
         !identical(old.circles, circles) ||
         !identical(old.planes, planes) ||
+        !identical(old.subspaces, subspaces) ||
+        !identical(old.subspacePoints, subspacePoints) ||
         old.camera.center != camera.center ||
         old.camera.zoom != camera.zoom ||
         old.camera.rotation != camera.rotation;

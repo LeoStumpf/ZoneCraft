@@ -139,7 +139,7 @@ across close/relaunch by construction.
 
 ### New geometry type
 
-- [ ] **"Closest subspace" object (M9).** Like the two-point plane but with **N points**: one
+- [x] **"Closest subspace" object (M9).** Like the two-point plane but with **N points**: one
   object holds all points, one is the **main** point, and the filled region is everywhere
   closer to the main point than to any other (its Voronoi cell). In a subspace layer the
   **Add** button adds *points* to the single object. Uncertainty band along the internal
@@ -149,10 +149,9 @@ across close/relaunch by construction.
 
 ## Data model impact (Drift — `lib/data/database.dart`)
 
-- `Layers`: `isInverted` (bool) and `type` ✅ done (circles | planes); **add `subspace`** to
-  the `type` set (M9).
-- `Circles` ✅ and `Planes` ✅ (two points). **Add `Subspaces` + `SubspacePoints`** (one
-  object, N points, one `isMain`) for M9.
+- `Layers`: `isInverted` (bool) and `type` ✅ done (circles | planes | **subspace** ✅ M9).
+- `Circles` ✅ and `Planes` ✅ (two points). `Subspaces` + `SubspacePoints` ✅ (one object, N
+  points, one `isMain`) added in M9 (schema v5).
 - `AppSettings` ✅ holds uncertainty + camera; **add columns** for the transport-overlay
   toggle (M10) and the enabled-POI-category set (M11); **default uncertainty → 500** (M8).
 - `Repository.clearAll()` for the clear-data button (M8).

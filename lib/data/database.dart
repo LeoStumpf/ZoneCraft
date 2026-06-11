@@ -63,6 +63,37 @@ class Planes extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// A "closest subspace" object: a set of points, exactly one of which is the
+/// main point. The filled region is everywhere closer to the main point than to
+/// any other point (the main point's Voronoi cell). A `subspace` layer holds a
+/// single [Subspaces] row; its points live in [SubspacePoints].
+class Subspaces extends Table {
+  TextColumn get id => text()();
+  TextColumn get layerId =>
+      text().references(Layers, #id, onDelete: KeyAction.cascade)();
+  TextColumn get label => text().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// One point of a [Subspaces] object. Exactly one point per subspace has
+/// [isMain] set; the filled region is that point's nearest-region.
+class SubspacePoints extends Table {
+  TextColumn get id => text()();
+  TextColumn get subspaceId =>
+      text().references(Subspaces, #id, onDelete: KeyAction.cascade)();
+  RealColumn get lat => real()();
+  RealColumn get lng => real()();
+  IntColumn get sortOrder => integer()();
+  BoolColumn get isMain => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 /// App-wide settings, stored as a single row (id == 1).
 class AppSettings extends Table {
   IntColumn get id => integer().withDefault(const Constant(1))();
@@ -80,7 +111,9 @@ class AppSettings extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-@DriftDatabase(tables: [Layers, Circles, Planes, AppSettings])
+@DriftDatabase(
+  tables: [Layers, Circles, Planes, AppSettings, Subspaces, SubspacePoints],
+)
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(driftDatabase(name: 'zonecraft'));
 
@@ -88,7 +121,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -114,6 +147,10 @@ class AppDatabase extends _$AppDatabase {
               'UPDATE app_settings SET uncertainty_meters = 500 '
               'WHERE uncertainty_meters = 0',
             );
+          }
+          if (from < 5) {
+            await m.createTable(subspaces);
+            await m.createTable(subspacePoints);
           }
         },
         beforeOpen: (details) async {

@@ -12,6 +12,7 @@ import 'circle_editor.dart';
 import 'layers_panel.dart';
 import 'plane_editor.dart';
 import 'region_layer.dart';
+import 'subspace_editor.dart';
 
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key});
@@ -120,17 +121,22 @@ class _MapScreenState extends ConsumerState<MapScreen>
   }
 
   /// A small non-interactive dot marking an edit point (circle centre / plane
-  /// endpoint). The white ring keeps it visible over any map colour.
-  Marker _editPointMarker(LatLng point) {
+  /// endpoint / subspace point). The white ring keeps it visible over any map
+  /// colour; the [main] point of a subspace is drawn larger and white-filled.
+  Marker _editPointMarker(LatLng point, {bool main = false}) {
+    final size = main ? 22.0 : 18.0;
     return Marker(
       point: point,
-      width: 18,
-      height: 18,
+      width: size,
+      height: size,
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.black87,
+          color: main ? Colors.white : Colors.black87,
           shape: BoxShape.circle,
-          border: Border.all(color: Colors.white, width: 2.5),
+          border: Border.all(
+            color: main ? Colors.black87 : Colors.white,
+            width: main ? 4 : 2.5,
+          ),
         ),
       ),
     );
@@ -194,6 +200,32 @@ class _MapScreenState extends ConsumerState<MapScreen>
     return null;
   }
 
+  /// A subspace in [layerId] whose main point is the nearest of its points to
+  /// [latlng] (Haversine) — i.e. [latlng] lies inside the main cell — or null.
+  Subspace? _subspaceInLayer(
+    LatLng latlng,
+    String layerId,
+    List<Subspace> subspaces,
+    List<SubspacePoint> points,
+  ) {
+    for (final s in subspaces.where((s) => s.layerId == layerId)) {
+      final pts = points.where((p) => p.subspaceId == s.id).toList();
+      if (pts.length < 2) continue;
+      SubspacePoint? nearest;
+      double bestD = double.infinity;
+      for (final p in pts) {
+        if (!p.lat.isFinite || !p.lng.isFinite) continue;
+        final d = _hitTest.as(LengthUnit.Meter, LatLng(p.lat, p.lng), latlng);
+        if (d < bestD) {
+          bestD = d;
+          nearest = p;
+        }
+      }
+      if (nearest != null && nearest.isMain) return s;
+    }
+    return null;
+  }
+
   Layer? _activeLayer(List<Layer> layers) {
     final activeId = effectiveActiveLayerId(
       layers,
@@ -206,6 +238,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
     ref.read(selectedCircleProvider.notifier).select(null);
     ref.read(selectedPlaneProvider.notifier).select(null);
     ref.read(planePlacementProvider.notifier).arm(null);
+    ref.read(selectedSubspaceProvider.notifier).select(null);
+    ref.read(subspacePlacementProvider.notifier).arm(null);
   }
 
   void _selectCircle(String id) {
@@ -216,6 +250,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
   void _selectPlane(String id) {
     _clearSelection();
     ref.read(selectedPlaneProvider.notifier).select(id);
+  }
+
+  void _selectSubspace(String id) {
+    _clearSelection();
+    ref.read(selectedSubspaceProvider.notifier).select(id);
   }
 
   Future<void> _addCircleAt(LatLng latlng, Layer layer) async {
@@ -248,12 +287,65 @@ class _MapScreenState extends ConsumerState<MapScreen>
     _selectPlane(id);
   }
 
+  /// Adds to a subspace layer: a point to the layer's existing object, or a new
+  /// object seeded with a main point at [center] plus two flanking points (so
+  /// the main cell is immediately visible). Selects the object either way.
+  Future<void> _addSubspaceAt(
+    LatLng center,
+    Layer layer,
+    List<Subspace> subspaces,
+  ) async {
+    final repo = ref.read(repositoryProvider);
+    final dist = _defaultRadius();
+    final existing =
+        subspaces.where((s) => s.layerId == layer.id).firstOrNull;
+    if (existing != null) {
+      final p = _hitTest.offset(center, dist, 45); // north-east of centre
+      await repo.addSubspacePoint(
+        subspaceId: existing.id,
+        lat: p.latitude,
+        lng: p.longitude,
+      );
+      _selectSubspace(existing.id);
+      return;
+    }
+    final id = await repo.createSubspace(layerId: layer.id);
+    await repo.addSubspacePoint(
+      subspaceId: id,
+      lat: center.latitude,
+      lng: center.longitude,
+      isMain: true,
+    );
+    final w = _hitTest.offset(center, dist, -90); // west
+    final e = _hitTest.offset(center, dist, 90); // east
+    await repo.addSubspacePoint(
+        subspaceId: id, lat: w.latitude, lng: w.longitude);
+    await repo.addSubspacePoint(
+        subspaceId: id, lat: e.latitude, lng: e.longitude);
+    _selectSubspace(id);
+  }
+
   Future<void> _handleTap(
     LatLng latlng,
     List<Layer> layers,
     List<Circle> circles,
     List<Plane> planes,
+    List<Subspace> subspaces,
+    List<SubspacePoint> subspacePoints,
   ) async {
+    // Placement mode: relocate the armed subspace point.
+    final armedSub = ref.read(subspacePlacementProvider);
+    final selSubId = ref.read(selectedSubspaceProvider);
+    if (armedSub != null && selSubId != null) {
+      await ref.read(repositoryProvider).updateSubspacePoint(
+            armedSub,
+            lat: latlng.latitude,
+            lng: latlng.longitude,
+          );
+      ref.read(subspacePlacementProvider.notifier).arm(null);
+      return;
+    }
+
     // Placement mode: relocate the armed endpoint of the selected plane.
     final armed = ref.read(planePlacementProvider);
     final selPlaneId = ref.read(selectedPlaneProvider);
@@ -291,12 +383,20 @@ class _MapScreenState extends ConsumerState<MapScreen>
           _selectPlane(hit.id);
           return;
         }
+      } else if (layer.type == 'subspace') {
+        final hit =
+            _subspaceInLayer(latlng, layer.id, subspaces, subspacePoints);
+        if (hit != null) {
+          _selectSubspace(hit.id);
+          return;
+        }
       }
     }
 
     // No hit: deselect if something is selected, else add to the active layer.
     if (ref.read(selectedCircleProvider) != null ||
-        ref.read(selectedPlaneProvider) != null) {
+        ref.read(selectedPlaneProvider) != null ||
+        ref.read(selectedSubspaceProvider) != null) {
       _clearSelection();
       return;
     }
@@ -304,7 +404,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (active != null && active.type == 'circles') {
       await _addCircleAt(latlng, active);
     }
-    // Planes need two points, so they're added via the FAB, not a single tap.
+    // Planes and subspaces need several points, so they're added via the FAB,
+    // not a single tap.
   }
 
   @override
@@ -316,6 +417,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final circles =
         ref.watch(circlesProvider).asData?.value ?? const <Circle>[];
     final planes = ref.watch(planesProvider).asData?.value ?? const <Plane>[];
+    final subspaces =
+        ref.watch(subspacesProvider).asData?.value ?? const <Subspace>[];
+    final subspacePoints =
+        ref.watch(subspacePointsProvider).asData?.value ??
+        const <SubspacePoint>[];
     final settings = ref.watch(settingsProvider).asData?.value;
     final uncertainty = settings?.uncertaintyMeters ?? 0;
     final selectedCircle = circles
@@ -324,12 +430,28 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final selectedPlane = planes
         .where((p) => p.id == ref.watch(selectedPlaneProvider))
         .firstOrNull;
+    final selectedSubspace = subspaces
+        .where((s) => s.id == ref.watch(selectedSubspaceProvider))
+        .firstOrNull;
+    final selectedSubspacePoints = selectedSubspace == null
+        ? const <SubspacePoint>[]
+        : subspacePoints
+            .where((p) => p.subspaceId == selectedSubspace.id)
+            .toList();
+    final hasSelection = selectedCircle != null ||
+        selectedPlane != null ||
+        selectedSubspace != null;
     final activeId = effectiveActiveLayerId(
       layers,
       ref.watch(activeLayerProvider),
     );
     final activeLayer = layers.where((l) => l.id == activeId).firstOrNull;
     final isPlaneLayer = activeLayer?.type == 'planes';
+    final isSubspaceLayer = activeLayer?.type == 'subspace';
+    // In a subspace layer the Add FAB seeds a new object, or — once one exists —
+    // appends a point to it.
+    final subspaceExists = isSubspaceLayer &&
+        subspaces.any((s) => s.layerId == activeLayer!.id);
 
     // Restore the last camera; fall back to Munich on first launch. Resolved
     // once, when settings first load — FlutterMap ignores these after creation.
@@ -367,8 +489,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         setState(() => _rotation = camera.rotation);
                       }
                     },
-                    onTap: (_, latlng) =>
-                        _handleTap(latlng, layers, circles, planes),
+                    onTap: (_, latlng) => _handleTap(
+                      latlng,
+                      layers,
+                      circles,
+                      planes,
+                      subspaces,
+                      subspacePoints,
+                    ),
                   ),
                   children: [
                     TileLayer(
@@ -393,6 +521,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                     .where((p) => p.layerId == layer.id)
                                     .toList()
                               : const <Plane>[],
+                          subspaces: layer.type == 'subspace'
+                              ? subspaces
+                                    .where((s) => s.layerId == layer.id)
+                                    .toList()
+                              : const <Subspace>[],
+                          subspacePoints: layer.type == 'subspace'
+                              ? subspacePoints
+                              : const <SubspacePoint>[],
                           uncertaintyMeters: uncertainty,
                         ),
                     if (_myPosition != null)
@@ -410,9 +546,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           ),
                         ],
                       ),
-                    // Visual handles for the object being edited: the circle's centre, or
-                    // the plane's two points.
-                    if (selectedCircle != null || selectedPlane != null)
+                    // Visual handles for the object being edited: the circle's
+                    // centre, the plane's two points, or the subspace's points
+                    // (its main point shown distinct).
+                    if (hasSelection)
                       MarkerLayer(
                         markers: [
                           if (selectedCircle != null)
@@ -430,6 +567,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               LatLng(selectedPlane.bLat, selectedPlane.bLng),
                             ),
                           ],
+                          for (final p in selectedSubspacePoints)
+                            _editPointMarker(
+                              LatLng(p.lat, p.lng),
+                              main: p.isMain,
+                            ),
                         ],
                       ),
                     const RichAttributionWidget(
@@ -461,7 +603,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
             ),
       // While an editor sheet is open it provides its own delete/close, and the
       // FABs would overlap it — so show them only when nothing is selected.
-      floatingActionButton: (selectedCircle != null || selectedPlane != null)
+      floatingActionButton: hasSelection
           ? null
           : Column(
               mainAxisSize: MainAxisSize.min,
@@ -497,7 +639,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       ? null
                       : () {
                           final c = _mapController.camera.center;
-                          if (isPlaneLayer) {
+                          if (isSubspaceLayer) {
+                            _addSubspaceAt(c, activeLayer, subspaces);
+                          } else if (isPlaneLayer) {
                             _addPlaneAt(c, activeLayer);
                           } else {
                             _addCircleAt(c, activeLayer);
@@ -507,11 +651,19 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       ? Theme.of(context).disabledColor
                       : null,
                   icon: Icon(
-                    isPlaneLayer
-                        ? Icons.change_history
-                        : Icons.add_location_alt_outlined,
+                    isSubspaceLayer
+                        ? Icons.scatter_plot_outlined
+                        : isPlaneLayer
+                            ? Icons.change_history
+                            : Icons.add_location_alt_outlined,
                   ),
-                  label: Text(isPlaneLayer ? 'Add plane' : 'Add circle'),
+                  label: Text(
+                    isSubspaceLayer
+                        ? (subspaceExists ? 'Add point' : 'Add subspace')
+                        : isPlaneLayer
+                            ? 'Add plane'
+                            : 'Add circle',
+                  ),
                 ),
               ],
             ),
@@ -525,6 +677,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
           ? PlaneEditorSheet(
               key: ValueKey(selectedPlane.id),
               plane: selectedPlane,
+              layers: layers,
+            )
+          : selectedSubspace != null
+          ? SubspaceEditorSheet(
+              key: ValueKey(selectedSubspace.id),
+              subspace: selectedSubspace,
+              points: selectedSubspacePoints,
               layers: layers,
             )
           : null,

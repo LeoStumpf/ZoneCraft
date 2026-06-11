@@ -51,6 +51,34 @@ void main() {
     expect(await repo.watchAllPlanes().first, isEmpty);
   });
 
+  test('subspace points: CRUD, single main, ordering, layer cascade', () async {
+    final layerId = await repo.createLayer(
+        name: 'S', colorArgb: 0xFF112233, type: 'subspace');
+    final subId = await repo.createSubspace(layerId: layerId);
+    final p1 = await repo.addSubspacePoint(
+        subspaceId: subId, lat: 48.1, lng: 11.5, isMain: true);
+    final p2 =
+        await repo.addSubspacePoint(subspaceId: subId, lat: 48.2, lng: 11.6);
+
+    var pts = await repo.watchAllSubspacePoints().first;
+    expect(pts, hasLength(2));
+    expect(pts.map((p) => p.sortOrder), [0, 1]); // appended in order
+    expect(pts.where((p) => p.isMain).map((p) => p.id), [p1]);
+
+    // setMainPoint keeps exactly one main.
+    await repo.setMainPoint(subId, p2);
+    pts = await repo.watchAllSubspacePoints().first;
+    expect(pts.where((p) => p.isMain).map((p) => p.id), [p2]);
+
+    await repo.deleteSubspacePoint(p1);
+    expect(await repo.watchAllSubspacePoints().first, hasLength(1));
+
+    // Deleting the layer cascades to the subspace and its points.
+    await repo.deleteLayer(layerId);
+    expect(await repo.watchAllSubspaces().first, isEmpty);
+    expect(await repo.watchAllSubspacePoints().first, isEmpty);
+  });
+
   test('settings default to 500 and persist updates', () async {
     expect((await repo.watchSettings().first).uncertaintyMeters, 500);
     await repo.updateUncertainty(250);

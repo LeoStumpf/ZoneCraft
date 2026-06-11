@@ -194,6 +194,110 @@ class Repository {
     return (_db.delete(_db.planes)..where((p) => p.id.equals(id))).go();
   }
 
+  // --- Subspaces ------------------------------------------------------------
+
+  Stream<List<Subspace>> watchAllSubspaces() {
+    return _db.select(_db.subspaces).watch();
+  }
+
+  /// All points across every subspace, ordered by their [SubspacePoints.sortOrder].
+  Stream<List<SubspacePoint>> watchAllSubspacePoints() {
+    return (_db.select(_db.subspacePoints)
+          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
+        .watch();
+  }
+
+  Future<String> createSubspace({required String layerId, String? label}) async {
+    final id = _uuid.v4();
+    await _db.into(_db.subspaces).insert(
+          SubspacesCompanion.insert(
+            id: id,
+            layerId: layerId,
+            label: Value(label),
+          ),
+        );
+    return id;
+  }
+
+  Future<void> updateSubspace(
+    String id, {
+    String? layerId,
+    Value<String?> label = const Value.absent(),
+  }) {
+    return (_db.update(_db.subspaces)..where((s) => s.id.equals(id))).write(
+      SubspacesCompanion(
+        layerId: layerId == null ? const Value.absent() : Value(layerId),
+        label: label,
+      ),
+    );
+  }
+
+  Future<void> deleteSubspace(String id) {
+    return (_db.delete(_db.subspaces)..where((s) => s.id.equals(id))).go();
+  }
+
+  /// Appends a point to [subspaceId] (placed last). The first point of a fresh
+  /// subspace should pass [isMain] true so the object always has a main point.
+  Future<String> addSubspacePoint({
+    required String subspaceId,
+    required double lat,
+    required double lng,
+    bool isMain = false,
+  }) async {
+    final order = await _maxPointOrder(subspaceId);
+    final id = _uuid.v4();
+    await _db.into(_db.subspacePoints).insert(
+          SubspacePointsCompanion.insert(
+            id: id,
+            subspaceId: subspaceId,
+            lat: lat,
+            lng: lng,
+            sortOrder: order + 1,
+            isMain: Value(isMain),
+          ),
+        );
+    return id;
+  }
+
+  Future<void> updateSubspacePoint(String id, {double? lat, double? lng}) {
+    return (_db.update(_db.subspacePoints)..where((p) => p.id.equals(id))).write(
+      SubspacePointsCompanion(
+        lat: lat == null ? const Value.absent() : Value(lat),
+        lng: lng == null ? const Value.absent() : Value(lng),
+      ),
+    );
+  }
+
+  /// Makes [pointId] the single main point of [subspaceId] (clears the flag on
+  /// every other point in one batch, so exactly one stays main).
+  Future<void> setMainPoint(String subspaceId, String pointId) {
+    return _db.batch((b) {
+      b.update(
+        _db.subspacePoints,
+        const SubspacePointsCompanion(isMain: Value(false)),
+        where: (p) => p.subspaceId.equals(subspaceId),
+      );
+      b.update(
+        _db.subspacePoints,
+        const SubspacePointsCompanion(isMain: Value(true)),
+        where: (p) => p.id.equals(pointId),
+      );
+    });
+  }
+
+  Future<void> deleteSubspacePoint(String id) {
+    return (_db.delete(_db.subspacePoints)..where((p) => p.id.equals(id))).go();
+  }
+
+  Future<int> _maxPointOrder(String subspaceId) async {
+    final max = _db.subspacePoints.sortOrder.max();
+    final row = await (_db.selectOnly(_db.subspacePoints)
+          ..addColumns([max])
+          ..where(_db.subspacePoints.subspaceId.equals(subspaceId)))
+        .getSingleOrNull();
+    return row?.read(max) ?? -1;
+  }
+
   // --- Settings -------------------------------------------------------------
 
   /// Watches the single settings row, emitting defaults when it doesn't exist

@@ -262,7 +262,29 @@ Settings shows the new section; "Clear all data" → confirm dialog → Cancel l
   force-stop/relaunch; "Clear all data" → confirm → app returns to first-run state (one empty
   layer, default settings) without crashing.
 
-## Milestone 9 — "Closest subspace" multi-point plane
+## Milestone 9 — "Closest subspace" multi-point plane ✅ DONE
+
+**Status:** complete (2026-06-11). New `subspace` layer type holding a single object of N
+points (one `isMain`); the filled region is the main point's Voronoi cell. **Schema bumped to
+v5** with a `from < 5` migration creating `Subspaces` + `SubspacePoints` (both cascade-deleted
+from their parent). `lib/geo/subspace.dart` builds the main cell by clipping the inflated
+viewport rect by each `main-vs-Pⱼ` half-plane in sequence (reusing the plane bisector idea);
+`outer` pushes each bisector `+u/2` toward the others and `core` pulls `−u/2`, so `band =
+outer − core` hugs the internal divides — degenerate (no others / a point coincident with main)
+→ empty. `RegionLayer`/`_RegionPainter` composite the convex cell exactly like a plane
+(union/band, inverse = viewport − outer). `lib/ui/subspace_editor.dart` lists each point (a
+"lat, lng" field + a main `RadioGroup` + move-by-tap + delete), an Add-point button, the layer,
+a label and delete-object; markers show every point with the main one drawn larger/white.
+The drawer's add-type chooser gained a **Subspace layer** option (`scatter_plot_outlined`); the
+Add FAB seeds a new object (main + two flanking points, immediately visible) or appends a point
+to the existing one ("Add point"); selection is unified (`selectedSubspaceProvider`,
+`subspacePlacementProvider`) and hit-testing picks the subspace iff its main point is the nearest
+of its points to the tap. Repository CRUD with `setMainPoint` keeping exactly one main; deleting
+the main promotes another. Tests: `test/subspace_test.dart` (geometry: central-strip cell, band
+offsets, empty/degenerate) and DB CRUD/cascade/single-main; `flutter analyze`/`flutter test`
+(26) green. Verified on device (migrated to `user_version=5`): a 3-point subspace fills the main
+cell, switching the main point reshapes it live, invert fills the complement (compositing over
+the circle layers beneath), and the object/point counts show in the drawer.
 
 **Goal:** a new object type — the region closest to a chosen "main" point among N points
 (the main point's Voronoi cell) — with the same union/band/inverse behaviour as planes.

@@ -19,9 +19,10 @@ edit-point markers (circle centre / plane endpoints) while editing; **persisted 
 just a floating top-left menu button opens the drawer.
 
 **v2 progress:** M7 compass/north-up **done**; M8 settings (500 m default uncertainty,
-schema **v4** migration, `clearAll`/"Clear all data") **done**. Next (planned, not yet
-built): M9 "closest subspace" multi-point plane, M10 public-transport overlay, M11
-OSMAnd-style POI toggles. See `IMPLEMENTATION_PLAN.md`.
+schema **v4** migration, `clearAll`/"Clear all data") **done**; M9 "closest subspace"
+multi-point object (new `subspace` layer type, `Subspaces`+`SubspacePoints`, schema **v5**,
+`geo/subspace.dart`, `ui/subspace_editor.dart`) **done**. Next (planned, not yet built):
+M10 public-transport overlay, M11 OSMAnd-style POI toggles. See `IMPLEMENTATION_PLAN.md`.
 
 Track in `IMPLEMENTATION_PLAN.md` (milestone status) and `PLAN.md` (feature backlog).
 
@@ -55,11 +56,14 @@ Track in `IMPLEMENTATION_PLAN.md` (milestone status) and `PLAN.md` (feature back
 
 ```
 lib/
-  data/        Drift database (Layers, Circles, Planes, AppSettings) + repository
-  geo/         geodesicCircle(), plane half-plane geometry, lat/lng parsing
-  state/       Riverpod providers (layers, circles, planes, settings, selection)
+  data/        Drift database (Layers, Circles, Planes, Subspaces,
+               SubspacePoints, AppSettings) + repository
+  geo/         geodesicCircle(), plane half-plane + subspace Voronoi-cell
+               geometry, lat/lng parsing
+  state/       Riverpod providers (layers, circles, planes, subspaces,
+               settings, selection)
   ui/          map_screen, layers_panel, circle_editor, plane_editor,
-               settings_screen, region_layer
+               subspace_editor, settings_screen, region_layer
 ```
 
 ## Plans
