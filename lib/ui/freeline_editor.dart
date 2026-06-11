@@ -1,0 +1,273 @@
+import 'package:drift/drift.dart' show Value;
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../data/database.dart';
+import '../data/repository.dart';
+import '../geo/coords.dart';
+import '../state/providers.dart';
+
+/// Docked bottom-sheet editor for a freehand line (polyline). Lists the line's
+/// ordered points — each a single "lat, lng" field with a place-by-tap button
+/// and a delete — plus an add-point button, a signed offset, the layer, a label
+/// and delete-object. Writes every change live while the map stays interactive.
+class FreeLineEditorSheet extends ConsumerStatefulWidget {
+  const FreeLineEditorSheet({
+    super.key,
+    required this.freeLine,
+    required this.points,
+    required this.layers,
+  });
+
+  final FreeLine freeLine;
+
+  /// The line's points, ordered.
+  final List<FreeLinePoint> points;
+  final List<Layer> layers;
+
+  @override
+  ConsumerState<FreeLineEditorSheet> createState() =>
+      _FreeLineEditorSheetState();
+}
+
+class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
+  final Map<String, TextEditingController> _ctl = {};
+  final Map<String, FocusNode> _focus = {};
+  late final TextEditingController _label;
+  late final TextEditingController _offset;
+
+  Repository get _repo => ref.read(repositoryProvider);
+
+  @override
+  void initState() {
+    super.initState();
+    _label = TextEditingController(text: widget.freeLine.label ?? '');
+    _offset =
+        TextEditingController(text: widget.freeLine.offsetMeters.round().toString());
+  }
+
+  @override
+  void didUpdateWidget(FreeLineEditorSheet old) {
+    super.didUpdateWidget(old);
+    final ids = widget.points.map((p) => p.id).toSet();
+    for (final p in widget.points) {
+      final c = _ctl[p.id];
+      if (c != null && !(_focus[p.id]?.hasFocus ?? false)) {
+        final t = formatLatLng(p.lat, p.lng);
+        if (c.text != t) c.text = t;
+      }
+    }
+    for (final id in _ctl.keys.toList()) {
+      if (!ids.contains(id)) {
+        _ctl.remove(id)?.dispose();
+        _focus.remove(id)?.dispose();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final c in _ctl.values) {
+      c.dispose();
+    }
+    for (final f in _focus.values) {
+      f.dispose();
+    }
+    _label.dispose();
+    _offset.dispose();
+    super.dispose();
+  }
+
+  TextEditingController _ctlFor(FreeLinePoint p) => _ctl.putIfAbsent(
+        p.id,
+        () => TextEditingController(text: formatLatLng(p.lat, p.lng)),
+      );
+
+  FocusNode _focusFor(String id) => _focus.putIfAbsent(id, () => FocusNode());
+
+  void _armPlacement(String pointId, int displayIndex) {
+    ref.read(freeLinePlacementProvider.notifier).arm(pointId);
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(content: Text('Tap the map to place point ${displayIndex + 1}')),
+      );
+  }
+
+  Future<void> _addPoint() async {
+    final anchor = widget.points.lastOrNull;
+    final lat = anchor?.lat ?? 0.0;
+    final lng = (anchor?.lng ?? 0.0) + 0.005;
+    final id = await _repo.addFreeLinePoint(
+      freeLineId: widget.freeLine.id,
+      lat: lat,
+      lng: lng,
+    );
+    if (!mounted) return;
+    _armPlacement(id, widget.points.length);
+  }
+
+  Future<void> _deletePoint(FreeLinePoint p) async {
+    await _repo.deleteFreeLinePoint(p.id);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final armed = ref.watch(freeLinePlacementProvider);
+    final id = widget.freeLine.id;
+    final lineLayers = widget.layers.where((l) => l.type == 'freeline').toList();
+
+    return Material(
+      elevation: 8,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.polyline, size: 18),
+                  const SizedBox(width: 8),
+                  Text('Edit freehand line',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  const Spacer(),
+                  DropdownButton<String>(
+                    value: lineLayers.any((l) => l.id == widget.freeLine.layerId)
+                        ? widget.freeLine.layerId
+                        : null,
+                    hint: const Text('Layer'),
+                    items: [
+                      for (final l in lineLayers)
+                        DropdownMenuItem(value: l.id, child: Text(l.name)),
+                    ],
+                    onChanged: (v) {
+                      if (v != null) _repo.updateFreeLine(id, layerId: v);
+                    },
+                  ),
+                  IconButton(
+                    tooltip: 'Delete line',
+                    icon: const Icon(Icons.delete_outline),
+                    color: Colors.red,
+                    onPressed: () async {
+                      await _repo.deleteFreeLine(id);
+                      _close();
+                    },
+                  ),
+                  IconButton(
+                    tooltip: 'Close',
+                    icon: const Icon(Icons.close),
+                    onPressed: _close,
+                  ),
+                ],
+              ),
+              Text(
+                'Fills one side of the drawn line. Use the layer’s Invert to '
+                'flip sides. Ends are extended straight to split the whole view.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 220),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: widget.points.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (context, i) {
+                    final p = widget.points[i];
+                    return _pointRow(p, i, armed == p.id);
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  TextButton.icon(
+                    onPressed: _addPoint,
+                    icon: const Icon(Icons.add_location_alt_outlined),
+                    label: const Text('Add point'),
+                  ),
+                  const Spacer(),
+                  SizedBox(
+                    width: 130,
+                    child: TextField(
+                      controller: _offset,
+                      decoration: const InputDecoration(
+                        labelText: 'Offset (m)',
+                        helperText: '+ away, − past',
+                        isDense: true,
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true, signed: true),
+                      onChanged: (s) {
+                        final n = double.tryParse(s);
+                        if (n != null && n.isFinite) {
+                          _repo.updateFreeLine(id, offsetMeters: n);
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              TextField(
+                controller: _label,
+                decoration: const InputDecoration(
+                    labelText: 'Label (optional)', isDense: true),
+                onChanged: (s) {
+                  final t = s.trim();
+                  _repo.updateFreeLine(id, label: Value(t.isEmpty ? null : t));
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _pointRow(FreeLinePoint p, int index, bool armed) {
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: _ctlFor(p),
+            focusNode: _focusFor(p.id),
+            decoration: InputDecoration(
+              labelText: 'Point ${index + 1} (lat, lng)',
+              hintText: '48.137154, 11.575382',
+              isDense: true,
+            ),
+            keyboardType: const TextInputType.numberWithOptions(
+                decimal: true, signed: true),
+            onChanged: (s) {
+              final ll = parseLatLng(s);
+              if (ll != null) {
+                _repo.updateFreeLinePoint(p.id,
+                    lat: ll.latitude, lng: ll.longitude);
+              }
+            },
+          ),
+        ),
+        IconButton(
+          tooltip: 'Move point ${index + 1} by tapping the map',
+          icon: Icon(armed ? Icons.touch_app : Icons.touch_app_outlined),
+          color: armed ? Theme.of(context).colorScheme.primary : null,
+          onPressed: () => _armPlacement(p.id, index),
+        ),
+        IconButton(
+          tooltip: 'Delete point ${index + 1}',
+          icon: const Icon(Icons.remove_circle_outline),
+          // Keep at least two points so the line still divides the view.
+          onPressed: widget.points.length <= 2 ? null : () => _deletePoint(p),
+        ),
+      ],
+    );
+  }
+
+  void _close() {
+    ref.read(freeLinePlacementProvider.notifier).arm(null);
+    ref.read(selectedFreeLineProvider.notifier).select(null);
+  }
+}

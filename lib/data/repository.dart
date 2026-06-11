@@ -298,6 +298,178 @@ class Repository {
     return row?.read(max) ?? -1;
   }
 
+  // --- Freehand lines -------------------------------------------------------
+
+  Stream<List<FreeLine>> watchAllFreeLines() {
+    return _db.select(_db.freeLines).watch();
+  }
+
+  /// All points across every freehand line, ordered by [FreeLinePoints.sortOrder].
+  Stream<List<FreeLinePoint>> watchAllFreeLinePoints() {
+    return (_db.select(_db.freeLinePoints)
+          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
+        .watch();
+  }
+
+  Future<String> createFreeLine({required String layerId, String? label}) async {
+    final id = _uuid.v4();
+    await _db.into(_db.freeLines).insert(
+          FreeLinesCompanion.insert(
+            id: id,
+            layerId: layerId,
+            label: Value(label),
+          ),
+        );
+    return id;
+  }
+
+  Future<void> updateFreeLine(
+    String id, {
+    String? layerId,
+    double? offsetMeters,
+    Value<String?> label = const Value.absent(),
+  }) {
+    return (_db.update(_db.freeLines)..where((l) => l.id.equals(id))).write(
+      FreeLinesCompanion(
+        layerId: layerId == null ? const Value.absent() : Value(layerId),
+        offsetMeters:
+            offsetMeters == null ? const Value.absent() : Value(offsetMeters),
+        label: label,
+      ),
+    );
+  }
+
+  Future<void> deleteFreeLine(String id) {
+    return (_db.delete(_db.freeLines)..where((l) => l.id.equals(id))).go();
+  }
+
+  Future<String> addFreeLinePoint({
+    required String freeLineId,
+    required double lat,
+    required double lng,
+  }) async {
+    final order = await _maxFreeLinePointOrder(freeLineId);
+    final id = _uuid.v4();
+    await _db.into(_db.freeLinePoints).insert(
+          FreeLinePointsCompanion.insert(
+            id: id,
+            freeLineId: freeLineId,
+            lat: lat,
+            lng: lng,
+            sortOrder: order + 1,
+          ),
+        );
+    return id;
+  }
+
+  Future<void> updateFreeLinePoint(String id, {double? lat, double? lng}) {
+    return (_db.update(_db.freeLinePoints)..where((p) => p.id.equals(id))).write(
+      FreeLinePointsCompanion(
+        lat: lat == null ? const Value.absent() : Value(lat),
+        lng: lng == null ? const Value.absent() : Value(lng),
+      ),
+    );
+  }
+
+  Future<void> deleteFreeLinePoint(String id) {
+    return (_db.delete(_db.freeLinePoints)..where((p) => p.id.equals(id))).go();
+  }
+
+  Future<int> _maxFreeLinePointOrder(String freeLineId) async {
+    final max = _db.freeLinePoints.sortOrder.max();
+    final row = await (_db.selectOnly(_db.freeLinePoints)
+          ..addColumns([max])
+          ..where(_db.freeLinePoints.freeLineId.equals(freeLineId)))
+        .getSingleOrNull();
+    return row?.read(max) ?? -1;
+  }
+
+  // --- Freehand areas -------------------------------------------------------
+
+  Stream<List<FreeArea>> watchAllFreeAreas() {
+    return _db.select(_db.freeAreas).watch();
+  }
+
+  /// All points across every freehand area, ordered by [FreeAreaPoints.sortOrder].
+  Stream<List<FreeAreaPoint>> watchAllFreeAreaPoints() {
+    return (_db.select(_db.freeAreaPoints)
+          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
+        .watch();
+  }
+
+  Future<String> createFreeArea({required String layerId, String? label}) async {
+    final id = _uuid.v4();
+    await _db.into(_db.freeAreas).insert(
+          FreeAreasCompanion.insert(
+            id: id,
+            layerId: layerId,
+            label: Value(label),
+          ),
+        );
+    return id;
+  }
+
+  Future<void> updateFreeArea(
+    String id, {
+    String? layerId,
+    double? offsetMeters,
+    Value<String?> label = const Value.absent(),
+  }) {
+    return (_db.update(_db.freeAreas)..where((a) => a.id.equals(id))).write(
+      FreeAreasCompanion(
+        layerId: layerId == null ? const Value.absent() : Value(layerId),
+        offsetMeters:
+            offsetMeters == null ? const Value.absent() : Value(offsetMeters),
+        label: label,
+      ),
+    );
+  }
+
+  Future<void> deleteFreeArea(String id) {
+    return (_db.delete(_db.freeAreas)..where((a) => a.id.equals(id))).go();
+  }
+
+  Future<String> addFreeAreaPoint({
+    required String freeAreaId,
+    required double lat,
+    required double lng,
+  }) async {
+    final order = await _maxFreeAreaPointOrder(freeAreaId);
+    final id = _uuid.v4();
+    await _db.into(_db.freeAreaPoints).insert(
+          FreeAreaPointsCompanion.insert(
+            id: id,
+            freeAreaId: freeAreaId,
+            lat: lat,
+            lng: lng,
+            sortOrder: order + 1,
+          ),
+        );
+    return id;
+  }
+
+  Future<void> updateFreeAreaPoint(String id, {double? lat, double? lng}) {
+    return (_db.update(_db.freeAreaPoints)..where((p) => p.id.equals(id))).write(
+      FreeAreaPointsCompanion(
+        lat: lat == null ? const Value.absent() : Value(lat),
+        lng: lng == null ? const Value.absent() : Value(lng),
+      ),
+    );
+  }
+
+  Future<void> deleteFreeAreaPoint(String id) {
+    return (_db.delete(_db.freeAreaPoints)..where((p) => p.id.equals(id))).go();
+  }
+
+  Future<int> _maxFreeAreaPointOrder(String freeAreaId) async {
+    final max = _db.freeAreaPoints.sortOrder.max();
+    final row = await (_db.selectOnly(_db.freeAreaPoints)
+          ..addColumns([max])
+          ..where(_db.freeAreaPoints.freeAreaId.equals(freeAreaId)))
+        .getSingleOrNull();
+    return row?.read(max) ?? -1;
+  }
+
   // --- Settings -------------------------------------------------------------
 
   /// Watches the single settings row, emitting defaults when it doesn't exist

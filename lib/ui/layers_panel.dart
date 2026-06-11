@@ -23,6 +23,16 @@ class LayersDrawer extends ConsumerWidget {
     final subspacePoints =
         ref.watch(subspacePointsProvider).asData?.value ??
         const <SubspacePoint>[];
+    final freeLines =
+        ref.watch(freeLinesProvider).asData?.value ?? const <FreeLine>[];
+    final freeLinePoints =
+        ref.watch(freeLinePointsProvider).asData?.value ??
+        const <FreeLinePoint>[];
+    final freeAreas =
+        ref.watch(freeAreasProvider).asData?.value ?? const <FreeArea>[];
+    final freeAreaPoints =
+        ref.watch(freeAreaPointsProvider).asData?.value ??
+        const <FreeAreaPoint>[];
     final selected = ref.watch(activeLayerProvider);
     final repo = ref.read(repositoryProvider);
 
@@ -85,6 +95,24 @@ class LayersDrawer extends ConsumerWidget {
                               title: Text('Subspace layer'),
                             ),
                           ),
+                          const PopupMenuItem(
+                            value: 'freeline',
+                            child: ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(Icons.polyline),
+                              title: Text('Freehand line layer'),
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'freearea',
+                            child: ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(Icons.hexagon_outlined),
+                              title: Text('Freehand area layer'),
+                            ),
+                          ),
                         ],
                         child: const Padding(
                           padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -125,6 +153,22 @@ class LayersDrawer extends ConsumerWidget {
                         count = subspacePoints
                             .where((p) => ids.contains(p.subspaceId))
                             .length;
+                      } else if (layer.type == 'freeline') {
+                        final ids = freeLines
+                            .where((l) => l.layerId == layer.id)
+                            .map((l) => l.id)
+                            .toSet();
+                        count = freeLinePoints
+                            .where((p) => ids.contains(p.freeLineId))
+                            .length;
+                      } else if (layer.type == 'freearea') {
+                        final ids = freeAreas
+                            .where((a) => a.layerId == layer.id)
+                            .map((a) => a.id)
+                            .toSet();
+                        count = freeAreaPoints
+                            .where((p) => ids.contains(p.freeAreaId))
+                            .length;
                       } else {
                         count =
                             circles.where((c) => c.layerId == layer.id).length;
@@ -164,6 +208,8 @@ class LayersDrawer extends ConsumerWidget {
 IconData _typeIcon(String type) => switch (type) {
       'planes' => Icons.change_history,
       'subspace' => Icons.scatter_plot_outlined,
+      'freeline' => Icons.polyline,
+      'freearea' => Icons.hexagon_outlined,
       _ => Icons.circle_outlined,
     };
 
@@ -187,6 +233,8 @@ class _LayerTile extends ConsumerWidget {
     final noun = switch (layer.type) {
       'planes' => 'plane',
       'subspace' => 'point',
+      'freeline' => 'point',
+      'freearea' => 'point',
       _ => 'circle',
     };
     final subtitle =

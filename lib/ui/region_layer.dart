@@ -3,6 +3,8 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' hide Circle, Path;
 
 import '../data/database.dart';
+import '../geo/freearea.dart';
+import '../geo/freeline.dart';
 import '../geo/geodesic.dart';
 import '../geo/plane.dart';
 import '../geo/subspace.dart';
@@ -26,6 +28,10 @@ class RegionLayer extends StatelessWidget {
     this.planes = const <Plane>[],
     this.subspaces = const <Subspace>[],
     this.subspacePoints = const <SubspacePoint>[],
+    this.freeLines = const <FreeLine>[],
+    this.freeLinePoints = const <FreeLinePoint>[],
+    this.freeAreas = const <FreeArea>[],
+    this.freeAreaPoints = const <FreeAreaPoint>[],
     required this.uncertaintyMeters,
   });
 
@@ -36,6 +42,16 @@ class RegionLayer extends StatelessWidget {
 
   /// Points belonging to [subspaces] (ordered); grouped per-subspace at paint.
   final List<SubspacePoint> subspacePoints;
+
+  final List<FreeLine> freeLines;
+
+  /// Points belonging to [freeLines] (ordered); grouped per-line at paint.
+  final List<FreeLinePoint> freeLinePoints;
+
+  final List<FreeArea> freeAreas;
+
+  /// Points belonging to [freeAreas] (ordered); grouped per-area at paint.
+  final List<FreeAreaPoint> freeAreaPoints;
   final double uncertaintyMeters;
 
   @override
@@ -52,6 +68,10 @@ class RegionLayer extends StatelessWidget {
           planes: planes,
           subspaces: subspaces,
           subspacePoints: subspacePoints,
+          freeLines: freeLines,
+          freeLinePoints: freeLinePoints,
+          freeAreas: freeAreas,
+          freeAreaPoints: freeAreaPoints,
           uncertaintyMeters: uncertaintyMeters,
         ),
       ),
@@ -68,6 +88,10 @@ class _RegionPainter extends CustomPainter {
     required this.planes,
     required this.subspaces,
     required this.subspacePoints,
+    required this.freeLines,
+    required this.freeLinePoints,
+    required this.freeAreas,
+    required this.freeAreaPoints,
     required this.uncertaintyMeters,
   });
 
@@ -78,6 +102,10 @@ class _RegionPainter extends CustomPainter {
   final List<Plane> planes;
   final List<Subspace> subspaces;
   final List<SubspacePoint> subspacePoints;
+  final List<FreeLine> freeLines;
+  final List<FreeLinePoint> freeLinePoints;
+  final List<FreeArea> freeAreas;
+  final List<FreeAreaPoint> freeAreaPoints;
   final double uncertaintyMeters;
 
   static const int _ringPoints = 90;
@@ -181,6 +209,72 @@ class _RegionPainter extends CustomPainter {
       }
     }
 
+    if (freeLines.isNotEmpty) {
+      final bounds = (Offset.zero & size).inflate(8);
+      for (final l in freeLines) {
+        final pts =
+            freeLinePoints.where((p) => p.freeLineId == l.id).toList();
+        if (pts.length < 2) continue;
+        final screen = <Offset>[
+          for (final p in pts)
+            camera.latLngToScreenOffset(LatLng(p.lat, p.lng)),
+        ];
+        final ref = LatLng(pts.first.lat, pts.first.lng);
+        final ppm = _pxPerMeter(ref);
+        final region = freeLineRegion(
+          points: screen,
+          offsetPx: l.offsetMeters * ppm,
+          halfBandPx: uncertaintyMeters > 0 ? uncertaintyMeters * ppm / 2 : 0,
+          bounds: bounds,
+        );
+        if (region.outer.length >= 3) {
+          final outerPath = _polyToPath(region.outer);
+          outerUnion = outerUnion == null
+              ? outerPath
+              : Path.combine(PathOperation.union, outerUnion, outerPath);
+        }
+        if (region.core.length >= 3) {
+          final corePath = _polyToPath(region.core);
+          coreUnion = coreUnion == null
+              ? corePath
+              : Path.combine(PathOperation.union, coreUnion, corePath);
+        }
+      }
+    }
+
+    if (freeAreas.isNotEmpty) {
+      final bounds = (Offset.zero & size).inflate(8);
+      for (final a in freeAreas) {
+        final pts =
+            freeAreaPoints.where((p) => p.freeAreaId == a.id).toList();
+        if (pts.length < 3) continue;
+        final ring = <Offset>[
+          for (final p in pts)
+            camera.latLngToScreenOffset(LatLng(p.lat, p.lng)),
+        ];
+        final ref = LatLng(pts.first.lat, pts.first.lng);
+        final ppm = _pxPerMeter(ref);
+        final region = freeAreaRegion(
+          ring: ring,
+          offsetPx: a.offsetMeters * ppm,
+          halfBandPx: uncertaintyMeters > 0 ? uncertaintyMeters * ppm / 2 : 0,
+          bounds: bounds,
+        );
+        if (region.outer.length >= 3) {
+          final outerPath = _polyToPath(region.outer);
+          outerUnion = outerUnion == null
+              ? outerPath
+              : Path.combine(PathOperation.union, outerUnion, outerPath);
+        }
+        if (region.core.length >= 3) {
+          final corePath = _polyToPath(region.core);
+          coreUnion = coreUnion == null
+              ? corePath
+              : Path.combine(PathOperation.union, coreUnion, corePath);
+        }
+      }
+    }
+
     if (outerUnion == null) return; // nothing valid to draw
     final core = coreUnion ?? Path();
 
@@ -240,6 +334,18 @@ class _RegionPainter extends CustomPainter {
     return px.isFinite ? px / 2 : 0;
   }
 
+  /// Screen pixels per real-world metre at [at], used to convert a freehand
+  /// object's offset and the global uncertainty into pixels. 0 when [at] is
+  /// non-finite.
+  double _pxPerMeter(LatLng at) {
+    if (!at.latitude.isFinite || !at.longitude.isFinite) return 0;
+    final off = _distance.offset(at, 1000, 0); // 1 km north
+    final px = (camera.latLngToScreenOffset(at) -
+            camera.latLngToScreenOffset(off))
+        .distance;
+    return px.isFinite ? px / 1000 : 0;
+  }
+
   Path _polyToPath(List<Offset> poly) {
     final path = Path()..moveTo(poly.first.dx, poly.first.dy);
     for (var i = 1; i < poly.length; i++) {
@@ -274,6 +380,10 @@ class _RegionPainter extends CustomPainter {
         !identical(old.planes, planes) ||
         !identical(old.subspaces, subspaces) ||
         !identical(old.subspacePoints, subspacePoints) ||
+        !identical(old.freeLines, freeLines) ||
+        !identical(old.freeLinePoints, freeLinePoints) ||
+        !identical(old.freeAreas, freeAreas) ||
+        !identical(old.freeAreaPoints, freeAreaPoints) ||
         old.camera.center != camera.center ||
         old.camera.zoom != camera.zoom ||
         old.camera.rotation != camera.rotation;

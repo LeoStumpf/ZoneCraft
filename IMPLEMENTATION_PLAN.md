@@ -382,6 +382,46 @@ and disappear when the category is toggled off; the choice persists in `AppSetti
 
 ---
 
+# v3 — freehand (user-drawn) regions
+
+## Milestone 12 — Freehand line ✅ DONE
+## Milestone 13 — Freehand area ✅ DONE
+
+**Status:** complete (2026-06-11). Two new user-drawn layer types added end-to-end by mirroring
+the `subspace` pattern. New `freeline` and `freearea` layer types; **`FreeLines`+`FreeLinePoints`**
+and **`FreeAreas`+`FreeAreaPoints`** parent/ordered-points tables, each parent carrying a signed
+**`offsetMeters`** (schema **v9**, `from < 9` migration creating all four tables). Repository CRUD
+and Riverpod stream/selection/placement providers mirror subspace.
+
+- **Freehand line** (`geo/freeline.dart`): a drawn polyline divides the view; the engine fills the
+  polyline's left (`+90°`) side and the per-layer **invert** gives the other side (engine
+  `viewport − outer` complement). A partial line is completed by **extending its first/last
+  segments straight** past the viewport. The near edge is shifted by the signed offset toward the
+  filled side (`outer = offset − halfBand`, `core = offset + halfBand`), so the uncertainty band
+  straddles the shifted boundary; the far side is capped far out along a single fixed normal to
+  avoid fan-out self-intersection.
+- **Freehand area** (`geo/freearea.dart`): a drawn closed ring; the engine fills the inside and
+  **invert** the outside. The ring is inset by the signed offset via per-edge offset + miter
+  intersection (`outer = offset − halfBand`, `core = offset + halfBand`), with a collapse guard
+  (flipped orientation, or a shrink that overshot the inradius → empty).
+- **Offset** is signed and per-object: `+` pushes the coloured boundary away from the line /
+  inward from the area, `−` extends the fill past the drawn boundary — independent of the global
+  uncertainty band, and converted metres→pixels at the object's first point like the band.
+- **Rendering** (`region_layer.dart`): two new per-object loops feed `outer`/`core` into the
+  existing union/band/invert compositor; `_pxPerMeter` converts both offset and uncertainty.
+- **UI:** `ui/freeline_editor.dart` / `ui/freearea_editor.dart` (multi-point editors with a signed
+  offset field, add/move-by-tap/delete, layer, label); `map_screen` tap-routing (placement first,
+  then hit-test: distance-to-polyline for lines, point-in-polygon for areas), a two-stage **Add**
+  FAB (seed object → add points), edit-point markers, a dashed outline of the object being edited,
+  and the editor bottom sheets; `layers_panel` add-layer menu entries, type icons, and point
+  counts.
+- **Verify:** `flutter analyze` + `flutter test` (57) green. Verified on device (migrated to
+  `user_version=9`): creating a Freehand line layer seeds a 2-point line that fills one side and
+  opens its editor; a Freehand area layer seeds a 3-point triangle that fills the inside; the
+  signed-offset and per-point placement controls work; no exceptions.
+
+---
+
 ## New dependencies (by milestone)
 
 - M4: `geolocator`, `permission_handler`

@@ -33,6 +33,15 @@ per-level on/off + colour, `data/borders.dart` via Overpass, packed
 `PolylineLayer`). Overpass `convert ::geom=geom()` returns GeoJSON `LineString`
 (`[lon,lat]`), parsed in `parseBordersResponse`.
 
+**v3 progress:** two **freehand (user-drawn)** layer types — M12 **freehand line** (a drawn
+polyline dividing the view into two sides, ends extended straight; `geo/freeline.dart`,
+`ui/freeline_editor.dart`) and M13 **freehand area** (a drawn closed polygon, fill inside;
+`geo/freearea.dart`, `ui/freearea_editor.dart`) — each a new layer type (`freeline`,
+`freearea`) with `FreeLines`+`FreeLinePoints` / `FreeAreas`+`FreeAreaPoints` tables and a
+signed per-object `offsetMeters` (schema **v9**). Both mirror the `subspace` pattern, reuse
+the per-layer **invert** to flip side/inside-outside, and feed `outer`/`core` polygons into
+the existing compositor. **The v3 freehand types are complete.**
+
 Track in `IMPLEMENTATION_PLAN.md` (milestone status) and `PLAN.md` (feature backlog).
 
 ## Workflow rule (required)
@@ -66,14 +75,17 @@ Track in `IMPLEMENTATION_PLAN.md` (milestone status) and `PLAN.md` (feature back
 ```
 lib/
   data/        Drift database (Layers, Circles, Planes, Subspaces,
-               SubspacePoints, AppSettings) + repository; Overpass POI client
+               SubspacePoints, FreeLines, FreeLinePoints, FreeAreas,
+               FreeAreaPoints, AppSettings) + repository; Overpass POI client
                (overpass.dart) + admin-border client (borders.dart)
   geo/         geodesicCircle(), plane half-plane + subspace Voronoi-cell
-               geometry, lat/lng parsing
+               geometry, freehand line/area region geometry (freeline.dart,
+               freearea.dart), lat/lng parsing
   state/       Riverpod providers (layers, circles, planes, subspaces,
-               settings, selection)
+               freehand lines/areas, settings, selection)
   ui/          map_screen, layers_panel, circle_editor, plane_editor,
-               subspace_editor, settings_screen, region_layer
+               subspace_editor, freeline_editor, freearea_editor,
+               settings_screen, region_layer
 ```
 
 ## Plans

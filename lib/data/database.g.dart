@@ -2822,6 +2822,1564 @@ class SubspacePointsCompanion extends UpdateCompanion<SubspacePoint> {
   }
 }
 
+class $FreeLinesTable extends FreeLines
+    with TableInfo<$FreeLinesTable, FreeLine> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $FreeLinesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _layerIdMeta = const VerificationMeta(
+    'layerId',
+  );
+  @override
+  late final GeneratedColumn<String> layerId = GeneratedColumn<String>(
+    'layer_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES layers (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _labelMeta = const VerificationMeta('label');
+  @override
+  late final GeneratedColumn<String> label = GeneratedColumn<String>(
+    'label',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _offsetMetersMeta = const VerificationMeta(
+    'offsetMeters',
+  );
+  @override
+  late final GeneratedColumn<double> offsetMeters = GeneratedColumn<double>(
+    'offset_meters',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    layerId,
+    label,
+    offsetMeters,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'free_lines';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<FreeLine> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('layer_id')) {
+      context.handle(
+        _layerIdMeta,
+        layerId.isAcceptableOrUnknown(data['layer_id']!, _layerIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_layerIdMeta);
+    }
+    if (data.containsKey('label')) {
+      context.handle(
+        _labelMeta,
+        label.isAcceptableOrUnknown(data['label']!, _labelMeta),
+      );
+    }
+    if (data.containsKey('offset_meters')) {
+      context.handle(
+        _offsetMetersMeta,
+        offsetMeters.isAcceptableOrUnknown(
+          data['offset_meters']!,
+          _offsetMetersMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  FreeLine map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return FreeLine(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      layerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}layer_id'],
+      )!,
+      label: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}label'],
+      ),
+      offsetMeters: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}offset_meters'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $FreeLinesTable createAlias(String alias) {
+    return $FreeLinesTable(attachedDatabase, alias);
+  }
+}
+
+class FreeLine extends DataClass implements Insertable<FreeLine> {
+  final String id;
+  final String layerId;
+  final String? label;
+
+  /// Signed offset in metres (see class doc). 0 = boundary sits on the line.
+  final double offsetMeters;
+  final DateTime createdAt;
+  const FreeLine({
+    required this.id,
+    required this.layerId,
+    this.label,
+    required this.offsetMeters,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['layer_id'] = Variable<String>(layerId);
+    if (!nullToAbsent || label != null) {
+      map['label'] = Variable<String>(label);
+    }
+    map['offset_meters'] = Variable<double>(offsetMeters);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  FreeLinesCompanion toCompanion(bool nullToAbsent) {
+    return FreeLinesCompanion(
+      id: Value(id),
+      layerId: Value(layerId),
+      label: label == null && nullToAbsent
+          ? const Value.absent()
+          : Value(label),
+      offsetMeters: Value(offsetMeters),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory FreeLine.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return FreeLine(
+      id: serializer.fromJson<String>(json['id']),
+      layerId: serializer.fromJson<String>(json['layerId']),
+      label: serializer.fromJson<String?>(json['label']),
+      offsetMeters: serializer.fromJson<double>(json['offsetMeters']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'layerId': serializer.toJson<String>(layerId),
+      'label': serializer.toJson<String?>(label),
+      'offsetMeters': serializer.toJson<double>(offsetMeters),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  FreeLine copyWith({
+    String? id,
+    String? layerId,
+    Value<String?> label = const Value.absent(),
+    double? offsetMeters,
+    DateTime? createdAt,
+  }) => FreeLine(
+    id: id ?? this.id,
+    layerId: layerId ?? this.layerId,
+    label: label.present ? label.value : this.label,
+    offsetMeters: offsetMeters ?? this.offsetMeters,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  FreeLine copyWithCompanion(FreeLinesCompanion data) {
+    return FreeLine(
+      id: data.id.present ? data.id.value : this.id,
+      layerId: data.layerId.present ? data.layerId.value : this.layerId,
+      label: data.label.present ? data.label.value : this.label,
+      offsetMeters: data.offsetMeters.present
+          ? data.offsetMeters.value
+          : this.offsetMeters,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FreeLine(')
+          ..write('id: $id, ')
+          ..write('layerId: $layerId, ')
+          ..write('label: $label, ')
+          ..write('offsetMeters: $offsetMeters, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, layerId, label, offsetMeters, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is FreeLine &&
+          other.id == this.id &&
+          other.layerId == this.layerId &&
+          other.label == this.label &&
+          other.offsetMeters == this.offsetMeters &&
+          other.createdAt == this.createdAt);
+}
+
+class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
+  final Value<String> id;
+  final Value<String> layerId;
+  final Value<String?> label;
+  final Value<double> offsetMeters;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const FreeLinesCompanion({
+    this.id = const Value.absent(),
+    this.layerId = const Value.absent(),
+    this.label = const Value.absent(),
+    this.offsetMeters = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  FreeLinesCompanion.insert({
+    required String id,
+    required String layerId,
+    this.label = const Value.absent(),
+    this.offsetMeters = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       layerId = Value(layerId);
+  static Insertable<FreeLine> custom({
+    Expression<String>? id,
+    Expression<String>? layerId,
+    Expression<String>? label,
+    Expression<double>? offsetMeters,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (layerId != null) 'layer_id': layerId,
+      if (label != null) 'label': label,
+      if (offsetMeters != null) 'offset_meters': offsetMeters,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  FreeLinesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? layerId,
+    Value<String?>? label,
+    Value<double>? offsetMeters,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return FreeLinesCompanion(
+      id: id ?? this.id,
+      layerId: layerId ?? this.layerId,
+      label: label ?? this.label,
+      offsetMeters: offsetMeters ?? this.offsetMeters,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (layerId.present) {
+      map['layer_id'] = Variable<String>(layerId.value);
+    }
+    if (label.present) {
+      map['label'] = Variable<String>(label.value);
+    }
+    if (offsetMeters.present) {
+      map['offset_meters'] = Variable<double>(offsetMeters.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FreeLinesCompanion(')
+          ..write('id: $id, ')
+          ..write('layerId: $layerId, ')
+          ..write('label: $label, ')
+          ..write('offsetMeters: $offsetMeters, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $FreeLinePointsTable extends FreeLinePoints
+    with TableInfo<$FreeLinePointsTable, FreeLinePoint> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $FreeLinePointsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _freeLineIdMeta = const VerificationMeta(
+    'freeLineId',
+  );
+  @override
+  late final GeneratedColumn<String> freeLineId = GeneratedColumn<String>(
+    'free_line_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES free_lines (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _latMeta = const VerificationMeta('lat');
+  @override
+  late final GeneratedColumn<double> lat = GeneratedColumn<double>(
+    'lat',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _lngMeta = const VerificationMeta('lng');
+  @override
+  late final GeneratedColumn<double> lng = GeneratedColumn<double>(
+    'lng',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    freeLineId,
+    lat,
+    lng,
+    sortOrder,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'free_line_points';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<FreeLinePoint> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('free_line_id')) {
+      context.handle(
+        _freeLineIdMeta,
+        freeLineId.isAcceptableOrUnknown(
+          data['free_line_id']!,
+          _freeLineIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_freeLineIdMeta);
+    }
+    if (data.containsKey('lat')) {
+      context.handle(
+        _latMeta,
+        lat.isAcceptableOrUnknown(data['lat']!, _latMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_latMeta);
+    }
+    if (data.containsKey('lng')) {
+      context.handle(
+        _lngMeta,
+        lng.isAcceptableOrUnknown(data['lng']!, _lngMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_lngMeta);
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sortOrderMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  FreeLinePoint map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return FreeLinePoint(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      freeLineId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}free_line_id'],
+      )!,
+      lat: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}lat'],
+      )!,
+      lng: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}lng'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $FreeLinePointsTable createAlias(String alias) {
+    return $FreeLinePointsTable(attachedDatabase, alias);
+  }
+}
+
+class FreeLinePoint extends DataClass implements Insertable<FreeLinePoint> {
+  final String id;
+  final String freeLineId;
+  final double lat;
+  final double lng;
+  final int sortOrder;
+  final DateTime createdAt;
+  const FreeLinePoint({
+    required this.id,
+    required this.freeLineId,
+    required this.lat,
+    required this.lng,
+    required this.sortOrder,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['free_line_id'] = Variable<String>(freeLineId);
+    map['lat'] = Variable<double>(lat);
+    map['lng'] = Variable<double>(lng);
+    map['sort_order'] = Variable<int>(sortOrder);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  FreeLinePointsCompanion toCompanion(bool nullToAbsent) {
+    return FreeLinePointsCompanion(
+      id: Value(id),
+      freeLineId: Value(freeLineId),
+      lat: Value(lat),
+      lng: Value(lng),
+      sortOrder: Value(sortOrder),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory FreeLinePoint.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return FreeLinePoint(
+      id: serializer.fromJson<String>(json['id']),
+      freeLineId: serializer.fromJson<String>(json['freeLineId']),
+      lat: serializer.fromJson<double>(json['lat']),
+      lng: serializer.fromJson<double>(json['lng']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'freeLineId': serializer.toJson<String>(freeLineId),
+      'lat': serializer.toJson<double>(lat),
+      'lng': serializer.toJson<double>(lng),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  FreeLinePoint copyWith({
+    String? id,
+    String? freeLineId,
+    double? lat,
+    double? lng,
+    int? sortOrder,
+    DateTime? createdAt,
+  }) => FreeLinePoint(
+    id: id ?? this.id,
+    freeLineId: freeLineId ?? this.freeLineId,
+    lat: lat ?? this.lat,
+    lng: lng ?? this.lng,
+    sortOrder: sortOrder ?? this.sortOrder,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  FreeLinePoint copyWithCompanion(FreeLinePointsCompanion data) {
+    return FreeLinePoint(
+      id: data.id.present ? data.id.value : this.id,
+      freeLineId: data.freeLineId.present
+          ? data.freeLineId.value
+          : this.freeLineId,
+      lat: data.lat.present ? data.lat.value : this.lat,
+      lng: data.lng.present ? data.lng.value : this.lng,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FreeLinePoint(')
+          ..write('id: $id, ')
+          ..write('freeLineId: $freeLineId, ')
+          ..write('lat: $lat, ')
+          ..write('lng: $lng, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, freeLineId, lat, lng, sortOrder, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is FreeLinePoint &&
+          other.id == this.id &&
+          other.freeLineId == this.freeLineId &&
+          other.lat == this.lat &&
+          other.lng == this.lng &&
+          other.sortOrder == this.sortOrder &&
+          other.createdAt == this.createdAt);
+}
+
+class FreeLinePointsCompanion extends UpdateCompanion<FreeLinePoint> {
+  final Value<String> id;
+  final Value<String> freeLineId;
+  final Value<double> lat;
+  final Value<double> lng;
+  final Value<int> sortOrder;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const FreeLinePointsCompanion({
+    this.id = const Value.absent(),
+    this.freeLineId = const Value.absent(),
+    this.lat = const Value.absent(),
+    this.lng = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  FreeLinePointsCompanion.insert({
+    required String id,
+    required String freeLineId,
+    required double lat,
+    required double lng,
+    required int sortOrder,
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       freeLineId = Value(freeLineId),
+       lat = Value(lat),
+       lng = Value(lng),
+       sortOrder = Value(sortOrder);
+  static Insertable<FreeLinePoint> custom({
+    Expression<String>? id,
+    Expression<String>? freeLineId,
+    Expression<double>? lat,
+    Expression<double>? lng,
+    Expression<int>? sortOrder,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (freeLineId != null) 'free_line_id': freeLineId,
+      if (lat != null) 'lat': lat,
+      if (lng != null) 'lng': lng,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  FreeLinePointsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? freeLineId,
+    Value<double>? lat,
+    Value<double>? lng,
+    Value<int>? sortOrder,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return FreeLinePointsCompanion(
+      id: id ?? this.id,
+      freeLineId: freeLineId ?? this.freeLineId,
+      lat: lat ?? this.lat,
+      lng: lng ?? this.lng,
+      sortOrder: sortOrder ?? this.sortOrder,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (freeLineId.present) {
+      map['free_line_id'] = Variable<String>(freeLineId.value);
+    }
+    if (lat.present) {
+      map['lat'] = Variable<double>(lat.value);
+    }
+    if (lng.present) {
+      map['lng'] = Variable<double>(lng.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FreeLinePointsCompanion(')
+          ..write('id: $id, ')
+          ..write('freeLineId: $freeLineId, ')
+          ..write('lat: $lat, ')
+          ..write('lng: $lng, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $FreeAreasTable extends FreeAreas
+    with TableInfo<$FreeAreasTable, FreeArea> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $FreeAreasTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _layerIdMeta = const VerificationMeta(
+    'layerId',
+  );
+  @override
+  late final GeneratedColumn<String> layerId = GeneratedColumn<String>(
+    'layer_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES layers (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _labelMeta = const VerificationMeta('label');
+  @override
+  late final GeneratedColumn<String> label = GeneratedColumn<String>(
+    'label',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _offsetMetersMeta = const VerificationMeta(
+    'offsetMeters',
+  );
+  @override
+  late final GeneratedColumn<double> offsetMeters = GeneratedColumn<double>(
+    'offset_meters',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    layerId,
+    label,
+    offsetMeters,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'free_areas';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<FreeArea> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('layer_id')) {
+      context.handle(
+        _layerIdMeta,
+        layerId.isAcceptableOrUnknown(data['layer_id']!, _layerIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_layerIdMeta);
+    }
+    if (data.containsKey('label')) {
+      context.handle(
+        _labelMeta,
+        label.isAcceptableOrUnknown(data['label']!, _labelMeta),
+      );
+    }
+    if (data.containsKey('offset_meters')) {
+      context.handle(
+        _offsetMetersMeta,
+        offsetMeters.isAcceptableOrUnknown(
+          data['offset_meters']!,
+          _offsetMetersMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  FreeArea map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return FreeArea(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      layerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}layer_id'],
+      )!,
+      label: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}label'],
+      ),
+      offsetMeters: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}offset_meters'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $FreeAreasTable createAlias(String alias) {
+    return $FreeAreasTable(attachedDatabase, alias);
+  }
+}
+
+class FreeArea extends DataClass implements Insertable<FreeArea> {
+  final String id;
+  final String layerId;
+  final String? label;
+
+  /// Signed inward offset in metres (see class doc). 0 = boundary on the ring.
+  final double offsetMeters;
+  final DateTime createdAt;
+  const FreeArea({
+    required this.id,
+    required this.layerId,
+    this.label,
+    required this.offsetMeters,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['layer_id'] = Variable<String>(layerId);
+    if (!nullToAbsent || label != null) {
+      map['label'] = Variable<String>(label);
+    }
+    map['offset_meters'] = Variable<double>(offsetMeters);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  FreeAreasCompanion toCompanion(bool nullToAbsent) {
+    return FreeAreasCompanion(
+      id: Value(id),
+      layerId: Value(layerId),
+      label: label == null && nullToAbsent
+          ? const Value.absent()
+          : Value(label),
+      offsetMeters: Value(offsetMeters),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory FreeArea.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return FreeArea(
+      id: serializer.fromJson<String>(json['id']),
+      layerId: serializer.fromJson<String>(json['layerId']),
+      label: serializer.fromJson<String?>(json['label']),
+      offsetMeters: serializer.fromJson<double>(json['offsetMeters']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'layerId': serializer.toJson<String>(layerId),
+      'label': serializer.toJson<String?>(label),
+      'offsetMeters': serializer.toJson<double>(offsetMeters),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  FreeArea copyWith({
+    String? id,
+    String? layerId,
+    Value<String?> label = const Value.absent(),
+    double? offsetMeters,
+    DateTime? createdAt,
+  }) => FreeArea(
+    id: id ?? this.id,
+    layerId: layerId ?? this.layerId,
+    label: label.present ? label.value : this.label,
+    offsetMeters: offsetMeters ?? this.offsetMeters,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  FreeArea copyWithCompanion(FreeAreasCompanion data) {
+    return FreeArea(
+      id: data.id.present ? data.id.value : this.id,
+      layerId: data.layerId.present ? data.layerId.value : this.layerId,
+      label: data.label.present ? data.label.value : this.label,
+      offsetMeters: data.offsetMeters.present
+          ? data.offsetMeters.value
+          : this.offsetMeters,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FreeArea(')
+          ..write('id: $id, ')
+          ..write('layerId: $layerId, ')
+          ..write('label: $label, ')
+          ..write('offsetMeters: $offsetMeters, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, layerId, label, offsetMeters, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is FreeArea &&
+          other.id == this.id &&
+          other.layerId == this.layerId &&
+          other.label == this.label &&
+          other.offsetMeters == this.offsetMeters &&
+          other.createdAt == this.createdAt);
+}
+
+class FreeAreasCompanion extends UpdateCompanion<FreeArea> {
+  final Value<String> id;
+  final Value<String> layerId;
+  final Value<String?> label;
+  final Value<double> offsetMeters;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const FreeAreasCompanion({
+    this.id = const Value.absent(),
+    this.layerId = const Value.absent(),
+    this.label = const Value.absent(),
+    this.offsetMeters = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  FreeAreasCompanion.insert({
+    required String id,
+    required String layerId,
+    this.label = const Value.absent(),
+    this.offsetMeters = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       layerId = Value(layerId);
+  static Insertable<FreeArea> custom({
+    Expression<String>? id,
+    Expression<String>? layerId,
+    Expression<String>? label,
+    Expression<double>? offsetMeters,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (layerId != null) 'layer_id': layerId,
+      if (label != null) 'label': label,
+      if (offsetMeters != null) 'offset_meters': offsetMeters,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  FreeAreasCompanion copyWith({
+    Value<String>? id,
+    Value<String>? layerId,
+    Value<String?>? label,
+    Value<double>? offsetMeters,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return FreeAreasCompanion(
+      id: id ?? this.id,
+      layerId: layerId ?? this.layerId,
+      label: label ?? this.label,
+      offsetMeters: offsetMeters ?? this.offsetMeters,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (layerId.present) {
+      map['layer_id'] = Variable<String>(layerId.value);
+    }
+    if (label.present) {
+      map['label'] = Variable<String>(label.value);
+    }
+    if (offsetMeters.present) {
+      map['offset_meters'] = Variable<double>(offsetMeters.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FreeAreasCompanion(')
+          ..write('id: $id, ')
+          ..write('layerId: $layerId, ')
+          ..write('label: $label, ')
+          ..write('offsetMeters: $offsetMeters, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $FreeAreaPointsTable extends FreeAreaPoints
+    with TableInfo<$FreeAreaPointsTable, FreeAreaPoint> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $FreeAreaPointsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _freeAreaIdMeta = const VerificationMeta(
+    'freeAreaId',
+  );
+  @override
+  late final GeneratedColumn<String> freeAreaId = GeneratedColumn<String>(
+    'free_area_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES free_areas (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _latMeta = const VerificationMeta('lat');
+  @override
+  late final GeneratedColumn<double> lat = GeneratedColumn<double>(
+    'lat',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _lngMeta = const VerificationMeta('lng');
+  @override
+  late final GeneratedColumn<double> lng = GeneratedColumn<double>(
+    'lng',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    freeAreaId,
+    lat,
+    lng,
+    sortOrder,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'free_area_points';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<FreeAreaPoint> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('free_area_id')) {
+      context.handle(
+        _freeAreaIdMeta,
+        freeAreaId.isAcceptableOrUnknown(
+          data['free_area_id']!,
+          _freeAreaIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_freeAreaIdMeta);
+    }
+    if (data.containsKey('lat')) {
+      context.handle(
+        _latMeta,
+        lat.isAcceptableOrUnknown(data['lat']!, _latMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_latMeta);
+    }
+    if (data.containsKey('lng')) {
+      context.handle(
+        _lngMeta,
+        lng.isAcceptableOrUnknown(data['lng']!, _lngMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_lngMeta);
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sortOrderMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  FreeAreaPoint map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return FreeAreaPoint(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      freeAreaId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}free_area_id'],
+      )!,
+      lat: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}lat'],
+      )!,
+      lng: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}lng'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $FreeAreaPointsTable createAlias(String alias) {
+    return $FreeAreaPointsTable(attachedDatabase, alias);
+  }
+}
+
+class FreeAreaPoint extends DataClass implements Insertable<FreeAreaPoint> {
+  final String id;
+  final String freeAreaId;
+  final double lat;
+  final double lng;
+  final int sortOrder;
+  final DateTime createdAt;
+  const FreeAreaPoint({
+    required this.id,
+    required this.freeAreaId,
+    required this.lat,
+    required this.lng,
+    required this.sortOrder,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['free_area_id'] = Variable<String>(freeAreaId);
+    map['lat'] = Variable<double>(lat);
+    map['lng'] = Variable<double>(lng);
+    map['sort_order'] = Variable<int>(sortOrder);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  FreeAreaPointsCompanion toCompanion(bool nullToAbsent) {
+    return FreeAreaPointsCompanion(
+      id: Value(id),
+      freeAreaId: Value(freeAreaId),
+      lat: Value(lat),
+      lng: Value(lng),
+      sortOrder: Value(sortOrder),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory FreeAreaPoint.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return FreeAreaPoint(
+      id: serializer.fromJson<String>(json['id']),
+      freeAreaId: serializer.fromJson<String>(json['freeAreaId']),
+      lat: serializer.fromJson<double>(json['lat']),
+      lng: serializer.fromJson<double>(json['lng']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'freeAreaId': serializer.toJson<String>(freeAreaId),
+      'lat': serializer.toJson<double>(lat),
+      'lng': serializer.toJson<double>(lng),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  FreeAreaPoint copyWith({
+    String? id,
+    String? freeAreaId,
+    double? lat,
+    double? lng,
+    int? sortOrder,
+    DateTime? createdAt,
+  }) => FreeAreaPoint(
+    id: id ?? this.id,
+    freeAreaId: freeAreaId ?? this.freeAreaId,
+    lat: lat ?? this.lat,
+    lng: lng ?? this.lng,
+    sortOrder: sortOrder ?? this.sortOrder,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  FreeAreaPoint copyWithCompanion(FreeAreaPointsCompanion data) {
+    return FreeAreaPoint(
+      id: data.id.present ? data.id.value : this.id,
+      freeAreaId: data.freeAreaId.present
+          ? data.freeAreaId.value
+          : this.freeAreaId,
+      lat: data.lat.present ? data.lat.value : this.lat,
+      lng: data.lng.present ? data.lng.value : this.lng,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FreeAreaPoint(')
+          ..write('id: $id, ')
+          ..write('freeAreaId: $freeAreaId, ')
+          ..write('lat: $lat, ')
+          ..write('lng: $lng, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, freeAreaId, lat, lng, sortOrder, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is FreeAreaPoint &&
+          other.id == this.id &&
+          other.freeAreaId == this.freeAreaId &&
+          other.lat == this.lat &&
+          other.lng == this.lng &&
+          other.sortOrder == this.sortOrder &&
+          other.createdAt == this.createdAt);
+}
+
+class FreeAreaPointsCompanion extends UpdateCompanion<FreeAreaPoint> {
+  final Value<String> id;
+  final Value<String> freeAreaId;
+  final Value<double> lat;
+  final Value<double> lng;
+  final Value<int> sortOrder;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const FreeAreaPointsCompanion({
+    this.id = const Value.absent(),
+    this.freeAreaId = const Value.absent(),
+    this.lat = const Value.absent(),
+    this.lng = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  FreeAreaPointsCompanion.insert({
+    required String id,
+    required String freeAreaId,
+    required double lat,
+    required double lng,
+    required int sortOrder,
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       freeAreaId = Value(freeAreaId),
+       lat = Value(lat),
+       lng = Value(lng),
+       sortOrder = Value(sortOrder);
+  static Insertable<FreeAreaPoint> custom({
+    Expression<String>? id,
+    Expression<String>? freeAreaId,
+    Expression<double>? lat,
+    Expression<double>? lng,
+    Expression<int>? sortOrder,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (freeAreaId != null) 'free_area_id': freeAreaId,
+      if (lat != null) 'lat': lat,
+      if (lng != null) 'lng': lng,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  FreeAreaPointsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? freeAreaId,
+    Value<double>? lat,
+    Value<double>? lng,
+    Value<int>? sortOrder,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return FreeAreaPointsCompanion(
+      id: id ?? this.id,
+      freeAreaId: freeAreaId ?? this.freeAreaId,
+      lat: lat ?? this.lat,
+      lng: lng ?? this.lng,
+      sortOrder: sortOrder ?? this.sortOrder,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (freeAreaId.present) {
+      map['free_area_id'] = Variable<String>(freeAreaId.value);
+    }
+    if (lat.present) {
+      map['lat'] = Variable<double>(lat.value);
+    }
+    if (lng.present) {
+      map['lng'] = Variable<double>(lng.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FreeAreaPointsCompanion(')
+          ..write('id: $id, ')
+          ..write('freeAreaId: $freeAreaId, ')
+          ..write('lat: $lat, ')
+          ..write('lng: $lng, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -2831,6 +4389,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $AppSettingsTable appSettings = $AppSettingsTable(this);
   late final $SubspacesTable subspaces = $SubspacesTable(this);
   late final $SubspacePointsTable subspacePoints = $SubspacePointsTable(this);
+  late final $FreeLinesTable freeLines = $FreeLinesTable(this);
+  late final $FreeLinePointsTable freeLinePoints = $FreeLinePointsTable(this);
+  late final $FreeAreasTable freeAreas = $FreeAreasTable(this);
+  late final $FreeAreaPointsTable freeAreaPoints = $FreeAreaPointsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -2842,6 +4404,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     appSettings,
     subspaces,
     subspacePoints,
+    freeLines,
+    freeLinePoints,
+    freeAreas,
+    freeAreaPoints,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -2872,6 +4438,34 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('subspace_points', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'layers',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('free_lines', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'free_lines',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('free_line_points', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'layers',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('free_areas', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'free_areas',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('free_area_points', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -2956,6 +4550,42 @@ final class $$LayersTableReferences
     ).filter((f) => f.layerId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_subspacesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$FreeLinesTable, List<FreeLine>>
+  _freeLinesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.freeLines,
+    aliasName: $_aliasNameGenerator(db.layers.id, db.freeLines.layerId),
+  );
+
+  $$FreeLinesTableProcessedTableManager get freeLinesRefs {
+    final manager = $$FreeLinesTableTableManager(
+      $_db,
+      $_db.freeLines,
+    ).filter((f) => f.layerId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_freeLinesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$FreeAreasTable, List<FreeArea>>
+  _freeAreasRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.freeAreas,
+    aliasName: $_aliasNameGenerator(db.layers.id, db.freeAreas.layerId),
+  );
+
+  $$FreeAreasTableProcessedTableManager get freeAreasRefs {
+    final manager = $$FreeAreasTableTableManager(
+      $_db,
+      $_db.freeAreas,
+    ).filter((f) => f.layerId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_freeAreasRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -3077,6 +4707,56 @@ class $$LayersTableFilterComposer
           }) => $$SubspacesTableFilterComposer(
             $db: $db,
             $table: $db.subspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> freeLinesRefs(
+    Expression<bool> Function($$FreeLinesTableFilterComposer f) f,
+  ) {
+    final $$FreeLinesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.freeLines,
+      getReferencedColumn: (t) => t.layerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FreeLinesTableFilterComposer(
+            $db: $db,
+            $table: $db.freeLines,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> freeAreasRefs(
+    Expression<bool> Function($$FreeAreasTableFilterComposer f) f,
+  ) {
+    final $$FreeAreasTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.freeAreas,
+      getReferencedColumn: (t) => t.layerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FreeAreasTableFilterComposer(
+            $db: $db,
+            $table: $db.freeAreas,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -3246,6 +4926,56 @@ class $$LayersTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> freeLinesRefs<T extends Object>(
+    Expression<T> Function($$FreeLinesTableAnnotationComposer a) f,
+  ) {
+    final $$FreeLinesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.freeLines,
+      getReferencedColumn: (t) => t.layerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FreeLinesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.freeLines,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> freeAreasRefs<T extends Object>(
+    Expression<T> Function($$FreeAreasTableAnnotationComposer a) f,
+  ) {
+    final $$FreeAreasTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.freeAreas,
+      getReferencedColumn: (t) => t.layerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FreeAreasTableAnnotationComposer(
+            $db: $db,
+            $table: $db.freeAreas,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LayersTableTableManager
@@ -3265,6 +4995,8 @@ class $$LayersTableTableManager
             bool circlesRefs,
             bool planesRefs,
             bool subspacesRefs,
+            bool freeLinesRefs,
+            bool freeAreasRefs,
           })
         > {
   $$LayersTableTableManager(_$AppDatabase db, $LayersTable table)
@@ -3333,6 +5065,8 @@ class $$LayersTableTableManager
                 circlesRefs = false,
                 planesRefs = false,
                 subspacesRefs = false,
+                freeLinesRefs = false,
+                freeAreasRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -3340,6 +5074,8 @@ class $$LayersTableTableManager
                     if (circlesRefs) db.circles,
                     if (planesRefs) db.planes,
                     if (subspacesRefs) db.subspaces,
+                    if (freeLinesRefs) db.freeLines,
+                    if (freeAreasRefs) db.freeAreas,
                   ],
                   addJoins: null,
                   getPrefetchedDataCallback: (items) async {
@@ -3395,6 +5131,48 @@ class $$LayersTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (freeLinesRefs)
+                        await $_getPrefetchedData<
+                          Layer,
+                          $LayersTable,
+                          FreeLine
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LayersTableReferences
+                              ._freeLinesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LayersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).freeLinesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.layerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (freeAreasRefs)
+                        await $_getPrefetchedData<
+                          Layer,
+                          $LayersTable,
+                          FreeArea
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LayersTableReferences
+                              ._freeAreasRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LayersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).freeAreasRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.layerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -3419,6 +5197,8 @@ typedef $$LayersTableProcessedTableManager =
         bool circlesRefs,
         bool planesRefs,
         bool subspacesRefs,
+        bool freeLinesRefs,
+        bool freeAreasRefs,
       })
     >;
 typedef $$CirclesTableCreateCompanionBuilder =
@@ -5189,6 +6969,1528 @@ typedef $$SubspacePointsTableProcessedTableManager =
       SubspacePoint,
       PrefetchHooks Function({bool subspaceId})
     >;
+typedef $$FreeLinesTableCreateCompanionBuilder =
+    FreeLinesCompanion Function({
+      required String id,
+      required String layerId,
+      Value<String?> label,
+      Value<double> offsetMeters,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$FreeLinesTableUpdateCompanionBuilder =
+    FreeLinesCompanion Function({
+      Value<String> id,
+      Value<String> layerId,
+      Value<String?> label,
+      Value<double> offsetMeters,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$FreeLinesTableReferences
+    extends BaseReferences<_$AppDatabase, $FreeLinesTable, FreeLine> {
+  $$FreeLinesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $LayersTable _layerIdTable(_$AppDatabase db) => db.layers.createAlias(
+    $_aliasNameGenerator(db.freeLines.layerId, db.layers.id),
+  );
+
+  $$LayersTableProcessedTableManager get layerId {
+    final $_column = $_itemColumn<String>('layer_id')!;
+
+    final manager = $$LayersTableTableManager(
+      $_db,
+      $_db.layers,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_layerIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$FreeLinePointsTable, List<FreeLinePoint>>
+  _freeLinePointsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.freeLinePoints,
+    aliasName: $_aliasNameGenerator(
+      db.freeLines.id,
+      db.freeLinePoints.freeLineId,
+    ),
+  );
+
+  $$FreeLinePointsTableProcessedTableManager get freeLinePointsRefs {
+    final manager = $$FreeLinePointsTableTableManager(
+      $_db,
+      $_db.freeLinePoints,
+    ).filter((f) => f.freeLineId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_freeLinePointsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$FreeLinesTableFilterComposer
+    extends Composer<_$AppDatabase, $FreeLinesTable> {
+  $$FreeLinesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get offsetMeters => $composableBuilder(
+    column: $table.offsetMeters,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$LayersTableFilterComposer get layerId {
+    final $$LayersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.layerId,
+      referencedTable: $db.layers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LayersTableFilterComposer(
+            $db: $db,
+            $table: $db.layers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> freeLinePointsRefs(
+    Expression<bool> Function($$FreeLinePointsTableFilterComposer f) f,
+  ) {
+    final $$FreeLinePointsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.freeLinePoints,
+      getReferencedColumn: (t) => t.freeLineId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FreeLinePointsTableFilterComposer(
+            $db: $db,
+            $table: $db.freeLinePoints,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$FreeLinesTableOrderingComposer
+    extends Composer<_$AppDatabase, $FreeLinesTable> {
+  $$FreeLinesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get offsetMeters => $composableBuilder(
+    column: $table.offsetMeters,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$LayersTableOrderingComposer get layerId {
+    final $$LayersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.layerId,
+      referencedTable: $db.layers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LayersTableOrderingComposer(
+            $db: $db,
+            $table: $db.layers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$FreeLinesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $FreeLinesTable> {
+  $$FreeLinesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get label =>
+      $composableBuilder(column: $table.label, builder: (column) => column);
+
+  GeneratedColumn<double> get offsetMeters => $composableBuilder(
+    column: $table.offsetMeters,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$LayersTableAnnotationComposer get layerId {
+    final $$LayersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.layerId,
+      referencedTable: $db.layers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LayersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.layers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> freeLinePointsRefs<T extends Object>(
+    Expression<T> Function($$FreeLinePointsTableAnnotationComposer a) f,
+  ) {
+    final $$FreeLinePointsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.freeLinePoints,
+      getReferencedColumn: (t) => t.freeLineId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FreeLinePointsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.freeLinePoints,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$FreeLinesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $FreeLinesTable,
+          FreeLine,
+          $$FreeLinesTableFilterComposer,
+          $$FreeLinesTableOrderingComposer,
+          $$FreeLinesTableAnnotationComposer,
+          $$FreeLinesTableCreateCompanionBuilder,
+          $$FreeLinesTableUpdateCompanionBuilder,
+          (FreeLine, $$FreeLinesTableReferences),
+          FreeLine,
+          PrefetchHooks Function({bool layerId, bool freeLinePointsRefs})
+        > {
+  $$FreeLinesTableTableManager(_$AppDatabase db, $FreeLinesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$FreeLinesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$FreeLinesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$FreeLinesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> layerId = const Value.absent(),
+                Value<String?> label = const Value.absent(),
+                Value<double> offsetMeters = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => FreeLinesCompanion(
+                id: id,
+                layerId: layerId,
+                label: label,
+                offsetMeters: offsetMeters,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String layerId,
+                Value<String?> label = const Value.absent(),
+                Value<double> offsetMeters = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => FreeLinesCompanion.insert(
+                id: id,
+                layerId: layerId,
+                label: label,
+                offsetMeters: offsetMeters,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$FreeLinesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({layerId = false, freeLinePointsRefs = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (freeLinePointsRefs) db.freeLinePoints,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (layerId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.layerId,
+                                    referencedTable: $$FreeLinesTableReferences
+                                        ._layerIdTable(db),
+                                    referencedColumn: $$FreeLinesTableReferences
+                                        ._layerIdTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (freeLinePointsRefs)
+                        await $_getPrefetchedData<
+                          FreeLine,
+                          $FreeLinesTable,
+                          FreeLinePoint
+                        >(
+                          currentTable: table,
+                          referencedTable: $$FreeLinesTableReferences
+                              ._freeLinePointsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$FreeLinesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).freeLinePointsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.freeLineId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$FreeLinesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $FreeLinesTable,
+      FreeLine,
+      $$FreeLinesTableFilterComposer,
+      $$FreeLinesTableOrderingComposer,
+      $$FreeLinesTableAnnotationComposer,
+      $$FreeLinesTableCreateCompanionBuilder,
+      $$FreeLinesTableUpdateCompanionBuilder,
+      (FreeLine, $$FreeLinesTableReferences),
+      FreeLine,
+      PrefetchHooks Function({bool layerId, bool freeLinePointsRefs})
+    >;
+typedef $$FreeLinePointsTableCreateCompanionBuilder =
+    FreeLinePointsCompanion Function({
+      required String id,
+      required String freeLineId,
+      required double lat,
+      required double lng,
+      required int sortOrder,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$FreeLinePointsTableUpdateCompanionBuilder =
+    FreeLinePointsCompanion Function({
+      Value<String> id,
+      Value<String> freeLineId,
+      Value<double> lat,
+      Value<double> lng,
+      Value<int> sortOrder,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$FreeLinePointsTableReferences
+    extends BaseReferences<_$AppDatabase, $FreeLinePointsTable, FreeLinePoint> {
+  $$FreeLinePointsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $FreeLinesTable _freeLineIdTable(_$AppDatabase db) =>
+      db.freeLines.createAlias(
+        $_aliasNameGenerator(db.freeLinePoints.freeLineId, db.freeLines.id),
+      );
+
+  $$FreeLinesTableProcessedTableManager get freeLineId {
+    final $_column = $_itemColumn<String>('free_line_id')!;
+
+    final manager = $$FreeLinesTableTableManager(
+      $_db,
+      $_db.freeLines,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_freeLineIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$FreeLinePointsTableFilterComposer
+    extends Composer<_$AppDatabase, $FreeLinePointsTable> {
+  $$FreeLinePointsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get lat => $composableBuilder(
+    column: $table.lat,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get lng => $composableBuilder(
+    column: $table.lng,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$FreeLinesTableFilterComposer get freeLineId {
+    final $$FreeLinesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.freeLineId,
+      referencedTable: $db.freeLines,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FreeLinesTableFilterComposer(
+            $db: $db,
+            $table: $db.freeLines,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$FreeLinePointsTableOrderingComposer
+    extends Composer<_$AppDatabase, $FreeLinePointsTable> {
+  $$FreeLinePointsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get lat => $composableBuilder(
+    column: $table.lat,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get lng => $composableBuilder(
+    column: $table.lng,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$FreeLinesTableOrderingComposer get freeLineId {
+    final $$FreeLinesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.freeLineId,
+      referencedTable: $db.freeLines,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FreeLinesTableOrderingComposer(
+            $db: $db,
+            $table: $db.freeLines,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$FreeLinePointsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $FreeLinePointsTable> {
+  $$FreeLinePointsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<double> get lat =>
+      $composableBuilder(column: $table.lat, builder: (column) => column);
+
+  GeneratedColumn<double> get lng =>
+      $composableBuilder(column: $table.lng, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$FreeLinesTableAnnotationComposer get freeLineId {
+    final $$FreeLinesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.freeLineId,
+      referencedTable: $db.freeLines,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FreeLinesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.freeLines,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$FreeLinePointsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $FreeLinePointsTable,
+          FreeLinePoint,
+          $$FreeLinePointsTableFilterComposer,
+          $$FreeLinePointsTableOrderingComposer,
+          $$FreeLinePointsTableAnnotationComposer,
+          $$FreeLinePointsTableCreateCompanionBuilder,
+          $$FreeLinePointsTableUpdateCompanionBuilder,
+          (FreeLinePoint, $$FreeLinePointsTableReferences),
+          FreeLinePoint,
+          PrefetchHooks Function({bool freeLineId})
+        > {
+  $$FreeLinePointsTableTableManager(
+    _$AppDatabase db,
+    $FreeLinePointsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$FreeLinePointsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$FreeLinePointsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$FreeLinePointsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> freeLineId = const Value.absent(),
+                Value<double> lat = const Value.absent(),
+                Value<double> lng = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => FreeLinePointsCompanion(
+                id: id,
+                freeLineId: freeLineId,
+                lat: lat,
+                lng: lng,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String freeLineId,
+                required double lat,
+                required double lng,
+                required int sortOrder,
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => FreeLinePointsCompanion.insert(
+                id: id,
+                freeLineId: freeLineId,
+                lat: lat,
+                lng: lng,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$FreeLinePointsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({freeLineId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (freeLineId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.freeLineId,
+                                referencedTable: $$FreeLinePointsTableReferences
+                                    ._freeLineIdTable(db),
+                                referencedColumn:
+                                    $$FreeLinePointsTableReferences
+                                        ._freeLineIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$FreeLinePointsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $FreeLinePointsTable,
+      FreeLinePoint,
+      $$FreeLinePointsTableFilterComposer,
+      $$FreeLinePointsTableOrderingComposer,
+      $$FreeLinePointsTableAnnotationComposer,
+      $$FreeLinePointsTableCreateCompanionBuilder,
+      $$FreeLinePointsTableUpdateCompanionBuilder,
+      (FreeLinePoint, $$FreeLinePointsTableReferences),
+      FreeLinePoint,
+      PrefetchHooks Function({bool freeLineId})
+    >;
+typedef $$FreeAreasTableCreateCompanionBuilder =
+    FreeAreasCompanion Function({
+      required String id,
+      required String layerId,
+      Value<String?> label,
+      Value<double> offsetMeters,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$FreeAreasTableUpdateCompanionBuilder =
+    FreeAreasCompanion Function({
+      Value<String> id,
+      Value<String> layerId,
+      Value<String?> label,
+      Value<double> offsetMeters,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$FreeAreasTableReferences
+    extends BaseReferences<_$AppDatabase, $FreeAreasTable, FreeArea> {
+  $$FreeAreasTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $LayersTable _layerIdTable(_$AppDatabase db) => db.layers.createAlias(
+    $_aliasNameGenerator(db.freeAreas.layerId, db.layers.id),
+  );
+
+  $$LayersTableProcessedTableManager get layerId {
+    final $_column = $_itemColumn<String>('layer_id')!;
+
+    final manager = $$LayersTableTableManager(
+      $_db,
+      $_db.layers,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_layerIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$FreeAreaPointsTable, List<FreeAreaPoint>>
+  _freeAreaPointsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.freeAreaPoints,
+    aliasName: $_aliasNameGenerator(
+      db.freeAreas.id,
+      db.freeAreaPoints.freeAreaId,
+    ),
+  );
+
+  $$FreeAreaPointsTableProcessedTableManager get freeAreaPointsRefs {
+    final manager = $$FreeAreaPointsTableTableManager(
+      $_db,
+      $_db.freeAreaPoints,
+    ).filter((f) => f.freeAreaId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_freeAreaPointsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$FreeAreasTableFilterComposer
+    extends Composer<_$AppDatabase, $FreeAreasTable> {
+  $$FreeAreasTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get offsetMeters => $composableBuilder(
+    column: $table.offsetMeters,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$LayersTableFilterComposer get layerId {
+    final $$LayersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.layerId,
+      referencedTable: $db.layers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LayersTableFilterComposer(
+            $db: $db,
+            $table: $db.layers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> freeAreaPointsRefs(
+    Expression<bool> Function($$FreeAreaPointsTableFilterComposer f) f,
+  ) {
+    final $$FreeAreaPointsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.freeAreaPoints,
+      getReferencedColumn: (t) => t.freeAreaId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FreeAreaPointsTableFilterComposer(
+            $db: $db,
+            $table: $db.freeAreaPoints,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$FreeAreasTableOrderingComposer
+    extends Composer<_$AppDatabase, $FreeAreasTable> {
+  $$FreeAreasTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get offsetMeters => $composableBuilder(
+    column: $table.offsetMeters,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$LayersTableOrderingComposer get layerId {
+    final $$LayersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.layerId,
+      referencedTable: $db.layers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LayersTableOrderingComposer(
+            $db: $db,
+            $table: $db.layers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$FreeAreasTableAnnotationComposer
+    extends Composer<_$AppDatabase, $FreeAreasTable> {
+  $$FreeAreasTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get label =>
+      $composableBuilder(column: $table.label, builder: (column) => column);
+
+  GeneratedColumn<double> get offsetMeters => $composableBuilder(
+    column: $table.offsetMeters,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$LayersTableAnnotationComposer get layerId {
+    final $$LayersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.layerId,
+      referencedTable: $db.layers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LayersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.layers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> freeAreaPointsRefs<T extends Object>(
+    Expression<T> Function($$FreeAreaPointsTableAnnotationComposer a) f,
+  ) {
+    final $$FreeAreaPointsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.freeAreaPoints,
+      getReferencedColumn: (t) => t.freeAreaId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FreeAreaPointsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.freeAreaPoints,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$FreeAreasTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $FreeAreasTable,
+          FreeArea,
+          $$FreeAreasTableFilterComposer,
+          $$FreeAreasTableOrderingComposer,
+          $$FreeAreasTableAnnotationComposer,
+          $$FreeAreasTableCreateCompanionBuilder,
+          $$FreeAreasTableUpdateCompanionBuilder,
+          (FreeArea, $$FreeAreasTableReferences),
+          FreeArea,
+          PrefetchHooks Function({bool layerId, bool freeAreaPointsRefs})
+        > {
+  $$FreeAreasTableTableManager(_$AppDatabase db, $FreeAreasTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$FreeAreasTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$FreeAreasTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$FreeAreasTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> layerId = const Value.absent(),
+                Value<String?> label = const Value.absent(),
+                Value<double> offsetMeters = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => FreeAreasCompanion(
+                id: id,
+                layerId: layerId,
+                label: label,
+                offsetMeters: offsetMeters,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String layerId,
+                Value<String?> label = const Value.absent(),
+                Value<double> offsetMeters = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => FreeAreasCompanion.insert(
+                id: id,
+                layerId: layerId,
+                label: label,
+                offsetMeters: offsetMeters,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$FreeAreasTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({layerId = false, freeAreaPointsRefs = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (freeAreaPointsRefs) db.freeAreaPoints,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (layerId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.layerId,
+                                    referencedTable: $$FreeAreasTableReferences
+                                        ._layerIdTable(db),
+                                    referencedColumn: $$FreeAreasTableReferences
+                                        ._layerIdTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (freeAreaPointsRefs)
+                        await $_getPrefetchedData<
+                          FreeArea,
+                          $FreeAreasTable,
+                          FreeAreaPoint
+                        >(
+                          currentTable: table,
+                          referencedTable: $$FreeAreasTableReferences
+                              ._freeAreaPointsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$FreeAreasTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).freeAreaPointsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.freeAreaId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$FreeAreasTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $FreeAreasTable,
+      FreeArea,
+      $$FreeAreasTableFilterComposer,
+      $$FreeAreasTableOrderingComposer,
+      $$FreeAreasTableAnnotationComposer,
+      $$FreeAreasTableCreateCompanionBuilder,
+      $$FreeAreasTableUpdateCompanionBuilder,
+      (FreeArea, $$FreeAreasTableReferences),
+      FreeArea,
+      PrefetchHooks Function({bool layerId, bool freeAreaPointsRefs})
+    >;
+typedef $$FreeAreaPointsTableCreateCompanionBuilder =
+    FreeAreaPointsCompanion Function({
+      required String id,
+      required String freeAreaId,
+      required double lat,
+      required double lng,
+      required int sortOrder,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$FreeAreaPointsTableUpdateCompanionBuilder =
+    FreeAreaPointsCompanion Function({
+      Value<String> id,
+      Value<String> freeAreaId,
+      Value<double> lat,
+      Value<double> lng,
+      Value<int> sortOrder,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$FreeAreaPointsTableReferences
+    extends BaseReferences<_$AppDatabase, $FreeAreaPointsTable, FreeAreaPoint> {
+  $$FreeAreaPointsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $FreeAreasTable _freeAreaIdTable(_$AppDatabase db) =>
+      db.freeAreas.createAlias(
+        $_aliasNameGenerator(db.freeAreaPoints.freeAreaId, db.freeAreas.id),
+      );
+
+  $$FreeAreasTableProcessedTableManager get freeAreaId {
+    final $_column = $_itemColumn<String>('free_area_id')!;
+
+    final manager = $$FreeAreasTableTableManager(
+      $_db,
+      $_db.freeAreas,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_freeAreaIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$FreeAreaPointsTableFilterComposer
+    extends Composer<_$AppDatabase, $FreeAreaPointsTable> {
+  $$FreeAreaPointsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get lat => $composableBuilder(
+    column: $table.lat,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get lng => $composableBuilder(
+    column: $table.lng,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$FreeAreasTableFilterComposer get freeAreaId {
+    final $$FreeAreasTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.freeAreaId,
+      referencedTable: $db.freeAreas,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FreeAreasTableFilterComposer(
+            $db: $db,
+            $table: $db.freeAreas,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$FreeAreaPointsTableOrderingComposer
+    extends Composer<_$AppDatabase, $FreeAreaPointsTable> {
+  $$FreeAreaPointsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get lat => $composableBuilder(
+    column: $table.lat,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get lng => $composableBuilder(
+    column: $table.lng,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$FreeAreasTableOrderingComposer get freeAreaId {
+    final $$FreeAreasTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.freeAreaId,
+      referencedTable: $db.freeAreas,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FreeAreasTableOrderingComposer(
+            $db: $db,
+            $table: $db.freeAreas,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$FreeAreaPointsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $FreeAreaPointsTable> {
+  $$FreeAreaPointsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<double> get lat =>
+      $composableBuilder(column: $table.lat, builder: (column) => column);
+
+  GeneratedColumn<double> get lng =>
+      $composableBuilder(column: $table.lng, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$FreeAreasTableAnnotationComposer get freeAreaId {
+    final $$FreeAreasTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.freeAreaId,
+      referencedTable: $db.freeAreas,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FreeAreasTableAnnotationComposer(
+            $db: $db,
+            $table: $db.freeAreas,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$FreeAreaPointsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $FreeAreaPointsTable,
+          FreeAreaPoint,
+          $$FreeAreaPointsTableFilterComposer,
+          $$FreeAreaPointsTableOrderingComposer,
+          $$FreeAreaPointsTableAnnotationComposer,
+          $$FreeAreaPointsTableCreateCompanionBuilder,
+          $$FreeAreaPointsTableUpdateCompanionBuilder,
+          (FreeAreaPoint, $$FreeAreaPointsTableReferences),
+          FreeAreaPoint,
+          PrefetchHooks Function({bool freeAreaId})
+        > {
+  $$FreeAreaPointsTableTableManager(
+    _$AppDatabase db,
+    $FreeAreaPointsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$FreeAreaPointsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$FreeAreaPointsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$FreeAreaPointsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> freeAreaId = const Value.absent(),
+                Value<double> lat = const Value.absent(),
+                Value<double> lng = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => FreeAreaPointsCompanion(
+                id: id,
+                freeAreaId: freeAreaId,
+                lat: lat,
+                lng: lng,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String freeAreaId,
+                required double lat,
+                required double lng,
+                required int sortOrder,
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => FreeAreaPointsCompanion.insert(
+                id: id,
+                freeAreaId: freeAreaId,
+                lat: lat,
+                lng: lng,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$FreeAreaPointsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({freeAreaId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (freeAreaId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.freeAreaId,
+                                referencedTable: $$FreeAreaPointsTableReferences
+                                    ._freeAreaIdTable(db),
+                                referencedColumn:
+                                    $$FreeAreaPointsTableReferences
+                                        ._freeAreaIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$FreeAreaPointsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $FreeAreaPointsTable,
+      FreeAreaPoint,
+      $$FreeAreaPointsTableFilterComposer,
+      $$FreeAreaPointsTableOrderingComposer,
+      $$FreeAreaPointsTableAnnotationComposer,
+      $$FreeAreaPointsTableCreateCompanionBuilder,
+      $$FreeAreaPointsTableUpdateCompanionBuilder,
+      (FreeAreaPoint, $$FreeAreaPointsTableReferences),
+      FreeAreaPoint,
+      PrefetchHooks Function({bool freeAreaId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -5205,4 +8507,12 @@ class $AppDatabaseManager {
       $$SubspacesTableTableManager(_db, _db.subspaces);
   $$SubspacePointsTableTableManager get subspacePoints =>
       $$SubspacePointsTableTableManager(_db, _db.subspacePoints);
+  $$FreeLinesTableTableManager get freeLines =>
+      $$FreeLinesTableTableManager(_db, _db.freeLines);
+  $$FreeLinePointsTableTableManager get freeLinePoints =>
+      $$FreeLinePointsTableTableManager(_db, _db.freeLinePoints);
+  $$FreeAreasTableTableManager get freeAreas =>
+      $$FreeAreasTableTableManager(_db, _db.freeAreas);
+  $$FreeAreaPointsTableTableManager get freeAreaPoints =>
+      $$FreeAreaPointsTableTableManager(_db, _db.freeAreaPoints);
 }

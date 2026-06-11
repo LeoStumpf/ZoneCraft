@@ -39,6 +39,26 @@ final subspacePointsProvider = StreamProvider<List<SubspacePoint>>((ref) {
   return ref.watch(repositoryProvider).watchAllSubspacePoints();
 });
 
+/// Reactive list of every freehand line across all layers.
+final freeLinesProvider = StreamProvider<List<FreeLine>>((ref) {
+  return ref.watch(repositoryProvider).watchAllFreeLines();
+});
+
+/// Reactive list of every freehand-line point (across all lines), ordered.
+final freeLinePointsProvider = StreamProvider<List<FreeLinePoint>>((ref) {
+  return ref.watch(repositoryProvider).watchAllFreeLinePoints();
+});
+
+/// Reactive list of every freehand area across all layers.
+final freeAreasProvider = StreamProvider<List<FreeArea>>((ref) {
+  return ref.watch(repositoryProvider).watchAllFreeAreas();
+});
+
+/// Reactive list of every freehand-area point (across all areas), ordered.
+final freeAreaPointsProvider = StreamProvider<List<FreeAreaPoint>>((ref) {
+  return ref.watch(repositoryProvider).watchAllFreeAreaPoints();
+});
+
 /// App-wide settings (currently the global uncertainty radius).
 final settingsProvider = StreamProvider<AppSetting>((ref) {
   return ref.watch(repositoryProvider).watchSettings();
@@ -123,6 +143,58 @@ class SubspacePlacementNotifier extends Notifier<String?> {
 final subspacePlacementProvider =
     NotifierProvider<SubspacePlacementNotifier, String?>(
         SubspacePlacementNotifier.new);
+
+/// Id of the currently selected freehand line, or null. Mutually exclusive with
+/// the other object selections (one object of one type is selected at a time).
+class SelectedFreeLineNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void select(String? id) => state = id;
+}
+
+final selectedFreeLineProvider =
+    NotifierProvider<SelectedFreeLineNotifier, String?>(
+        SelectedFreeLineNotifier.new);
+
+/// While a freehand line is selected, the id of the point the next map tap
+/// relocates, or null for "no placement armed".
+class FreeLinePlacementNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void arm(String? pointId) => state = pointId;
+}
+
+final freeLinePlacementProvider =
+    NotifierProvider<FreeLinePlacementNotifier, String?>(
+        FreeLinePlacementNotifier.new);
+
+/// Id of the currently selected freehand area, or null. Mutually exclusive with
+/// the other object selections.
+class SelectedFreeAreaNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void select(String? id) => state = id;
+}
+
+final selectedFreeAreaProvider =
+    NotifierProvider<SelectedFreeAreaNotifier, String?>(
+        SelectedFreeAreaNotifier.new);
+
+/// While a freehand area is selected, the id of the point the next map tap
+/// relocates, or null for "no placement armed".
+class FreeAreaPlacementNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void arm(String? pointId) => state = pointId;
+}
+
+final freeAreaPlacementProvider =
+    NotifierProvider<FreeAreaPlacementNotifier, String?>(
+        FreeAreaPlacementNotifier.new);
 
 /// Resolves the effective active layer id given the current layer list,
 /// falling back to the top-most layer when nothing is explicitly selected.

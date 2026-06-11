@@ -12,6 +12,8 @@ import '../data/database.dart';
 import '../data/overpass.dart';
 import '../state/providers.dart';
 import 'circle_editor.dart';
+import 'freearea_editor.dart';
+import 'freeline_editor.dart';
 import 'layers_panel.dart';
 import 'plane_editor.dart';
 import 'region_layer.dart';
@@ -424,12 +426,83 @@ class _MapScreenState extends ConsumerState<MapScreen>
     return null;
   }
 
+  /// A freehand line in [layerId] whose drawn polyline passes within a tap
+  /// tolerance of [latlng], or null. Hit testing is done in screen space so the
+  /// tolerance is a constant number of pixels at any zoom.
+  FreeLine? _freeLineInLayer(
+    LatLng latlng,
+    String layerId,
+    List<FreeLine> lines,
+    List<FreeLinePoint> points,
+  ) {
+    const tol = 24.0;
+    final cam = _mapController.camera;
+    final tap = cam.latLngToScreenOffset(latlng);
+    for (final l in lines.where((l) => l.layerId == layerId)) {
+      final pts = points.where((p) => p.freeLineId == l.id).toList();
+      for (var i = 0; i < pts.length - 1; i++) {
+        final a = cam.latLngToScreenOffset(LatLng(pts[i].lat, pts[i].lng));
+        final b =
+            cam.latLngToScreenOffset(LatLng(pts[i + 1].lat, pts[i + 1].lng));
+        if (_distToSegment(tap, a, b) <= tol) return l;
+      }
+    }
+    return null;
+  }
+
+  /// A freehand area in [layerId] whose drawn ring contains [latlng], or null.
+  /// Point-in-polygon is evaluated in screen space.
+  FreeArea? _freeAreaInLayer(
+    LatLng latlng,
+    String layerId,
+    List<FreeArea> areas,
+    List<FreeAreaPoint> points,
+  ) {
+    final cam = _mapController.camera;
+    final tap = cam.latLngToScreenOffset(latlng);
+    for (final a in areas.where((a) => a.layerId == layerId)) {
+      final pts = points.where((p) => p.freeAreaId == a.id).toList();
+      if (pts.length < 3) continue;
+      final ring = <Offset>[
+        for (final p in pts) cam.latLngToScreenOffset(LatLng(p.lat, p.lng)),
+      ];
+      if (_pointInPolygon(tap, ring)) return a;
+    }
+    return null;
+  }
+
+  static double _distToSegment(Offset p, Offset a, Offset b) {
+    final ab = b - a;
+    final lenSq = ab.dx * ab.dx + ab.dy * ab.dy;
+    if (lenSq == 0) return (p - a).distance;
+    var t = ((p.dx - a.dx) * ab.dx + (p.dy - a.dy) * ab.dy) / lenSq;
+    t = t.clamp(0.0, 1.0);
+    return (p - (a + ab * t)).distance;
+  }
+
+  static bool _pointInPolygon(Offset p, List<Offset> poly) {
+    var inside = false;
+    for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      final pi = poly[i], pj = poly[j];
+      if (((pi.dy > p.dy) != (pj.dy > p.dy)) &&
+          (p.dx <
+              (pj.dx - pi.dx) * (p.dy - pi.dy) / (pj.dy - pi.dy) + pi.dx)) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  }
+
   void _clearSelection() {
     ref.read(selectedCircleProvider.notifier).select(null);
     ref.read(selectedPlaneProvider.notifier).select(null);
     ref.read(planePlacementProvider.notifier).arm(null);
     ref.read(selectedSubspaceProvider.notifier).select(null);
     ref.read(subspacePlacementProvider.notifier).arm(null);
+    ref.read(selectedFreeLineProvider.notifier).select(null);
+    ref.read(freeLinePlacementProvider.notifier).arm(null);
+    ref.read(selectedFreeAreaProvider.notifier).select(null);
+    ref.read(freeAreaPlacementProvider.notifier).arm(null);
   }
 
   void _selectCircle(String id) {
@@ -445,6 +518,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
   void _selectSubspace(String id) {
     _clearSelection();
     ref.read(selectedSubspaceProvider.notifier).select(id);
+  }
+
+  void _selectFreeLine(String id) {
+    _clearSelection();
+    ref.read(selectedFreeLineProvider.notifier).select(id);
+  }
+
+  void _selectFreeArea(String id) {
+    _clearSelection();
+    ref.read(selectedFreeAreaProvider.notifier).select(id);
   }
 
   Future<void> _addCircleAt(LatLng latlng, Layer layer) async {
@@ -515,6 +598,62 @@ class _MapScreenState extends ConsumerState<MapScreen>
     _selectSubspace(id);
   }
 
+  /// Adds to a freehand-line layer: a point to the layer's existing line, or a
+  /// new line seeded with two points across the map centre (so it immediately
+  /// divides the view). Selects the line either way.
+  Future<void> _addFreeLineAt(
+    LatLng center,
+    Layer layer,
+    List<FreeLine> lines,
+  ) async {
+    final repo = ref.read(repositoryProvider);
+    final dist = _defaultRadius();
+    final existing = lines.where((l) => l.layerId == layer.id).firstOrNull;
+    if (existing != null) {
+      final p = _hitTest.offset(center, dist, 45); // north-east of centre
+      await repo.addFreeLinePoint(
+          freeLineId: existing.id, lat: p.latitude, lng: p.longitude);
+      _selectFreeLine(existing.id);
+      return;
+    }
+    final id = await repo.createFreeLine(layerId: layer.id);
+    final w = _hitTest.offset(center, dist, -90); // west
+    final e = _hitTest.offset(center, dist, 90); // east
+    await repo.addFreeLinePoint(
+        freeLineId: id, lat: w.latitude, lng: w.longitude);
+    await repo.addFreeLinePoint(
+        freeLineId: id, lat: e.latitude, lng: e.longitude);
+    _selectFreeLine(id);
+  }
+
+  /// Adds to a freehand-area layer: a point to the layer's existing area, or a
+  /// new area seeded with a triangle of points around the map centre. Selects
+  /// the area either way.
+  Future<void> _addFreeAreaAt(
+    LatLng center,
+    Layer layer,
+    List<FreeArea> areas,
+  ) async {
+    final repo = ref.read(repositoryProvider);
+    final dist = _defaultRadius();
+    final existing = areas.where((a) => a.layerId == layer.id).firstOrNull;
+    if (existing != null) {
+      final p = _hitTest.offset(center, dist, 0); // north of centre
+      await repo.addFreeAreaPoint(
+          freeAreaId: existing.id, lat: p.latitude, lng: p.longitude);
+      _selectFreeArea(existing.id);
+      return;
+    }
+    final id = await repo.createFreeArea(layerId: layer.id);
+    // Bearings must be within -180..180 (Distance.offset constraint).
+    for (final bearing in [0.0, 120.0, -120.0]) {
+      final p = _hitTest.offset(center, dist, bearing);
+      await repo.addFreeAreaPoint(
+          freeAreaId: id, lat: p.latitude, lng: p.longitude);
+    }
+    _selectFreeArea(id);
+  }
+
   Future<void> _handleTap(
     LatLng latlng,
     List<Layer> layers,
@@ -522,7 +661,37 @@ class _MapScreenState extends ConsumerState<MapScreen>
     List<Plane> planes,
     List<Subspace> subspaces,
     List<SubspacePoint> subspacePoints,
+    List<FreeLine> freeLines,
+    List<FreeLinePoint> freeLinePoints,
+    List<FreeArea> freeAreas,
+    List<FreeAreaPoint> freeAreaPoints,
   ) async {
+    // Placement mode: relocate the armed freehand-line point.
+    final armedLine = ref.read(freeLinePlacementProvider);
+    final selLineId = ref.read(selectedFreeLineProvider);
+    if (armedLine != null && selLineId != null) {
+      await ref.read(repositoryProvider).updateFreeLinePoint(
+            armedLine,
+            lat: latlng.latitude,
+            lng: latlng.longitude,
+          );
+      ref.read(freeLinePlacementProvider.notifier).arm(null);
+      return;
+    }
+
+    // Placement mode: relocate the armed freehand-area point.
+    final armedArea = ref.read(freeAreaPlacementProvider);
+    final selAreaId = ref.read(selectedFreeAreaProvider);
+    if (armedArea != null && selAreaId != null) {
+      await ref.read(repositoryProvider).updateFreeAreaPoint(
+            armedArea,
+            lat: latlng.latitude,
+            lng: latlng.longitude,
+          );
+      ref.read(freeAreaPlacementProvider.notifier).arm(null);
+      return;
+    }
+
     // Placement mode: relocate the armed subspace point.
     final armedSub = ref.read(subspacePlacementProvider);
     final selSubId = ref.read(selectedSubspaceProvider);
@@ -580,6 +749,20 @@ class _MapScreenState extends ConsumerState<MapScreen>
           _selectSubspace(hit.id);
           return;
         }
+      } else if (layer.type == 'freeline') {
+        final hit =
+            _freeLineInLayer(latlng, layer.id, freeLines, freeLinePoints);
+        if (hit != null) {
+          _selectFreeLine(hit.id);
+          return;
+        }
+      } else if (layer.type == 'freearea') {
+        final hit =
+            _freeAreaInLayer(latlng, layer.id, freeAreas, freeAreaPoints);
+        if (hit != null) {
+          _selectFreeArea(hit.id);
+          return;
+        }
       }
     }
 
@@ -587,7 +770,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     // the Add button — tapping empty map never adds one.
     if (ref.read(selectedCircleProvider) != null ||
         ref.read(selectedPlaneProvider) != null ||
-        ref.read(selectedSubspaceProvider) != null) {
+        ref.read(selectedSubspaceProvider) != null ||
+        ref.read(selectedFreeLineProvider) != null ||
+        ref.read(selectedFreeAreaProvider) != null) {
       _clearSelection();
     }
   }
@@ -606,6 +791,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final subspacePoints =
         ref.watch(subspacePointsProvider).asData?.value ??
         const <SubspacePoint>[];
+    final freeLines =
+        ref.watch(freeLinesProvider).asData?.value ?? const <FreeLine>[];
+    final freeLinePoints =
+        ref.watch(freeLinePointsProvider).asData?.value ??
+        const <FreeLinePoint>[];
+    final freeAreas =
+        ref.watch(freeAreasProvider).asData?.value ?? const <FreeArea>[];
+    final freeAreaPoints =
+        ref.watch(freeAreaPointsProvider).asData?.value ??
+        const <FreeAreaPoint>[];
     final settings = ref.watch(settingsProvider).asData?.value;
     final uncertainty = settings?.uncertaintyMeters ?? 0;
     final transportOverlay = settings?.transportOverlay ?? false;
@@ -638,9 +833,27 @@ class _MapScreenState extends ConsumerState<MapScreen>
         : subspacePoints
             .where((p) => p.subspaceId == selectedSubspace.id)
             .toList();
+    final selectedFreeLine = freeLines
+        .where((l) => l.id == ref.watch(selectedFreeLineProvider))
+        .firstOrNull;
+    final selectedFreeLinePoints = selectedFreeLine == null
+        ? const <FreeLinePoint>[]
+        : freeLinePoints
+            .where((p) => p.freeLineId == selectedFreeLine.id)
+            .toList();
+    final selectedFreeArea = freeAreas
+        .where((a) => a.id == ref.watch(selectedFreeAreaProvider))
+        .firstOrNull;
+    final selectedFreeAreaPoints = selectedFreeArea == null
+        ? const <FreeAreaPoint>[]
+        : freeAreaPoints
+            .where((p) => p.freeAreaId == selectedFreeArea.id)
+            .toList();
     final hasSelection = selectedCircle != null ||
         selectedPlane != null ||
-        selectedSubspace != null;
+        selectedSubspace != null ||
+        selectedFreeLine != null ||
+        selectedFreeArea != null;
     final activeId = effectiveActiveLayerId(
       layers,
       ref.watch(activeLayerProvider),
@@ -648,10 +861,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final activeLayer = layers.where((l) => l.id == activeId).firstOrNull;
     final isPlaneLayer = activeLayer?.type == 'planes';
     final isSubspaceLayer = activeLayer?.type == 'subspace';
+    final isFreeLineLayer = activeLayer?.type == 'freeline';
+    final isFreeAreaLayer = activeLayer?.type == 'freearea';
     // In a subspace layer the Add FAB seeds a new object, or — once one exists —
     // appends a point to it.
     final subspaceExists = isSubspaceLayer &&
         subspaces.any((s) => s.layerId == activeLayer!.id);
+    final freeLineExists = isFreeLineLayer &&
+        freeLines.any((l) => l.layerId == activeLayer!.id);
+    final freeAreaExists = isFreeAreaLayer &&
+        freeAreas.any((a) => a.layerId == activeLayer!.id);
 
     // Restore the last camera; fall back to Munich on first launch. Resolved
     // once, when settings first load — FlutterMap ignores these after creation.
@@ -721,6 +940,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       planes,
                       subspaces,
                       subspacePoints,
+                      freeLines,
+                      freeLinePoints,
+                      freeAreas,
+                      freeAreaPoints,
                     ),
                   ),
                   children: [
@@ -771,8 +994,56 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           subspacePoints: layer.type == 'subspace'
                               ? subspacePoints
                               : const <SubspacePoint>[],
+                          freeLines: layer.type == 'freeline'
+                              ? freeLines
+                                    .where((l) => l.layerId == layer.id)
+                                    .toList()
+                              : const <FreeLine>[],
+                          freeLinePoints: layer.type == 'freeline'
+                              ? freeLinePoints
+                              : const <FreeLinePoint>[],
+                          freeAreas: layer.type == 'freearea'
+                              ? freeAreas
+                                    .where((a) => a.layerId == layer.id)
+                                    .toList()
+                              : const <FreeArea>[],
+                          freeAreaPoints: layer.type == 'freearea'
+                              ? freeAreaPoints
+                              : const <FreeAreaPoint>[],
                           uncertaintyMeters: uncertainty,
                         ),
+                    // Dashed outline of the freehand object being edited, so the
+                    // drawn polyline/ring is visible while placing points.
+                    if (selectedFreeLine != null &&
+                        selectedFreeLinePoints.length >= 2)
+                      PolylineLayer(
+                        polylines: [
+                          Polyline(
+                            points: [
+                              for (final p in selectedFreeLinePoints)
+                                LatLng(p.lat, p.lng),
+                            ],
+                            color: Colors.black87,
+                            strokeWidth: 1.5,
+                          ),
+                        ],
+                      ),
+                    if (selectedFreeArea != null &&
+                        selectedFreeAreaPoints.length >= 2)
+                      PolylineLayer(
+                        polylines: [
+                          Polyline(
+                            points: [
+                              for (final p in selectedFreeAreaPoints)
+                                LatLng(p.lat, p.lng),
+                              LatLng(selectedFreeAreaPoints.first.lat,
+                                  selectedFreeAreaPoints.first.lng),
+                            ],
+                            color: Colors.black87,
+                            strokeWidth: 1.5,
+                          ),
+                        ],
+                      ),
                     // Administrative borders (Overpass), above the zones so the
                     // lines stay crisp. Present only when enabled at this zoom.
                     if (_borders.isNotEmpty)
@@ -833,6 +1104,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               LatLng(p.lat, p.lng),
                               main: p.isMain,
                             ),
+                          for (final p in selectedFreeLinePoints)
+                            _editPointMarker(LatLng(p.lat, p.lng)),
+                          for (final p in selectedFreeAreaPoints)
+                            _editPointMarker(LatLng(p.lat, p.lng)),
                         ],
                       ),
                     RichAttributionWidget(
@@ -908,6 +1183,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           final c = _mapController.camera.center;
                           if (isSubspaceLayer) {
                             _addSubspaceAt(c, activeLayer, subspaces);
+                          } else if (isFreeLineLayer) {
+                            _addFreeLineAt(c, activeLayer, freeLines);
+                          } else if (isFreeAreaLayer) {
+                            _addFreeAreaAt(c, activeLayer, freeAreas);
                           } else if (isPlaneLayer) {
                             _addPlaneAt(c, activeLayer);
                           } else {
@@ -920,16 +1199,24 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   icon: Icon(
                     isSubspaceLayer
                         ? Icons.scatter_plot_outlined
-                        : isPlaneLayer
-                            ? Icons.change_history
-                            : Icons.add_location_alt_outlined,
+                        : isFreeLineLayer
+                            ? Icons.polyline
+                            : isFreeAreaLayer
+                                ? Icons.hexagon_outlined
+                                : isPlaneLayer
+                                    ? Icons.change_history
+                                    : Icons.add_location_alt_outlined,
                   ),
                   label: Text(
                     isSubspaceLayer
                         ? (subspaceExists ? 'Add point' : 'Add subspace')
-                        : isPlaneLayer
-                            ? 'Add plane'
-                            : 'Add circle',
+                        : isFreeLineLayer
+                            ? (freeLineExists ? 'Add point' : 'Add line')
+                            : isFreeAreaLayer
+                                ? (freeAreaExists ? 'Add point' : 'Add area')
+                                : isPlaneLayer
+                                    ? 'Add plane'
+                                    : 'Add circle',
                   ),
                 ),
               ],
@@ -951,6 +1238,20 @@ class _MapScreenState extends ConsumerState<MapScreen>
               key: ValueKey(selectedSubspace.id),
               subspace: selectedSubspace,
               points: selectedSubspacePoints,
+              layers: layers,
+            )
+          : selectedFreeLine != null
+          ? FreeLineEditorSheet(
+              key: ValueKey(selectedFreeLine.id),
+              freeLine: selectedFreeLine,
+              points: selectedFreeLinePoints,
+              layers: layers,
+            )
+          : selectedFreeArea != null
+          ? FreeAreaEditorSheet(
+              key: ValueKey(selectedFreeArea.id),
+              freeArea: selectedFreeArea,
+              points: selectedFreeAreaPoints,
               layers: layers,
             )
           : null,

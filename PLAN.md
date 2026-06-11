@@ -152,6 +152,30 @@ across close/relaunch by construction.
 
 ---
 
+## v3 backlog (planned — see `IMPLEMENTATION_PLAN.md` M12–M13)
+
+User-drawn (freehand) regions, as opposed to the geometric primitives above.
+
+### New geometry types
+
+- [x] **"Freehand line" object (M12).** A user-drawn **polyline** that divides the map into
+  two sides; the layer colours one side and the per-layer **invert** flips to the other. A
+  partial line (e.g. a stretch of the Isar) is completed by **extending its first/last
+  segments straight** so it still splits the whole view. New `freeline` layer type,
+  `FreeLines` + `FreeLinePoints` tables (schema v9), `geo/freeline.dart`,
+  `ui/freeline_editor.dart`.
+- [x] **"Freehand area" object (M13).** A user-drawn **closed polygon**; the layer colours
+  the inside and **invert** the outside (e.g. a city outline). New `freearea` layer type,
+  `FreeAreas` + `FreeAreaPoints` tables (schema v9), `geo/freearea.dart`,
+  `ui/freearea_editor.dart`.
+- [x] **Signed per-object offset (M12/M13).** Each freehand object carries an
+  `offsetMeters`, separate from the global uncertainty: positive pushes the coloured
+  boundary away from the line / inward from the area ("inside the city **and** >5 km from
+  the border"); negative extends the fill past the drawn boundary. The uncertainty band
+  straddles the shifted boundary as before.
+
+---
+
 ## Data model impact (Drift — `lib/data/database.dart`)
 
 - `Layers`: `isInverted` (bool) and `type` ✅ done (circles | planes | **subspace** ✅ M9).
@@ -160,6 +184,8 @@ across close/relaunch by construction.
 - `AppSettings` ✅ holds uncertainty + camera + transport-overlay toggle ✅ (M10, schema v6) +
   enabled-POI-category bitmask ✅ (M11, schema v7) + enabled-border-levels bitmask ✅
   (post-v2, schema v8); **default uncertainty → 500** ✅ (M8).
+- `FreeLines` + `FreeLinePoints` and `FreeAreas` + `FreeAreaPoints` ✅ (one object, N ordered
+  points, signed `offsetMeters` on the parent) added in M12/M13 (schema v9).
 - `Repository.clearAll()` for the clear-data button (M8).
 - Remember to bump `schemaVersion` and add migrations for each (M8 → v4, then M9, M10/M11).
 
