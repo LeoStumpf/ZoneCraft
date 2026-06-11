@@ -4,14 +4,15 @@ Backlog of planned features beyond v1. Grouped by area; check items off as they 
 Notes under each item are implementation hints, not final decisions. Open design
 questions are collected at the bottom.
 
-> **Progress:** **All milestones M0–M6 are done** — see `IMPLEMENTATION_PLAN.md`. The
-> engine handles union/flat-colour, the uncertainty band, and inverse rendering for
-> **circles and planes**; the layers **left drawer** (with visibility/reorder/colour/
-> rename/**invert**/delete and a circles|planes **type chooser**), the docked **bottom
-> editor**, **add/remove**, a **Settings screen** (global uncertainty radius), an opt-in
-> **Locate me** button, and the **app icon + launch splash** are in. The v1 roadmap is
-> complete; a round of **post-v1 refinements** (below) has also landed. Remaining items are
-> future polish.
+> **Progress:** **v1 (M0–M6), v2 (M7–M11) and v3 (M12–M13) are all delivered** — see
+> `IMPLEMENTATION_PLAN.md`. The compositing engine handles union/flat-colour, the uncertainty
+> band, and inverse rendering for **five object types** (circles, planes, subspace, freehand
+> line, freehand area). The app has the layers **left drawer** (visibility/reorder/colour/
+> rename/**invert**/delete + an object-**type chooser**), docked **per-type editors**,
+> **add/remove**, a **Settings screen** (global uncertainty, clear-all, overlay toggles), a
+> **compass**, opt-in **Locate me**, a persisted camera, optional **map overlays**
+> (public-transport tiles, OSMAnd POIs, administrative borders), and the **app icon + splash**.
+> Remaining items below are future polish.
 
 ## Post-v1 refinements (done)
 

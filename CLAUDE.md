@@ -1,7 +1,24 @@
 # ZoneCraft — working notes for Claude
 
-Flutter app: geodesic circle/zone layers on OpenStreetMap, stored locally (Drift/SQLite),
+Flutter app: composable **zone layers** on OpenStreetMap, stored locally (Drift/SQLite),
 no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
+
+## At a glance (current app)
+
+- **Five object types**, one per layer: `circles` (geodesic), `planes` (closer-of-two-points
+  half-plane), `subspace` (closest-of-N Voronoi cell), `freeline` (drawn polyline dividing the
+  view), `freearea` (drawn closed polygon). Each has a `geo/*.dart` region builder and a
+  `ui/*_editor.dart` docked editor.
+- **Compositing engine** (`ui/region_layer.dart`): per layer, every object yields an
+  `outer`+`core` screen-space polygon; these union via `Path.combine`, then paint core (solid)
+  + band (`outer−core`, lighter) + outline, or `viewport−outer` when the layer is **inverted**.
+  Global uncertainty widens the band; freehand objects add a signed per-object `offsetMeters`.
+- **Layers drawer** (show/hide, reorder, recolour, rename, invert, add/delete) + **compass**,
+  opt-in **Locate me**, **persisted camera**, and a **Settings** screen (uncertainty,
+  clear-all, and the overlay toggles below).
+- **Optional overlays** (Overpass / tiles, all in Settings): public-transport tiles, OSMAnd
+  POIs, administrative borders.
+- **Drift schema is at v9**; migrations are append-only `if (from < N)` blocks.
 
 ## Current status
 

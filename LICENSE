@@ -1,0 +1,18 @@
+"THE BEER-WARE LICENSE" (Revision 42):
+
+Leo Stumpf <leo.m.stumpf@gmail.com> wrote ZoneCraft. As long as you retain this
+notice you can do whatever you want with this stuff. If we meet some day, and you
+think this stuff is worth it, you can buy me a beer in return.
+
+                                                                      Leo Stumpf
+
+----------------------------------------------------------------------------
+
+ZoneCraft bundles third-party open-source packages and uses OpenStreetMap data
+and tiles whose own license/attribution notices must be retained. See
+THIRD_PARTY_NOTICES.md.
+
+----------------------------------------------------------------------------
+
+For full transparency: ZoneCraft was "vibe-coded" collaboratively with Claude
+(Anthropic's AI assistant), which wrote much of the code under human direction.

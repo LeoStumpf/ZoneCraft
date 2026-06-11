@@ -1,38 +1,77 @@
 # ZoneCraft
 
-A map app for placing **geodesic circles** on OpenStreetMap, organised into stackable
-**overlay layers**. No login, no account — everything is stored locally on the device.
+ZoneCraft turns a map into a canvas for **zones** — coloured regions defined by simple
+geometric rules (circles, "closer to here than there", hand-drawn borders and areas) that you
+stack into **layers** on top of OpenStreetMap. It runs fully offline of any account: there is
+**no login and no server** — every layer, object and setting lives in a local SQLite database
+on the device.
 
-This is step 1 toward a broader tool for **geometry projections on maps**.
+Android-first, iOS-ready. Built with Flutter.
 
-## Status
+> **Transparency:** ZoneCraft was "vibe-coded" collaboratively with Claude (Anthropic's AI
+> assistant), which wrote much of the code under human direction.
 
-**The v1 roadmap is complete — all milestones M0–M6 are done**, plus a round of post-v1
-refinements (rename, single-field coordinate input, edit-point markers, persisted map view,
-full-bleed UI). See `IMPLEMENTATION_PLAN.md` for the milestone history and `PLAN.md` for the
-feature backlog and remaining polish.
+## What you can build
+
+Each **layer** holds one kind of object and paints a single flat-coloured region (overlapping
+objects in a layer never darken each other). Layers stack, and a per-layer **invert** fills
+everything *outside* the region instead. There are five object types:
+
+| Type | What it draws |
+|---|---|
+| **Circle** | A true **geodesic** circle — radius in real-world metres, accurate on the globe (so it looks like an ellipse at high latitudes in Web Mercator, as it should). |
+| **Plane** | The "**closer to one of two points**" region — one side of two points' perpendicular bisector, with a toggle for which side. |
+| **Subspace** | The "**closest of N points**" region — a Voronoi cell: everywhere closer to a chosen *main* point than to any of the others. |
+| **Freehand line** | A polyline **you draw** that splits the view into two sides; the layer fills one (invert flips it). Partial lines are completed by extending the end segments straight. |
+| **Freehand area** | A closed polygon **you draw**; the layer fills the inside (invert fills the outside). |
+
+Every object also carries a measurement **uncertainty band** — a lighter strip hugging its
+boundary, set globally in Settings. The two freehand types additionally have a signed
+**offset** (metres): positive pushes the coloured boundary away from the line / inward from the
+area (e.g. *"inside the city **and** more than 5 km from its border"*), negative extends the
+fill past the drawn boundary.
 
 ## Features
 
-- OpenStreetMap base map (live tiles, no API key). **Full-bleed map** with a single floating
-  menu button (top-left) opening the layers drawer.
-- **Layers** in a left drawer that stack/overlay: show/hide, reorder, rename, recolour,
-  **invert**, add, delete. A layer is **single-type** — it holds *circles* **or** *planes*
-  (chosen when you add it); one active layer receives new objects.
-- **Circles** are **geodesic** — the radius is in real-world metres and is drawn accurately
-  on the globe (so it shows as an ellipse at high latitudes in Web Mercator, as it should).
-- **Planes** — the "closer to one of two points" region (one side of two points'
-  perpendicular bisector), with a toggleable near side.
-- **Composited rendering engine:** a layer's objects are unioned into one flat-coloured
-  region (overlaps don't darken), with a lighter **uncertainty band** (global, set in
-  Settings) and an optional **inverse** fill (everything outside the objects). Works
-  identically for circles and planes.
-- **Docked editor:** tap an object to edit it live (map stays interactive). Coordinates use
-  a single **"lat, lng"** field that accepts values pasted straight from Google Maps; the
-  edited object's points are shown as markers on the map.
-- Opt-in **"Locate me"** (location permission requested only on tap, never at launch).
-- Fully local persistence via SQLite (Drift). Data — and your **last map view** (centre +
-  zoom) — survive restarts. No login, no account.
+**Map & layers**
+- Full-bleed OpenStreetMap base map (live tiles, no API key); a single floating menu button
+  (top-left) opens the layers drawer.
+- Layers drawer: show/hide, reorder, rename, recolour, **invert**, add, delete. The active
+  layer receives new objects; each layer is single-type, chosen when you add it.
+- A **compass** button that always points to map-north; tap it to snap back to north-up.
+
+**Editing**
+- Tap an object to open a **docked editor** that writes changes live while the map stays
+  interactive; the object's points show as draggable-by-tap markers.
+- Coordinates use one **"lat, lng"** field that accepts values pasted straight from Google
+  Maps. Multi-point objects (subspace, freehand) support add / move-by-tap / delete per point.
+
+**Optional map overlays** (toggled in Settings)
+- **Public transport** — transparent ÖPNVKarte (buses/trams/stops) + OpenRailwayMap (rail)
+  tile overlays.
+- **Points of interest** — OSMAnd-style OSM POI categories (benches, post boxes, drinking
+  water, toilets, cafés, …) fetched from Overpass and shown as markers, only at high zoom.
+- **Administrative borders** — OSM `admin_level` boundaries (countries → … → suburbs), each a
+  toggle with its own colour, fetched from Overpass and drawn as polylines with per-level zoom
+  gating.
+
+**Settings & data**
+- Global measurement **uncertainty** radius (default 500 m) and a **"Clear all data"** action.
+- Opt-in **"Locate me"** — location permission is requested only when you tap it, never at
+  launch; nothing runs in the background.
+- Fully local persistence via SQLite (Drift). Your data **and** your last map view (centre +
+  zoom) survive restarts.
+
+## How rendering works
+
+All region geometry is computed per frame in **screen space** at the current camera (project
+points → bisect / clip / offset → fill). For each layer the engine builds two polygons per
+object — an `outer` and a shrunk `core` — unions them across the layer with `dart:ui`
+`Path.combine`, then paints the **core** solid, the **band** (`outer − core`) lighter, and the
+outline as a stroke. **Invert** simply paints `viewport − outer` instead. This single
+`outer`/`core` contract is shared by all five object types, so invert and the uncertainty band
+work uniformly. The approximation is planar (accurate at city scale); geodesic refinement is a
+possible follow-up.
 
 ## Tech stack
 
@@ -41,21 +80,28 @@ feature backlog and remaining polish.
 | Framework | Flutter (Android-first, iOS-ready) |
 | Map | [`flutter_map`](https://pub.dev/packages/flutter_map) |
 | Geo math | [`latlong2`](https://pub.dev/packages/latlong2) |
-| Local DB | [`drift`](https://pub.dev/packages/drift) + `drift_flutter` (SQLite) |
+| Local DB | [`drift`](https://pub.dev/packages/drift) + `drift_flutter` / `sqlite3_flutter_libs` |
 | State | [`flutter_riverpod`](https://pub.dev/packages/flutter_riverpod) |
+| Overlays | [`http`](https://pub.dev/packages/http) (Overpass API: POIs + borders) |
+| Location | [`geolocator`](https://pub.dev/packages/geolocator) (opt-in) |
+| Colour picker | [`flutter_colorpicker`](https://pub.dev/packages/flutter_colorpicker) |
+| Icon / splash | `flutter_launcher_icons`, `flutter_native_splash` (dev) |
 
 ## Project layout
 
 ```
 lib/
-  data/        Drift database (Layers, Circles, Planes, AppSettings) + repository
-  geo/         geodesicCircle(), plane half-plane geometry, lat/lng parsing
-  state/       Riverpod providers (layers, circles, planes, settings, selection)
-  ui/          map_screen, layers_panel (drawer), circle_editor & plane_editor
-               (sheets), settings_screen, region_layer (rendering engine)
+  data/   Drift schema + repository (Layers, Circles, Planes, Subspaces+points,
+          FreeLines+points, FreeAreas+points, AppSettings); Overpass clients
+          for POIs (overpass.dart) and admin borders (borders.dart)
+  geo/    region geometry — geodesic.dart, plane.dart, subspace.dart,
+          freeline.dart, freearea.dart — plus lat/lng parsing (coords.dart)
+  state/  Riverpod providers (per-object lists, settings, selection/placement)
+  ui/     map_screen, layers_panel (drawer), one *_editor.dart per object type,
+          settings_screen, region_layer (the compositing engine)
 assets/icon/   app-icon source art (transparent PNG + adaptive foreground)
-scripts/       build.sh — build / install / run helper
-test/          geodesic_test, plane_test, coords_test, database_test
+scripts/       build.sh — analyze / test / build / install / run helper
+test/          geometry, parsing, Overpass and database unit tests
 ```
 
 ## Develop
@@ -81,12 +127,26 @@ flutter pub get
 dart run build_runner build      # regenerate database.g.dart after schema changes
 flutter analyze
 flutter test
-flutter run                      # on a connected Android device / emulator
+flutter run                      # on a connected Android device
 flutter build apk --debug        # build an installable APK
 ```
 
+The local database is **schema v9**; installing with `-r` (as the build script does) preserves
+existing data and exercises the migrations.
+
 ## Roadmap
 
-The v1 milestones (`IMPLEMENTATION_PLAN.md`) are all delivered. Future polish in `PLAN.md`:
-offline tile caching, import/export (GeoJSON / KML), more shapes, geodesic refinement of the
-plane bisector, and the broader geometry-projection features.
+`PLAN.md` tracks the feature backlog and `IMPLEMENTATION_PLAN.md` the milestone history (the
+v1, v2 and v3 milestones are all delivered). Likely next steps: offline tile caching,
+import/export (GeoJSON / KML), geodesic refinement of the planar geometry, and more object
+types.
+
+## License
+
+ZoneCraft is released under the **Beer-Ware License (Revision 42)** — see [`LICENSE`](LICENSE).
+Do whatever you want with the code; if we meet some day and you think it's worth it, buy me a
+beer. 🍺
+
+It builds on open-source packages and OpenStreetMap data whose attribution must be retained —
+see [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) (their full license texts are also
+viewable on the app's in-app licenses page).
