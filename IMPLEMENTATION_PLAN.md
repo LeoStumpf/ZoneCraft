@@ -93,7 +93,12 @@ viewport as a spherical quad (the painter still `clipRect`s to the true screen r
   cache-first then network, writing fresh tiles back. One screen-owned `http.Client` is
   shared across all tile layers + the viewport prefetcher (so toggling an overlay off
   can't close it). Prefetch (`map_screen._prefetchTiles`) caches the viewport + a
-  one-tile ring at zoom ≥ 10, capped and failure-safe.
+  one-tile ring at zoom ≥ 10, capped and failure-safe. An explicit **"download this
+  area"** map FAB (`map_screen._downloadArea`) caches the current viewport across the
+  current zoom + a couple deeper levels (base + enabled overlays) via the same
+  `prefetch`, behind a confirm-with-estimate + cancellable progress dialog. Both share
+  the `tilesCovering` enumerator (`geo/tiles.dart`). No pinning: just-downloaded tiles are
+  the most-recently-used, so the 200 MB LRU evicts older areas first.
 - **Overpass (POIs + admin borders):** debounced, zoom-gated, viewport-inflated fetches
   that **keep stale data and retry on failure** (never clear on a network error). Use a
   polite User-Agent, cap result counts, fail silently. Results persist via `OverpassCache`

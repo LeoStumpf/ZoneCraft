@@ -23,3 +23,51 @@ int tileYFor(double lat, int z) {
       .floor();
   return y.clamp(0, n - 1);
 }
+
+/// A `{z}/{x}/{y}` tile column/row pair (the zoom is carried by the caller).
+class TileCoord {
+  const TileCoord(this.x, this.y);
+  final int x;
+  final int y;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TileCoord && other.x == x && other.y == y;
+
+  @override
+  int get hashCode => Object.hash(x, y);
+
+  @override
+  String toString() => 'TileCoord($x, $y)';
+}
+
+/// Enumerates the tiles covering the bounding box [west]..[east] (longitude) ×
+/// [south]..[north] (latitude) at integer zoom [z], optionally widened by a
+/// [ring] of extra tiles on every side. Longitude columns wrap around the
+/// antimeridian; rows that fall off the top/bottom of the map are dropped.
+///
+/// Shared by the viewport prefetcher and the explicit "download this area"
+/// action; pure and dependency-free for easy unit testing.
+List<TileCoord> tilesCovering({
+  required double west,
+  required double east,
+  required double north,
+  required double south,
+  required int z,
+  int ring = 0,
+}) {
+  final n = 1 << z;
+  final minX = tileXFor(west, z) - ring;
+  final maxX = tileXFor(east, z) + ring;
+  final minY = tileYFor(north, z) - ring; // north -> smaller tile-Y
+  final maxY = tileYFor(south, z) + ring;
+  final out = <TileCoord>[];
+  for (var x = minX; x <= maxX; x++) {
+    final cx = ((x % n) + n) % n; // wrap longitude
+    for (var y = minY; y <= maxY; y++) {
+      if (y < 0 || y >= n) continue; // off the top/bottom of the map
+      out.add(TileCoord(cx, y));
+    }
+  }
+  return out;
+}

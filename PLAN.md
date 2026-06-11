@@ -16,23 +16,16 @@ ZoneCraft is feature-complete for everything planned so far. It has:
 - **Settings**: global uncertainty (default 500 m), clear-all, and overlay toggles.
 - **Optional overlays**: public-transport tiles, OSMAnd-style POIs, administrative borders.
 - **Offline resilience**: cache-first map tiles + viewport prefetch and persisted
-  POI/border overlays, so the map survives a few minutes with no reception.
+  POI/border overlays, so the map survives a few minutes with no reception. Plus an
+  explicit **"download this area"** button (map FAB) that bulk-caches the current view
+  across a few zoom levels, with an estimate, a progress dialog and cancel.
 - **Import / export**: share all layers + objects as **GeoJSON** (lossless round-trip) or
   **KML** (Google Earth / Maps); import GeoJSON back as new layers (Settings → Import & export).
 - Fully local SQLite (Drift), **schema v10**.
 
 ## Open points
 
-### 1. Offline — "download this area"
-
-Add an explicit bulk-download for guaranteed offline coverage beyond the automatic browse
-cache + one-tile prefetch ring.
-
-- A Settings/map button that downloads all tiles for the current viewport across a few
-  zoom levels (base map + enabled overlays) into the existing `TileCache`, with a progress
-  indicator and a size estimate.
-- Reuse `geo/tiles.dart` tile enumeration and `CachedTileProvider.prefetch`; respect the
-  200 MB LRU cap (or let this pin an area exempt from eviction — decide).
+_None — everything on the roadmap has shipped._ Add new ideas below as they come up.
 
 ---
 

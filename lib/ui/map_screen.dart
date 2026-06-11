@@ -64,6 +64,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
   static const int _prefetchMaxTiles = 60;
   Timer? _prefetchDebounce;
 
+  /// "Download this area": how many zoom levels *deeper* than the current view to
+  /// also cache (so you can still zoom in offline), the hard ceiling on tiles per
+  /// download, and the rough per-tile size used only for the up-front estimate.
+  static const int _downloadExtraZoomLevels = 2;
+  static const int _downloadMaxTiles = 4000;
+  static const int _avgTileBytes = 20 * 1024;
+
+  /// True while a "download this area" run is in progress (disables its button).
+  bool _downloading = false;
+
   /// Current map rotation in degrees (clockwise). Drives the compass needle.
   double _rotation = 0;
 
@@ -331,30 +341,26 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (z < _prefetchMinZoom) return;
 
     final vp = cam.visibleBounds;
-    final n = 1 << z;
-    // Visible tile span, widened by a one-tile ring. North maps to the smaller
-    // tile-Y, south to the larger.
-    final minX = tileXFor(vp.west, z) - 1;
-    final maxX = tileXFor(vp.east, z) + 1;
-    final minY = tileYFor(vp.north, z) - 1;
-    final maxY = tileYFor(vp.south, z) + 1;
     final transport =
         ref.read(settingsProvider).asData?.value.transportOverlay ?? false;
 
+    // Visible tiles widened by a one-tile ring, capped by a budget.
+    final tiles = tilesCovering(
+      west: vp.west,
+      east: vp.east,
+      north: vp.north,
+      south: vp.south,
+      z: z,
+      ring: 1,
+    );
     var budget = _prefetchMaxTiles;
-    outer:
-    for (var x = minX; x <= maxX; x++) {
-      // Wrap longitude tiles; skip rows off the top/bottom of the map.
-      final cx = ((x % n) + n) % n;
-      for (var y = minY; y <= maxY; y++) {
-        if (y < 0 || y >= n) continue;
-        await _tileProvider.prefetch(_fillTileUrl(_baseTileUrl, z, cx, y));
-        if (transport) {
-          await _tileProvider.prefetch(_fillTileUrl(_opnvTileUrl, z, cx, y));
-          await _tileProvider.prefetch(_fillTileUrl(_railTileUrl, z, cx, y));
-        }
-        if (--budget <= 0) break outer;
+    for (final t in tiles) {
+      await _tileProvider.prefetch(_fillTileUrl(_baseTileUrl, z, t.x, t.y));
+      if (transport) {
+        await _tileProvider.prefetch(_fillTileUrl(_opnvTileUrl, z, t.x, t.y));
+        await _tileProvider.prefetch(_fillTileUrl(_railTileUrl, z, t.x, t.y));
       }
+      if (--budget <= 0) break;
     }
     if (!mounted) return;
     await ref
@@ -366,6 +372,140 @@ class _MapScreenState extends ConsumerState<MapScreen>
       .replaceAll('{z}', '$z')
       .replaceAll('{x}', '$x')
       .replaceAll('{y}', '$y');
+
+  /// The tile URLs to cache for an explicit "download this area": the current
+  /// viewport at the current zoom plus [_downloadExtraZoomLevels] deeper levels,
+  /// base map and (when enabled) the transport overlays. Shallower levels come
+  /// first, so when the [_downloadMaxTiles] ceiling trims the list it drops the
+  /// deepest detail rather than the view you're looking at.
+  List<String> _areaTileUrls(MapCamera cam) {
+    final vp = cam.visibleBounds;
+    final zBase = cam.zoom.round().clamp(0, 19);
+    final transport =
+        ref.read(settingsProvider).asData?.value.transportOverlay ?? false;
+    final urls = <String>[];
+    for (var dz = 0; dz <= _downloadExtraZoomLevels; dz++) {
+      final z = zBase + dz;
+      if (z > 19) break;
+      for (final t in tilesCovering(
+        west: vp.west,
+        east: vp.east,
+        north: vp.north,
+        south: vp.south,
+        z: z,
+      )) {
+        urls.add(_fillTileUrl(_baseTileUrl, z, t.x, t.y));
+        if (transport) {
+          urls.add(_fillTileUrl(_opnvTileUrl, z, t.x, t.y));
+          urls.add(_fillTileUrl(_railTileUrl, z, t.x, t.y));
+        }
+        if (urls.length >= _downloadMaxTiles) return urls;
+      }
+    }
+    return urls;
+  }
+
+  /// Bulk-downloads the current area for guaranteed offline coverage: confirms
+  /// with an estimate, then caches every tile with a cancellable progress
+  /// dialog. Freshly written tiles are the most-recently-used, so the LRU cap
+  /// evicts older areas first and keeps what you just downloaded.
+  Future<void> _downloadArea() async {
+    if (!_mapReady || _downloading) return;
+    final cam = _mapController.camera;
+    if (!cam.center.latitude.isFinite ||
+        !cam.center.longitude.isFinite ||
+        !cam.zoom.isFinite) {
+      return;
+    }
+    final urls = _areaTileUrls(cam);
+    if (urls.isEmpty) {
+      _hint('Nothing to download for this view');
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Download this area?'),
+        content: Text(
+          'Caches up to ${urls.length} map tiles (~${_formatBytes(urls.length * _avgTileBytes)}) '
+          'for offline use — the current view plus $_downloadExtraZoomLevels '
+          'zoom levels of detail. Tiles you already have are skipped.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Download'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final progress = ValueNotifier<int>(0);
+    var cancelled = false;
+    final total = urls.length;
+    setState(() => _downloading = true);
+
+    unawaited(showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Downloading area…'),
+        content: ValueListenableBuilder<int>(
+          valueListenable: progress,
+          builder: (_, done, _) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              LinearProgressIndicator(value: total == 0 ? null : done / total),
+              const SizedBox(height: 12),
+              Text('$done / $total tiles'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              cancelled = true;
+              Navigator.pop(ctx);
+            },
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    ));
+
+    var downloaded = 0;
+    for (var i = 0; i < urls.length; i++) {
+      if (cancelled || !mounted) break;
+      if (await _tileProvider.prefetch(urls[i])) downloaded++;
+      progress.value = i + 1;
+    }
+    // Close the progress dialog unless the user already dismissed it via Cancel.
+    if (!cancelled && mounted) {
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+    progress.dispose();
+
+    if (!mounted) return;
+    setState(() => _downloading = false);
+    await ref
+        .read(repositoryProvider)
+        .evictTilesDownTo(CachedTileProvider.maxCacheBytes);
+    _hint(cancelled
+        ? 'Download cancelled — $downloaded new tiles saved'
+        : 'Downloaded $downloaded new tiles for offline use');
+  }
+
+  static String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(0)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
 
   /// Writes the current camera (centre + zoom) to settings. No-op until the map
   /// is ready or if the camera is somehow non-finite.
@@ -1289,6 +1429,19 @@ class _MapScreenState extends ConsumerState<MapScreen>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
+                FloatingActionButton.small(
+                  heroTag: 'download',
+                  tooltip: 'Download this area for offline use',
+                  onPressed: _downloading ? null : _downloadArea,
+                  child: _downloading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.download_for_offline_outlined),
+                ),
+                const SizedBox(height: 12),
                 FloatingActionButton.small(
                   heroTag: 'compass',
                   tooltip: 'Reset to north-up',
