@@ -55,7 +55,12 @@ fill past the drawn boundary.
   toggle with its own colour, fetched from Overpass and drawn as polylines with per-level zoom
   gating.
 
-**Settings & data**
+**Offline & data**
+- **Offline-resilient map** — tiles you view (plus a ring around them) are cached on the
+  device, so revisited areas don't re-download and the map keeps working for a few minutes
+  with no reception (subway, underground). The last POI/border overlays are persisted too, so
+  they reappear instantly on launch. A Settings readout shows the cache size, with a **"Clear
+  cached map tiles"** button (separate from "Clear all data").
 - Global measurement **uncertainty** radius (default 500 m) and a **"Clear all data"** action.
 - Opt-in **"Locate me"** — location permission is requested only when you tap it, never at
   launch; nothing runs in the background.
@@ -92,10 +97,12 @@ possible follow-up.
 ```
 lib/
   data/   Drift schema + repository (Layers, Circles, Planes, Subspaces+points,
-          FreeLines+points, FreeAreas+points, AppSettings); Overpass clients
-          for POIs (overpass.dart) and admin borders (borders.dart)
+          FreeLines+points, FreeAreas+points, TileCache, OverpassCache, AppSettings);
+          Overpass clients for POIs (overpass.dart) and admin borders (borders.dart);
+          offline tile cache (cached_tile_provider.dart)
   geo/    region geometry — geodesic.dart, plane.dart, subspace.dart,
-          freeline.dart, freearea.dart — plus lat/lng parsing (coords.dart)
+          freeline.dart, freearea.dart — slippy-tile maths (tiles.dart),
+          plus lat/lng parsing (coords.dart)
   state/  Riverpod providers (per-object lists, settings, selection/placement)
   ui/     map_screen, layers_panel (drawer), one *_editor.dart per object type,
           settings_screen, region_layer (the compositing engine)
@@ -131,15 +138,15 @@ flutter run                      # on a connected Android device
 flutter build apk --debug        # build an installable APK
 ```
 
-The local database is **schema v9**; installing with `-r` (as the build script does) preserves
+The local database is **schema v10**; installing with `-r` (as the build script does) preserves
 existing data and exercises the migrations.
 
 ## Roadmap
 
-`PLAN.md` tracks the feature backlog and `IMPLEMENTATION_PLAN.md` the milestone history (the
-v1, v2 and v3 milestones are all delivered). Likely next steps: offline tile caching,
-import/export (GeoJSON / KML), geodesic refinement of the planar geometry, and more object
-types.
+[`PLAN.md`](PLAN.md) is the roadmap (current state + open points) and
+[`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) is the architecture reference. Open points:
+**import/export** (GeoJSON / KML), **geodesic refinement** of the planar geometry, and an
+explicit **"download this area"** button for guaranteed offline coverage.
 
 ## License
 

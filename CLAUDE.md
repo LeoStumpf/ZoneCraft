@@ -28,59 +28,25 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
 
 ## Current status
 
-**All milestones M0–M6 done** (data model + settings schema; composited rendering engine
-with union/band/inverse for circles **and planes**; UI restructure: layers left drawer,
-docked live editor, add/remove; settings screen with global uncertainty; opt-in locate-me
-via `geolocator`; plane "closer-to-one-of-two-points" object with a circles|planes layer
-type chooser; app icon + launch splash via `flutter_launcher_icons`/`flutter_native_splash`,
-source art at `assets/icon/`). The v1 roadmap is complete.
+Feature-complete for everything planned so far: five object types with the shared
+compositing engine (union / band / invert), the layers drawer + per-type editors,
+settings (uncertainty, clear-all, overlay toggles), opt-in locate-me, persisted camera,
+optional overlays (public-transport tiles, OSMAnd POIs, admin borders), and offline
+resilience (cache-first tiles + prefetch, persisted POI/border overlays). Drift schema
+is **v10**.
 
-**Post-v1 refinements (done):** app renamed to **ZoneCraft**; single "lat, lng" coordinate
-field per point in the editors (pastes Google Maps coords; parser in `geo/coords.dart`);
-edit-point markers (circle centre / plane endpoints) while editing; **persisted map camera**
-(centre + zoom in `AppSettings`, **schema now v3**); **full-bleed map** with no app bar —
-just a floating top-left menu button opens the drawer.
-
-**v2 progress:** M7 compass/north-up **done**; M8 settings (500 m default uncertainty,
-schema **v4** migration, `clearAll`/"Clear all data") **done**; M9 "closest subspace"
-multi-point object (new `subspace` layer type, `Subspaces`+`SubspacePoints`, schema **v5**,
-`geo/subspace.dart`, `ui/subspace_editor.dart`) **done**; M10 public-transport tile overlay
-(ÖPNVKarte + OpenRailwayMap, `AppSettings.transportOverlay`, schema **v6**) **done**; M11
-OSMAnd-style POI toggles (Overpass via `data/overpass.dart` + `http`, packed
-`AppSettings.poiCategories`, schema **v7**, debounced/zoom-gated marker fetch) **done**.
-**The v2 roadmap (M7–M11) is complete.** See `IMPLEMENTATION_PLAN.md`.
-
-**Post-v2 additions:** toggleable **administrative borders** (OSM `admin_level` 2–10,
-per-level on/off + colour, `data/borders.dart` via Overpass, packed
-`AppSettings.borderLevels`, schema **v8**, per-level zoom gating, rendered as
-`PolylineLayer`). Overpass `convert ::geom=geom()` returns GeoJSON `LineString`
-(`[lon,lat]`), parsed in `parseBordersResponse`.
-
-**v3 progress:** two **freehand (user-drawn)** layer types — M12 **freehand line** (a drawn
-polyline dividing the view into two sides, ends extended straight; `geo/freeline.dart`,
-`ui/freeline_editor.dart`) and M13 **freehand area** (a drawn closed polygon, fill inside;
-`geo/freearea.dart`, `ui/freearea_editor.dart`) — each a new layer type (`freeline`,
-`freearea`) with `FreeLines`+`FreeLinePoints` / `FreeAreas`+`FreeAreaPoints` tables and a
-signed per-object `offsetMeters` (schema **v9**). Both mirror the `subspace` pattern, reuse
-the per-layer **invert** to flip side/inside-outside, and feed `outer`/`core` polygons into
-the existing compositor. **The v3 freehand types are complete.**
-
-**Offline resilience:** M14 **offline map caching** — Drift `TileCache` + `CachedTileProvider`
-(cache-first map tiles), viewport prefetch (one-tile ring, `geo/tiles.dart`), LRU eviction
-(200 MB cap), Settings size/clear controls; plus `OverpassCache` persisting POI/border results
-(instant, offline-safe). Schema **v10**. **Done.**
-
-Track in `IMPLEMENTATION_PLAN.md` (milestone status) and `PLAN.md` (feature backlog).
+Open work lives in `PLAN.md`: import/export (GeoJSON/KML), geodesic refinement of the
+planar geometry, and an explicit "download this area" offline button.
 
 ## Workflow rule (required)
 
 - **Build & verify with the script:** before wrapping up a task, run
   `./scripts/build.sh --install --run` (analyze + test + build + install + launch) and check
   the change on the device. Use `--skip-checks` only for quick iteration.
-- After completing **all** the steps of a task/milestone, **update the plan docs**
-  (`PLAN.md` and `IMPLEMENTATION_PLAN.md`) — tick off the items that are now done —
-  and then **commit and push to `main`**. Do plan-update + commit/push once at the end,
-  not after every individual step.
+- After completing **all** the steps of a task, **update the docs** — drop the delivered
+  item from `PLAN.md`'s open points and, if it introduced a new pattern/invariant, add it
+  to `IMPLEMENTATION_PLAN.md` (the architecture reference) — then **commit and push to
+  `main`**. Do the doc update + commit/push once at the end, not after every step.
 
 ## Toolchain
 
@@ -119,5 +85,6 @@ lib/
 
 ## Plans
 
-- `PLAN.md` — feature backlog (checklist).
-- `IMPLEMENTATION_PLAN.md` — sequenced milestones (M0…M6) with decisions & verification.
+- `PLAN.md` — current state + open points (the roadmap).
+- `IMPLEMENTATION_PLAN.md` — architecture reference (rendering contract, data model,
+  caching, known approximations). No milestone history.

@@ -1,235 +1,59 @@
-# ZoneCraft — Roadmap / TODO
+# ZoneCraft — Roadmap
 
-Backlog of planned features beyond v1. Grouped by area; check items off as they land.
-Notes under each item are implementation hints, not final decisions. Open design
-questions are collected at the bottom.
+A short overview of what's built and what's still open. For *how* it's built, see
+[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) (architecture reference).
 
-> **Progress:** **v1 (M0–M6), v2 (M7–M11) and v3 (M12–M13) are all delivered** — see
-> `IMPLEMENTATION_PLAN.md`. The compositing engine handles union/flat-colour, the uncertainty
-> band, and inverse rendering for **five object types** (circles, planes, subspace, freehand
-> line, freehand area). The app has the layers **left drawer** (visibility/reorder/colour/
-> rename/**invert**/delete + an object-**type chooser**), docked **per-type editors**,
-> **add/remove**, a **Settings screen** (global uncertainty, clear-all, overlay toggles), a
-> **compass**, opt-in **Locate me**, a persisted camera, optional **map overlays**
-> (public-transport tiles, OSMAnd POIs, administrative borders), and the **app icon + splash**.
-> Remaining items below are future polish.
+## Current state
 
-## Post-v1 refinements (done)
+ZoneCraft is feature-complete for everything planned so far. It has:
 
-- [x] **Renamed the app to "ZoneCraft"** (launcher label, iOS display name, in-app title).
-- [x] **Single coordinate field per point** ("lat, lng") in the circle/plane editors,
-  accepting coordinates pasted straight from Google Maps. Shared parser `geo/coords.dart`.
-- [x] **Edit-point markers:** while editing, the circle's centre / a plane's two endpoints
-  show as dots on the map.
-- [x] **Persisted map camera:** centre + zoom are saved (AppSettings, schema v3) and the
-  app reopens on the same view.
-- [x] **Full-bleed map:** removed the app bar; a single floating menu button (top-left)
-  opens the layers drawer.
+- **Five object types**, one per layer: circle (geodesic), plane (closer-of-two-points),
+  subspace (closest-of-N Voronoi cell), freehand line, freehand area — all driven by one
+  compositing engine (union / flat colour / uncertainty band / per-layer **invert**).
+- **Layers** drawer (show/hide, reorder, recolour, rename, invert, add/delete, type
+  chooser), docked **per-type editors**, add/remove, **compass**, opt-in **Locate me**,
+  persisted camera, full-bleed map.
+- **Settings**: global uncertainty (default 500 m), clear-all, and overlay toggles.
+- **Optional overlays**: public-transport tiles, OSMAnd-style POIs, administrative borders.
+- **Offline resilience**: cache-first map tiles + viewport prefetch and persisted
+  POI/border overlays, so the map survives a few minutes with no reception.
+- Fully local SQLite (Drift), **schema v10**.
 
----
+## Open points
 
-## UI & navigation
+### 1. Import / export (GeoJSON / KML)
 
-- [x] **Move the layers menu to a left side drawer.**
-  - Replace the bottom-sheet `showLayersPanel` (`lib/ui/layers_panel.dart`) with a
-    left `Drawer` opened from the AppBar / a hamburger button.
-  - Keep all existing layer controls (visibility, reorder, colour, rename, active).
+Save layers and objects to a file and load them back. The most-requested next step.
 
-- [x] **Add an explicit add / remove button (object add/delete).**
-  - A clear "add object" action and a "remove" action, instead of relying only on
-    map taps. Add button creates an object in the active layer; remove deletes the
-    selected object.
-  - Decide how it pairs with the bottom edit menu below (e.g. add → object becomes
-    selected → bottom menu opens for placement/tuning).
+- Serialise per object type (circle → point+radius, plane/subspace/freehand → point
+  lists, plus layer colour/type/invert/offset) to **GeoJSON** features; consider **KML**
+  for interop with Google Earth / Maps.
+- Round-trip through the existing `Repository` CRUD; reuse the `geo/coords.dart` parsing
+  conventions. Decide on a sharing mechanism (share sheet vs. file picker) and whether
+  import merges into existing layers or creates new ones.
 
-- [x] **Add a nice app icon / symbol.**
-  - Replace the default Flutter launcher icon (`android/app/src/main/res/mipmap-*`,
-    `ios/.../AppIcon.appiconset`). Use `flutter_launcher_icons` to generate all sizes
-    from one source asset. Done: transparent rounded-square at `assets/icon/zonecraft.png`
-    (+ adaptive foreground); also shown as the launch splash via `flutter_native_splash`.
+### 2. Geodesic geometry refinement
 
-## Object editing
+Make the plane/subspace bisectors and the freehand offsets **geodesically accurate**
+instead of the current planar approximation (fine at city scale, drifts at large extents
+or high latitude).
 
-- [x] **Edit objects via a bottom menu, not a dialog floating over the map.**
-  - Replace the `AlertDialog` in `lib/ui/circle_editor.dart` with a persistent /
-    docked **bottom panel** (e.g. bottom sheet that stays while the map is visible),
-    so the map stays usable while editing.
-  - Selecting an object on the map opens this bottom menu; it shows the object's
-    fields (centre, radius, label, layer) plus add/remove.
+- Affects `geo/plane.dart`, `geo/subspace.dart`, `geo/freeline.dart`, `geo/freearea.dart`.
+- Keep the `outer`/`core` rendering contract unchanged — only the geometry that produces
+  those polygons changes. Add unit tests comparing against known great-circle results.
 
-## Location
+### 3. Offline — "download this area"
 
-- [x] **"Locate me" button to centre the map on the phone's position.**
-  - **Strictly optional** — never force it. Only request location permission when the
-    user taps the button; degrade gracefully if denied. No background location.
-  - Likely `geolocator` + `permission_handler`. Show the current position marker only
-    after explicit opt-in.
+Add an explicit bulk-download for guaranteed offline coverage beyond the automatic browse
+cache + one-tile prefetch ring.
 
-## Settings & uncertainty
-
-- [x] **Add a general Settings screen.**
-  - A place for app-wide options (persisted locally, e.g. a `Settings` table or
-    key/value store via Drift / `shared_preferences`).
-
-- [x] **Uncertainty radius as a global setting (e.g. 500 m).**
-  - Configurable in Settings. Applied to objects so the **outer band** of the object
-    is drawn lighter than the inner core, representing measurement uncertainty.
-  - For a circle of radius `R` and uncertainty `u`: render an inner solid region and
-    an outer, lighter band. See open question on which band (inner `R-u..R`, or an
-    extra ring `R..R+u`).
-  - Applies to planes too (lighter band along the dividing edge — see below).
-
-## Layer behaviour
-
-- [x] **Per-layer "inverse" toggle.**
-  - When inverted, fill everything **not** covered by the layer's objects instead of
-    the covered area (e.g. a circles layer fills the outside, leaving holes where the
-    circles are). Store as a `isInverted` flag on the layer.
-
-- [x] **Union rendering — overlaps don't darken.**
-  - Overlapping objects within a layer (and overlapping layers) must show a **single
-    flat colour**, not compounded opacity. The interior is one uniform colour; only
-    the **uncertainty band** differs.
-  - Implementation: composite each layer's objects as a unioned `Path` (or draw the
-    union at full alpha) rather than stacking translucent polygons. The current
-    per-polygon translucent fill in `lib/ui/map_screen.dart` `_buildPolygons` stacks —
-    needs to change to a union/merge approach.
-
-## New geometry types
-
-- [x] **Layers are single-type: a layer holds circles **or** planes (or future types),
-      not a mix.**
-  - Add an object/layer `type` to the data model. The add button and editor adapt to
-    the layer's type.
-
-- [x] **"Plane" object: closer-to-one-of-two-points region.**
-  - Defined by **two points**; the enabled region is all points **closer to one point
-    than the other** — i.e. the half-plane on one side of the two points'
-    perpendicular bisector. (Geodesic equivalent on the sphere.)
-  - Has an **uncertainty area**: a lighter band straddling the bisector edge (width
-    from the global uncertainty setting).
-  - Works with the inverse toggle and union rendering like circles.
+- A Settings/map button that downloads all tiles for the current viewport across a few
+  zoom levels (base map + enabled overlays) into the existing `TileCache`, with a progress
+  indicator and a size estimate.
+- Reuse `geo/tiles.dart` tile enumeration and `CachedTileProvider.prefetch`; respect the
+  200 MB LRU cap (or let this pin an area exempt from eviction — decide).
 
 ---
 
-## v2 backlog (planned — see `IMPLEMENTATION_PLAN.md` M7–M11)
-
-The next batch of features. Each general setting is stored in `AppSettings` and so persists
-across close/relaunch by construction.
-
-### Map chrome
-
-- [x] **Compass control (M7).** A small button in the lower-right stack whose needle always
-  points to map-north; tapping it snaps the map back to north-up (rotation = 0).
-
-### Settings
-
-- [x] **Default uncertainty = 500 m (M8)**, not 0. Migration bumps an existing stored `0` to
-  `500`.
-- [x] **All general settings persist (M8)** across app close/start (stored in `AppSettings`).
-- [x] **"Clear all data" button (M8)** in Settings, behind a confirmation dialog — wipes
-  layers/objects, resets settings, re-seeds an empty default layer.
-
-### Map data overlays (toggled in Settings)
-
-- [x] **Public-transport overlay (M10).** Load the train/bus network and stops — as an
-  optional OSM-based tile overlay (ÖPNVKarte for buses/stops, OpenRailwayMap for rail).
-- [x] **OSMAnd-style POIs (M11).** Toggle OSM POI categories (park benches, post boxes, …),
-  fetched from Overpass and shown as markers, **only at high zoom** to match OSMAnd's
-  behaviour (no clutter when zoomed out).
-- [x] **Administrative borders (post-v2).** Toggle OSM `admin_level` boundaries individually
-  (countries → states → counties → cities → districts → suburbs), each its own colour, fetched
-  from Overpass (relations → member ways clipped to the viewport, tagged via `convert`) and
-  drawn as polylines. Per-level zoom gating keeps queries bounded. Stored in
-  `AppSettings.borderLevels` (bitmask, schema v8).
-
-### New geometry type
-
-- [x] **"Closest subspace" object (M9).** Like the two-point plane but with **N points**: one
-  object holds all points, one is the **main** point, and the filled region is everywhere
-  closer to the main point than to any other (its Voronoi cell). In a subspace layer the
-  **Add** button adds *points* to the single object. Uncertainty band along the internal
-  divides, and the per-layer **inverse** fills everything except the main cell.
-
----
-
-## v3 backlog (planned — see `IMPLEMENTATION_PLAN.md` M12–M13)
-
-User-drawn (freehand) regions, as opposed to the geometric primitives above.
-
-### New geometry types
-
-- [x] **"Freehand line" object (M12).** A user-drawn **polyline** that divides the map into
-  two sides; the layer colours one side and the per-layer **invert** flips to the other. A
-  partial line (e.g. a stretch of the Isar) is completed by **extending its first/last
-  segments straight** so it still splits the whole view. New `freeline` layer type,
-  `FreeLines` + `FreeLinePoints` tables (schema v9), `geo/freeline.dart`,
-  `ui/freeline_editor.dart`.
-- [x] **"Freehand area" object (M13).** A user-drawn **closed polygon**; the layer colours
-  the inside and **invert** the outside (e.g. a city outline). New `freearea` layer type,
-  `FreeAreas` + `FreeAreaPoints` tables (schema v9), `geo/freearea.dart`,
-  `ui/freearea_editor.dart`.
-- [x] **Signed per-object offset (M12/M13).** Each freehand object carries an
-  `offsetMeters`, separate from the global uncertainty: positive pushes the coloured
-  boundary away from the line / inward from the area ("inside the city **and** >5 km from
-  the border"); negative extends the fill past the drawn boundary. The uncertainty band
-  straddles the shifted boundary as before.
-
-## Offline resilience (see `IMPLEMENTATION_PLAN.md` M14)
-
-- [x] **Offline map tile caching (M14).** A Drift-backed `TileCache` + custom
-  `CachedTileProvider` serve map tiles cache-first then network, so revisited areas don't
-  re-download and the map survives a few minutes with no reception. **Viewport prefetch**
-  caches a one-tile ring around the view (and the transport overlays) so a short offline pan
-  still has tiles. LRU eviction under a 200 MB cap; a Settings size readout + "Clear cached
-  map tiles" button (separate from "Clear all data"). Slippy-tile maths in `geo/tiles.dart`.
-- [x] **Persisted POI/border overlays (M14).** An `OverpassCache` table stores the last
-  successful POI/border results so they reappear instantly on launch, including offline.
-- Schema **v10** (`TileCache` + `OverpassCache`).
-
----
-
-## Data model impact (Drift — `lib/data/database.dart`)
-
-- `Layers`: `isInverted` (bool) and `type` ✅ done (circles | planes | **subspace** ✅ M9).
-- `Circles` ✅ and `Planes` ✅ (two points). `Subspaces` + `SubspacePoints` ✅ (one object, N
-  points, one `isMain`) added in M9 (schema v5).
-- `AppSettings` ✅ holds uncertainty + camera + transport-overlay toggle ✅ (M10, schema v6) +
-  enabled-POI-category bitmask ✅ (M11, schema v7) + enabled-border-levels bitmask ✅
-  (post-v2, schema v8); **default uncertainty → 500** ✅ (M8).
-- `FreeLines` + `FreeLinePoints` and `FreeAreas` + `FreeAreaPoints` ✅ (one object, N ordered
-  points, signed `offsetMeters` on the parent) added in M12/M13 (schema v9).
-- `TileCache` (offline map tiles) + `OverpassCache` (persisted POI/border overlays) ✅
-  added in M14 (schema v10).
-- `Repository.clearAll()` for the clear-data button (M8).
-- Remember to bump `schemaVersion` and add migrations for each (M8 → v4, then M9, M10/M11).
-
-## Open questions / decisions (all resolved during v1)
-
-1. **Uncertainty band geometry:** ✅ inner band `R-u..R` for circles (the band eats into
-   the object); for planes the band straddles the dividing bisector.
-2. **Plane region:** ✅ user-toggleable per plane (the "Nearer side: A | B" switch).
-3. **Union across layers vs per layer:** ✅ flat union applies *within* a layer; different
-   layers still composite (blend) over each other.
-4. **Single source of truth for object type:** ✅ per-layer `type`, chosen at layer
-   creation; a layer holds one object kind.
-
-### v2 open questions
-
-5. **Default-500 migration:** bumping a stored `0` to `500` also overrides a user who
-   deliberately set `0`. Accepted (one tap to change) — confirm if a smarter "only if never
-   touched" check is wanted instead.
-6. **Transport data source:** rendered tile overlay (ÖPNVKarte / OpenRailwayMap — chosen for
-   v1 simplicity) vs. interactive vector stops via Overpass (tappable, heavier). Start tiles.
-7. **POI source & limits:** Overpass API at high zoom with debounce + caching. Which Overpass
-   instance, how aggressive the cache/zoom-gate, and the initial category list?
-8. **Subspace storage:** separate `Subspaces` + `SubspacePoints` tables (chosen) vs. a JSON
-   point list on one row. Tables keep it relational and queryable.
-9. **Subspace "main" + inverse:** exactly one main point per object; inverse fills the
-   complement of the main cell. Confirm whether multiple "shown" cells are ever wanted (no —
-   spec says one shown region).
-
----
-
-> This is a living document — refine items and tick them off as we build. Each item is
-> a candidate for its own focused implementation pass.
+> Living document — add open points as they come up, and move them to
+> [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) as architecture notes once delivered.
