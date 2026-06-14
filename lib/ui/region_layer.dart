@@ -194,6 +194,7 @@ class _RegionPainter extends CustomPainter {
           nearA: p.nearA,
           bandMeters: cellBand,
           viewportCorners: corners,
+          bandInward: inverted,
         );
         addOuter(region.outer);
         addCore(region.core);
@@ -214,6 +215,7 @@ class _RegionPainter extends CustomPainter {
           others: others,
           bandMeters: cellBand,
           viewportCorners: corners,
+          bandInward: inverted,
         );
         addOuter(region.outer);
         addCore(region.core);

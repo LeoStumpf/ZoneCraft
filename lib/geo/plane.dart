@@ -37,6 +37,7 @@ PlaneRegion planeRegion({
   required bool nearA,
   required double bandMeters,
   required List<LatLng> viewportCorners,
+  bool bandInward = false,
 }) {
   final near = nearA ? a : b;
   final far = nearA ? b : a;
@@ -45,6 +46,7 @@ PlaneRegion planeRegion({
     others: <LatLng>[far],
     bandMeters: bandMeters,
     viewportCorners: viewportCorners,
+    bandInward: bandInward,
   );
   return PlaneRegion(cell.outer, cell.core);
 }

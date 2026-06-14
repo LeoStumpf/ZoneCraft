@@ -123,6 +123,27 @@ void main() {
           inside(withFar.outer, probe));
     });
 
+    test('bandInward puts the band inside the divide (for inverted layers)', () {
+      // Inverted: the divide is unchanged but the band shrinks the cell inward,
+      // so `outer` is the strict cell and `core` is it pulled ~500 m toward main.
+      const main = LatLng(0, 0);
+      const others = <LatLng>[LatLng(0, 0.02)]; // divide ~1.1 km east
+      final r = subspaceRegion(
+        main: main,
+        others: others,
+        bandMeters: 500,
+        viewportCorners: corners,
+        bandInward: true,
+      );
+      // `outer` is the strict cell: the divide hasn't moved.
+      expect(inside(r.outer, const LatLng(0, 0.009)), isTrue);
+      expect(inside(r.outer, const LatLng(0, 0.011)), isFalse);
+      // `core` is shrunk inward: a point just inside the divide is now in the
+      // band (outer, not core); only deeper inside is core (the uncoloured hole).
+      expect(inside(r.core, const LatLng(0, 0.009)), isFalse);
+      expect(inside(r.core, const LatLng(0, 0.003)), isTrue);
+    });
+
     test('empty when there are no other points', () {
       final r = subspaceRegion(
         main: const LatLng(0, 0),

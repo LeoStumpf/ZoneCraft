@@ -40,6 +40,7 @@ SubspaceRegion subspaceRegion({
   required List<LatLng> others,
   required double bandMeters,
   required List<LatLng> viewportCorners,
+  bool bandInward = false,
   int maxOthers = 32,
 }) {
   // The main point's cell is bounded only by its *Voronoi neighbours* — points
@@ -56,6 +57,7 @@ SubspaceRegion subspaceRegion({
     others: culled,
     bandMeters: bandMeters,
     viewportCorners: viewportCorners,
+    bandInward: bandInward,
   );
   return SubspaceRegion(cell.outer, cell.core);
 }

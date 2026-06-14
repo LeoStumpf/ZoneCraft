@@ -137,18 +137,23 @@ double bandThreshold(double bandMeters) {
 /// shared core of both the plane (one "other") and subspace (N "others")
 /// regions.
 ///
-/// `core` is the **strict cell** — the true "closer to [main]" region, whose
-/// boundary is the equidistant divide (the engine outlines this and fills it
-/// solid). `outer` is that cell grown **outward** by [bandMeters] (each bisector
-/// pushed toward the other points), so the engine paints `outer − core` as the
-/// uncertainty band hugging the divide on its outside. Returns empty rings when
-/// there are no others, a point coincides with [main], or the geometry is
-/// non-finite.
+/// One of `outer`/`core` is always the **strict cell** (the true "closer to
+/// [main]" region, whose boundary is the equidistant divide the engine outlines)
+/// and the other offsets it by [bandMeters] to make the uncertainty band as
+/// `outer − core`. Normally (`bandInward` false) `core` is the strict cell and
+/// `outer` grows **outward** (band on the divide's outside) — the right shape for
+/// the solid "closer-to-main" fill. When the layer is **inverted** the coloured
+/// region is the complement, so pass `bandInward: true`: then `outer` is the
+/// strict cell and `core` is it shrunk **inward**, putting the band on the
+/// divide's inside (the now-uncoloured cell) while the outline stays on the
+/// divide. Returns empty rings when there are no others, a point coincides with
+/// [main], or the geometry is non-finite.
 ({List<LatLng> outer, List<LatLng> core}) sphericalCell({
   required LatLng main,
   required List<LatLng> others,
   required double bandMeters,
   required List<LatLng> viewportCorners,
+  bool bandInward = false,
   int segments = 20,
 }) {
   const empty = (outer: <LatLng>[], core: <LatLng>[]);
@@ -174,15 +179,19 @@ double bandThreshold(double bandMeters) {
   }
   if (mList.isEmpty) return empty;
 
-  // The band is a **fixed** outward offset of the divide — every bisector is
-  // pushed out by the same [bandMeters], so the halo is uniformly that wide on
-  // all sides regardless of how near each neighbour is.
+  // The band is a **fixed** offset of the divide — every bisector is pushed by
+  // the same [bandMeters], so the halo is uniformly that wide on all sides
+  // regardless of how near each neighbour is. One ring is the strict cell
+  // (threshold 0); the other is offset by ±s. Outward (default) grows the cell;
+  // inward (inverted layers) shrinks it, keeping the band on the divide's inside.
   final s = bandThreshold(bandMeters);
+  final outerThresh = bandInward ? 0.0 : -s;
+  final coreThresh = bandInward ? s : 0.0;
   var outer = quad;
   var core = quad;
   for (final m in mList) {
-    outer = clipByPlane(outer, m, -s); // grown outward by a fixed band
-    core = clipByPlane(core, m, 0); // the strict cell: the true divide
+    outer = clipByPlane(outer, m, outerThresh);
+    core = clipByPlane(core, m, coreThresh);
     if (outer.isEmpty && core.isEmpty) break;
   }
   return (
