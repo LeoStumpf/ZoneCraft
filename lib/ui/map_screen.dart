@@ -55,6 +55,18 @@ class _MapScreenState extends ConsumerState<MapScreen>
   double? _probeElevation;
   bool _probing = false;
 
+  // --- Distance probe -------------------------------------------------------
+  /// When on, the first two map taps set the endpoints of a distance/bearing
+  /// measurement; a third tap restarts from a fresh first point.
+  bool _distanceMode = false;
+  LatLng? _distA;
+  LatLng? _distB;
+
+  // --- Action-button stack --------------------------------------------------
+  /// Whether the right-side utility FABs are shown. The toggle + Add button
+  /// stay visible either way. Session-only; defaults to expanded.
+  bool _fabsExpanded = true;
+
   // --- Offline tile cache ---------------------------------------------------
   /// Tile URL templates, shared by the [TileLayer]s and the offline prefetcher
   /// so the two never drift apart.
@@ -541,9 +553,28 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (_locating) return;
     setState(() => _locating = true);
     try {
+      final here = await _getCurrentPosition();
+      if (here == null || !mounted) return;
+      setState(() {
+        _myPosition = here;
+        _myElevation = null;
+      });
+      _mapController.move(here, 14);
+      unawaited(_updateMyElevation(here));
+    } finally {
+      if (mounted) setState(() => _locating = false);
+    }
+  }
+
+  /// Requests the device's current position, handling permission/service state
+  /// with dismissible hints. Returns the fix, or null on denial / disabled
+  /// services / a bad (non-finite) fix / any error. Has no side effects on the
+  /// map camera — callers decide what to do with the result.
+  Future<LatLng?> _getCurrentPosition() async {
+    try {
       if (!await Geolocator.isLocationServiceEnabled()) {
         _hint('Location services are off. Enable them to use Locate me.');
-        return;
+        return null;
       }
 
       var permission = await Geolocator.checkPermission();
@@ -553,7 +584,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
         _hint('Location permission denied. ZoneCraft works fine without it.');
-        return;
+        return null;
       }
 
       final pos = await Geolocator.getCurrentPosition();
@@ -561,20 +592,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
       // camera and crash every subsequent projection.
       if (!pos.latitude.isFinite || !pos.longitude.isFinite) {
         _hint('Could not get a valid location fix. Try again outdoors.');
-        return;
+        return null;
       }
-      final here = LatLng(pos.latitude, pos.longitude);
-      if (!mounted) return;
-      setState(() {
-        _myPosition = here;
-        _myElevation = null;
-      });
-      _mapController.move(here, 14);
-      unawaited(_updateMyElevation(here));
+      return LatLng(pos.latitude, pos.longitude);
     } catch (e) {
       _hint('Could not get your location.');
-    } finally {
-      if (mounted) setState(() => _locating = false);
+      return null;
     }
   }
 
@@ -586,15 +609,63 @@ class _MapScreenState extends ConsumerState<MapScreen>
   }
 
   /// Toggles tap-to-measure-elevation mode. Clears any previous probe result.
+  /// Arming this disarms the distance probe — only one measure mode at a time.
   void _toggleProbe() {
     setState(() {
       _probeMode = !_probeMode;
       if (!_probeMode) {
         _probePoint = null;
         _probeElevation = null;
+      } else {
+        _distanceMode = false;
+        _distA = null;
+        _distB = null;
       }
     });
     if (_probeMode) _hint('Tap the map to measure elevation');
+  }
+
+  /// Toggles tap-two-points-to-measure-distance mode. Clears any endpoints on
+  /// disarm and disarms the elevation probe on arm (one measure mode at a time).
+  void _toggleDistance() {
+    setState(() {
+      _distanceMode = !_distanceMode;
+      if (!_distanceMode) {
+        _distA = null;
+        _distB = null;
+      } else {
+        _probeMode = false;
+        _probePoint = null;
+        _probeElevation = null;
+      }
+    });
+    if (_distanceMode) _hint('Tap two points to measure distance');
+  }
+
+  /// Records [p] as the next distance endpoint: first/restart point when none
+  /// or both are set, otherwise the second point.
+  void _distanceTap(LatLng p) {
+    setState(() {
+      if (_distA == null || _distB != null) {
+        _distA = p;
+        _distB = null;
+      } else {
+        _distB = p;
+      }
+    });
+  }
+
+  /// Snaps the next distance endpoint to the device's current location.
+  Future<void> _distanceFromMyLocation() async {
+    final here = _myPosition ?? await _getCurrentPosition();
+    if (here == null || !mounted) return;
+    setState(() => _myPosition = here);
+    _distanceTap(here);
+  }
+
+  static String _formatDistance(double meters) {
+    if (meters < 1000) return '${meters.round()} m';
+    return '${(meters / 1000).toStringAsFixed(2)} km';
   }
 
   /// Measures the terrain elevation at [p] (cache-first terrain tile) and shows
@@ -1144,6 +1215,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
       return;
     }
 
+    // Distance-probe mode: collect two endpoints instead of selecting.
+    if (_distanceMode) {
+      _distanceTap(latlng);
+      return;
+    }
+
     // Topmost object across visible layers (regardless of type) wins.
     for (final layer in layers.reversed) {
       if (!layer.isVisible) continue;
@@ -1589,6 +1666,33 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           ),
                         ],
                       ),
+                    // Distance probe: a line between the two endpoints plus a
+                    // pin at each.
+                    if (_distA != null && _distB != null)
+                      PolylineLayer(
+                        polylines: [
+                          Polyline(
+                            points: [_distA!, _distB!],
+                            strokeWidth: 3,
+                            color: Colors.black87,
+                          ),
+                        ],
+                      ),
+                    if (_distA != null || _distB != null)
+                      MarkerLayer(
+                        markers: [
+                          for (final p in [_distA, _distB])
+                            if (p != null)
+                              Marker(
+                                point: p,
+                                width: 28,
+                                height: 28,
+                                alignment: Alignment.topCenter,
+                                child: const Icon(Icons.place,
+                                    color: Colors.black87, size: 28),
+                              ),
+                        ],
+                      ),
                     // Visual handles for the object being edited: the circle's
                     // centre, the plane's two points, or the subspace's points
                     // (its main point shown distinct).
@@ -1653,7 +1757,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   ),
                 ),
                 // Elevation readout: the measured point and/or current location.
-                if (_probeMode || _probePoint != null || _myElevation != null)
+                if (_probeMode ||
+                    _probePoint != null ||
+                    _myElevation != null ||
+                    _distanceMode ||
+                    _distA != null)
                   SafeArea(
                     child: Align(
                       alignment: Alignment.topCenter,
@@ -1703,6 +1811,41 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                       ),
                                     ],
                                   ),
+                                if (_distanceMode || _distA != null)
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.straighten, size: 16),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        _distA != null && _distB != null
+                                            ? '${_formatDistance(_hitTest(_distA!, _distB!))} · '
+                                                '${_hitTest.bearing(_distA!, _distB!).round()}°'
+                                            : _distA != null
+                                                ? 'Tap the second point'
+                                                : 'Tap two points',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodyMedium,
+                                      ),
+                                      if (_distanceMode) ...[
+                                        const SizedBox(width: 8),
+                                        TextButton.icon(
+                                          onPressed: _distanceFromMyLocation,
+                                          icon: const Icon(Icons.my_location,
+                                              size: 16),
+                                          label: const Text('My location'),
+                                          style: TextButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 8),
+                                            minimumSize: const Size(0, 32),
+                                            tapTargetSize: MaterialTapTargetSize
+                                                .shrinkWrap,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
                               ],
                             ),
                           ),
@@ -1720,52 +1863,79 @@ class _MapScreenState extends ConsumerState<MapScreen>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                FloatingActionButton.small(
-                  heroTag: 'download',
-                  tooltip: 'Download this area for offline use',
-                  onPressed: _downloading ? null : _downloadArea,
-                  child: _downloading
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.download_for_offline_outlined),
-                ),
-                const SizedBox(height: 12),
-                FloatingActionButton.small(
-                  heroTag: 'compass',
-                  tooltip: 'Reset to north-up',
-                  onPressed: () => _mapController.rotate(0),
-                  child: Transform.rotate(
-                    // Counter-rotate so the needle always points to map-north.
-                    angle: -_rotation * math.pi / 180,
-                    child: const Icon(Icons.navigation, color: Colors.red),
+                if (_fabsExpanded) ...[
+                  FloatingActionButton.small(
+                    heroTag: 'download',
+                    tooltip: 'Download this area for offline use',
+                    onPressed: _downloading ? null : _downloadArea,
+                    child: _downloading
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.download_for_offline_outlined),
                   ),
-                ),
-                const SizedBox(height: 12),
+                  const SizedBox(height: 12),
+                  FloatingActionButton.small(
+                    heroTag: 'compass',
+                    tooltip: 'Reset to north-up',
+                    onPressed: () => _mapController.rotate(0),
+                    child: Transform.rotate(
+                      // Counter-rotate so the needle always points to map-north.
+                      angle: -_rotation * math.pi / 180,
+                      child: const Icon(Icons.navigation, color: Colors.red),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  FloatingActionButton.small(
+                    heroTag: 'locate',
+                    tooltip: 'Locate me',
+                    onPressed: _locating ? null : _locateMe,
+                    child: _locating
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.my_location),
+                  ),
+                  const SizedBox(height: 12),
+                  FloatingActionButton.small(
+                    heroTag: 'probe',
+                    tooltip: 'Measure elevation',
+                    backgroundColor: _probeMode
+                        ? Theme.of(context).colorScheme.primary
+                        : null,
+                    foregroundColor: _probeMode
+                        ? Theme.of(context).colorScheme.onPrimary
+                        : null,
+                    onPressed: _toggleProbe,
+                    child: const Icon(Icons.terrain),
+                  ),
+                  const SizedBox(height: 12),
+                  FloatingActionButton.small(
+                    heroTag: 'distance',
+                    tooltip: 'Measure distance',
+                    backgroundColor: _distanceMode
+                        ? Theme.of(context).colorScheme.primary
+                        : null,
+                    foregroundColor: _distanceMode
+                        ? Theme.of(context).colorScheme.onPrimary
+                        : null,
+                    onPressed: _toggleDistance,
+                    child: const Icon(Icons.straighten),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 FloatingActionButton.small(
-                  heroTag: 'locate',
-                  tooltip: 'Locate me',
-                  onPressed: _locating ? null : _locateMe,
-                  child: _locating
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.my_location),
-                ),
-                const SizedBox(height: 12),
-                FloatingActionButton.small(
-                  heroTag: 'probe',
-                  tooltip: 'Measure elevation',
-                  backgroundColor:
-                      _probeMode ? Theme.of(context).colorScheme.primary : null,
-                  foregroundColor:
-                      _probeMode ? Theme.of(context).colorScheme.onPrimary : null,
-                  onPressed: _toggleProbe,
-                  child: const Icon(Icons.terrain),
+                  heroTag: 'fabsToggle',
+                  tooltip: _fabsExpanded ? 'Hide tools' : 'Show tools',
+                  onPressed: () =>
+                      setState(() => _fabsExpanded = !_fabsExpanded),
+                  child: Icon(
+                    _fabsExpanded ? Icons.unfold_less : Icons.unfold_more,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 FloatingActionButton.extended(
