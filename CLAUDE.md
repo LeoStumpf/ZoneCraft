@@ -15,8 +15,9 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   + band (`outer−core`, lighter) + outline, or `viewport−outer` when the layer is **inverted**.
   Global uncertainty widens the band; freehand objects add a signed per-object `offsetMeters`.
 - **Layers drawer** (show/hide, reorder, recolour, rename, invert, add/delete) + **compass**,
-  opt-in **Locate me**, **persisted camera**, and a **Settings** screen (uncertainty,
-  clear-all, and the overlay toggles below).
+  opt-in **Locate me** (also reads the terrain elevation there), a **Measure-elevation**
+  probe (tap any point for its height), **persisted camera**, and a **Settings** screen
+  (uncertainty, clear-all, and the overlay toggles below).
 - **Optional overlays** (Overpass / tiles, all in Settings): public-transport tiles, OSMAnd
   POIs, administrative borders.
 - **Offline caching:** a Drift-backed `TileCache` + custom `CachedTileProvider`

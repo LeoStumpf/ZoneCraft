@@ -34,12 +34,17 @@ design reference, not a task log — the feature backlog lives in [PLAN.md](PLAN
 - This single `outer`/`core` contract is shared by all the bisector/ring object types, so
   invert and the band work the same everywhere. A new object type only has to emit `outer`
   and `core` lat/lng rings; the painter projects to the current camera.
-- **Height is the exception to the band/invert flow.** A height region's generated polygons
-  are pre-bounded to its circle and already encode above/below, so the painter builds one
-  **even-odd** `Path` from the region's rings (which yields correct sub-threshold *holes*
-  without any union/subtraction), unions the per-region paths into `outer`/`core`
-  identically (so there is no band — `core == outer`), and never takes the unbounded
-  `viewport − outer` invert path (`isHeight` guard; the layer's Invert menu item is hidden).
+- **Height is the exception to the band/invert flow** (`_paintHeight`). A height region's
+  generated polygons are pre-bounded to its circle and already encode above/below, so the
+  painter builds one **even-odd** `Path` per region from its rings (which yields correct
+  sub-threshold *holes* without any union/subtraction) and fills it solid. The uncertainty
+  band is drawn as a wide translucent **stroke along the elevation contour only** (edges
+  whose endpoints both sit on the bounding circle are the clip arc, not a real border, and
+  are skipped) — but clipped to **`circle − fill`** so the confident core stays solid and
+  only the uncertain strip *outside* the fill (and inside holes) is lightened (no
+  compounding/darkening). Stroke width = the global uncertainty in px (`_metersToPixels`).
+  Height never takes the unbounded `viewport − outer` invert path; its Invert menu item is
+  hidden.
 
 ## Geometry (`lib/geo/`)
 
@@ -130,6 +135,11 @@ viewport as a spherical quad (the painter still `clipRect`s to the true screen r
   `compute()` isolate (raw bytes + doubles cross the boundary — no drift/`ui.Image`). Caps:
   radius ≤ 25 km, ≤ 80 tiles. A 404/offline tile is treated as sea level rather than
   failing; an all-missing fetch throws a user-facing message and keeps prior geometry.
+  The map also offers a single-point **elevation probe** (`queryElevation` +
+  `elevationFromTilePng`): a "Measure elevation" FAB arms a mode where a tap reads the
+  terrain height at that point (one cache-first tile, decoded on the main isolate), and
+  "Locate me" reads the elevation at the current position — both shown in a small readout
+  card. Probe taps yield to any armed point-placement and pre-empt object selection.
 - **Overpass (POIs + admin borders):** debounced, zoom-gated, viewport-inflated fetches
   that **keep stale data and retry on failure** (never clear on a network error). Use a
   polite User-Agent, cap result counts, fail silently. Results persist via `OverpassCache`

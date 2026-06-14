@@ -28,7 +28,10 @@ ZoneCraft is feature-complete for everything planned so far. It has:
 - **Height layer**: enter an elevation; the layer colours terrain above (or below) it inside
   a chosen circle. "Generate" fetches public AWS Terrarium terrain tiles (cache-first),
   contours the threshold with marching squares off the UI thread, and stores the fill
-  polygons so it renders cheaply and offline thereafter.
+  polygons so it renders cheaply and offline thereafter. The global uncertainty shows as a
+  lighter band just outside the height border (the solid core stays solid). A map
+  **"Measure elevation"** probe reads the height of any tapped point, and "Locate me" shows
+  the elevation at your current position.
 - Fully local SQLite (Drift), **schema v11**.
 
 ## Open points
