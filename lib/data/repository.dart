@@ -663,6 +663,7 @@ class Repository {
                   transportOverlay: false,
                   poiCategories: 0,
                   borderLevels: 0,
+                  toolsExpanded: true,
                 )
               : rows.first,
         );
@@ -704,6 +705,16 @@ class Repository {
           AppSettingsCompanion.insert(
             id: const Value(1),
             borderLevels: Value(mask),
+          ),
+        );
+  }
+
+  /// Upserts the utility-FAB expand/collapse choice into the settings row.
+  Future<void> updateToolsExpanded(bool expanded) {
+    return _db.into(_db.appSettings).insertOnConflictUpdate(
+          AppSettingsCompanion.insert(
+            id: const Value(1),
+            toolsExpanded: Value(expanded),
           ),
         );
   }

@@ -305,6 +305,11 @@ class AppSettings extends Table {
   /// in `borders.dart`). 0 = none shown.
   IntColumn get borderLevels => integer().withDefault(const Constant(0))();
 
+  /// Whether the right-side utility FABs are shown (vs. collapsed behind the
+  /// expand/hide toggle). Persisted so the choice survives a relaunch.
+  BoolColumn get toolsExpanded =>
+      boolean().withDefault(const Constant(true))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -335,7 +340,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -389,6 +394,9 @@ class AppDatabase extends _$AppDatabase {
             await m.createTable(heightRegions);
             await m.createTable(heightPolygons);
             await m.createTable(heightPolygonPoints);
+          }
+          if (from < 12) {
+            await m.addColumn(appSettings, appSettings.toolsExpanded);
           }
         },
         beforeOpen: (details) async {

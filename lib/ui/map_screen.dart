@@ -62,10 +62,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
   LatLng? _distA;
   LatLng? _distB;
 
-  // --- Action-button stack --------------------------------------------------
-  /// Whether the right-side utility FABs are shown. The toggle + Add button
-  /// stay visible either way. Session-only; defaults to expanded.
-  bool _fabsExpanded = true;
 
   // --- Offline tile cache ---------------------------------------------------
   /// Tile URL templates, shared by the [TileLayer]s and the offline prefetcher
@@ -1314,6 +1310,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final settings = ref.watch(settingsProvider).asData?.value;
     final uncertainty = settings?.uncertaintyMeters ?? 0;
     final transportOverlay = settings?.transportOverlay ?? false;
+    final toolsExpanded = settings?.toolsExpanded ?? true;
     // React to POI-category changes: update the enabled set and refetch.
     final poiMask = settings?.poiCategories ?? 0;
     if (poiMask != _poiMask) {
@@ -1863,7 +1860,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                if (_fabsExpanded) ...[
+                if (toolsExpanded) ...[
                   FloatingActionButton.small(
                     heroTag: 'download',
                     tooltip: 'Download this area for offline use',
@@ -1930,11 +1927,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
                 ],
                 FloatingActionButton.small(
                   heroTag: 'fabsToggle',
-                  tooltip: _fabsExpanded ? 'Hide tools' : 'Show tools',
-                  onPressed: () =>
-                      setState(() => _fabsExpanded = !_fabsExpanded),
+                  tooltip: toolsExpanded ? 'Hide tools' : 'Show tools',
+                  onPressed: () => ref
+                      .read(repositoryProvider)
+                      .updateToolsExpanded(!toolsExpanded),
                   child: Icon(
-                    _fabsExpanded ? Icons.unfold_less : Icons.unfold_more,
+                    toolsExpanded ? Icons.unfold_less : Icons.unfold_more,
                   ),
                 ),
                 const SizedBox(height: 12),
