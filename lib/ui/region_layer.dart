@@ -283,11 +283,11 @@ class _RegionPainter extends CustomPainter {
   /// Paints a height layer: each region's stored polygons fill with an even-odd
   /// path (so enclosed sub-threshold pockets read as holes), plus an uncertainty
   /// **band** along the *elevation* border only (the circle clip arc is excluded)
-  /// and clipped to the region's circle. The band straddles the border on both
-  /// sides; to keep the contract that overlaps never darken, the band corridor is
-  /// first erased from the solid fill (so the two abut at a flat colour instead
-  /// of compounding). The fill already encodes above/below and is bounded, so
-  /// there is no viewport invert here.
+  /// and clipped to the region's circle. The filled area stays fully solid; the
+  /// band is drawn only *outside* the fill (the outer halo, and the halo inside
+  /// holes), so the confident core never darkens and only the genuinely uncertain
+  /// strip beyond the border is lightened. The fill already encodes above/below
+  /// and is bounded, so there is no viewport invert here.
   void _paintHeight(Canvas canvas, Size size) {
     final solidPaint = Paint()
       ..style = PaintingStyle.fill
@@ -297,14 +297,6 @@ class _RegionPainter extends CustomPainter {
       ..strokeJoin = StrokeJoin.round
       ..strokeCap = StrokeCap.round
       ..color = color.withValues(alpha: 0.20);
-    // Carves the band corridor out of the fill so the band doesn't paint on top
-    // of an already-coloured area (which would read darker). Used inside a
-    // saveLayer so the clear only affects this region's fill, not the map below.
-    final eraserPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeJoin = StrokeJoin.round
-      ..strokeCap = StrokeCap.round
-      ..blendMode = BlendMode.clear;
     final strokePaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5
@@ -349,24 +341,23 @@ class _RegionPainter extends CustomPainter {
       }
       if (!hasFill) continue;
 
+      // Solid fill stays fully solid.
+      canvas.drawPath(fill, solidPaint);
+
       final bandPx =
           uncertaintyMeters > 0 ? _metersToPixels(center, uncertaintyMeters) : 0.0;
-      final hasBand = bandPx > 0;
-
-      // Fill, with the band corridor cleared from it (so band + fill abut flat).
-      canvas.saveLayer(Offset.zero & size, Paint());
-      canvas.drawPath(fill, solidPaint);
-      if (hasBand) {
-        canvas.drawPath(contour, eraserPaint..strokeWidth = bandPx);
-      }
-      canvas.restore();
-
-      // The band itself fills that corridor (and its outer half over bare map),
-      // clipped to the region circle so it stays bounded.
-      if (hasBand) {
+      if (bandPx > 0) {
+        // Band only where it isn't already filled: clip to (circle − fill), so
+        // the inner half of the corridor (over the solid core) is dropped and
+        // the core never lightens. The outer half — and the halo inside any
+        // sub-threshold holes — shows the uncertain strip.
         final ring = geodesicCircle(center, rMeters, points: _ringPoints);
+        final bound = ring.isNotEmpty
+            ? _ringToPath(ring)
+            : (Path()..addRect(Offset.zero & size));
+        final outside = Path.combine(PathOperation.difference, bound, fill);
         canvas.save();
-        if (ring.isNotEmpty) canvas.clipPath(_ringToPath(ring));
+        canvas.clipPath(outside);
         canvas.drawPath(contour, bandPaint..strokeWidth = bandPx);
         canvas.restore();
       }
