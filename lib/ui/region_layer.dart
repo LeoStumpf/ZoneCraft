@@ -138,6 +138,13 @@ class _RegionPainter extends CustomPainter {
     // their viewport-edge stroke) don't paint outside this layer's bounds.
     canvas.clipRect(Offset.zero & size);
 
+    // Height layers render their stored fill polygons with their own bounded
+    // band (along the elevation contour only), so handle them separately.
+    if (heightRegions.isNotEmpty) {
+      _paintHeight(canvas, size);
+      return;
+    }
+
     Path? outerUnion;
     Path? coreUnion;
 
@@ -240,54 +247,16 @@ class _RegionPainter extends CustomPainter {
       }
     }
 
-    // Height regions: each region's generated polygons form one even-odd path
-    // (so enclosed sub-threshold holes are correctly excluded). The bounded fill
-    // already encodes above/below, so there is no band and no viewport invert.
-    final isHeight = heightRegions.isNotEmpty;
-    if (isHeight) {
-      for (final r in heightRegions) {
-        final polys =
-            heightPolygons.where((p) => p.heightRegionId == r.id).toList();
-        if (polys.isEmpty) continue;
-        final regionPath = Path()..fillType = PathFillType.evenOdd;
-        var any = false;
-        for (final poly in polys) {
-          final pts =
-              heightPolygonPoints.where((p) => p.polygonId == poly.id).toList();
-          if (pts.length < 3) continue;
-          for (var i = 0; i < pts.length; i++) {
-            final o = camera.latLngToScreenOffset(LatLng(pts[i].lat, pts[i].lng));
-            if (i == 0) {
-              regionPath.moveTo(o.dx, o.dy);
-            } else {
-              regionPath.lineTo(o.dx, o.dy);
-            }
-          }
-          regionPath.close();
-          any = true;
-        }
-        if (!any) continue;
-        outerUnion = outerUnion == null
-            ? regionPath
-            : Path.combine(PathOperation.union, outerUnion!, regionPath);
-        coreUnion = coreUnion == null
-            ? regionPath
-            : Path.combine(PathOperation.union, coreUnion!, regionPath);
-      }
-    }
-
     final outer = outerUnion;
     if (outer == null) return; // nothing valid to draw
-    // Height layers fill the stored rings exactly (core == outer, no band).
-    final core = isHeight ? outer : (coreUnion ?? Path());
+    final core = coreUnion ?? Path();
 
     // Band is always the ring between core and outline.
     final bandPath = Path.combine(PathOperation.difference, outer, core);
 
-    // Solid fill: the core normally, or the complement when inverted. Height
-    // layers are always bounded (never the unbounded viewport complement).
+    // Solid fill: the core normally, or the complement when inverted.
     final Path solid;
-    if (inverted && !isHeight) {
+    if (inverted) {
       final viewport = Path()..addRect(Offset.zero & size);
       solid = Path.combine(PathOperation.difference, viewport, outer);
     } else {
@@ -309,6 +278,85 @@ class _RegionPainter extends CustomPainter {
     canvas.drawPath(solid, solidPaint);
     canvas.drawPath(bandPath, bandPaint);
     canvas.drawPath(outer, strokePaint);
+  }
+
+  /// Paints a height layer: each region's stored polygons fill with an even-odd
+  /// path (so enclosed sub-threshold pockets read as holes), plus an uncertainty
+  /// **band** stroked along the *elevation* border only (the circle clip arc is
+  /// excluded) and clipped to the region's circle. The fill already encodes
+  /// above/below and is bounded, so there is no viewport invert here.
+  void _paintHeight(Canvas canvas, Size size) {
+    final solidPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = color.withValues(alpha: 0.45);
+    final bandPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeJoin = StrokeJoin.round
+      ..strokeCap = StrokeCap.round
+      ..color = color.withValues(alpha: 0.20);
+    final strokePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..color = color;
+
+    for (final r in heightRegions) {
+      final polys =
+          heightPolygons.where((p) => p.heightRegionId == r.id).toList();
+      if (polys.isEmpty) continue;
+      final center = LatLng(r.centerLat, r.centerLng);
+      final rMeters = r.radiusMeters;
+
+      final fill = Path()..fillType = PathFillType.evenOdd;
+      final contour = Path(); // the real elevation border, for band + outline
+      var hasFill = false;
+      for (final poly in polys) {
+        final pts =
+            heightPolygonPoints.where((p) => p.polygonId == poly.id).toList();
+        if (pts.length < 3) continue;
+        final offs = <Offset>[
+          for (final p in pts)
+            camera.latLngToScreenOffset(LatLng(p.lat, p.lng)),
+        ];
+        fill.moveTo(offs[0].dx, offs[0].dy);
+        for (var i = 1; i < offs.length; i++) {
+          fill.lineTo(offs[i].dx, offs[i].dy);
+        }
+        fill.close();
+        hasFill = true;
+        // Stroke only edges that aren't the circle clip arc (both endpoints on
+        // the boundary ring) — those aren't a real height border.
+        for (var i = 0; i < pts.length; i++) {
+          final a = pts[i];
+          final b = pts[(i + 1) % pts.length];
+          final dA = _distance.as(LengthUnit.Meter, center, LatLng(a.lat, a.lng));
+          final dB = _distance.as(LengthUnit.Meter, center, LatLng(b.lat, b.lng));
+          if (dA > rMeters * 0.97 && dB > rMeters * 0.97) continue;
+          final bo = offs[(i + 1) % offs.length];
+          contour.moveTo(offs[i].dx, offs[i].dy);
+          contour.lineTo(bo.dx, bo.dy);
+        }
+      }
+      if (!hasFill) continue;
+
+      canvas.drawPath(fill, solidPaint);
+
+      if (uncertaintyMeters > 0) {
+        final bandPx = _metersToPixels(center, uncertaintyMeters);
+        final ring = geodesicCircle(center, rMeters, points: _ringPoints);
+        canvas.save();
+        if (ring.isNotEmpty) canvas.clipPath(_ringToPath(ring));
+        canvas.drawPath(contour, bandPaint..strokeWidth = bandPx);
+        canvas.restore();
+      }
+      canvas.drawPath(contour, strokePaint);
+    }
+  }
+
+  /// Screen-space length (px) of [meters] on the ground near [at].
+  double _metersToPixels(LatLng at, double meters) {
+    final east = _distance.offset(at, meters, 90);
+    return (camera.latLngToScreenOffset(at) - camera.latLngToScreenOffset(east))
+        .distance;
   }
 
   /// The four corners of the (slightly inflated) viewport as lat/lng, in ring

@@ -28,6 +28,37 @@ class HeightGenResult {
   final int missingTiles;
 }
 
+/// Looks up the terrain elevation (metres) at [lat]/[lng] from the single
+/// Terrarium tile covering it (cache-first, then network). Returns null when the
+/// tile can't be fetched (offline) or decoded. Used by the map elevation probe
+/// and the current-position readout.
+Future<double?> queryElevation({
+  required Repository repo,
+  required http.Client client,
+  required double lat,
+  required double lng,
+  int z = 13,
+  Map<String, String> headers = const {},
+}) async {
+  final x = terrariumTileX(lng, z);
+  final y = terrariumTileY(lat, z);
+  final url = terrariumTileUrl(z, x, y);
+  Uint8List? bytes = await repo.getTile(url);
+  if (bytes == null) {
+    try {
+      final resp = await client.get(Uri.parse(url), headers: headers);
+      if (resp.statusCode == 200 && resp.bodyBytes.isNotEmpty) {
+        bytes = resp.bodyBytes;
+        await repo.putTile(url, bytes);
+      }
+    } catch (_) {
+      return null;
+    }
+  }
+  if (bytes == null) return null;
+  return elevationFromTilePng(bytes, z, x, y, lat, lng);
+}
+
 Future<HeightGenResult> generateHeightRegion({
   required Repository repo,
   required http.Client client,

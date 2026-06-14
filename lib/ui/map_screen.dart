@@ -11,6 +11,7 @@ import 'package:latlong2/latlong.dart' hide Circle;
 import '../data/borders.dart';
 import '../data/cached_tile_provider.dart';
 import '../data/database.dart';
+import '../data/height_generator.dart';
 import '../data/overpass.dart';
 import '../geo/geodesic.dart';
 import '../geo/tiles.dart';
@@ -42,6 +43,17 @@ class _MapScreenState extends ConsumerState<MapScreen>
   LatLng? _myPosition;
   bool _locating = false;
   bool _mapReady = false;
+
+  /// Terrain elevation (m) at the current "Locate me" position, when known.
+  double? _myElevation;
+
+  // --- Elevation probe ------------------------------------------------------
+  /// When on, a map tap measures the terrain elevation at that point instead of
+  /// selecting/deselecting objects.
+  bool _probeMode = false;
+  LatLng? _probePoint;
+  double? _probeElevation;
+  bool _probing = false;
 
   // --- Offline tile cache ---------------------------------------------------
   /// Tile URL templates, shared by the [TileLayer]s and the offline prefetcher
@@ -553,8 +565,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
       }
       final here = LatLng(pos.latitude, pos.longitude);
       if (!mounted) return;
-      setState(() => _myPosition = here);
+      setState(() {
+        _myPosition = here;
+        _myElevation = null;
+      });
       _mapController.move(here, 14);
+      unawaited(_updateMyElevation(here));
     } catch (e) {
       _hint('Could not get your location.');
     } finally {
@@ -567,6 +583,65 @@ class _MapScreenState extends ConsumerState<MapScreen>
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
       ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Toggles tap-to-measure-elevation mode. Clears any previous probe result.
+  void _toggleProbe() {
+    setState(() {
+      _probeMode = !_probeMode;
+      if (!_probeMode) {
+        _probePoint = null;
+        _probeElevation = null;
+      }
+    });
+    if (_probeMode) _hint('Tap the map to measure elevation');
+  }
+
+  /// Measures the terrain elevation at [p] (cache-first terrain tile) and shows
+  /// it. Shares the screen's tile client.
+  Future<void> _probeAt(LatLng p) async {
+    setState(() {
+      _probing = true;
+      _probePoint = p;
+      _probeElevation = null;
+    });
+    final e = await queryElevation(
+      repo: ref.read(repositoryProvider),
+      client: _tileClient,
+      lat: p.latitude,
+      lng: p.longitude,
+      headers: const {'User-Agent': _tileUserAgent},
+    );
+    if (!mounted) return;
+    setState(() {
+      _probing = false;
+      _probeElevation = e;
+    });
+    if (e == null) _hint('Elevation data unavailable here (offline?)');
+  }
+
+  /// Looks up and stores the elevation at the current location for the readout.
+  Future<void> _updateMyElevation(LatLng p) async {
+    final e = await queryElevation(
+      repo: ref.read(repositoryProvider),
+      client: _tileClient,
+      lat: p.latitude,
+      lng: p.longitude,
+      headers: const {'User-Agent': _tileUserAgent},
+    );
+    if (!mounted) return;
+    setState(() => _myElevation = e);
+  }
+
+  static String _formatElevation(double meters) {
+    final m = meters.round();
+    final s = m.abs().toString();
+    // Thousands separator for readability (e.g. 2,962 m).
+    final withSep = s.replaceAllMapped(
+      RegExp(r'(\d)(?=(\d{3})+$)'),
+      (mm) => '${mm[1]},',
+    );
+    return '${m < 0 ? '−' : ''}$withSep m';
   }
 
   /// A small non-interactive dot marking an edit point (circle centre / plane
@@ -1062,6 +1137,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
       return;
     }
 
+    // Elevation-probe mode: measure the tapped point instead of selecting (but
+    // after any armed point-placement above, which takes priority).
+    if (_probeMode) {
+      await _probeAt(latlng);
+      return;
+    }
+
     // Topmost object across visible layers (regardless of type) wins.
     for (final layer in layers.reversed) {
       if (!layer.isVisible) continue;
@@ -1470,6 +1552,43 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           ),
                         ],
                       ),
+                    // Elevation-probe pin + value at the measured point.
+                    if (_probePoint != null)
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: _probePoint!,
+                            width: 120,
+                            height: 56,
+                            alignment: Alignment.topCenter,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.place,
+                                    color: Colors.black87, size: 28),
+                                Material(
+                                  color: Colors.black87,
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 2),
+                                    child: Text(
+                                      _probing
+                                          ? '…'
+                                          : _probeElevation != null
+                                              ? _formatElevation(
+                                                  _probeElevation!)
+                                              : 'n/a',
+                                      style: const TextStyle(
+                                          color: Colors.white, fontSize: 12),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     // Visual handles for the object being edited: the circle's
                     // centre, the plane's two points, or the subspace's points
                     // (its main point shown distinct).
@@ -1533,6 +1652,64 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     ),
                   ),
                 ),
+                // Elevation readout: the measured point and/or current location.
+                if (_probeMode || _probePoint != null || _myElevation != null)
+                  SafeArea(
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Material(
+                          color: Theme.of(context).colorScheme.surface,
+                          elevation: 2,
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (_probeMode || _probePoint != null)
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.place_outlined, size: 16),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        _probing
+                                            ? 'Measuring…'
+                                            : _probeElevation != null
+                                                ? 'Point: ${_formatElevation(_probeElevation!)}'
+                                                : _probePoint != null
+                                                    ? 'Point: n/a'
+                                                    : 'Tap the map to measure',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodyMedium,
+                                      ),
+                                    ],
+                                  ),
+                                if (_myElevation != null)
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.my_location, size: 16),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'You: ${_formatElevation(_myElevation!)}',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodyMedium,
+                                      ),
+                                    ],
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
       // While an editor sheet is open it provides its own delete/close, and the
@@ -1578,6 +1755,17 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.my_location),
+                ),
+                const SizedBox(height: 12),
+                FloatingActionButton.small(
+                  heroTag: 'probe',
+                  tooltip: 'Measure elevation',
+                  backgroundColor:
+                      _probeMode ? Theme.of(context).colorScheme.primary : null,
+                  foregroundColor:
+                      _probeMode ? Theme.of(context).colorScheme.onPrimary : null,
+                  onPressed: _toggleProbe,
+                  child: const Icon(Icons.terrain),
                 ),
                 const SizedBox(height: 12),
                 FloatingActionButton.extended(

@@ -17,6 +17,26 @@ import 'package:latlong2/latlong.dart';
 String terrariumTileUrl(int z, int x, int y) =>
     'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/$z/$x/$y.png';
 
+/// The slippy tile column/row covering [lng]/[lat] at zoom [z] (for a
+/// single-point elevation lookup).
+int terrariumTileX(double lng, int z) =>
+    _lngToTileX(lng, z).floor().clamp(0, (1 << z) - 1);
+int terrariumTileY(double lat, int z) =>
+    _latToTileY(lat, z).floor().clamp(0, (1 << z) - 1);
+
+/// Elevation (metres) at [lat]/[lng], decoded from the single Terrarium tile
+/// PNG [bytes] (tile [tileX]/[tileY] at zoom [z]) that covers it; null if the
+/// bytes don't decode. Used by the map's "measure elevation" probe.
+double? elevationFromTilePng(
+    Uint8List bytes, int z, int tileX, int tileY, double lat, double lng) {
+  final im = img.decodePng(bytes);
+  if (im == null) return null;
+  final px = ((_lngToTileX(lng, z) - tileX) * 256).floor().clamp(0, im.width - 1);
+  final py = ((_latToTileY(lat, z) - tileY) * 256).floor().clamp(0, im.height - 1);
+  final p = im.getPixel(px, py);
+  return p.r * 256 + p.g + p.b / 256 - 32768;
+}
+
 /// Hard caps keeping a single generation bounded (also enforced by the caller).
 const double heightMaxRadiusMeters = 25000;
 const int heightMaxTiles = 80;

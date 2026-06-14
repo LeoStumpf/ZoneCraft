@@ -104,6 +104,16 @@ void main() {
     expect(rings, isEmpty);
   });
 
+  test('elevationFromTilePng decodes the pixel under a point', () {
+    const z = 14;
+    final x = terrariumTileX(centerLng, z);
+    final y = terrariumTileY(centerLat, z);
+    final e = elevationFromTilePng(
+        _flatTile(1234), z, x, y, centerLat, centerLng);
+    expect(e, isNotNull);
+    expect(e!.round(), 1234);
+  });
+
   test('all terrain below threshold (above=true) yields no fill', () {
     final rings = buildHeightRings(_flatRequest(
       centerLat: centerLat,
