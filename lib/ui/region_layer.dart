@@ -176,9 +176,12 @@ class _RegionPainter extends CustomPainter {
       }
     }
 
-    // The band straddles each divide; its half-width on the ground is half the
-    // global uncertainty (matching the circle's full-width core inset).
+    // Freehand line/area bands straddle their divide, so use half the global
+    // uncertainty each way. Plane/subspace cells instead keep a solid *strict*
+    // cell and grow the band fully **outward** from the divide, so they take the
+    // whole uncertainty (see [cellBand] below).
     final band = uncertaintyMeters > 0 ? uncertaintyMeters / 2 : 0.0;
+    final cellBand = uncertaintyMeters > 0 ? uncertaintyMeters : 0.0;
     // Plane/subspace clip to the viewport as a spherical quad; unproject its
     // (slightly inflated) corners once. Null at extreme zoom / near-pole.
     final corners = _viewportCorners(size);
@@ -189,7 +192,7 @@ class _RegionPainter extends CustomPainter {
           a: LatLng(p.aLat, p.aLng),
           b: LatLng(p.bLat, p.bLng),
           nearA: p.nearA,
-          bandMeters: band,
+          bandMeters: cellBand,
           viewportCorners: corners,
         );
         addOuter(region.outer);
@@ -209,7 +212,7 @@ class _RegionPainter extends CustomPainter {
         final region = subspaceRegion(
           main: LatLng(mainPt.lat, mainPt.lng),
           others: others,
-          bandMeters: band,
+          bandMeters: cellBand,
           viewportCorners: corners,
         );
         addOuter(region.outer);
@@ -274,10 +277,17 @@ class _RegionPainter extends CustomPainter {
       ..strokeWidth = 1.5
       ..color = color;
 
+    // The outline traces the *nominal* boundary. For plane/subspace that's the
+    // strict cell (the true divide = the core edge), with the band as an outward
+    // halo; for the other types the nominal edge is the outer ring. When the
+    // layer is inverted the fill is bounded by `outer`, so trace that instead.
+    final bisectorCell = planes.isNotEmpty || subspaces.isNotEmpty;
+    final outline = (bisectorCell && !inverted) ? core : outer;
+
     // Regions are disjoint, so paint order is irrelevant.
     canvas.drawPath(solid, solidPaint);
     canvas.drawPath(bandPath, bandPaint);
-    canvas.drawPath(outer, strokePaint);
+    canvas.drawPath(outline, strokePaint);
   }
 
   /// Paints a height layer: each region's stored polygons fill with an even-odd

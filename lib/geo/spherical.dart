@@ -137,10 +137,13 @@ double bandThreshold(double bandMeters) {
 /// shared core of both the plane (one "other") and subspace (N "others")
 /// regions.
 ///
-/// `outer` is the cell enlarged by the uncertainty half-band [bandMeters] (each
-/// bisector pushed toward the other points), `core` the cell shrunk by it; the
-/// engine paints the difference as the band. Returns empty rings when there are
-/// no others, a point coincides with [main], or the geometry is non-finite.
+/// `core` is the **strict cell** — the true "closer to [main]" region, whose
+/// boundary is the equidistant divide (the engine outlines this and fills it
+/// solid). `outer` is that cell grown **outward** by [bandMeters] (each bisector
+/// pushed toward the other points), so the engine paints `outer − core` as the
+/// uncertainty band hugging the divide on its outside. Returns empty rings when
+/// there are no others, a point coincides with [main], or the geometry is
+/// non-finite.
 ({List<LatLng> outer, List<LatLng> core}) sphericalCell({
   required LatLng main,
   required List<LatLng> others,
@@ -160,29 +163,26 @@ double bandThreshold(double bandMeters) {
     quad.add(v);
   }
 
-  // One bisector per other point: its pole [m] plus the signed band threshold
-  // [s]. The band is clamped per bisector to **half the main–other distance**,
-  // so widening the cell can never push its boundary past the neighbouring
-  // site (which would wrongly engulf a point that is, by definition, closer to
-  // itself). For well-separated points the clamp never binds.
-  final planes = <({Vec3 m, double s})>[];
+  // Bisector pole directions, one per other point.
+  final mList = <Vec3>[];
   for (final o in others) {
     final ov = ecef(o);
     if (!ov.isFinite) continue; // skip an invalid point
     final m = (mainV - ov).normalized();
     if (m.length < 1e-9) return empty; // coincident with main -> undefined cell
-    final halfGap =
-        acos(mainV.dot(ov).clamp(-1.0, 1.0)) * earthRadius / 2;
-    final bandEff = bandMeters < halfGap ? bandMeters : halfGap;
-    planes.add((m: m, s: bandThreshold(bandEff)));
+    mList.add(m);
   }
-  if (planes.isEmpty) return empty;
+  if (mList.isEmpty) return empty;
 
+  // The band is a **fixed** outward offset of the divide — every bisector is
+  // pushed out by the same [bandMeters], so the halo is uniformly that wide on
+  // all sides regardless of how near each neighbour is.
+  final s = bandThreshold(bandMeters);
   var outer = quad;
   var core = quad;
-  for (final p in planes) {
-    outer = clipByPlane(outer, p.m, -p.s);
-    core = clipByPlane(core, p.m, p.s);
+  for (final m in mList) {
+    outer = clipByPlane(outer, m, -s); // grown outward by a fixed band
+    core = clipByPlane(core, m, 0); // the strict cell: the true divide
     if (outer.isEmpty && core.isEmpty) break;
   }
   return (
