@@ -42,7 +42,7 @@ overlays (public-transport tiles, OSMAnd POIs, admin borders), offline resilienc
 (cache-first tiles + prefetch, persisted POI/border overlays), and import/export
 (whole-DB + per-layer + external GeoJSON/KML/KMZ/GPX). Drift schema is **v11**.
 
-`PLAN.md` has no open roadmap items; future polish ideas are listed there.
+`planning/PLAN.md` has no open roadmap items; future polish ideas are listed there.
 
 ## Workflow rule (required)
 
@@ -50,9 +50,12 @@ overlays (public-transport tiles, OSMAnd POIs, admin borders), offline resilienc
   `./scripts/build.sh --install --run` (analyze + test + build + install + launch) and check
   the change on the device. Use `--skip-checks` only for quick iteration.
 - After completing **all** the steps of a task, **update the docs** — drop the delivered
-  item from `PLAN.md`'s open points and, if it introduced a new pattern/invariant, add it
-  to `IMPLEMENTATION_PLAN.md` (the architecture reference) — then **commit and push to
-  `main`**. Do the doc update + commit/push once at the end, not after every step.
+  item from `planning/PLAN.md`'s open points and, if it introduced a new pattern/invariant,
+  add it to `planning/IMPLEMENTATION_PLAN.md` (the architecture reference) — then **commit and
+  push the code to `main`**. Do the doc update + commit/push once at the end, not after every
+  step. **Note:** the `planning/` folder is gitignored (see [Plans](#plans)), so updating those
+  plan files is a local-only edit — it is never part of the commit; only the code changes are
+  committed and pushed.
 
 ## Toolchain
 
@@ -96,6 +99,9 @@ lib/
 
 ## Plans
 
-- `PLAN.md` — current state + open points (the roadmap).
-- `IMPLEMENTATION_PLAN.md` — architecture reference (rendering contract, data model,
+**All planning docs live in the `planning/` folder, which is gitignored — they are local-only
+and never committed.** New plans/notes go there too.
+
+- `planning/PLAN.md` — current state + open points (the roadmap).
+- `planning/IMPLEMENTATION_PLAN.md` — architecture reference (rendering contract, data model,
   caching, known approximations). No milestone history.
