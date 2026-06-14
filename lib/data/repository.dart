@@ -245,6 +245,7 @@ class Repository {
     required double lat,
     required double lng,
     bool isMain = false,
+    String? label,
   }) async {
     final order = await _maxPointOrder(subspaceId);
     final id = _uuid.v4();
@@ -256,6 +257,7 @@ class Repository {
             lng: lng,
             sortOrder: order + 1,
             isMain: Value(isMain),
+            label: Value(label),
           ),
         );
     return id;

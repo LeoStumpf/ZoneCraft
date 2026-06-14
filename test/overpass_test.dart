@@ -74,6 +74,45 @@ void main() {
       expect(parseOverpassResponse('{"elements":"oops"}', poiCategories),
           isEmpty);
     });
+
+    test('captures the OSM name tag (trimmed), null when absent/blank', () {
+      const body = '''
+      {"elements":[
+        {"type":"node","lat":1,"lon":2,"tags":{"amenity":"cafe","name":"  Tati  "}},
+        {"type":"node","lat":3,"lon":4,"tags":{"amenity":"cafe"}},
+        {"type":"node","lat":5,"lon":6,"tags":{"amenity":"cafe","name":"   "}}
+      ]}''';
+      final res = parseOverpassResponse(body, [cat('cafe')]);
+      expect(res, hasLength(3));
+      expect(res[0].name, 'Tati');
+      expect(res[1].name, isNull);
+      expect(res[2].name, isNull);
+    });
+  });
+
+  group('poisWithinRadius', () {
+    // ~111 m per 0.001° of latitude near the equator.
+    const here = (lat: 0.0, lng: 0.0);
+    PoiResult at(double lat, double lng, {String? name}) =>
+        PoiResult(lat: lat, lng: lng, categoryKey: 'cafe', name: name);
+
+    test('keeps only within radius, sorted nearest-first', () {
+      final pois = [
+        at(0.010, 0), // ~1110 m
+        at(0.001, 0), // ~111 m
+        at(0.005, 0), // ~555 m
+      ];
+      final res =
+          poisWithinRadius(here.lat, here.lng, 600, pois);
+      expect(res.map((p) => p.lat), [0.001, 0.005]); // 1110 m dropped
+    });
+
+    test('caps the result count', () {
+      final pois = [for (var i = 1; i <= 100; i++) at(0.00001 * i, 0)];
+      final res = poisWithinRadius(here.lat, here.lng, 1e9, pois, cap: 10);
+      expect(res, hasLength(10));
+      expect(res.first.lat, closeTo(0.00001, 1e-12)); // nearest kept
+    });
   });
 
   group('fetchPois', () {
@@ -119,7 +158,7 @@ void main() {
   group('persistent cache JSON', () {
     test('encode/decode round-trips POI results', () {
       const pois = [
-        PoiResult(lat: 48.137, lng: 11.575, categoryKey: 'cafe'),
+        PoiResult(lat: 48.137, lng: 11.575, categoryKey: 'cafe', name: 'Tati'),
         PoiResult(lat: -33.86, lng: 151.21, categoryKey: 'bench'),
       ];
       final back = decodePoiResults(encodePoiResults(pois));
@@ -127,7 +166,9 @@ void main() {
       expect(back[0].lat, closeTo(48.137, 1e-9));
       expect(back[0].lng, closeTo(11.575, 1e-9));
       expect(back[0].categoryKey, 'cafe');
+      expect(back[0].name, 'Tati');
       expect(back[1].categoryKey, 'bench');
+      expect(back[1].name, isNull);
     });
 
     test('decode returns empty on garbage rather than throwing', () {

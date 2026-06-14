@@ -88,6 +88,8 @@ class SubspacePoints extends Table {
   RealColumn get lng => real()();
   IntColumn get sortOrder => integer()();
   BoolColumn get isMain => boolean().withDefault(const Constant(false))();
+  /// Optional name, e.g. the OSM `name` of an imported POI.
+  TextColumn get label => text().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 
   @override
@@ -340,7 +342,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -397,6 +399,9 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 12) {
             await m.addColumn(appSettings, appSettings.toolsExpanded);
+          }
+          if (from < 13) {
+            await m.addColumn(subspacePoints, subspacePoints.label);
           }
         },
         beforeOpen: (details) async {

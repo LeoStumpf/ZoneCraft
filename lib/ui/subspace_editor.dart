@@ -241,7 +241,9 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
             controller: _ctlFor(p),
             focusNode: _focusFor(p.id),
             decoration: InputDecoration(
-              labelText: 'Point ${index + 1} (lat, lng)',
+              labelText: p.label != null && p.label!.isNotEmpty
+                  ? '${p.label} (lat, lng)'
+                  : 'Point ${index + 1} (lat, lng)',
               hintText: '48.137154, 11.575382',
               isDense: true,
             ),

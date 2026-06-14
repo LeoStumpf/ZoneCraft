@@ -30,7 +30,7 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   exported alone and files imported as a new layer or **merged** into an existing same-type
   one (`ui/import_actions.dart`); generic **GeoJSON/KML/KMZ/GPX** tracks import into freehand
   layers (`data/geo_import.dart`).
-- **Drift schema is at v12**; migrations are append-only `if (from < N)` blocks.
+- **Drift schema is at v13**; migrations are append-only `if (from < N)` blocks.
 
 ## Current status
 
@@ -40,7 +40,7 @@ bounded, so it skips band/invert), the layers drawer + per-type editors, setting
 (uncertainty, clear-all, overlay toggles), opt-in locate-me, persisted camera, optional
 overlays (public-transport tiles, OSMAnd POIs, admin borders), offline resilience
 (cache-first tiles + prefetch, persisted POI/border overlays), and import/export
-(whole-DB + per-layer + external GeoJSON/KML/KMZ/GPX). Drift schema is **v12**.
+(whole-DB + per-layer + external GeoJSON/KML/KMZ/GPX). Drift schema is **v13**.
 
 `planning/PLAN.md` has no open roadmap items; future polish ideas are listed there.
 

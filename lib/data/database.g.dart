@@ -2495,6 +2495,15 @@ class $SubspacePointsTable extends SubspacePoints
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _labelMeta = const VerificationMeta('label');
+  @override
+  late final GeneratedColumn<String> label = GeneratedColumn<String>(
+    'label',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -2515,6 +2524,7 @@ class $SubspacePointsTable extends SubspacePoints
     lng,
     sortOrder,
     isMain,
+    label,
     createdAt,
   ];
   @override
@@ -2572,6 +2582,12 @@ class $SubspacePointsTable extends SubspacePoints
         isMain.isAcceptableOrUnknown(data['is_main']!, _isMainMeta),
       );
     }
+    if (data.containsKey('label')) {
+      context.handle(
+        _labelMeta,
+        label.isAcceptableOrUnknown(data['label']!, _labelMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -2611,6 +2627,10 @@ class $SubspacePointsTable extends SubspacePoints
         DriftSqlType.bool,
         data['${effectivePrefix}is_main'],
       )!,
+      label: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}label'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -2631,6 +2651,9 @@ class SubspacePoint extends DataClass implements Insertable<SubspacePoint> {
   final double lng;
   final int sortOrder;
   final bool isMain;
+
+  /// Optional name, e.g. the OSM `name` of an imported POI.
+  final String? label;
   final DateTime createdAt;
   const SubspacePoint({
     required this.id,
@@ -2639,6 +2662,7 @@ class SubspacePoint extends DataClass implements Insertable<SubspacePoint> {
     required this.lng,
     required this.sortOrder,
     required this.isMain,
+    this.label,
     required this.createdAt,
   });
   @override
@@ -2650,6 +2674,9 @@ class SubspacePoint extends DataClass implements Insertable<SubspacePoint> {
     map['lng'] = Variable<double>(lng);
     map['sort_order'] = Variable<int>(sortOrder);
     map['is_main'] = Variable<bool>(isMain);
+    if (!nullToAbsent || label != null) {
+      map['label'] = Variable<String>(label);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -2662,6 +2689,9 @@ class SubspacePoint extends DataClass implements Insertable<SubspacePoint> {
       lng: Value(lng),
       sortOrder: Value(sortOrder),
       isMain: Value(isMain),
+      label: label == null && nullToAbsent
+          ? const Value.absent()
+          : Value(label),
       createdAt: Value(createdAt),
     );
   }
@@ -2678,6 +2708,7 @@ class SubspacePoint extends DataClass implements Insertable<SubspacePoint> {
       lng: serializer.fromJson<double>(json['lng']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
       isMain: serializer.fromJson<bool>(json['isMain']),
+      label: serializer.fromJson<String?>(json['label']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -2691,6 +2722,7 @@ class SubspacePoint extends DataClass implements Insertable<SubspacePoint> {
       'lng': serializer.toJson<double>(lng),
       'sortOrder': serializer.toJson<int>(sortOrder),
       'isMain': serializer.toJson<bool>(isMain),
+      'label': serializer.toJson<String?>(label),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -2702,6 +2734,7 @@ class SubspacePoint extends DataClass implements Insertable<SubspacePoint> {
     double? lng,
     int? sortOrder,
     bool? isMain,
+    Value<String?> label = const Value.absent(),
     DateTime? createdAt,
   }) => SubspacePoint(
     id: id ?? this.id,
@@ -2710,6 +2743,7 @@ class SubspacePoint extends DataClass implements Insertable<SubspacePoint> {
     lng: lng ?? this.lng,
     sortOrder: sortOrder ?? this.sortOrder,
     isMain: isMain ?? this.isMain,
+    label: label.present ? label.value : this.label,
     createdAt: createdAt ?? this.createdAt,
   );
   SubspacePoint copyWithCompanion(SubspacePointsCompanion data) {
@@ -2722,6 +2756,7 @@ class SubspacePoint extends DataClass implements Insertable<SubspacePoint> {
       lng: data.lng.present ? data.lng.value : this.lng,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
       isMain: data.isMain.present ? data.isMain.value : this.isMain,
+      label: data.label.present ? data.label.value : this.label,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -2735,14 +2770,23 @@ class SubspacePoint extends DataClass implements Insertable<SubspacePoint> {
           ..write('lng: $lng, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('isMain: $isMain, ')
+          ..write('label: $label, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, subspaceId, lat, lng, sortOrder, isMain, createdAt);
+  int get hashCode => Object.hash(
+    id,
+    subspaceId,
+    lat,
+    lng,
+    sortOrder,
+    isMain,
+    label,
+    createdAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2753,6 +2797,7 @@ class SubspacePoint extends DataClass implements Insertable<SubspacePoint> {
           other.lng == this.lng &&
           other.sortOrder == this.sortOrder &&
           other.isMain == this.isMain &&
+          other.label == this.label &&
           other.createdAt == this.createdAt);
 }
 
@@ -2763,6 +2808,7 @@ class SubspacePointsCompanion extends UpdateCompanion<SubspacePoint> {
   final Value<double> lng;
   final Value<int> sortOrder;
   final Value<bool> isMain;
+  final Value<String?> label;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const SubspacePointsCompanion({
@@ -2772,6 +2818,7 @@ class SubspacePointsCompanion extends UpdateCompanion<SubspacePoint> {
     this.lng = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.isMain = const Value.absent(),
+    this.label = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -2782,6 +2829,7 @@ class SubspacePointsCompanion extends UpdateCompanion<SubspacePoint> {
     required double lng,
     required int sortOrder,
     this.isMain = const Value.absent(),
+    this.label = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -2796,6 +2844,7 @@ class SubspacePointsCompanion extends UpdateCompanion<SubspacePoint> {
     Expression<double>? lng,
     Expression<int>? sortOrder,
     Expression<bool>? isMain,
+    Expression<String>? label,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -2806,6 +2855,7 @@ class SubspacePointsCompanion extends UpdateCompanion<SubspacePoint> {
       if (lng != null) 'lng': lng,
       if (sortOrder != null) 'sort_order': sortOrder,
       if (isMain != null) 'is_main': isMain,
+      if (label != null) 'label': label,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -2818,6 +2868,7 @@ class SubspacePointsCompanion extends UpdateCompanion<SubspacePoint> {
     Value<double>? lng,
     Value<int>? sortOrder,
     Value<bool>? isMain,
+    Value<String?>? label,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
@@ -2828,6 +2879,7 @@ class SubspacePointsCompanion extends UpdateCompanion<SubspacePoint> {
       lng: lng ?? this.lng,
       sortOrder: sortOrder ?? this.sortOrder,
       isMain: isMain ?? this.isMain,
+      label: label ?? this.label,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -2854,6 +2906,9 @@ class SubspacePointsCompanion extends UpdateCompanion<SubspacePoint> {
     if (isMain.present) {
       map['is_main'] = Variable<bool>(isMain.value);
     }
+    if (label.present) {
+      map['label'] = Variable<String>(label.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -2872,6 +2927,7 @@ class SubspacePointsCompanion extends UpdateCompanion<SubspacePoint> {
           ..write('lng: $lng, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('isMain: $isMain, ')
+          ..write('label: $label, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -9168,6 +9224,7 @@ typedef $$SubspacePointsTableCreateCompanionBuilder =
       required double lng,
       required int sortOrder,
       Value<bool> isMain,
+      Value<String?> label,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -9179,6 +9236,7 @@ typedef $$SubspacePointsTableUpdateCompanionBuilder =
       Value<double> lng,
       Value<int> sortOrder,
       Value<bool> isMain,
+      Value<String?> label,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -9245,6 +9303,11 @@ class $$SubspacePointsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnFilters(column),
@@ -9308,6 +9371,11 @@ class $$SubspacePointsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -9360,6 +9428,9 @@ class $$SubspacePointsTableAnnotationComposer
 
   GeneratedColumn<bool> get isMain =>
       $composableBuilder(column: $table.isMain, builder: (column) => column);
+
+  GeneratedColumn<String> get label =>
+      $composableBuilder(column: $table.label, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -9424,6 +9495,7 @@ class $$SubspacePointsTableTableManager
                 Value<double> lng = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 Value<bool> isMain = const Value.absent(),
+                Value<String?> label = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SubspacePointsCompanion(
@@ -9433,6 +9505,7 @@ class $$SubspacePointsTableTableManager
                 lng: lng,
                 sortOrder: sortOrder,
                 isMain: isMain,
+                label: label,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -9444,6 +9517,7 @@ class $$SubspacePointsTableTableManager
                 required double lng,
                 required int sortOrder,
                 Value<bool> isMain = const Value.absent(),
+                Value<String?> label = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SubspacePointsCompanion.insert(
@@ -9453,6 +9527,7 @@ class $$SubspacePointsTableTableManager
                 lng: lng,
                 sortOrder: sortOrder,
                 isMain: isMain,
+                label: label,
                 createdAt: createdAt,
                 rowid: rowid,
               ),

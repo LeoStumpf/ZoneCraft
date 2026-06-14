@@ -22,6 +22,7 @@ import 'freeline_editor.dart';
 import 'height_editor.dart';
 import 'layers_panel.dart';
 import 'plane_editor.dart';
+import 'poi_import_dialog.dart';
 import 'region_layer.dart';
 import 'subspace_editor.dart';
 
@@ -1004,6 +1005,86 @@ class _MapScreenState extends ConsumerState<MapScreen>
     _selectCircle(id);
   }
 
+  /// Imports nearby POIs into a circle or subspace [layer]: prompts for a
+  /// category + radius, fetches POIs of that type around the map centre, then
+  /// (circles) creates one named circle per POI, or (subspace) appends them as
+  /// named points — promoting the nearest-to-centre as the main point when the
+  /// subspace has none yet. POIs without an OSM name are added unnamed.
+  Future<void> _importPois(Layer layer, {required bool isCircleLayer}) async {
+    final config =
+        await showPoiImportDialog(context, needsCircleRadius: isCircleLayer);
+    if (config == null || !mounted) return;
+
+    final center = _mapController.camera.center;
+    final r = config.searchRadiusMeters;
+    // Bounding box from the centre + search radius (N/S/E/W offsets).
+    final north = _hitTest.offset(center, r, 0).latitude;
+    final south = _hitTest.offset(center, r, 180).latitude;
+    final east = _hitTest.offset(center, r, 90).longitude;
+    final west = _hitTest.offset(center, r, -90).longitude;
+
+    final fetched = await fetchPois(
+      south: south,
+      west: west,
+      north: north,
+      east: east,
+      categories: [config.category],
+      client: _tileClient,
+    );
+    if (!mounted) return;
+    if (fetched == null) {
+      _hint('Could not fetch POIs (offline or rate-limited).');
+      return;
+    }
+    final within = poisWithinRadius(
+        center.latitude, center.longitude, r, fetched);
+    final label = config.category.label.toLowerCase();
+    if (within.isEmpty) {
+      _hint('No $label found within ${r.round()} m.');
+      return;
+    }
+
+    final repo = ref.read(repositoryProvider);
+    if (isCircleLayer) {
+      for (final p in within) {
+        await repo.createCircle(
+          layerId: layer.id,
+          centerLat: p.lat,
+          centerLng: p.lng,
+          radiusMeters: config.circleRadiusMeters!,
+          label: p.name,
+        );
+      }
+      if (mounted) _hint('Imported ${within.length} $label as circles.');
+      return;
+    }
+
+    // Subspace: append to the layer's existing object, or create one.
+    final subspaces =
+        ref.read(subspacesProvider).asData?.value ?? const <Subspace>[];
+    final points = ref.read(subspacePointsProvider).asData?.value ??
+        const <SubspacePoint>[];
+    final existing = subspaces.where((s) => s.layerId == layer.id).firstOrNull;
+    final subId = existing?.id ?? await repo.createSubspace(layerId: layer.id);
+    var hasMain = points.any((pt) => pt.subspaceId == subId && pt.isMain);
+    // `within` is nearest-first, so the first point promotes to main when none.
+    for (final p in within) {
+      final makeMain = !hasMain;
+      await repo.addSubspacePoint(
+        subspaceId: subId,
+        lat: p.lat,
+        lng: p.lng,
+        isMain: makeMain,
+        label: p.name,
+      );
+      if (makeMain) hasMain = true;
+    }
+    if (!mounted) return;
+    _selectSubspace(subId);
+    _hint('Seeded ${within.length} $label '
+        '(tap ● to mark the nearest).');
+  }
+
   Future<void> _addPlaneAt(LatLng center, Layer layer) async {
     // Seed A and B offset west/east of the map centre, so the new plane is
     // immediately visible with its dividing line through the centre.
@@ -1379,6 +1460,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final activeLayer = layers.where((l) => l.id == activeId).firstOrNull;
     final isPlaneLayer = activeLayer?.type == 'planes';
     final isSubspaceLayer = activeLayer?.type == 'subspace';
+    final isCircleLayer = activeLayer?.type == 'circles';
     final isFreeLineLayer = activeLayer?.type == 'freeline';
     final isFreeAreaLayer = activeLayer?.type == 'freearea';
     final isHeightLayer = activeLayer?.type == 'height';
@@ -1925,66 +2007,85 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   ),
                   const SizedBox(height: 12),
                 ],
-                FloatingActionButton.small(
-                  heroTag: 'fabsToggle',
-                  tooltip: toolsExpanded ? 'Hide tools' : 'Show tools',
-                  onPressed: () => ref
-                      .read(repositoryProvider)
-                      .updateToolsExpanded(!toolsExpanded),
-                  child: Icon(
-                    toolsExpanded ? Icons.unfold_less : Icons.unfold_more,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                FloatingActionButton.extended(
-                  heroTag: 'add',
-                  onPressed: activeLayer == null
-                      ? null
-                      : () {
-                          final c = _mapController.camera.center;
-                          if (isSubspaceLayer) {
-                            _addSubspaceAt(c, activeLayer, subspaces);
-                          } else if (isFreeLineLayer) {
-                            _addFreeLineAt(c, activeLayer, freeLines);
-                          } else if (isFreeAreaLayer) {
-                            _addFreeAreaAt(c, activeLayer, freeAreas);
-                          } else if (isHeightLayer) {
-                            _addHeightRegionAt(c, activeLayer);
-                          } else if (isPlaneLayer) {
-                            _addPlaneAt(c, activeLayer);
-                          } else {
-                            _addCircleAt(c, activeLayer);
-                          }
-                        },
-                  backgroundColor: activeLayer == null
-                      ? Theme.of(context).disabledColor
-                      : null,
-                  icon: Icon(
-                    isSubspaceLayer
-                        ? Icons.scatter_plot_outlined
-                        : isFreeLineLayer
-                            ? Icons.polyline
-                            : isFreeAreaLayer
-                                ? Icons.hexagon_outlined
-                                : isHeightLayer
-                                    ? Icons.terrain
-                                    : isPlaneLayer
-                                        ? Icons.change_history
-                                        : Icons.add_location_alt_outlined,
-                  ),
-                  label: Text(
-                    isSubspaceLayer
-                        ? (subspaceExists ? 'Add point' : 'Add subspace')
-                        : isFreeLineLayer
-                            ? (freeLineExists ? 'Add point' : 'Add line')
-                            : isFreeAreaLayer
-                                ? (freeAreaExists ? 'Add point' : 'Add area')
-                                : isHeightLayer
-                                    ? 'Add height area'
-                                    : isPlaneLayer
-                                        ? 'Add plane'
-                                        : 'Add circle',
-                  ),
+                // Bottom row: the tools toggle, an optional POI-import button
+                // (circle/subspace layers only), then the primary Add button.
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FloatingActionButton.small(
+                      heroTag: 'fabsToggle',
+                      tooltip: toolsExpanded ? 'Hide tools' : 'Show tools',
+                      onPressed: () => ref
+                          .read(repositoryProvider)
+                          .updateToolsExpanded(!toolsExpanded),
+                      child: Icon(
+                        toolsExpanded ? Icons.unfold_less : Icons.unfold_more,
+                      ),
+                    ),
+                    if (isCircleLayer || isSubspaceLayer) ...[
+                      const SizedBox(width: 12),
+                      FloatingActionButton.small(
+                        heroTag: 'poiImport',
+                        tooltip: 'Import nearby POIs',
+                        onPressed: activeLayer == null
+                            ? null
+                            : () => _importPois(activeLayer,
+                                isCircleLayer: isCircleLayer),
+                        child: const Icon(Icons.travel_explore),
+                      ),
+                    ],
+                    const SizedBox(width: 12),
+                    FloatingActionButton.extended(
+                      heroTag: 'add',
+                      onPressed: activeLayer == null
+                          ? null
+                          : () {
+                              final c = _mapController.camera.center;
+                              if (isSubspaceLayer) {
+                                _addSubspaceAt(c, activeLayer, subspaces);
+                              } else if (isFreeLineLayer) {
+                                _addFreeLineAt(c, activeLayer, freeLines);
+                              } else if (isFreeAreaLayer) {
+                                _addFreeAreaAt(c, activeLayer, freeAreas);
+                              } else if (isHeightLayer) {
+                                _addHeightRegionAt(c, activeLayer);
+                              } else if (isPlaneLayer) {
+                                _addPlaneAt(c, activeLayer);
+                              } else {
+                                _addCircleAt(c, activeLayer);
+                              }
+                            },
+                      backgroundColor: activeLayer == null
+                          ? Theme.of(context).disabledColor
+                          : null,
+                      icon: Icon(
+                        isSubspaceLayer
+                            ? Icons.scatter_plot_outlined
+                            : isFreeLineLayer
+                                ? Icons.polyline
+                                : isFreeAreaLayer
+                                    ? Icons.hexagon_outlined
+                                    : isHeightLayer
+                                        ? Icons.terrain
+                                        : isPlaneLayer
+                                            ? Icons.change_history
+                                            : Icons.add_location_alt_outlined,
+                      ),
+                      label: Text(
+                        isSubspaceLayer
+                            ? (subspaceExists ? 'Add point' : 'Add subspace')
+                            : isFreeLineLayer
+                                ? (freeLineExists ? 'Add point' : 'Add line')
+                                : isFreeAreaLayer
+                                    ? (freeAreaExists ? 'Add point' : 'Add area')
+                                    : isHeightLayer
+                                        ? 'Add height area'
+                                        : isPlaneLayer
+                                            ? 'Add plane'
+                                            : 'Add circle',
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

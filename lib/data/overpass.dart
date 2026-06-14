@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:http/http.dart' as http;
 
@@ -84,22 +85,31 @@ Set<PoiCategory> poiCategoriesFromMask(int mask) =>
 int poiMaskWith(int mask, PoiCategory c, bool on) =>
     on ? (mask | c.bit) : (mask & ~c.bit);
 
-/// One resolved POI: a position and the [categoryKey] that matched it.
+/// One resolved POI: a position, the [categoryKey] that matched it, and the
+/// OSM `name` tag when present (used to label imported objects).
 class PoiResult {
   const PoiResult({
     required this.lat,
     required this.lng,
     required this.categoryKey,
+    this.name,
   });
 
   final double lat;
   final double lng;
   final String categoryKey;
+  final String? name;
 }
 
 /// Encodes [pois] to a compact JSON string for the persistent overlay cache.
 String encodePoiResults(Iterable<PoiResult> pois) => jsonEncode([
-      for (final p in pois) {'lat': p.lat, 'lng': p.lng, 'k': p.categoryKey},
+      for (final p in pois)
+        {
+          'lat': p.lat,
+          'lng': p.lng,
+          'k': p.categoryKey,
+          if (p.name != null) 'n': p.name,
+        },
     ]);
 
 /// Decodes the string produced by [encodePoiResults]. Returns empty on any
@@ -118,9 +128,15 @@ List<PoiResult> decodePoiResults(String json) {
     final lat = (e['lat'] as num?)?.toDouble();
     final lng = (e['lng'] as num?)?.toDouble();
     final k = e['k'];
+    final n = e['n'];
     if (lat == null || lng == null || k is! String) continue;
     if (!lat.isFinite || !lng.isFinite) continue;
-    out.add(PoiResult(lat: lat, lng: lng, categoryKey: k));
+    out.add(PoiResult(
+      lat: lat,
+      lng: lng,
+      categoryKey: k,
+      name: n is String ? n : null,
+    ));
   }
   return out;
 }
@@ -178,6 +194,7 @@ List<PoiResult> parseOverpassResponse(
 
     final tags = e['tags'];
     PoiCategory? matched;
+    String? name;
     if (tags is Map) {
       for (final c in categories) {
         if (tags[c.tagKey] == c.tagValue) {
@@ -185,11 +202,48 @@ List<PoiResult> parseOverpassResponse(
           break;
         }
       }
+      final n = tags['name'];
+      if (n is String && n.trim().isNotEmpty) name = n.trim();
     }
     if (matched == null) continue; // unknown element -> skip
-    out.add(PoiResult(lat: lat, lng: lng, categoryKey: matched.key));
+    out.add(PoiResult(
+        lat: lat, lng: lng, categoryKey: matched.key, name: name));
   }
   return out;
+}
+
+/// Keeps the POIs in [pois] within [radiusMeters] of (centerLat, centerLng),
+/// sorted nearest-first and capped to [cap]. Pure and testable; the cap keeps a
+/// seeded Voronoi cell (an intersection of N−1 bisectors) and bulk-circle import
+/// responsive when a dense category returns hundreds of hits.
+List<PoiResult> poisWithinRadius(
+  double centerLat,
+  double centerLng,
+  double radiusMeters,
+  Iterable<PoiResult> pois, {
+  int cap = 60,
+}) {
+  final scored = <MapEntry<double, PoiResult>>[];
+  for (final p in pois) {
+    final d = _haversineMeters(centerLat, centerLng, p.lat, p.lng);
+    if (d <= radiusMeters) scored.add(MapEntry(d, p));
+  }
+  scored.sort((a, b) => a.key.compareTo(b.key));
+  return [for (final e in scored.take(cap)) e.value];
+}
+
+double _haversineMeters(
+    double lat1, double lon1, double lat2, double lon2) {
+  const earthRadius = 6371000.0;
+  double rad(double d) => d * math.pi / 180;
+  final dLat = rad(lat2 - lat1);
+  final dLon = rad(lon2 - lon1);
+  final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+      math.cos(rad(lat1)) *
+          math.cos(rad(lat2)) *
+          math.sin(dLon / 2) *
+          math.sin(dLon / 2);
+  return 2 * earthRadius * math.asin(math.min(1.0, math.sqrt(a)));
 }
 
 /// Queries the Overpass API for the enabled [categories] within the bbox.
