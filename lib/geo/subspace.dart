@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:latlong2/latlong.dart';
 
 import 'spherical.dart';
@@ -37,12 +39,36 @@ SubspaceRegion subspaceRegion({
   required List<LatLng> others,
   required double bandMeters,
   required List<LatLng> viewportCorners,
+  int maxOthers = 32,
 }) {
+  // The main point's cell is bounded only by its *Voronoi neighbours* — points
+  // close to it. Every far point's bisector lies entirely outside the cell
+  // (masked by nearer points), so it can't change the result. With dense inputs
+  // (e.g. POIs metres apart) that's dozens of useless half-plane clips per
+  // frame, so keep just the nearest [maxOthers] before building the cell. The
+  // neighbour count of a Voronoi cell is tiny, so this is exact in practice.
+  final culled = others.length > maxOthers
+      ? _nearest(main, others, maxOthers)
+      : others;
   final cell = sphericalCell(
     main: main,
-    others: others,
+    others: culled,
     bandMeters: bandMeters,
     viewportCorners: viewportCorners,
   );
   return SubspaceRegion(cell.outer, cell.core);
+}
+
+/// The [n] points of [pts] nearest [origin], ranked by a cheap equirectangular
+/// metric (exact ordering isn't needed — only "is this among the nearest few").
+List<LatLng> _nearest(LatLng origin, List<LatLng> pts, int n) {
+  final cosLat = cos(origin.latitude * pi / 180);
+  double d2(LatLng p) {
+    final dx = (p.longitude - origin.longitude) * cosLat;
+    final dy = p.latitude - origin.latitude;
+    return dx * dx + dy * dy;
+  }
+
+  final sorted = pts.toList()..sort((a, b) => d2(a).compareTo(d2(b)));
+  return sorted.sublist(0, n);
 }

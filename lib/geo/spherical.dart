@@ -160,23 +160,29 @@ double bandThreshold(double bandMeters) {
     quad.add(v);
   }
 
-  // Bisector pole directions, one per other point.
-  final mList = <Vec3>[];
+  // One bisector per other point: its pole [m] plus the signed band threshold
+  // [s]. The band is clamped per bisector to **half the main–other distance**,
+  // so widening the cell can never push its boundary past the neighbouring
+  // site (which would wrongly engulf a point that is, by definition, closer to
+  // itself). For well-separated points the clamp never binds.
+  final planes = <({Vec3 m, double s})>[];
   for (final o in others) {
     final ov = ecef(o);
     if (!ov.isFinite) continue; // skip an invalid point
     final m = (mainV - ov).normalized();
     if (m.length < 1e-9) return empty; // coincident with main -> undefined cell
-    mList.add(m);
+    final halfGap =
+        acos(mainV.dot(ov).clamp(-1.0, 1.0)) * earthRadius / 2;
+    final bandEff = bandMeters < halfGap ? bandMeters : halfGap;
+    planes.add((m: m, s: bandThreshold(bandEff)));
   }
-  if (mList.isEmpty) return empty;
+  if (planes.isEmpty) return empty;
 
-  final s = bandThreshold(bandMeters);
   var outer = quad;
   var core = quad;
-  for (final m in mList) {
-    outer = clipByPlane(outer, m, -s);
-    core = clipByPlane(core, m, s);
+  for (final p in planes) {
+    outer = clipByPlane(outer, p.m, -p.s);
+    core = clipByPlane(core, p.m, p.s);
     if (outer.isEmpty && core.isEmpty) break;
   }
   return (

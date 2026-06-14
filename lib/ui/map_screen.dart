@@ -1044,15 +1044,20 @@ class _MapScreenState extends ConsumerState<MapScreen>
       return;
     }
 
+    // Many OSM categories (benches, post boxes, toilets…) carry no `name` tag,
+    // so fall back to the category plus an index — every imported POI is named.
+    String labelFor(int i) =>
+        within[i].name ?? '${config.category.label} ${i + 1}';
+
     final repo = ref.read(repositoryProvider);
     if (isCircleLayer) {
-      for (final p in within) {
+      for (var i = 0; i < within.length; i++) {
         await repo.createCircle(
           layerId: layer.id,
-          centerLat: p.lat,
-          centerLng: p.lng,
+          centerLat: within[i].lat,
+          centerLng: within[i].lng,
           radiusMeters: config.circleRadiusMeters!,
-          label: p.name,
+          label: labelFor(i),
         );
       }
       if (mounted) _hint('Imported ${within.length} $label as circles.');
@@ -1068,14 +1073,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final subId = existing?.id ?? await repo.createSubspace(layerId: layer.id);
     var hasMain = points.any((pt) => pt.subspaceId == subId && pt.isMain);
     // `within` is nearest-first, so the first point promotes to main when none.
-    for (final p in within) {
+    for (var i = 0; i < within.length; i++) {
       final makeMain = !hasMain;
       await repo.addSubspacePoint(
         subspaceId: subId,
-        lat: p.lat,
-        lng: p.lng,
+        lat: within[i].lat,
+        lng: within[i].lng,
         isMain: makeMain,
-        label: p.name,
+        label: labelFor(i),
       );
       if (makeMain) hasMain = true;
     }
