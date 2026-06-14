@@ -48,6 +48,9 @@ dependencies:
   path_provider: ^2.1.5
   file_selector: ^1.1.0
   sentry_flutter: ^9.0.0
+  xml: ^6.5.0
+  archive: ^4.0.0
+  image: ^4.3.0
 
 dev_dependencies:
   flutter_test:

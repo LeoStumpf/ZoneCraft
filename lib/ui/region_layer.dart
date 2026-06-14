@@ -33,6 +33,9 @@ class RegionLayer extends StatelessWidget {
     this.freeLinePoints = const <FreeLinePoint>[],
     this.freeAreas = const <FreeArea>[],
     this.freeAreaPoints = const <FreeAreaPoint>[],
+    this.heightRegions = const <HeightRegion>[],
+    this.heightPolygons = const <HeightPolygon>[],
+    this.heightPolygonPoints = const <HeightPolygonPoint>[],
     required this.uncertaintyMeters,
   });
 
@@ -53,6 +56,14 @@ class RegionLayer extends StatelessWidget {
 
   /// Points belonging to [freeAreas] (ordered); grouped per-area at paint.
   final List<FreeAreaPoint> freeAreaPoints;
+
+  final List<HeightRegion> heightRegions;
+
+  /// Generated fill polygons for [heightRegions] (ordered); grouped per-region.
+  final List<HeightPolygon> heightPolygons;
+
+  /// Ring points of [heightPolygons] (ordered); grouped per-polygon at paint.
+  final List<HeightPolygonPoint> heightPolygonPoints;
   final double uncertaintyMeters;
 
   @override
@@ -73,6 +84,9 @@ class RegionLayer extends StatelessWidget {
           freeLinePoints: freeLinePoints,
           freeAreas: freeAreas,
           freeAreaPoints: freeAreaPoints,
+          heightRegions: heightRegions,
+          heightPolygons: heightPolygons,
+          heightPolygonPoints: heightPolygonPoints,
           uncertaintyMeters: uncertaintyMeters,
         ),
       ),
@@ -93,6 +107,9 @@ class _RegionPainter extends CustomPainter {
     required this.freeLinePoints,
     required this.freeAreas,
     required this.freeAreaPoints,
+    required this.heightRegions,
+    required this.heightPolygons,
+    required this.heightPolygonPoints,
     required this.uncertaintyMeters,
   });
 
@@ -107,6 +124,9 @@ class _RegionPainter extends CustomPainter {
   final List<FreeLinePoint> freeLinePoints;
   final List<FreeArea> freeAreas;
   final List<FreeAreaPoint> freeAreaPoints;
+  final List<HeightRegion> heightRegions;
+  final List<HeightPolygon> heightPolygons;
+  final List<HeightPolygonPoint> heightPolygonPoints;
   final double uncertaintyMeters;
 
   static const int _ringPoints = 90;
@@ -220,16 +240,54 @@ class _RegionPainter extends CustomPainter {
       }
     }
 
+    // Height regions: each region's generated polygons form one even-odd path
+    // (so enclosed sub-threshold holes are correctly excluded). The bounded fill
+    // already encodes above/below, so there is no band and no viewport invert.
+    final isHeight = heightRegions.isNotEmpty;
+    if (isHeight) {
+      for (final r in heightRegions) {
+        final polys =
+            heightPolygons.where((p) => p.heightRegionId == r.id).toList();
+        if (polys.isEmpty) continue;
+        final regionPath = Path()..fillType = PathFillType.evenOdd;
+        var any = false;
+        for (final poly in polys) {
+          final pts =
+              heightPolygonPoints.where((p) => p.polygonId == poly.id).toList();
+          if (pts.length < 3) continue;
+          for (var i = 0; i < pts.length; i++) {
+            final o = camera.latLngToScreenOffset(LatLng(pts[i].lat, pts[i].lng));
+            if (i == 0) {
+              regionPath.moveTo(o.dx, o.dy);
+            } else {
+              regionPath.lineTo(o.dx, o.dy);
+            }
+          }
+          regionPath.close();
+          any = true;
+        }
+        if (!any) continue;
+        outerUnion = outerUnion == null
+            ? regionPath
+            : Path.combine(PathOperation.union, outerUnion!, regionPath);
+        coreUnion = coreUnion == null
+            ? regionPath
+            : Path.combine(PathOperation.union, coreUnion!, regionPath);
+      }
+    }
+
     final outer = outerUnion;
     if (outer == null) return; // nothing valid to draw
-    final core = coreUnion ?? Path();
+    // Height layers fill the stored rings exactly (core == outer, no band).
+    final core = isHeight ? outer : (coreUnion ?? Path());
 
     // Band is always the ring between core and outline.
     final bandPath = Path.combine(PathOperation.difference, outer, core);
 
-    // Solid fill: the core normally, or the complement when inverted.
+    // Solid fill: the core normally, or the complement when inverted. Height
+    // layers are always bounded (never the unbounded viewport complement).
     final Path solid;
-    if (inverted) {
+    if (inverted && !isHeight) {
       final viewport = Path()..addRect(Offset.zero & size);
       solid = Path.combine(PathOperation.difference, viewport, outer);
     } else {
@@ -305,6 +363,9 @@ class _RegionPainter extends CustomPainter {
         !identical(old.freeLinePoints, freeLinePoints) ||
         !identical(old.freeAreas, freeAreas) ||
         !identical(old.freeAreaPoints, freeAreaPoints) ||
+        !identical(old.heightRegions, heightRegions) ||
+        !identical(old.heightPolygons, heightPolygons) ||
+        !identical(old.heightPolygonPoints, heightPolygonPoints) ||
         old.camera.center != camera.center ||
         old.camera.zoom != camera.zoom ||
         old.camera.rotation != camera.rotation;

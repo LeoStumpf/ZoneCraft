@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/database.dart';
 import '../data/repository.dart';
 import '../state/providers.dart';
+import 'import_actions.dart';
 import 'settings_screen.dart';
 
 /// Left-hand drawer for managing layers: list, choose active, visibility,
@@ -33,6 +34,9 @@ class LayersDrawer extends ConsumerWidget {
     final freeAreaPoints =
         ref.watch(freeAreaPointsProvider).asData?.value ??
         const <FreeAreaPoint>[];
+    final heightRegions =
+        ref.watch(heightRegionsProvider).asData?.value ??
+        const <HeightRegion>[];
     final selected = ref.watch(activeLayerProvider);
     final repo = ref.read(repositoryProvider);
 
@@ -64,6 +68,12 @@ class LayersDrawer extends ConsumerWidget {
                       Text('Layers',
                           style: Theme.of(context).textTheme.titleLarge),
                       const Spacer(),
+                      IconButton(
+                        tooltip: 'Import layer from file',
+                        icon: const Icon(Icons.file_open_outlined),
+                        onPressed: () =>
+                            importLayerFlow(context, repo, layers),
+                      ),
                       PopupMenuButton<String>(
                         tooltip: 'Add layer',
                         onSelected: (type) => addLayer(layers.length, type),
@@ -111,6 +121,15 @@ class LayersDrawer extends ConsumerWidget {
                               contentPadding: EdgeInsets.zero,
                               leading: Icon(Icons.hexagon_outlined),
                               title: Text('Freehand area layer'),
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'height',
+                            child: ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(Icons.terrain),
+                              title: Text('Height layer'),
                             ),
                           ),
                         ],
@@ -169,6 +188,10 @@ class LayersDrawer extends ConsumerWidget {
                         count = freeAreaPoints
                             .where((p) => ids.contains(p.freeAreaId))
                             .length;
+                      } else if (layer.type == 'height') {
+                        count = heightRegions
+                            .where((r) => r.layerId == layer.id)
+                            .length;
                       } else {
                         count =
                             circles.where((c) => c.layerId == layer.id).length;
@@ -210,6 +233,7 @@ IconData _typeIcon(String type) => switch (type) {
       'subspace' => Icons.scatter_plot_outlined,
       'freeline' => Icons.polyline,
       'freearea' => Icons.hexagon_outlined,
+      'height' => Icons.terrain,
       _ => Icons.circle_outlined,
     };
 
@@ -235,6 +259,7 @@ class _LayerTile extends ConsumerWidget {
       'subspace' => 'point',
       'freeline' => 'point',
       'freearea' => 'point',
+      'height' => 'area',
       _ => 'circle',
     };
     final subtitle =
@@ -286,6 +311,10 @@ class _LayerTile extends ConsumerWidget {
                 case 'inverse':
                   await repo.updateLayer(layer.id,
                       isInverted: !layer.isInverted);
+                case 'importTrack':
+                  await importTrackIntoLayer(context, repo, layer);
+                case 'export':
+                  await exportSingleLayer(context, repo, layer);
                 case 'delete':
                   await repo.deleteLayer(layer.id);
               }
@@ -293,10 +322,18 @@ class _LayerTile extends ConsumerWidget {
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'rename', child: Text('Rename')),
               const PopupMenuItem(value: 'color', child: Text('Colour')),
-              PopupMenuItem(
-                value: 'inverse',
-                child: Text(layer.isInverted ? 'Un-invert' : 'Invert'),
-              ),
+              // 'height' layers use an above/below toggle, not viewport invert.
+              if (layer.type != 'height')
+                PopupMenuItem(
+                  value: 'inverse',
+                  child: Text(layer.isInverted ? 'Un-invert' : 'Invert'),
+                ),
+              if (layer.type == 'freeline' || layer.type == 'freearea')
+                const PopupMenuItem(
+                  value: 'importTrack',
+                  child: Text('Import track…'),
+                ),
+              const PopupMenuItem(value: 'export', child: Text('Export layer…')),
               if (canDelete)
                 const PopupMenuItem(value: 'delete', child: Text('Delete')),
             ],

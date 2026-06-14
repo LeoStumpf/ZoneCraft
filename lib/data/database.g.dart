@@ -4380,6 +4380,1419 @@ class FreeAreaPointsCompanion extends UpdateCompanion<FreeAreaPoint> {
   }
 }
 
+class $HeightRegionsTable extends HeightRegions
+    with TableInfo<$HeightRegionsTable, HeightRegion> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $HeightRegionsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _layerIdMeta = const VerificationMeta(
+    'layerId',
+  );
+  @override
+  late final GeneratedColumn<String> layerId = GeneratedColumn<String>(
+    'layer_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES layers (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _centerLatMeta = const VerificationMeta(
+    'centerLat',
+  );
+  @override
+  late final GeneratedColumn<double> centerLat = GeneratedColumn<double>(
+    'center_lat',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _centerLngMeta = const VerificationMeta(
+    'centerLng',
+  );
+  @override
+  late final GeneratedColumn<double> centerLng = GeneratedColumn<double>(
+    'center_lng',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _radiusMetersMeta = const VerificationMeta(
+    'radiusMeters',
+  );
+  @override
+  late final GeneratedColumn<double> radiusMeters = GeneratedColumn<double>(
+    'radius_meters',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _thresholdMetersMeta = const VerificationMeta(
+    'thresholdMeters',
+  );
+  @override
+  late final GeneratedColumn<double> thresholdMeters = GeneratedColumn<double>(
+    'threshold_meters',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _aboveThresholdMeta = const VerificationMeta(
+    'aboveThreshold',
+  );
+  @override
+  late final GeneratedColumn<bool> aboveThreshold = GeneratedColumn<bool>(
+    'above_threshold',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("above_threshold" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _sampleZoomMeta = const VerificationMeta(
+    'sampleZoom',
+  );
+  @override
+  late final GeneratedColumn<int> sampleZoom = GeneratedColumn<int>(
+    'sample_zoom',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(13),
+  );
+  static const VerificationMeta _labelMeta = const VerificationMeta('label');
+  @override
+  late final GeneratedColumn<String> label = GeneratedColumn<String>(
+    'label',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _generatedAtMeta = const VerificationMeta(
+    'generatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> generatedAt = GeneratedColumn<DateTime>(
+    'generated_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    layerId,
+    centerLat,
+    centerLng,
+    radiusMeters,
+    thresholdMeters,
+    aboveThreshold,
+    sampleZoom,
+    label,
+    generatedAt,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'height_regions';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<HeightRegion> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('layer_id')) {
+      context.handle(
+        _layerIdMeta,
+        layerId.isAcceptableOrUnknown(data['layer_id']!, _layerIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_layerIdMeta);
+    }
+    if (data.containsKey('center_lat')) {
+      context.handle(
+        _centerLatMeta,
+        centerLat.isAcceptableOrUnknown(data['center_lat']!, _centerLatMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_centerLatMeta);
+    }
+    if (data.containsKey('center_lng')) {
+      context.handle(
+        _centerLngMeta,
+        centerLng.isAcceptableOrUnknown(data['center_lng']!, _centerLngMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_centerLngMeta);
+    }
+    if (data.containsKey('radius_meters')) {
+      context.handle(
+        _radiusMetersMeta,
+        radiusMeters.isAcceptableOrUnknown(
+          data['radius_meters']!,
+          _radiusMetersMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_radiusMetersMeta);
+    }
+    if (data.containsKey('threshold_meters')) {
+      context.handle(
+        _thresholdMetersMeta,
+        thresholdMeters.isAcceptableOrUnknown(
+          data['threshold_meters']!,
+          _thresholdMetersMeta,
+        ),
+      );
+    }
+    if (data.containsKey('above_threshold')) {
+      context.handle(
+        _aboveThresholdMeta,
+        aboveThreshold.isAcceptableOrUnknown(
+          data['above_threshold']!,
+          _aboveThresholdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sample_zoom')) {
+      context.handle(
+        _sampleZoomMeta,
+        sampleZoom.isAcceptableOrUnknown(data['sample_zoom']!, _sampleZoomMeta),
+      );
+    }
+    if (data.containsKey('label')) {
+      context.handle(
+        _labelMeta,
+        label.isAcceptableOrUnknown(data['label']!, _labelMeta),
+      );
+    }
+    if (data.containsKey('generated_at')) {
+      context.handle(
+        _generatedAtMeta,
+        generatedAt.isAcceptableOrUnknown(
+          data['generated_at']!,
+          _generatedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  HeightRegion map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return HeightRegion(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      layerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}layer_id'],
+      )!,
+      centerLat: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}center_lat'],
+      )!,
+      centerLng: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}center_lng'],
+      )!,
+      radiusMeters: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}radius_meters'],
+      )!,
+      thresholdMeters: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}threshold_meters'],
+      )!,
+      aboveThreshold: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}above_threshold'],
+      )!,
+      sampleZoom: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sample_zoom'],
+      )!,
+      label: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}label'],
+      ),
+      generatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}generated_at'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $HeightRegionsTable createAlias(String alias) {
+    return $HeightRegionsTable(attachedDatabase, alias);
+  }
+}
+
+class HeightRegion extends DataClass implements Insertable<HeightRegion> {
+  final String id;
+  final String layerId;
+  final double centerLat;
+  final double centerLng;
+  final double radiusMeters;
+
+  /// Elevation threshold in metres above sea level (may be negative).
+  final double thresholdMeters;
+
+  /// True = fill terrain above the threshold; false = below.
+  final bool aboveThreshold;
+
+  /// Slippy zoom of the terrain tiles sampled when generating (12–14).
+  final int sampleZoom;
+  final String? label;
+
+  /// When the fill polygons were last generated; null until first generation.
+  final DateTime? generatedAt;
+  final DateTime createdAt;
+  const HeightRegion({
+    required this.id,
+    required this.layerId,
+    required this.centerLat,
+    required this.centerLng,
+    required this.radiusMeters,
+    required this.thresholdMeters,
+    required this.aboveThreshold,
+    required this.sampleZoom,
+    this.label,
+    this.generatedAt,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['layer_id'] = Variable<String>(layerId);
+    map['center_lat'] = Variable<double>(centerLat);
+    map['center_lng'] = Variable<double>(centerLng);
+    map['radius_meters'] = Variable<double>(radiusMeters);
+    map['threshold_meters'] = Variable<double>(thresholdMeters);
+    map['above_threshold'] = Variable<bool>(aboveThreshold);
+    map['sample_zoom'] = Variable<int>(sampleZoom);
+    if (!nullToAbsent || label != null) {
+      map['label'] = Variable<String>(label);
+    }
+    if (!nullToAbsent || generatedAt != null) {
+      map['generated_at'] = Variable<DateTime>(generatedAt);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  HeightRegionsCompanion toCompanion(bool nullToAbsent) {
+    return HeightRegionsCompanion(
+      id: Value(id),
+      layerId: Value(layerId),
+      centerLat: Value(centerLat),
+      centerLng: Value(centerLng),
+      radiusMeters: Value(radiusMeters),
+      thresholdMeters: Value(thresholdMeters),
+      aboveThreshold: Value(aboveThreshold),
+      sampleZoom: Value(sampleZoom),
+      label: label == null && nullToAbsent
+          ? const Value.absent()
+          : Value(label),
+      generatedAt: generatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(generatedAt),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory HeightRegion.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return HeightRegion(
+      id: serializer.fromJson<String>(json['id']),
+      layerId: serializer.fromJson<String>(json['layerId']),
+      centerLat: serializer.fromJson<double>(json['centerLat']),
+      centerLng: serializer.fromJson<double>(json['centerLng']),
+      radiusMeters: serializer.fromJson<double>(json['radiusMeters']),
+      thresholdMeters: serializer.fromJson<double>(json['thresholdMeters']),
+      aboveThreshold: serializer.fromJson<bool>(json['aboveThreshold']),
+      sampleZoom: serializer.fromJson<int>(json['sampleZoom']),
+      label: serializer.fromJson<String?>(json['label']),
+      generatedAt: serializer.fromJson<DateTime?>(json['generatedAt']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'layerId': serializer.toJson<String>(layerId),
+      'centerLat': serializer.toJson<double>(centerLat),
+      'centerLng': serializer.toJson<double>(centerLng),
+      'radiusMeters': serializer.toJson<double>(radiusMeters),
+      'thresholdMeters': serializer.toJson<double>(thresholdMeters),
+      'aboveThreshold': serializer.toJson<bool>(aboveThreshold),
+      'sampleZoom': serializer.toJson<int>(sampleZoom),
+      'label': serializer.toJson<String?>(label),
+      'generatedAt': serializer.toJson<DateTime?>(generatedAt),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  HeightRegion copyWith({
+    String? id,
+    String? layerId,
+    double? centerLat,
+    double? centerLng,
+    double? radiusMeters,
+    double? thresholdMeters,
+    bool? aboveThreshold,
+    int? sampleZoom,
+    Value<String?> label = const Value.absent(),
+    Value<DateTime?> generatedAt = const Value.absent(),
+    DateTime? createdAt,
+  }) => HeightRegion(
+    id: id ?? this.id,
+    layerId: layerId ?? this.layerId,
+    centerLat: centerLat ?? this.centerLat,
+    centerLng: centerLng ?? this.centerLng,
+    radiusMeters: radiusMeters ?? this.radiusMeters,
+    thresholdMeters: thresholdMeters ?? this.thresholdMeters,
+    aboveThreshold: aboveThreshold ?? this.aboveThreshold,
+    sampleZoom: sampleZoom ?? this.sampleZoom,
+    label: label.present ? label.value : this.label,
+    generatedAt: generatedAt.present ? generatedAt.value : this.generatedAt,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  HeightRegion copyWithCompanion(HeightRegionsCompanion data) {
+    return HeightRegion(
+      id: data.id.present ? data.id.value : this.id,
+      layerId: data.layerId.present ? data.layerId.value : this.layerId,
+      centerLat: data.centerLat.present ? data.centerLat.value : this.centerLat,
+      centerLng: data.centerLng.present ? data.centerLng.value : this.centerLng,
+      radiusMeters: data.radiusMeters.present
+          ? data.radiusMeters.value
+          : this.radiusMeters,
+      thresholdMeters: data.thresholdMeters.present
+          ? data.thresholdMeters.value
+          : this.thresholdMeters,
+      aboveThreshold: data.aboveThreshold.present
+          ? data.aboveThreshold.value
+          : this.aboveThreshold,
+      sampleZoom: data.sampleZoom.present
+          ? data.sampleZoom.value
+          : this.sampleZoom,
+      label: data.label.present ? data.label.value : this.label,
+      generatedAt: data.generatedAt.present
+          ? data.generatedAt.value
+          : this.generatedAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HeightRegion(')
+          ..write('id: $id, ')
+          ..write('layerId: $layerId, ')
+          ..write('centerLat: $centerLat, ')
+          ..write('centerLng: $centerLng, ')
+          ..write('radiusMeters: $radiusMeters, ')
+          ..write('thresholdMeters: $thresholdMeters, ')
+          ..write('aboveThreshold: $aboveThreshold, ')
+          ..write('sampleZoom: $sampleZoom, ')
+          ..write('label: $label, ')
+          ..write('generatedAt: $generatedAt, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    layerId,
+    centerLat,
+    centerLng,
+    radiusMeters,
+    thresholdMeters,
+    aboveThreshold,
+    sampleZoom,
+    label,
+    generatedAt,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is HeightRegion &&
+          other.id == this.id &&
+          other.layerId == this.layerId &&
+          other.centerLat == this.centerLat &&
+          other.centerLng == this.centerLng &&
+          other.radiusMeters == this.radiusMeters &&
+          other.thresholdMeters == this.thresholdMeters &&
+          other.aboveThreshold == this.aboveThreshold &&
+          other.sampleZoom == this.sampleZoom &&
+          other.label == this.label &&
+          other.generatedAt == this.generatedAt &&
+          other.createdAt == this.createdAt);
+}
+
+class HeightRegionsCompanion extends UpdateCompanion<HeightRegion> {
+  final Value<String> id;
+  final Value<String> layerId;
+  final Value<double> centerLat;
+  final Value<double> centerLng;
+  final Value<double> radiusMeters;
+  final Value<double> thresholdMeters;
+  final Value<bool> aboveThreshold;
+  final Value<int> sampleZoom;
+  final Value<String?> label;
+  final Value<DateTime?> generatedAt;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const HeightRegionsCompanion({
+    this.id = const Value.absent(),
+    this.layerId = const Value.absent(),
+    this.centerLat = const Value.absent(),
+    this.centerLng = const Value.absent(),
+    this.radiusMeters = const Value.absent(),
+    this.thresholdMeters = const Value.absent(),
+    this.aboveThreshold = const Value.absent(),
+    this.sampleZoom = const Value.absent(),
+    this.label = const Value.absent(),
+    this.generatedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  HeightRegionsCompanion.insert({
+    required String id,
+    required String layerId,
+    required double centerLat,
+    required double centerLng,
+    required double radiusMeters,
+    this.thresholdMeters = const Value.absent(),
+    this.aboveThreshold = const Value.absent(),
+    this.sampleZoom = const Value.absent(),
+    this.label = const Value.absent(),
+    this.generatedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       layerId = Value(layerId),
+       centerLat = Value(centerLat),
+       centerLng = Value(centerLng),
+       radiusMeters = Value(radiusMeters);
+  static Insertable<HeightRegion> custom({
+    Expression<String>? id,
+    Expression<String>? layerId,
+    Expression<double>? centerLat,
+    Expression<double>? centerLng,
+    Expression<double>? radiusMeters,
+    Expression<double>? thresholdMeters,
+    Expression<bool>? aboveThreshold,
+    Expression<int>? sampleZoom,
+    Expression<String>? label,
+    Expression<DateTime>? generatedAt,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (layerId != null) 'layer_id': layerId,
+      if (centerLat != null) 'center_lat': centerLat,
+      if (centerLng != null) 'center_lng': centerLng,
+      if (radiusMeters != null) 'radius_meters': radiusMeters,
+      if (thresholdMeters != null) 'threshold_meters': thresholdMeters,
+      if (aboveThreshold != null) 'above_threshold': aboveThreshold,
+      if (sampleZoom != null) 'sample_zoom': sampleZoom,
+      if (label != null) 'label': label,
+      if (generatedAt != null) 'generated_at': generatedAt,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  HeightRegionsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? layerId,
+    Value<double>? centerLat,
+    Value<double>? centerLng,
+    Value<double>? radiusMeters,
+    Value<double>? thresholdMeters,
+    Value<bool>? aboveThreshold,
+    Value<int>? sampleZoom,
+    Value<String?>? label,
+    Value<DateTime?>? generatedAt,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return HeightRegionsCompanion(
+      id: id ?? this.id,
+      layerId: layerId ?? this.layerId,
+      centerLat: centerLat ?? this.centerLat,
+      centerLng: centerLng ?? this.centerLng,
+      radiusMeters: radiusMeters ?? this.radiusMeters,
+      thresholdMeters: thresholdMeters ?? this.thresholdMeters,
+      aboveThreshold: aboveThreshold ?? this.aboveThreshold,
+      sampleZoom: sampleZoom ?? this.sampleZoom,
+      label: label ?? this.label,
+      generatedAt: generatedAt ?? this.generatedAt,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (layerId.present) {
+      map['layer_id'] = Variable<String>(layerId.value);
+    }
+    if (centerLat.present) {
+      map['center_lat'] = Variable<double>(centerLat.value);
+    }
+    if (centerLng.present) {
+      map['center_lng'] = Variable<double>(centerLng.value);
+    }
+    if (radiusMeters.present) {
+      map['radius_meters'] = Variable<double>(radiusMeters.value);
+    }
+    if (thresholdMeters.present) {
+      map['threshold_meters'] = Variable<double>(thresholdMeters.value);
+    }
+    if (aboveThreshold.present) {
+      map['above_threshold'] = Variable<bool>(aboveThreshold.value);
+    }
+    if (sampleZoom.present) {
+      map['sample_zoom'] = Variable<int>(sampleZoom.value);
+    }
+    if (label.present) {
+      map['label'] = Variable<String>(label.value);
+    }
+    if (generatedAt.present) {
+      map['generated_at'] = Variable<DateTime>(generatedAt.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HeightRegionsCompanion(')
+          ..write('id: $id, ')
+          ..write('layerId: $layerId, ')
+          ..write('centerLat: $centerLat, ')
+          ..write('centerLng: $centerLng, ')
+          ..write('radiusMeters: $radiusMeters, ')
+          ..write('thresholdMeters: $thresholdMeters, ')
+          ..write('aboveThreshold: $aboveThreshold, ')
+          ..write('sampleZoom: $sampleZoom, ')
+          ..write('label: $label, ')
+          ..write('generatedAt: $generatedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $HeightPolygonsTable extends HeightPolygons
+    with TableInfo<$HeightPolygonsTable, HeightPolygon> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $HeightPolygonsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _heightRegionIdMeta = const VerificationMeta(
+    'heightRegionId',
+  );
+  @override
+  late final GeneratedColumn<String> heightRegionId = GeneratedColumn<String>(
+    'height_region_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES height_regions (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    heightRegionId,
+    sortOrder,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'height_polygons';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<HeightPolygon> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('height_region_id')) {
+      context.handle(
+        _heightRegionIdMeta,
+        heightRegionId.isAcceptableOrUnknown(
+          data['height_region_id']!,
+          _heightRegionIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_heightRegionIdMeta);
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sortOrderMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  HeightPolygon map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return HeightPolygon(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      heightRegionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}height_region_id'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $HeightPolygonsTable createAlias(String alias) {
+    return $HeightPolygonsTable(attachedDatabase, alias);
+  }
+}
+
+class HeightPolygon extends DataClass implements Insertable<HeightPolygon> {
+  final String id;
+  final String heightRegionId;
+  final int sortOrder;
+  final DateTime createdAt;
+  const HeightPolygon({
+    required this.id,
+    required this.heightRegionId,
+    required this.sortOrder,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['height_region_id'] = Variable<String>(heightRegionId);
+    map['sort_order'] = Variable<int>(sortOrder);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  HeightPolygonsCompanion toCompanion(bool nullToAbsent) {
+    return HeightPolygonsCompanion(
+      id: Value(id),
+      heightRegionId: Value(heightRegionId),
+      sortOrder: Value(sortOrder),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory HeightPolygon.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return HeightPolygon(
+      id: serializer.fromJson<String>(json['id']),
+      heightRegionId: serializer.fromJson<String>(json['heightRegionId']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'heightRegionId': serializer.toJson<String>(heightRegionId),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  HeightPolygon copyWith({
+    String? id,
+    String? heightRegionId,
+    int? sortOrder,
+    DateTime? createdAt,
+  }) => HeightPolygon(
+    id: id ?? this.id,
+    heightRegionId: heightRegionId ?? this.heightRegionId,
+    sortOrder: sortOrder ?? this.sortOrder,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  HeightPolygon copyWithCompanion(HeightPolygonsCompanion data) {
+    return HeightPolygon(
+      id: data.id.present ? data.id.value : this.id,
+      heightRegionId: data.heightRegionId.present
+          ? data.heightRegionId.value
+          : this.heightRegionId,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HeightPolygon(')
+          ..write('id: $id, ')
+          ..write('heightRegionId: $heightRegionId, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, heightRegionId, sortOrder, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is HeightPolygon &&
+          other.id == this.id &&
+          other.heightRegionId == this.heightRegionId &&
+          other.sortOrder == this.sortOrder &&
+          other.createdAt == this.createdAt);
+}
+
+class HeightPolygonsCompanion extends UpdateCompanion<HeightPolygon> {
+  final Value<String> id;
+  final Value<String> heightRegionId;
+  final Value<int> sortOrder;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const HeightPolygonsCompanion({
+    this.id = const Value.absent(),
+    this.heightRegionId = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  HeightPolygonsCompanion.insert({
+    required String id,
+    required String heightRegionId,
+    required int sortOrder,
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       heightRegionId = Value(heightRegionId),
+       sortOrder = Value(sortOrder);
+  static Insertable<HeightPolygon> custom({
+    Expression<String>? id,
+    Expression<String>? heightRegionId,
+    Expression<int>? sortOrder,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (heightRegionId != null) 'height_region_id': heightRegionId,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  HeightPolygonsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? heightRegionId,
+    Value<int>? sortOrder,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return HeightPolygonsCompanion(
+      id: id ?? this.id,
+      heightRegionId: heightRegionId ?? this.heightRegionId,
+      sortOrder: sortOrder ?? this.sortOrder,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (heightRegionId.present) {
+      map['height_region_id'] = Variable<String>(heightRegionId.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HeightPolygonsCompanion(')
+          ..write('id: $id, ')
+          ..write('heightRegionId: $heightRegionId, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $HeightPolygonPointsTable extends HeightPolygonPoints
+    with TableInfo<$HeightPolygonPointsTable, HeightPolygonPoint> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $HeightPolygonPointsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _polygonIdMeta = const VerificationMeta(
+    'polygonId',
+  );
+  @override
+  late final GeneratedColumn<String> polygonId = GeneratedColumn<String>(
+    'polygon_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES height_polygons (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _latMeta = const VerificationMeta('lat');
+  @override
+  late final GeneratedColumn<double> lat = GeneratedColumn<double>(
+    'lat',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _lngMeta = const VerificationMeta('lng');
+  @override
+  late final GeneratedColumn<double> lng = GeneratedColumn<double>(
+    'lng',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    polygonId,
+    lat,
+    lng,
+    sortOrder,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'height_polygon_points';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<HeightPolygonPoint> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('polygon_id')) {
+      context.handle(
+        _polygonIdMeta,
+        polygonId.isAcceptableOrUnknown(data['polygon_id']!, _polygonIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_polygonIdMeta);
+    }
+    if (data.containsKey('lat')) {
+      context.handle(
+        _latMeta,
+        lat.isAcceptableOrUnknown(data['lat']!, _latMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_latMeta);
+    }
+    if (data.containsKey('lng')) {
+      context.handle(
+        _lngMeta,
+        lng.isAcceptableOrUnknown(data['lng']!, _lngMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_lngMeta);
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sortOrderMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  HeightPolygonPoint map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return HeightPolygonPoint(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      polygonId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}polygon_id'],
+      )!,
+      lat: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}lat'],
+      )!,
+      lng: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}lng'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $HeightPolygonPointsTable createAlias(String alias) {
+    return $HeightPolygonPointsTable(attachedDatabase, alias);
+  }
+}
+
+class HeightPolygonPoint extends DataClass
+    implements Insertable<HeightPolygonPoint> {
+  final String id;
+  final String polygonId;
+  final double lat;
+  final double lng;
+  final int sortOrder;
+  final DateTime createdAt;
+  const HeightPolygonPoint({
+    required this.id,
+    required this.polygonId,
+    required this.lat,
+    required this.lng,
+    required this.sortOrder,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['polygon_id'] = Variable<String>(polygonId);
+    map['lat'] = Variable<double>(lat);
+    map['lng'] = Variable<double>(lng);
+    map['sort_order'] = Variable<int>(sortOrder);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  HeightPolygonPointsCompanion toCompanion(bool nullToAbsent) {
+    return HeightPolygonPointsCompanion(
+      id: Value(id),
+      polygonId: Value(polygonId),
+      lat: Value(lat),
+      lng: Value(lng),
+      sortOrder: Value(sortOrder),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory HeightPolygonPoint.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return HeightPolygonPoint(
+      id: serializer.fromJson<String>(json['id']),
+      polygonId: serializer.fromJson<String>(json['polygonId']),
+      lat: serializer.fromJson<double>(json['lat']),
+      lng: serializer.fromJson<double>(json['lng']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'polygonId': serializer.toJson<String>(polygonId),
+      'lat': serializer.toJson<double>(lat),
+      'lng': serializer.toJson<double>(lng),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  HeightPolygonPoint copyWith({
+    String? id,
+    String? polygonId,
+    double? lat,
+    double? lng,
+    int? sortOrder,
+    DateTime? createdAt,
+  }) => HeightPolygonPoint(
+    id: id ?? this.id,
+    polygonId: polygonId ?? this.polygonId,
+    lat: lat ?? this.lat,
+    lng: lng ?? this.lng,
+    sortOrder: sortOrder ?? this.sortOrder,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  HeightPolygonPoint copyWithCompanion(HeightPolygonPointsCompanion data) {
+    return HeightPolygonPoint(
+      id: data.id.present ? data.id.value : this.id,
+      polygonId: data.polygonId.present ? data.polygonId.value : this.polygonId,
+      lat: data.lat.present ? data.lat.value : this.lat,
+      lng: data.lng.present ? data.lng.value : this.lng,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HeightPolygonPoint(')
+          ..write('id: $id, ')
+          ..write('polygonId: $polygonId, ')
+          ..write('lat: $lat, ')
+          ..write('lng: $lng, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, polygonId, lat, lng, sortOrder, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is HeightPolygonPoint &&
+          other.id == this.id &&
+          other.polygonId == this.polygonId &&
+          other.lat == this.lat &&
+          other.lng == this.lng &&
+          other.sortOrder == this.sortOrder &&
+          other.createdAt == this.createdAt);
+}
+
+class HeightPolygonPointsCompanion extends UpdateCompanion<HeightPolygonPoint> {
+  final Value<String> id;
+  final Value<String> polygonId;
+  final Value<double> lat;
+  final Value<double> lng;
+  final Value<int> sortOrder;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const HeightPolygonPointsCompanion({
+    this.id = const Value.absent(),
+    this.polygonId = const Value.absent(),
+    this.lat = const Value.absent(),
+    this.lng = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  HeightPolygonPointsCompanion.insert({
+    required String id,
+    required String polygonId,
+    required double lat,
+    required double lng,
+    required int sortOrder,
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       polygonId = Value(polygonId),
+       lat = Value(lat),
+       lng = Value(lng),
+       sortOrder = Value(sortOrder);
+  static Insertable<HeightPolygonPoint> custom({
+    Expression<String>? id,
+    Expression<String>? polygonId,
+    Expression<double>? lat,
+    Expression<double>? lng,
+    Expression<int>? sortOrder,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (polygonId != null) 'polygon_id': polygonId,
+      if (lat != null) 'lat': lat,
+      if (lng != null) 'lng': lng,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  HeightPolygonPointsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? polygonId,
+    Value<double>? lat,
+    Value<double>? lng,
+    Value<int>? sortOrder,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return HeightPolygonPointsCompanion(
+      id: id ?? this.id,
+      polygonId: polygonId ?? this.polygonId,
+      lat: lat ?? this.lat,
+      lng: lng ?? this.lng,
+      sortOrder: sortOrder ?? this.sortOrder,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (polygonId.present) {
+      map['polygon_id'] = Variable<String>(polygonId.value);
+    }
+    if (lat.present) {
+      map['lat'] = Variable<double>(lat.value);
+    }
+    if (lng.present) {
+      map['lng'] = Variable<double>(lng.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HeightPolygonPointsCompanion(')
+          ..write('id: $id, ')
+          ..write('polygonId: $polygonId, ')
+          ..write('lat: $lat, ')
+          ..write('lng: $lng, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $TileCacheTable extends TileCache
     with TableInfo<$TileCacheTable, TileCacheData> {
   @override
@@ -5332,6 +6745,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $FreeLinePointsTable freeLinePoints = $FreeLinePointsTable(this);
   late final $FreeAreasTable freeAreas = $FreeAreasTable(this);
   late final $FreeAreaPointsTable freeAreaPoints = $FreeAreaPointsTable(this);
+  late final $HeightRegionsTable heightRegions = $HeightRegionsTable(this);
+  late final $HeightPolygonsTable heightPolygons = $HeightPolygonsTable(this);
+  late final $HeightPolygonPointsTable heightPolygonPoints =
+      $HeightPolygonPointsTable(this);
   late final $TileCacheTable tileCache = $TileCacheTable(this);
   late final $OverpassCacheTable overpassCache = $OverpassCacheTable(this);
   @override
@@ -5349,6 +6766,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     freeLinePoints,
     freeAreas,
     freeAreaPoints,
+    heightRegions,
+    heightPolygons,
+    heightPolygonPoints,
     tileCache,
     overpassCache,
   ];
@@ -5409,6 +6829,27 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('free_area_points', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'layers',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('height_regions', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'height_regions',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('height_polygons', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'height_polygons',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('height_polygon_points', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -5529,6 +6970,24 @@ final class $$LayersTableReferences
     ).filter((f) => f.layerId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_freeAreasRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$HeightRegionsTable, List<HeightRegion>>
+  _heightRegionsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.heightRegions,
+    aliasName: $_aliasNameGenerator(db.layers.id, db.heightRegions.layerId),
+  );
+
+  $$HeightRegionsTableProcessedTableManager get heightRegionsRefs {
+    final manager = $$HeightRegionsTableTableManager(
+      $_db,
+      $_db.heightRegions,
+    ).filter((f) => f.layerId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_heightRegionsRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -5700,6 +7159,31 @@ class $$LayersTableFilterComposer
           }) => $$FreeAreasTableFilterComposer(
             $db: $db,
             $table: $db.freeAreas,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> heightRegionsRefs(
+    Expression<bool> Function($$HeightRegionsTableFilterComposer f) f,
+  ) {
+    final $$HeightRegionsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.heightRegions,
+      getReferencedColumn: (t) => t.layerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HeightRegionsTableFilterComposer(
+            $db: $db,
+            $table: $db.heightRegions,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -5919,6 +7403,31 @@ class $$LayersTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> heightRegionsRefs<T extends Object>(
+    Expression<T> Function($$HeightRegionsTableAnnotationComposer a) f,
+  ) {
+    final $$HeightRegionsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.heightRegions,
+      getReferencedColumn: (t) => t.layerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HeightRegionsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.heightRegions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LayersTableTableManager
@@ -5940,6 +7449,7 @@ class $$LayersTableTableManager
             bool subspacesRefs,
             bool freeLinesRefs,
             bool freeAreasRefs,
+            bool heightRegionsRefs,
           })
         > {
   $$LayersTableTableManager(_$AppDatabase db, $LayersTable table)
@@ -6010,6 +7520,7 @@ class $$LayersTableTableManager
                 subspacesRefs = false,
                 freeLinesRefs = false,
                 freeAreasRefs = false,
+                heightRegionsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -6019,6 +7530,7 @@ class $$LayersTableTableManager
                     if (subspacesRefs) db.subspaces,
                     if (freeLinesRefs) db.freeLines,
                     if (freeAreasRefs) db.freeAreas,
+                    if (heightRegionsRefs) db.heightRegions,
                   ],
                   addJoins: null,
                   getPrefetchedDataCallback: (items) async {
@@ -6116,6 +7628,27 @@ class $$LayersTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (heightRegionsRefs)
+                        await $_getPrefetchedData<
+                          Layer,
+                          $LayersTable,
+                          HeightRegion
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LayersTableReferences
+                              ._heightRegionsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LayersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).heightRegionsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.layerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -6142,6 +7675,7 @@ typedef $$LayersTableProcessedTableManager =
         bool subspacesRefs,
         bool freeLinesRefs,
         bool freeAreasRefs,
+        bool heightRegionsRefs,
       })
     >;
 typedef $$CirclesTableCreateCompanionBuilder =
@@ -9434,6 +10968,1330 @@ typedef $$FreeAreaPointsTableProcessedTableManager =
       FreeAreaPoint,
       PrefetchHooks Function({bool freeAreaId})
     >;
+typedef $$HeightRegionsTableCreateCompanionBuilder =
+    HeightRegionsCompanion Function({
+      required String id,
+      required String layerId,
+      required double centerLat,
+      required double centerLng,
+      required double radiusMeters,
+      Value<double> thresholdMeters,
+      Value<bool> aboveThreshold,
+      Value<int> sampleZoom,
+      Value<String?> label,
+      Value<DateTime?> generatedAt,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$HeightRegionsTableUpdateCompanionBuilder =
+    HeightRegionsCompanion Function({
+      Value<String> id,
+      Value<String> layerId,
+      Value<double> centerLat,
+      Value<double> centerLng,
+      Value<double> radiusMeters,
+      Value<double> thresholdMeters,
+      Value<bool> aboveThreshold,
+      Value<int> sampleZoom,
+      Value<String?> label,
+      Value<DateTime?> generatedAt,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$HeightRegionsTableReferences
+    extends BaseReferences<_$AppDatabase, $HeightRegionsTable, HeightRegion> {
+  $$HeightRegionsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $LayersTable _layerIdTable(_$AppDatabase db) => db.layers.createAlias(
+    $_aliasNameGenerator(db.heightRegions.layerId, db.layers.id),
+  );
+
+  $$LayersTableProcessedTableManager get layerId {
+    final $_column = $_itemColumn<String>('layer_id')!;
+
+    final manager = $$LayersTableTableManager(
+      $_db,
+      $_db.layers,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_layerIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$HeightPolygonsTable, List<HeightPolygon>>
+  _heightPolygonsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.heightPolygons,
+    aliasName: $_aliasNameGenerator(
+      db.heightRegions.id,
+      db.heightPolygons.heightRegionId,
+    ),
+  );
+
+  $$HeightPolygonsTableProcessedTableManager get heightPolygonsRefs {
+    final manager = $$HeightPolygonsTableTableManager(
+      $_db,
+      $_db.heightPolygons,
+    ).filter((f) => f.heightRegionId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_heightPolygonsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$HeightRegionsTableFilterComposer
+    extends Composer<_$AppDatabase, $HeightRegionsTable> {
+  $$HeightRegionsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get centerLat => $composableBuilder(
+    column: $table.centerLat,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get centerLng => $composableBuilder(
+    column: $table.centerLng,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get radiusMeters => $composableBuilder(
+    column: $table.radiusMeters,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get thresholdMeters => $composableBuilder(
+    column: $table.thresholdMeters,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get aboveThreshold => $composableBuilder(
+    column: $table.aboveThreshold,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sampleZoom => $composableBuilder(
+    column: $table.sampleZoom,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get generatedAt => $composableBuilder(
+    column: $table.generatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$LayersTableFilterComposer get layerId {
+    final $$LayersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.layerId,
+      referencedTable: $db.layers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LayersTableFilterComposer(
+            $db: $db,
+            $table: $db.layers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> heightPolygonsRefs(
+    Expression<bool> Function($$HeightPolygonsTableFilterComposer f) f,
+  ) {
+    final $$HeightPolygonsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.heightPolygons,
+      getReferencedColumn: (t) => t.heightRegionId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HeightPolygonsTableFilterComposer(
+            $db: $db,
+            $table: $db.heightPolygons,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$HeightRegionsTableOrderingComposer
+    extends Composer<_$AppDatabase, $HeightRegionsTable> {
+  $$HeightRegionsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get centerLat => $composableBuilder(
+    column: $table.centerLat,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get centerLng => $composableBuilder(
+    column: $table.centerLng,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get radiusMeters => $composableBuilder(
+    column: $table.radiusMeters,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get thresholdMeters => $composableBuilder(
+    column: $table.thresholdMeters,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get aboveThreshold => $composableBuilder(
+    column: $table.aboveThreshold,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sampleZoom => $composableBuilder(
+    column: $table.sampleZoom,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get generatedAt => $composableBuilder(
+    column: $table.generatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$LayersTableOrderingComposer get layerId {
+    final $$LayersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.layerId,
+      referencedTable: $db.layers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LayersTableOrderingComposer(
+            $db: $db,
+            $table: $db.layers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$HeightRegionsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $HeightRegionsTable> {
+  $$HeightRegionsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<double> get centerLat =>
+      $composableBuilder(column: $table.centerLat, builder: (column) => column);
+
+  GeneratedColumn<double> get centerLng =>
+      $composableBuilder(column: $table.centerLng, builder: (column) => column);
+
+  GeneratedColumn<double> get radiusMeters => $composableBuilder(
+    column: $table.radiusMeters,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get thresholdMeters => $composableBuilder(
+    column: $table.thresholdMeters,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get aboveThreshold => $composableBuilder(
+    column: $table.aboveThreshold,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get sampleZoom => $composableBuilder(
+    column: $table.sampleZoom,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get label =>
+      $composableBuilder(column: $table.label, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get generatedAt => $composableBuilder(
+    column: $table.generatedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$LayersTableAnnotationComposer get layerId {
+    final $$LayersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.layerId,
+      referencedTable: $db.layers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LayersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.layers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> heightPolygonsRefs<T extends Object>(
+    Expression<T> Function($$HeightPolygonsTableAnnotationComposer a) f,
+  ) {
+    final $$HeightPolygonsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.heightPolygons,
+      getReferencedColumn: (t) => t.heightRegionId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HeightPolygonsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.heightPolygons,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$HeightRegionsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $HeightRegionsTable,
+          HeightRegion,
+          $$HeightRegionsTableFilterComposer,
+          $$HeightRegionsTableOrderingComposer,
+          $$HeightRegionsTableAnnotationComposer,
+          $$HeightRegionsTableCreateCompanionBuilder,
+          $$HeightRegionsTableUpdateCompanionBuilder,
+          (HeightRegion, $$HeightRegionsTableReferences),
+          HeightRegion,
+          PrefetchHooks Function({bool layerId, bool heightPolygonsRefs})
+        > {
+  $$HeightRegionsTableTableManager(_$AppDatabase db, $HeightRegionsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$HeightRegionsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$HeightRegionsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$HeightRegionsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> layerId = const Value.absent(),
+                Value<double> centerLat = const Value.absent(),
+                Value<double> centerLng = const Value.absent(),
+                Value<double> radiusMeters = const Value.absent(),
+                Value<double> thresholdMeters = const Value.absent(),
+                Value<bool> aboveThreshold = const Value.absent(),
+                Value<int> sampleZoom = const Value.absent(),
+                Value<String?> label = const Value.absent(),
+                Value<DateTime?> generatedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => HeightRegionsCompanion(
+                id: id,
+                layerId: layerId,
+                centerLat: centerLat,
+                centerLng: centerLng,
+                radiusMeters: radiusMeters,
+                thresholdMeters: thresholdMeters,
+                aboveThreshold: aboveThreshold,
+                sampleZoom: sampleZoom,
+                label: label,
+                generatedAt: generatedAt,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String layerId,
+                required double centerLat,
+                required double centerLng,
+                required double radiusMeters,
+                Value<double> thresholdMeters = const Value.absent(),
+                Value<bool> aboveThreshold = const Value.absent(),
+                Value<int> sampleZoom = const Value.absent(),
+                Value<String?> label = const Value.absent(),
+                Value<DateTime?> generatedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => HeightRegionsCompanion.insert(
+                id: id,
+                layerId: layerId,
+                centerLat: centerLat,
+                centerLng: centerLng,
+                radiusMeters: radiusMeters,
+                thresholdMeters: thresholdMeters,
+                aboveThreshold: aboveThreshold,
+                sampleZoom: sampleZoom,
+                label: label,
+                generatedAt: generatedAt,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$HeightRegionsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({layerId = false, heightPolygonsRefs = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (heightPolygonsRefs) db.heightPolygons,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (layerId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.layerId,
+                                    referencedTable:
+                                        $$HeightRegionsTableReferences
+                                            ._layerIdTable(db),
+                                    referencedColumn:
+                                        $$HeightRegionsTableReferences
+                                            ._layerIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (heightPolygonsRefs)
+                        await $_getPrefetchedData<
+                          HeightRegion,
+                          $HeightRegionsTable,
+                          HeightPolygon
+                        >(
+                          currentTable: table,
+                          referencedTable: $$HeightRegionsTableReferences
+                              ._heightPolygonsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$HeightRegionsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).heightPolygonsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.heightRegionId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$HeightRegionsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $HeightRegionsTable,
+      HeightRegion,
+      $$HeightRegionsTableFilterComposer,
+      $$HeightRegionsTableOrderingComposer,
+      $$HeightRegionsTableAnnotationComposer,
+      $$HeightRegionsTableCreateCompanionBuilder,
+      $$HeightRegionsTableUpdateCompanionBuilder,
+      (HeightRegion, $$HeightRegionsTableReferences),
+      HeightRegion,
+      PrefetchHooks Function({bool layerId, bool heightPolygonsRefs})
+    >;
+typedef $$HeightPolygonsTableCreateCompanionBuilder =
+    HeightPolygonsCompanion Function({
+      required String id,
+      required String heightRegionId,
+      required int sortOrder,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$HeightPolygonsTableUpdateCompanionBuilder =
+    HeightPolygonsCompanion Function({
+      Value<String> id,
+      Value<String> heightRegionId,
+      Value<int> sortOrder,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$HeightPolygonsTableReferences
+    extends BaseReferences<_$AppDatabase, $HeightPolygonsTable, HeightPolygon> {
+  $$HeightPolygonsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $HeightRegionsTable _heightRegionIdTable(_$AppDatabase db) =>
+      db.heightRegions.createAlias(
+        $_aliasNameGenerator(
+          db.heightPolygons.heightRegionId,
+          db.heightRegions.id,
+        ),
+      );
+
+  $$HeightRegionsTableProcessedTableManager get heightRegionId {
+    final $_column = $_itemColumn<String>('height_region_id')!;
+
+    final manager = $$HeightRegionsTableTableManager(
+      $_db,
+      $_db.heightRegions,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_heightRegionIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $HeightPolygonPointsTable,
+    List<HeightPolygonPoint>
+  >
+  _heightPolygonPointsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.heightPolygonPoints,
+        aliasName: $_aliasNameGenerator(
+          db.heightPolygons.id,
+          db.heightPolygonPoints.polygonId,
+        ),
+      );
+
+  $$HeightPolygonPointsTableProcessedTableManager get heightPolygonPointsRefs {
+    final manager = $$HeightPolygonPointsTableTableManager(
+      $_db,
+      $_db.heightPolygonPoints,
+    ).filter((f) => f.polygonId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _heightPolygonPointsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$HeightPolygonsTableFilterComposer
+    extends Composer<_$AppDatabase, $HeightPolygonsTable> {
+  $$HeightPolygonsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$HeightRegionsTableFilterComposer get heightRegionId {
+    final $$HeightRegionsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.heightRegionId,
+      referencedTable: $db.heightRegions,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HeightRegionsTableFilterComposer(
+            $db: $db,
+            $table: $db.heightRegions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> heightPolygonPointsRefs(
+    Expression<bool> Function($$HeightPolygonPointsTableFilterComposer f) f,
+  ) {
+    final $$HeightPolygonPointsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.heightPolygonPoints,
+      getReferencedColumn: (t) => t.polygonId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HeightPolygonPointsTableFilterComposer(
+            $db: $db,
+            $table: $db.heightPolygonPoints,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$HeightPolygonsTableOrderingComposer
+    extends Composer<_$AppDatabase, $HeightPolygonsTable> {
+  $$HeightPolygonsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$HeightRegionsTableOrderingComposer get heightRegionId {
+    final $$HeightRegionsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.heightRegionId,
+      referencedTable: $db.heightRegions,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HeightRegionsTableOrderingComposer(
+            $db: $db,
+            $table: $db.heightRegions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$HeightPolygonsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $HeightPolygonsTable> {
+  $$HeightPolygonsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$HeightRegionsTableAnnotationComposer get heightRegionId {
+    final $$HeightRegionsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.heightRegionId,
+      referencedTable: $db.heightRegions,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HeightRegionsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.heightRegions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> heightPolygonPointsRefs<T extends Object>(
+    Expression<T> Function($$HeightPolygonPointsTableAnnotationComposer a) f,
+  ) {
+    final $$HeightPolygonPointsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.heightPolygonPoints,
+          getReferencedColumn: (t) => t.polygonId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$HeightPolygonPointsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.heightPolygonPoints,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$HeightPolygonsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $HeightPolygonsTable,
+          HeightPolygon,
+          $$HeightPolygonsTableFilterComposer,
+          $$HeightPolygonsTableOrderingComposer,
+          $$HeightPolygonsTableAnnotationComposer,
+          $$HeightPolygonsTableCreateCompanionBuilder,
+          $$HeightPolygonsTableUpdateCompanionBuilder,
+          (HeightPolygon, $$HeightPolygonsTableReferences),
+          HeightPolygon,
+          PrefetchHooks Function({
+            bool heightRegionId,
+            bool heightPolygonPointsRefs,
+          })
+        > {
+  $$HeightPolygonsTableTableManager(
+    _$AppDatabase db,
+    $HeightPolygonsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$HeightPolygonsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$HeightPolygonsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$HeightPolygonsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> heightRegionId = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => HeightPolygonsCompanion(
+                id: id,
+                heightRegionId: heightRegionId,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String heightRegionId,
+                required int sortOrder,
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => HeightPolygonsCompanion.insert(
+                id: id,
+                heightRegionId: heightRegionId,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$HeightPolygonsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({heightRegionId = false, heightPolygonPointsRefs = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (heightPolygonPointsRefs) db.heightPolygonPoints,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (heightRegionId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.heightRegionId,
+                                    referencedTable:
+                                        $$HeightPolygonsTableReferences
+                                            ._heightRegionIdTable(db),
+                                    referencedColumn:
+                                        $$HeightPolygonsTableReferences
+                                            ._heightRegionIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (heightPolygonPointsRefs)
+                        await $_getPrefetchedData<
+                          HeightPolygon,
+                          $HeightPolygonsTable,
+                          HeightPolygonPoint
+                        >(
+                          currentTable: table,
+                          referencedTable: $$HeightPolygonsTableReferences
+                              ._heightPolygonPointsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$HeightPolygonsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).heightPolygonPointsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.polygonId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$HeightPolygonsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $HeightPolygonsTable,
+      HeightPolygon,
+      $$HeightPolygonsTableFilterComposer,
+      $$HeightPolygonsTableOrderingComposer,
+      $$HeightPolygonsTableAnnotationComposer,
+      $$HeightPolygonsTableCreateCompanionBuilder,
+      $$HeightPolygonsTableUpdateCompanionBuilder,
+      (HeightPolygon, $$HeightPolygonsTableReferences),
+      HeightPolygon,
+      PrefetchHooks Function({
+        bool heightRegionId,
+        bool heightPolygonPointsRefs,
+      })
+    >;
+typedef $$HeightPolygonPointsTableCreateCompanionBuilder =
+    HeightPolygonPointsCompanion Function({
+      required String id,
+      required String polygonId,
+      required double lat,
+      required double lng,
+      required int sortOrder,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$HeightPolygonPointsTableUpdateCompanionBuilder =
+    HeightPolygonPointsCompanion Function({
+      Value<String> id,
+      Value<String> polygonId,
+      Value<double> lat,
+      Value<double> lng,
+      Value<int> sortOrder,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$HeightPolygonPointsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $HeightPolygonPointsTable,
+          HeightPolygonPoint
+        > {
+  $$HeightPolygonPointsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $HeightPolygonsTable _polygonIdTable(_$AppDatabase db) =>
+      db.heightPolygons.createAlias(
+        $_aliasNameGenerator(
+          db.heightPolygonPoints.polygonId,
+          db.heightPolygons.id,
+        ),
+      );
+
+  $$HeightPolygonsTableProcessedTableManager get polygonId {
+    final $_column = $_itemColumn<String>('polygon_id')!;
+
+    final manager = $$HeightPolygonsTableTableManager(
+      $_db,
+      $_db.heightPolygons,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_polygonIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$HeightPolygonPointsTableFilterComposer
+    extends Composer<_$AppDatabase, $HeightPolygonPointsTable> {
+  $$HeightPolygonPointsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get lat => $composableBuilder(
+    column: $table.lat,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get lng => $composableBuilder(
+    column: $table.lng,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$HeightPolygonsTableFilterComposer get polygonId {
+    final $$HeightPolygonsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.polygonId,
+      referencedTable: $db.heightPolygons,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HeightPolygonsTableFilterComposer(
+            $db: $db,
+            $table: $db.heightPolygons,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$HeightPolygonPointsTableOrderingComposer
+    extends Composer<_$AppDatabase, $HeightPolygonPointsTable> {
+  $$HeightPolygonPointsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get lat => $composableBuilder(
+    column: $table.lat,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get lng => $composableBuilder(
+    column: $table.lng,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$HeightPolygonsTableOrderingComposer get polygonId {
+    final $$HeightPolygonsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.polygonId,
+      referencedTable: $db.heightPolygons,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HeightPolygonsTableOrderingComposer(
+            $db: $db,
+            $table: $db.heightPolygons,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$HeightPolygonPointsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $HeightPolygonPointsTable> {
+  $$HeightPolygonPointsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<double> get lat =>
+      $composableBuilder(column: $table.lat, builder: (column) => column);
+
+  GeneratedColumn<double> get lng =>
+      $composableBuilder(column: $table.lng, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$HeightPolygonsTableAnnotationComposer get polygonId {
+    final $$HeightPolygonsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.polygonId,
+      referencedTable: $db.heightPolygons,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HeightPolygonsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.heightPolygons,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$HeightPolygonPointsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $HeightPolygonPointsTable,
+          HeightPolygonPoint,
+          $$HeightPolygonPointsTableFilterComposer,
+          $$HeightPolygonPointsTableOrderingComposer,
+          $$HeightPolygonPointsTableAnnotationComposer,
+          $$HeightPolygonPointsTableCreateCompanionBuilder,
+          $$HeightPolygonPointsTableUpdateCompanionBuilder,
+          (HeightPolygonPoint, $$HeightPolygonPointsTableReferences),
+          HeightPolygonPoint,
+          PrefetchHooks Function({bool polygonId})
+        > {
+  $$HeightPolygonPointsTableTableManager(
+    _$AppDatabase db,
+    $HeightPolygonPointsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$HeightPolygonPointsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$HeightPolygonPointsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$HeightPolygonPointsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> polygonId = const Value.absent(),
+                Value<double> lat = const Value.absent(),
+                Value<double> lng = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => HeightPolygonPointsCompanion(
+                id: id,
+                polygonId: polygonId,
+                lat: lat,
+                lng: lng,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String polygonId,
+                required double lat,
+                required double lng,
+                required int sortOrder,
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => HeightPolygonPointsCompanion.insert(
+                id: id,
+                polygonId: polygonId,
+                lat: lat,
+                lng: lng,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$HeightPolygonPointsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({polygonId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (polygonId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.polygonId,
+                                referencedTable:
+                                    $$HeightPolygonPointsTableReferences
+                                        ._polygonIdTable(db),
+                                referencedColumn:
+                                    $$HeightPolygonPointsTableReferences
+                                        ._polygonIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$HeightPolygonPointsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $HeightPolygonPointsTable,
+      HeightPolygonPoint,
+      $$HeightPolygonPointsTableFilterComposer,
+      $$HeightPolygonPointsTableOrderingComposer,
+      $$HeightPolygonPointsTableAnnotationComposer,
+      $$HeightPolygonPointsTableCreateCompanionBuilder,
+      $$HeightPolygonPointsTableUpdateCompanionBuilder,
+      (HeightPolygonPoint, $$HeightPolygonPointsTableReferences),
+      HeightPolygonPoint,
+      PrefetchHooks Function({bool polygonId})
+    >;
 typedef $$TileCacheTableCreateCompanionBuilder =
     TileCacheCompanion Function({
       required String url,
@@ -9940,6 +12798,12 @@ class $AppDatabaseManager {
       $$FreeAreasTableTableManager(_db, _db.freeAreas);
   $$FreeAreaPointsTableTableManager get freeAreaPoints =>
       $$FreeAreaPointsTableTableManager(_db, _db.freeAreaPoints);
+  $$HeightRegionsTableTableManager get heightRegions =>
+      $$HeightRegionsTableTableManager(_db, _db.heightRegions);
+  $$HeightPolygonsTableTableManager get heightPolygons =>
+      $$HeightPolygonsTableTableManager(_db, _db.heightPolygons);
+  $$HeightPolygonPointsTableTableManager get heightPolygonPoints =>
+      $$HeightPolygonPointsTableTableManager(_db, _db.heightPolygonPoints);
   $$TileCacheTableTableManager get tileCache =>
       $$TileCacheTableTableManager(_db, _db.tileCache);
   $$OverpassCacheTableTableManager get overpassCache =>

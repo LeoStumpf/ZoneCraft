@@ -12,11 +12,13 @@ import '../data/borders.dart';
 import '../data/cached_tile_provider.dart';
 import '../data/database.dart';
 import '../data/overpass.dart';
+import '../geo/geodesic.dart';
 import '../geo/tiles.dart';
 import '../state/providers.dart';
 import 'circle_editor.dart';
 import 'freearea_editor.dart';
 import 'freeline_editor.dart';
+import 'height_editor.dart';
 import 'layers_panel.dart';
 import 'plane_editor.dart';
 import 'region_layer.dart';
@@ -779,6 +781,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
     ref.read(freeLinePlacementProvider.notifier).arm(null);
     ref.read(selectedFreeAreaProvider.notifier).select(null);
     ref.read(freeAreaPlacementProvider.notifier).arm(null);
+    ref.read(selectedHeightRegionProvider.notifier).select(null);
+    ref.read(heightPlacementProvider.notifier).arm(false);
   }
 
   void _selectCircle(String id) {
@@ -804,6 +808,46 @@ class _MapScreenState extends ConsumerState<MapScreen>
   void _selectFreeArea(String id) {
     _clearSelection();
     ref.read(selectedFreeAreaProvider.notifier).select(id);
+  }
+
+  void _selectHeightRegion(String id) {
+    _clearSelection();
+    ref.read(selectedHeightRegionProvider.notifier).select(id);
+  }
+
+  /// A height region in [layerId] whose bounded circle contains [latlng]
+  /// (Haversine), preferring the smallest, or null.
+  HeightRegion? _heightRegionInLayer(
+    LatLng latlng,
+    String layerId,
+    List<HeightRegion> regions,
+  ) {
+    HeightRegion? best;
+    for (final r in regions.where((r) => r.layerId == layerId)) {
+      if (!r.radiusMeters.isFinite || r.radiusMeters <= 0) continue;
+      final d = _hitTest.as(
+        LengthUnit.Meter,
+        LatLng(r.centerLat, r.centerLng),
+        latlng,
+      );
+      if (d <= r.radiusMeters &&
+          (best == null || r.radiusMeters < best.radiusMeters)) {
+        best = r;
+      }
+    }
+    return best;
+  }
+
+  /// Adds a height region to [layer] at [center] (un-generated — the editor's
+  /// Generate fills it). A sensible default radius scales with the current zoom.
+  Future<void> _addHeightRegionAt(LatLng center, Layer layer) async {
+    final id = await ref.read(repositoryProvider).createHeightRegion(
+          layerId: layer.id,
+          centerLat: center.latitude,
+          centerLng: center.longitude,
+          radiusMeters: _defaultRadius().clamp(100.0, 25000.0),
+        );
+    _selectHeightRegion(id);
   }
 
   Future<void> _addCircleAt(LatLng latlng, Layer layer) async {
@@ -941,7 +985,22 @@ class _MapScreenState extends ConsumerState<MapScreen>
     List<FreeLinePoint> freeLinePoints,
     List<FreeArea> freeAreas,
     List<FreeAreaPoint> freeAreaPoints,
+    List<HeightRegion> heightRegions,
   ) async {
+    // Placement mode: relocate the selected height region's centre.
+    if (ref.read(heightPlacementProvider)) {
+      final selId = ref.read(selectedHeightRegionProvider);
+      if (selId != null) {
+        await ref.read(repositoryProvider).updateHeightRegion(
+              selId,
+              centerLat: latlng.latitude,
+              centerLng: latlng.longitude,
+            );
+        ref.read(heightPlacementProvider.notifier).arm(false);
+        return;
+      }
+    }
+
     // Placement mode: relocate the armed freehand-line point.
     final armedLine = ref.read(freeLinePlacementProvider);
     final selLineId = ref.read(selectedFreeLineProvider);
@@ -1039,6 +1098,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
           _selectFreeArea(hit.id);
           return;
         }
+      } else if (layer.type == 'height') {
+        final hit = _heightRegionInLayer(latlng, layer.id, heightRegions);
+        if (hit != null) {
+          _selectHeightRegion(hit.id);
+          return;
+        }
       }
     }
 
@@ -1048,7 +1113,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
         ref.read(selectedPlaneProvider) != null ||
         ref.read(selectedSubspaceProvider) != null ||
         ref.read(selectedFreeLineProvider) != null ||
-        ref.read(selectedFreeAreaProvider) != null) {
+        ref.read(selectedFreeAreaProvider) != null ||
+        ref.read(selectedHeightRegionProvider) != null) {
       _clearSelection();
     }
   }
@@ -1077,6 +1143,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final freeAreaPoints =
         ref.watch(freeAreaPointsProvider).asData?.value ??
         const <FreeAreaPoint>[];
+    final heightRegions =
+        ref.watch(heightRegionsProvider).asData?.value ??
+        const <HeightRegion>[];
+    final heightPolygons =
+        ref.watch(heightPolygonsProvider).asData?.value ??
+        const <HeightPolygon>[];
+    final heightPolygonPoints =
+        ref.watch(heightPolygonPointsProvider).asData?.value ??
+        const <HeightPolygonPoint>[];
     final settings = ref.watch(settingsProvider).asData?.value;
     final uncertainty = settings?.uncertaintyMeters ?? 0;
     final transportOverlay = settings?.transportOverlay ?? false;
@@ -1125,11 +1200,22 @@ class _MapScreenState extends ConsumerState<MapScreen>
         : freeAreaPoints
             .where((p) => p.freeAreaId == selectedFreeArea.id)
             .toList();
+    final selectedHeightRegion = heightRegions
+        .where((r) => r.id == ref.watch(selectedHeightRegionProvider))
+        .firstOrNull;
+    final selectedHeightCircle = selectedHeightRegion == null
+        ? const <LatLng>[]
+        : geodesicCircle(
+            LatLng(selectedHeightRegion.centerLat,
+                selectedHeightRegion.centerLng),
+            selectedHeightRegion.radiusMeters,
+          );
     final hasSelection = selectedCircle != null ||
         selectedPlane != null ||
         selectedSubspace != null ||
         selectedFreeLine != null ||
-        selectedFreeArea != null;
+        selectedFreeArea != null ||
+        selectedHeightRegion != null;
     final activeId = effectiveActiveLayerId(
       layers,
       ref.watch(activeLayerProvider),
@@ -1139,6 +1225,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final isSubspaceLayer = activeLayer?.type == 'subspace';
     final isFreeLineLayer = activeLayer?.type == 'freeline';
     final isFreeAreaLayer = activeLayer?.type == 'freearea';
+    final isHeightLayer = activeLayer?.type == 'height';
     // In a subspace layer the Add FAB seeds a new object, or — once one exists —
     // appends a point to it.
     final subspaceExists = isSubspaceLayer &&
@@ -1222,6 +1309,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       freeLinePoints,
                       freeAreas,
                       freeAreaPoints,
+                      heightRegions,
                     ),
                   ),
                   children: [
@@ -1288,6 +1376,17 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           freeAreaPoints: layer.type == 'freearea'
                               ? freeAreaPoints
                               : const <FreeAreaPoint>[],
+                          heightRegions: layer.type == 'height'
+                              ? heightRegions
+                                    .where((r) => r.layerId == layer.id)
+                                    .toList()
+                              : const <HeightRegion>[],
+                          heightPolygons: layer.type == 'height'
+                              ? heightPolygons
+                              : const <HeightPolygon>[],
+                          heightPolygonPoints: layer.type == 'height'
+                              ? heightPolygonPoints
+                              : const <HeightPolygonPoint>[],
                           uncertaintyMeters: uncertainty,
                         ),
                     // Dashed outline of the freehand object being edited, so the
@@ -1316,6 +1415,21 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                 LatLng(p.lat, p.lng),
                               LatLng(selectedFreeAreaPoints.first.lat,
                                   selectedFreeAreaPoints.first.lng),
+                            ],
+                            color: Colors.black87,
+                            strokeWidth: 1.5,
+                          ),
+                        ],
+                      ),
+                    // Outline of the selected height region's circle, so its
+                    // bounded area is visible while editing / before generating.
+                    if (selectedHeightCircle.isNotEmpty)
+                      PolylineLayer(
+                        polylines: [
+                          Polyline(
+                            points: [
+                              ...selectedHeightCircle,
+                              selectedHeightCircle.first,
                             ],
                             color: Colors.black87,
                             strokeWidth: 1.5,
@@ -1478,6 +1592,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             _addFreeLineAt(c, activeLayer, freeLines);
                           } else if (isFreeAreaLayer) {
                             _addFreeAreaAt(c, activeLayer, freeAreas);
+                          } else if (isHeightLayer) {
+                            _addHeightRegionAt(c, activeLayer);
                           } else if (isPlaneLayer) {
                             _addPlaneAt(c, activeLayer);
                           } else {
@@ -1494,9 +1610,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             ? Icons.polyline
                             : isFreeAreaLayer
                                 ? Icons.hexagon_outlined
-                                : isPlaneLayer
-                                    ? Icons.change_history
-                                    : Icons.add_location_alt_outlined,
+                                : isHeightLayer
+                                    ? Icons.terrain
+                                    : isPlaneLayer
+                                        ? Icons.change_history
+                                        : Icons.add_location_alt_outlined,
                   ),
                   label: Text(
                     isSubspaceLayer
@@ -1505,9 +1623,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             ? (freeLineExists ? 'Add point' : 'Add line')
                             : isFreeAreaLayer
                                 ? (freeAreaExists ? 'Add point' : 'Add area')
-                                : isPlaneLayer
-                                    ? 'Add plane'
-                                    : 'Add circle',
+                                : isHeightLayer
+                                    ? 'Add height area'
+                                    : isPlaneLayer
+                                        ? 'Add plane'
+                                        : 'Add circle',
                   ),
                 ),
               ],
@@ -1543,6 +1663,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
               key: ValueKey(selectedFreeArea.id),
               freeArea: selectedFreeArea,
               points: selectedFreeAreaPoints,
+              layers: layers,
+            )
+          : selectedHeightRegion != null
+          ? HeightEditorSheet(
+              key: ValueKey(selectedHeightRegion.id),
+              region: selectedHeightRegion,
+              polygonCount: heightPolygons
+                  .where((p) => p.heightRegionId == selectedHeightRegion.id)
+                  .length,
               layers: layers,
             )
           : null,

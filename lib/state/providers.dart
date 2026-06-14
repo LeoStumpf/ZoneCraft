@@ -59,6 +59,23 @@ final freeAreaPointsProvider = StreamProvider<List<FreeAreaPoint>>((ref) {
   return ref.watch(repositoryProvider).watchAllFreeAreaPoints();
 });
 
+/// Reactive list of every height region across all layers.
+final heightRegionsProvider = StreamProvider<List<HeightRegion>>((ref) {
+  return ref.watch(repositoryProvider).watchAllHeightRegions();
+});
+
+/// Reactive list of every generated height polygon (across all regions), ordered.
+final heightPolygonsProvider = StreamProvider<List<HeightPolygon>>((ref) {
+  return ref.watch(repositoryProvider).watchAllHeightPolygons();
+});
+
+/// Reactive list of every height-polygon ring point (across all polygons),
+/// ordered.
+final heightPolygonPointsProvider =
+    StreamProvider<List<HeightPolygonPoint>>((ref) {
+  return ref.watch(repositoryProvider).watchAllHeightPolygonPoints();
+});
+
 /// App-wide settings (currently the global uncertainty radius).
 final settingsProvider = StreamProvider<AppSetting>((ref) {
   return ref.watch(repositoryProvider).watchSettings();
@@ -195,6 +212,31 @@ class FreeAreaPlacementNotifier extends Notifier<String?> {
 final freeAreaPlacementProvider =
     NotifierProvider<FreeAreaPlacementNotifier, String?>(
         FreeAreaPlacementNotifier.new);
+
+/// Id of the currently selected height region, or null. Mutually exclusive with
+/// the other object selections.
+class SelectedHeightRegionNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void select(String? id) => state = id;
+}
+
+final selectedHeightRegionProvider =
+    NotifierProvider<SelectedHeightRegionNotifier, String?>(
+        SelectedHeightRegionNotifier.new);
+
+/// While a height region is selected, whether the next map tap relocates its
+/// centre (true) or not (null/false).
+class HeightPlacementNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void arm(bool armed) => state = armed;
+}
+
+final heightPlacementProvider =
+    NotifierProvider<HeightPlacementNotifier, bool>(HeightPlacementNotifier.new);
 
 /// Resolves the effective active layer id given the current layer list,
 /// falling back to the top-most layer when nothing is explicitly selected.

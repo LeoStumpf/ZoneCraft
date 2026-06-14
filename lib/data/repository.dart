@@ -364,6 +364,28 @@ class Repository {
     return id;
   }
 
+  /// Appends many points to [freeLineId] in one batch (used by track import,
+  /// where a city border can carry thousands of vertices).
+  Future<void> addFreeLinePoints(String freeLineId, List<LatLng> pts) async {
+    if (pts.isEmpty) return;
+    var order = await _maxFreeLinePointOrder(freeLineId);
+    await _db.batch((b) {
+      for (final p in pts) {
+        order++;
+        b.insert(
+          _db.freeLinePoints,
+          FreeLinePointsCompanion.insert(
+            id: _uuid.v4(),
+            freeLineId: freeLineId,
+            lat: p.latitude,
+            lng: p.longitude,
+            sortOrder: order,
+          ),
+        );
+      }
+    });
+  }
+
   Future<void> updateFreeLinePoint(String id, {double? lat, double? lng}) {
     return (_db.update(_db.freeLinePoints)..where((p) => p.id.equals(id))).write(
       FreeLinePointsCompanion(
@@ -450,6 +472,27 @@ class Repository {
     return id;
   }
 
+  /// Appends many points to [freeAreaId] in one batch (used by area import).
+  Future<void> addFreeAreaPoints(String freeAreaId, List<LatLng> pts) async {
+    if (pts.isEmpty) return;
+    var order = await _maxFreeAreaPointOrder(freeAreaId);
+    await _db.batch((b) {
+      for (final p in pts) {
+        order++;
+        b.insert(
+          _db.freeAreaPoints,
+          FreeAreaPointsCompanion.insert(
+            id: _uuid.v4(),
+            freeAreaId: freeAreaId,
+            lat: p.latitude,
+            lng: p.longitude,
+            sortOrder: order,
+          ),
+        );
+      }
+    });
+  }
+
   Future<void> updateFreeAreaPoint(String id, {double? lat, double? lng}) {
     return (_db.update(_db.freeAreaPoints)..where((p) => p.id.equals(id))).write(
       FreeAreaPointsCompanion(
@@ -470,6 +513,139 @@ class Repository {
           ..where(_db.freeAreaPoints.freeAreaId.equals(freeAreaId)))
         .getSingleOrNull();
     return row?.read(max) ?? -1;
+  }
+
+  // --- Height regions -------------------------------------------------------
+
+  Stream<List<HeightRegion>> watchAllHeightRegions() {
+    return _db.select(_db.heightRegions).watch();
+  }
+
+  /// All generated height polygons across every region, ordered.
+  Stream<List<HeightPolygon>> watchAllHeightPolygons() {
+    return (_db.select(_db.heightPolygons)
+          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
+        .watch();
+  }
+
+  /// All height-polygon ring points across every polygon, ordered.
+  Stream<List<HeightPolygonPoint>> watchAllHeightPolygonPoints() {
+    return (_db.select(_db.heightPolygonPoints)
+          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
+        .watch();
+  }
+
+  Future<String> createHeightRegion({
+    required String layerId,
+    required double centerLat,
+    required double centerLng,
+    required double radiusMeters,
+    double thresholdMeters = 0,
+    bool aboveThreshold = true,
+    int sampleZoom = 13,
+    String? label,
+  }) async {
+    final id = _uuid.v4();
+    await _db.into(_db.heightRegions).insert(
+          HeightRegionsCompanion.insert(
+            id: id,
+            layerId: layerId,
+            centerLat: centerLat,
+            centerLng: centerLng,
+            radiusMeters: radiusMeters,
+            thresholdMeters: Value(thresholdMeters),
+            aboveThreshold: Value(aboveThreshold),
+            sampleZoom: Value(sampleZoom),
+            label: Value(label),
+          ),
+        );
+    return id;
+  }
+
+  /// Updates a height region. Editing a parameter that changes the geometry
+  /// (centre/radius/threshold/above/zoom) clears [generatedAt] so the editor
+  /// shows the result is stale until regenerated.
+  Future<void> updateHeightRegion(
+    String id, {
+    String? layerId,
+    double? centerLat,
+    double? centerLng,
+    double? radiusMeters,
+    double? thresholdMeters,
+    bool? aboveThreshold,
+    int? sampleZoom,
+    Value<String?> label = const Value.absent(),
+  }) {
+    final geometryChanged = centerLat != null ||
+        centerLng != null ||
+        radiusMeters != null ||
+        thresholdMeters != null ||
+        aboveThreshold != null ||
+        sampleZoom != null;
+    return (_db.update(_db.heightRegions)..where((r) => r.id.equals(id))).write(
+      HeightRegionsCompanion(
+        layerId: layerId == null ? const Value.absent() : Value(layerId),
+        centerLat: centerLat == null ? const Value.absent() : Value(centerLat),
+        centerLng: centerLng == null ? const Value.absent() : Value(centerLng),
+        radiusMeters:
+            radiusMeters == null ? const Value.absent() : Value(radiusMeters),
+        thresholdMeters: thresholdMeters == null
+            ? const Value.absent()
+            : Value(thresholdMeters),
+        aboveThreshold: aboveThreshold == null
+            ? const Value.absent()
+            : Value(aboveThreshold),
+        sampleZoom: sampleZoom == null ? const Value.absent() : Value(sampleZoom),
+        label: label,
+        generatedAt: geometryChanged ? const Value(null) : const Value.absent(),
+      ),
+    );
+  }
+
+  Future<void> deleteHeightRegion(String id) {
+    return (_db.delete(_db.heightRegions)..where((r) => r.id.equals(id))).go();
+  }
+
+  /// Replaces all generated polygons for [regionId] with [rings] (delete + batch
+  /// insert). Each ring is an ordered list of vertices.
+  Future<void> replaceHeightPolygons(
+      String regionId, List<List<LatLng>> rings) async {
+    await (_db.delete(_db.heightPolygons)
+          ..where((p) => p.heightRegionId.equals(regionId)))
+        .go();
+    if (rings.isEmpty) return;
+    await _db.batch((b) {
+      for (var ri = 0; ri < rings.length; ri++) {
+        final polyId = _uuid.v4();
+        b.insert(
+          _db.heightPolygons,
+          HeightPolygonsCompanion.insert(
+            id: polyId,
+            heightRegionId: regionId,
+            sortOrder: ri,
+          ),
+        );
+        final ring = rings[ri];
+        for (var i = 0; i < ring.length; i++) {
+          b.insert(
+            _db.heightPolygonPoints,
+            HeightPolygonPointsCompanion.insert(
+              id: _uuid.v4(),
+              polygonId: polyId,
+              lat: ring[i].latitude,
+              lng: ring[i].longitude,
+              sortOrder: i,
+            ),
+          );
+        }
+      }
+    });
+  }
+
+  /// Stamps [regionId] as freshly generated (now).
+  Future<void> markHeightGenerated(String regionId) {
+    return (_db.update(_db.heightRegions)..where((r) => r.id.equals(regionId)))
+        .write(HeightRegionsCompanion(generatedAt: Value(DateTime.now())));
   }
 
   // --- Settings -------------------------------------------------------------
@@ -665,13 +841,17 @@ class Repository {
 
   // --- Import / export ------------------------------------------------------
 
-  /// Snapshots every layer and its objects into a drift-free [ExportData] for
+  /// Snapshots layers and their objects into a drift-free [ExportData] for
   /// GeoJSON/KML serialisation. Layers come out in draw order; child points keep
-  /// their stored order.
-  Future<ExportData> exportData() async {
-    final layers = await (_db.select(_db.layers)
-          ..orderBy([(l) => OrderingTerm(expression: l.sortOrder)]))
-        .get();
+  /// their stored order. With [onlyLayerId] set, exports just that one layer
+  /// (used by the per-layer "Export layer" action).
+  Future<ExportData> exportData({String? onlyLayerId}) async {
+    final layersQuery = _db.select(_db.layers)
+      ..orderBy([(l) => OrderingTerm(expression: l.sortOrder)]);
+    if (onlyLayerId != null) {
+      layersQuery.where((l) => l.id.equals(onlyLayerId));
+    }
+    final layers = await layersQuery.get();
     final circles = await _db.select(_db.circles).get();
     final planes = await _db.select(_db.planes).get();
     final subspaces = await _db.select(_db.subspaces).get();
@@ -686,6 +866,7 @@ class Repository {
     final faPoints = await (_db.select(_db.freeAreaPoints)
           ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
         .get();
+    final heightRegions = await _db.select(_db.heightRegions).get();
 
     final out = <ExportLayer>[];
     for (final layer in layers) {
@@ -742,6 +923,18 @@ class Repository {
               label: a.label,
             ));
           }
+        case 'height':
+          for (final r in heightRegions.where((r) => r.layerId == layer.id)) {
+            objects.add(ExportObject(
+              kind: 'height',
+              coords: [LatLng(r.centerLat, r.centerLng)],
+              radiusMeters: r.radiusMeters,
+              thresholdMeters: r.thresholdMeters,
+              aboveThreshold: r.aboveThreshold,
+              sampleZoom: r.sampleZoom,
+              label: r.label,
+            ));
+          }
       }
       out.add(ExportLayer(
         name: layer.name,
@@ -769,67 +962,108 @@ class Repository {
       if (layer.isInverted) await updateLayer(layerId, isInverted: true);
 
       for (final o in layer.objects) {
-        switch (o.kind) {
-          case 'circle':
-            final r = o.radiusMeters;
-            if (o.coords.isEmpty || r == null || !r.isFinite || r <= 0) {
-              continue;
-            }
-            await createCircle(
-              layerId: layerId,
-              centerLat: o.coords.first.latitude,
-              centerLng: o.coords.first.longitude,
-              radiusMeters: r,
-              label: o.label,
-            );
-          case 'plane':
-            if (o.coords.length < 2) continue;
-            await createPlane(
-              layerId: layerId,
-              aLat: o.coords[0].latitude,
-              aLng: o.coords[0].longitude,
-              bLat: o.coords[1].latitude,
-              bLng: o.coords[1].longitude,
-              nearA: o.nearA ?? true,
-              label: o.label,
-            );
-          case 'subspace':
-            if (o.coords.isEmpty) continue;
-            final sid = await createSubspace(layerId: layerId, label: o.label);
-            final main = (o.mainIndex ?? 0).clamp(0, o.coords.length - 1);
-            for (var i = 0; i < o.coords.length; i++) {
-              await addSubspacePoint(
-                subspaceId: sid,
-                lat: o.coords[i].latitude,
-                lng: o.coords[i].longitude,
-                isMain: i == main,
-              );
-            }
-          case 'freeline':
-            final lid = await createFreeLine(layerId: layerId, label: o.label);
-            if ((o.offsetMeters ?? 0) != 0) {
-              await updateFreeLine(lid, offsetMeters: o.offsetMeters);
-            }
-            for (final c in o.coords) {
-              await addFreeLinePoint(
-                  freeLineId: lid, lat: c.latitude, lng: c.longitude);
-            }
-          case 'freearea':
-            final aid = await createFreeArea(layerId: layerId, label: o.label);
-            if ((o.offsetMeters ?? 0) != 0) {
-              await updateFreeArea(aid, offsetMeters: o.offsetMeters);
-            }
-            for (final c in o.coords) {
-              await addFreeAreaPoint(
-                  freeAreaId: aid, lat: c.latitude, lng: c.longitude);
-            }
-          default:
-            continue;
-        }
-        imported++;
+        if (await _insertObject(layerId, o)) imported++;
       }
     }
     return imported;
+  }
+
+  /// Adds [layer]'s objects into the existing [layerId] (must be the same
+  /// type), without creating a new layer. Returns the number of objects
+  /// inserted. Throws [ArgumentError] on a missing layer or a type mismatch so
+  /// the caller can show a friendly message.
+  Future<int> mergeIntoLayer(String layerId, ExportLayer layer) async {
+    final target = await (_db.select(_db.layers)
+          ..where((l) => l.id.equals(layerId)))
+        .getSingleOrNull();
+    if (target == null) throw ArgumentError('Layer no longer exists');
+    if (target.type != layer.type) {
+      throw ArgumentError(
+          'That file holds ${layer.type} objects, but the layer is '
+          '${target.type}');
+    }
+    var imported = 0;
+    for (final o in layer.objects) {
+      if (await _insertObject(layerId, o)) imported++;
+    }
+    return imported;
+  }
+
+  /// Inserts one exported object into [layerId]. Returns true when it created an
+  /// object, false when the geometry was unusable. Shared by [importData] (into
+  /// fresh layers) and [mergeIntoLayer] (into an existing one).
+  Future<bool> _insertObject(String layerId, ExportObject o) async {
+    switch (o.kind) {
+      case 'circle':
+        final r = o.radiusMeters;
+        if (o.coords.isEmpty || r == null || !r.isFinite || r <= 0) {
+          return false;
+        }
+        await createCircle(
+          layerId: layerId,
+          centerLat: o.coords.first.latitude,
+          centerLng: o.coords.first.longitude,
+          radiusMeters: r,
+          label: o.label,
+        );
+      case 'plane':
+        if (o.coords.length < 2) return false;
+        await createPlane(
+          layerId: layerId,
+          aLat: o.coords[0].latitude,
+          aLng: o.coords[0].longitude,
+          bLat: o.coords[1].latitude,
+          bLng: o.coords[1].longitude,
+          nearA: o.nearA ?? true,
+          label: o.label,
+        );
+      case 'subspace':
+        if (o.coords.isEmpty) return false;
+        final sid = await createSubspace(layerId: layerId, label: o.label);
+        final main = (o.mainIndex ?? 0).clamp(0, o.coords.length - 1);
+        for (var i = 0; i < o.coords.length; i++) {
+          await addSubspacePoint(
+            subspaceId: sid,
+            lat: o.coords[i].latitude,
+            lng: o.coords[i].longitude,
+            isMain: i == main,
+          );
+        }
+      case 'freeline':
+        if (o.coords.length < 2) return false;
+        final lid = await createFreeLine(layerId: layerId, label: o.label);
+        if ((o.offsetMeters ?? 0) != 0) {
+          await updateFreeLine(lid, offsetMeters: o.offsetMeters);
+        }
+        await addFreeLinePoints(lid, o.coords);
+      case 'freearea':
+        if (o.coords.length < 3) return false;
+        final aid = await createFreeArea(layerId: layerId, label: o.label);
+        if ((o.offsetMeters ?? 0) != 0) {
+          await updateFreeArea(aid, offsetMeters: o.offsetMeters);
+        }
+        await addFreeAreaPoints(aid, o.coords);
+      case 'height':
+        final r = o.radiusMeters;
+        if (o.coords.isEmpty || r == null || !r.isFinite || r <= 0) {
+          return false;
+        }
+        // The generated polygons are derived, not imported — the region comes
+        // in un-generated and the user taps Generate.
+        await createHeightRegion(
+          layerId: layerId,
+          centerLat: o.coords.first.latitude,
+          centerLng: o.coords.first.longitude,
+          radiusMeters: r,
+          thresholdMeters: o.thresholdMeters ?? 0,
+          aboveThreshold: o.aboveThreshold ?? true,
+          sampleZoom: o.sampleZoom ?? 13,
+          label: o.label,
+        );
+      default:
+        return false;
+    }
+    return true;
   }
 
   // --- Seed -----------------------------------------------------------------

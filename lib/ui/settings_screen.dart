@@ -1,16 +1,17 @@
 import 'dart:io';
 
-import 'package:file_selector/file_selector.dart' show XTypeGroup, openFile;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../data/borders.dart';
+import '../data/database.dart';
 import '../data/overpass.dart';
 import '../data/repository.dart';
 import '../data/serialization.dart';
 import '../state/providers.dart';
+import 'import_actions.dart';
 
 /// App-wide settings. Currently just the global uncertainty radius, applied as
 /// a lighter band on every object's outer edge by the rendering engine.
@@ -144,27 +145,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  /// Picks a ZoneCraft GeoJSON file and imports it as new layers (never merges).
+  /// Picks a geometry file (ZoneCraft GeoJSON, generic GeoJSON, KML/KMZ or GPX)
+  /// and imports it, asking whether to add new layers or merge into an existing
+  /// one.
   Future<void> _import() async {
-    try {
-      const group = XTypeGroup(
-        label: 'ZoneCraft GeoJSON',
-        extensions: ['geojson', 'json'],
-      );
-      final picked = await openFile(acceptedTypeGroups: const [group]);
-      if (picked == null) return; // user cancelled
-      final text = await picked.readAsString();
-      final data = importFromGeoJson(text);
-      if (data == null) {
-        _snack("Couldn't read that file as a ZoneCraft GeoJSON export");
-        return;
-      }
-      final count = await _repo.importData(data);
-      _snack('Imported ${data.layers.length} '
-          'layer${data.layers.length == 1 ? '' : 's'} ($count objects)');
-    } catch (e) {
-      _snack('Import failed: $e');
-    }
+    final layers = ref.read(layersProvider).asData?.value ?? const <Layer>[];
+    await importLayerFlow(context, _repo, layers);
   }
 
   Future<void> _clearTileCache() async {
@@ -351,8 +337,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 4),
           Text(
             'Save all layers and objects to a file to share or back up. GeoJSON '
-            'imports back into the app; KML is for Google Earth / Maps. Importing '
-            'adds the file’s layers alongside your existing ones.',
+            'imports back into the app; KML is for Google Earth / Maps. Import '
+            'accepts ZoneCraft GeoJSON plus generic GeoJSON, KML/KMZ and GPX, '
+            'either as new layers or merged into an existing one. You can also '
+            'export or import a single layer from the layers drawer.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 12),
@@ -368,7 +356,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               OutlinedButton.icon(
                 onPressed: _import,
                 icon: const Icon(Icons.file_open),
-                label: const Text('Import GeoJSON'),
+                label: const Text('Import'),
               ),
             ],
           ),

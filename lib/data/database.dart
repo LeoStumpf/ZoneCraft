@@ -162,6 +162,65 @@ class FreeAreaPoints extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// A "height region": an elevation threshold applied inside a bounded circle
+/// (center + radius). The layer fills terrain *above* [thresholdMeters] when
+/// [aboveThreshold] is true (or *below* it otherwise), but only within the
+/// circle. The actual fill polygons are generated on demand from terrain tiles
+/// and stored in [HeightPolygons]; [generatedAt] is null until first generated.
+/// A `height` layer may hold several regions.
+class HeightRegions extends Table {
+  TextColumn get id => text()();
+  TextColumn get layerId =>
+      text().references(Layers, #id, onDelete: KeyAction.cascade)();
+  RealColumn get centerLat => real()();
+  RealColumn get centerLng => real()();
+  RealColumn get radiusMeters => real()();
+
+  /// Elevation threshold in metres above sea level (may be negative).
+  RealColumn get thresholdMeters => real().withDefault(const Constant(0))();
+
+  /// True = fill terrain above the threshold; false = below.
+  BoolColumn get aboveThreshold => boolean().withDefault(const Constant(true))();
+
+  /// Slippy zoom of the terrain tiles sampled when generating (12–14).
+  IntColumn get sampleZoom => integer().withDefault(const Constant(13))();
+  TextColumn get label => text().nullable()();
+
+  /// When the fill polygons were last generated; null until first generation.
+  DateTimeColumn get generatedAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// One generated fill polygon of a [HeightRegions] object (regenerated wholesale
+/// each time the region is generated). Its ring lives in [HeightPolygonPoints].
+class HeightPolygons extends Table {
+  TextColumn get id => text()();
+  TextColumn get heightRegionId =>
+      text().references(HeightRegions, #id, onDelete: KeyAction.cascade)();
+  IntColumn get sortOrder => integer()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// One ordered vertex of a [HeightPolygons] ring.
+class HeightPolygonPoints extends Table {
+  TextColumn get id => text()();
+  TextColumn get polygonId =>
+      text().references(HeightPolygons, #id, onDelete: KeyAction.cascade)();
+  RealColumn get lat => real()();
+  RealColumn get lng => real()();
+  IntColumn get sortOrder => integer()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 /// On-disk cache of map tile images, keyed by their full fetch [url] (so the base
 /// OSM layer and the transport overlays — which have distinct URLs — share one
 /// table). Filled as tiles are browsed/prefetched; evicted least-recently-used
@@ -262,6 +321,9 @@ class AppSettings extends Table {
     FreeLinePoints,
     FreeAreas,
     FreeAreaPoints,
+    HeightRegions,
+    HeightPolygons,
+    HeightPolygonPoints,
     TileCache,
     OverpassCache,
   ],
@@ -273,7 +335,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -322,6 +384,11 @@ class AppDatabase extends _$AppDatabase {
           if (from < 10) {
             await m.createTable(tileCache);
             await m.createTable(overpassCache);
+          }
+          if (from < 11) {
+            await m.createTable(heightRegions);
+            await m.createTable(heightPolygons);
+            await m.createTable(heightPolygonPoints);
           }
         },
         beforeOpen: (details) async {

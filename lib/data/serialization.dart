@@ -23,14 +23,17 @@ class ExportObject {
     this.nearA,
     this.offsetMeters,
     this.mainIndex,
+    this.thresholdMeters,
+    this.aboveThreshold,
+    this.sampleZoom,
   });
 
-  /// One of: circle, plane, subspace, freeline, freearea.
+  /// One of: circle, plane, subspace, freeline, freearea, height.
   final String kind;
   final List<LatLng> coords;
   final String? label;
 
-  // circle
+  // circle / height: radius of the circle (height uses it as its bound)
   final double? radiusMeters;
   // plane
   final bool? nearA;
@@ -38,6 +41,11 @@ class ExportObject {
   final double? offsetMeters;
   // subspace: index into [coords] of the main point
   final int? mainIndex;
+  // height: elevation threshold, direction and sample zoom (the generated
+  // polygons are derived, not exported — the importer regenerates them)
+  final double? thresholdMeters;
+  final bool? aboveThreshold;
+  final int? sampleZoom;
 }
 
 /// One exported layer: its display attributes plus its objects.
@@ -112,10 +120,14 @@ Map<String, dynamic> _objectToFeature(ExportObject o, int layerIndex) {
     if (o.nearA != null) 'nearA': o.nearA,
     if (o.offsetMeters != null) 'offsetMeters': o.offsetMeters,
     if (o.mainIndex != null) 'mainIndex': o.mainIndex,
+    if (o.thresholdMeters != null) 'thresholdMeters': o.thresholdMeters,
+    if (o.aboveThreshold != null) 'aboveThreshold': o.aboveThreshold,
+    if (o.sampleZoom != null) 'sampleZoom': o.sampleZoom,
   };
   final Map<String, dynamic> geometry;
   switch (o.kind) {
     case 'circle':
+    case 'height':
       geometry = {'type': 'Point', 'coordinates': _pt(o.coords.first)};
     case 'plane':
     case 'freeline':
@@ -211,6 +223,9 @@ ExportObject? _featureToObject(Map f) {
     nearA: props['nearA'] as bool?,
     offsetMeters: (props['offsetMeters'] as num?)?.toDouble(),
     mainIndex: (props['mainIndex'] as num?)?.toInt(),
+    thresholdMeters: (props['thresholdMeters'] as num?)?.toDouble(),
+    aboveThreshold: props['aboveThreshold'] as bool?,
+    sampleZoom: (props['sampleZoom'] as num?)?.toInt(),
   );
 }
 
@@ -290,6 +305,7 @@ void _kmlPlacemark(StringBuffer b, ExportObject o) {
   }
   switch (o.kind) {
     case 'circle':
+    case 'height':
       final ring = geodesicCircle(o.coords.first, o.radiusMeters ?? 0);
       b.writeln(_kmlPolygon(ring.isEmpty ? [o.coords.first] : ring));
     case 'freearea':

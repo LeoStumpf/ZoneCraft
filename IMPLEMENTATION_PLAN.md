@@ -31,9 +31,15 @@ design reference, not a task log — the feature backlog lives in [PLAN.md](PLAN
   the ground**, applied geodesically by the geometry builders — no per-reference-point
   pixel conversion. The plane/subspace band half-width is half the global uncertainty (so
   the band straddling a divide is `uncertainty` wide), matching the circle's core inset.
-- This single `outer`/`core` contract is shared by all five object types, so invert
-  and the band work the same everywhere. A new object type only has to emit `outer`
+- This single `outer`/`core` contract is shared by all the bisector/ring object types, so
+  invert and the band work the same everywhere. A new object type only has to emit `outer`
   and `core` lat/lng rings; the painter projects to the current camera.
+- **Height is the exception to the band/invert flow.** A height region's generated polygons
+  are pre-bounded to its circle and already encode above/below, so the painter builds one
+  **even-odd** `Path` from the region's rings (which yields correct sub-threshold *holes*
+  without any union/subtraction), unions the per-region paths into `outer`/`core`
+  identically (so there is no band — `core == outer`), and never takes the unbounded
+  `viewport − outer` invert path (`isHeight` guard; the layer's Invert menu item is hidden).
 
 ## Geometry (`lib/geo/`)
 
@@ -50,19 +56,31 @@ design reference, not a task log — the feature backlog lives in [PLAN.md](PLAN
   latitude). `freearea` insets per-vertex along the inward bisector, with collapse rejection.
 - `coords.dart` — `parseLatLng` / `formatLatLng` ("lat, lng", pastes from Google Maps).
 - `tiles.dart` — Web-Mercator slippy-tile maths (`tileXFor`/`tileYFor`) for prefetch.
+- `height.dart` — elevation contouring (pure, isolate-safe): decode Terrarium terrain PNGs
+  (`elev = R*256 + G + B/256 − 32768`), sample an elevation grid over the region's circle
+  bbox, trace the threshold with **marching squares** (padded border so loops close; pad side
+  selects above/below), stitch segments into loops, and clip each to the circle
+  (Sutherland–Hodgman). Returns flat `[lat,lng,…]` rings for even-odd fill.
 
 The bisector/offset maths are **geodesically accurate** (great-circle bisectors, ground-metre
 offsets); the only approximations left are the per-edge densification count and treating the
 viewport as a spherical quad (the painter still `clipRect`s to the true screen rectangle).
 
-## Data model (`lib/data/database.dart`, schema **v10**)
+## Data model (`lib/data/database.dart`, schema **v11**)
 
-- `Layers` — `type` (circles | planes | subspace | freeline | freearea), `isInverted`,
-  colour, order, visibility, name. A layer is locked to one object type once it holds
-  objects.
+- `Layers` — `type` (circles | planes | subspace | freeline | freearea | height),
+  `isInverted`, colour, order, visibility, name. A layer is locked to one object type once
+  it holds objects.
 - `Circles`, `Planes`; `Subspaces` + `SubspacePoints`; `FreeLines` + `FreeLinePoints`;
   `FreeAreas` + `FreeAreaPoints` (parents carry `offsetMeters`). Child points cascade-
   delete; `PRAGMA foreign_keys = ON` in `beforeOpen`.
+- `HeightRegions` (centre/radius/threshold/`aboveThreshold`/`sampleZoom`/`generatedAt`) +
+  `HeightPolygons` + `HeightPolygonPoints`: the region's bound + parameters, and its
+  *generated* fill rings. Generation is decoupled from rendering — `replaceHeightPolygons`
+  rewrites the polygons wholesale and `markHeightGenerated` stamps the region; editing any
+  geometry parameter clears `generatedAt` (stale until regenerated). Only the parameters
+  export to GeoJSON/KML; the importer recreates the region un-generated and the user taps
+  Generate.
 - `AppSettings` (single row) — uncertainty, last camera (centre+zoom), transport-overlay
   toggle, packed POI-category bitmask, packed border-level bitmask.
 - `TileCache` (offline map tiles, LRU-evicted under a 200 MB cap) and `OverpassCache`
@@ -73,8 +91,15 @@ viewport as a spherical quad (the painter still `clipRect`s to the true screen r
 
 - A drift-free intermediate (`ExportData` → `ExportLayer` → `ExportObject`) decouples the
   encoders from the database, so GeoJSON/KML codecs are pure and unit-testable.
-  `Repository.exportData()` snapshots the DB into it; `importData()` writes it back into
-  **new** layers (never merges) via the existing `create*` methods.
+  `Repository.exportData({onlyLayerId})` snapshots the DB (all layers, or one) into it;
+  `importData()` writes it into **new** layers and `mergeIntoLayer()` appends a parsed
+  layer's objects into an existing same-type layer (both share `_insertObject`, which
+  batch-inserts ring points). Per-layer Export / Import track / Import live in the layers
+  drawer (`ui/import_actions.dart`); the new-vs-merge prompt and target picker are there too.
+- **External geometry import** (`lib/data/geo_import.dart`): `parseExternalGeometry` reads
+  generic **GeoJSON / KML / KMZ / GPX** (not just ZoneCraft's tagged GeoJSON) into
+  line/area features, so tracks/borders from other apps import as freehand lines/areas.
+  Depends on `xml` + `archive` (both pure Dart).
 - **GeoJSON** is the lossless round-trip format: a `FeatureCollection` where each object is a
   `Feature` (circle→Point+`radiusMeters`, plane→LineString of the two foci+`nearA`,
   subspace→MultiPoint+`mainIndex`, freeline→LineString, freearea→Polygon, both +`offsetMeters`).
@@ -99,6 +124,12 @@ viewport as a spherical quad (the painter still `clipRect`s to the true screen r
   `prefetch`, behind a confirm-with-estimate + cancellable progress dialog. Both share
   the `tilesCovering` enumerator (`geo/tiles.dart`). No pinning: just-downloaded tiles are
   the most-recently-used, so the 200 MB LRU evicts older areas first.
+- **Terrain (height layer):** `height_generator.dart` fetches the covering public AWS
+  Terrarium terrain tiles **cache-first via the same `TileCache`** (URL-keyed, so they
+  coexist with map tiles), then runs the CPU-heavy decode + marching squares in a
+  `compute()` isolate (raw bytes + doubles cross the boundary — no drift/`ui.Image`). Caps:
+  radius ≤ 25 km, ≤ 80 tiles. A 404/offline tile is treated as sea level rather than
+  failing; an all-missing fetch throws a user-facing message and keeps prior geometry.
 - **Overpass (POIs + admin borders):** debounced, zoom-gated, viewport-inflated fetches
   that **keep stale data and retry on failure** (never clear on a network error). Use a
   polite User-Agent, cap result counts, fail silently. Results persist via `OverpassCache`
@@ -114,6 +145,10 @@ viewport as a spherical quad (the painter still `clipRect`s to the true screen r
   off-screen objects; cache when the camera is idle if it ever bites.
 - **Degenerate cameras** — zoom-out gestures can briefly yield a NaN camera; guard
   reads of `camera.visibleBounds` and snap back to the last good camera.
+- **Height fidelity** — contours come from a capped elevation grid (≤ 512²) sampled
+  nearest-pixel from terrain tiles, so very fine features are smoothed; lower `sampleZoom`
+  trades detail for fewer tiles. Generation needs network the first time (then renders from
+  stored polygons offline). Holes are handled by even-odd fill, not polygon subtraction.
 - **Third-party tile/Overpass usage** — respect attribution and rate limits; keep
   zoom-gating and debouncing in place.
 - **iOS** — only the Android build has been run on a device; the iOS path is unverified.
