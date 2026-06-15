@@ -715,13 +715,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// A small non-interactive dot marking an edit point (circle centre / plane
   /// endpoint / subspace point). The white ring keeps it visible over any map
   /// colour; the [main] point of a subspace is drawn larger and white-filled.
-  Marker _editPointMarker(LatLng point, {bool main = false}) {
+  Marker _editPointMarker(LatLng point, {bool main = false, String? label}) {
     final size = main ? 22.0 : 18.0;
-    return Marker(
-      point: point,
-      width: size,
-      height: size,
-      child: _editPointDot(main: main),
+    return _labeledMarker(
+      point,
+      coreSize: size,
+      core: _editPointDot(main: main),
+      label: label,
     );
   }
 
@@ -744,17 +744,80 @@ class _MapScreenState extends ConsumerState<MapScreen>
   }
 
   /// A subspace point handle: like [_editPointMarker] but long-pressable to open
-  /// a menu that makes it the main (active) point. The dot sits inside a larger
-  /// transparent box so the small handle is easy to long-press.
+  /// a menu that makes it the main (active) point, and labelled with its name
+  /// (when set). The dot sits inside a larger transparent box so the small
+  /// handle is easy to long-press.
   Marker _subspacePointMarker(SubspacePoint p) {
-    return Marker(
-      point: LatLng(p.lat, p.lng),
-      width: 40,
-      height: 40,
-      child: GestureDetector(
+    return _labeledMarker(
+      LatLng(p.lat, p.lng),
+      coreSize: 40,
+      core: Center(child: _editPointDot(main: p.isMain)),
+      label: p.label,
+      onLongPressStart: (d) => _showSubspacePointMenu(p, d.globalPosition),
+    );
+  }
+
+  /// Places [core] (a fixed [coreSize] square) centred on [point], with an
+  /// optional tiny [label] just below it. The marker box is sized symmetrically
+  /// so the core stays anchored on the point regardless of the label. When
+  /// [onLongPressStart] is given the whole marker is long-pressable.
+  Marker _labeledMarker(
+    LatLng point, {
+    required double coreSize,
+    required Widget core,
+    String? label,
+    GestureLongPressStartCallback? onLongPressStart,
+  }) {
+    const labelHeight = 14.0;
+    const gap = 1.0;
+    final hasLabel = label != null && label.isNotEmpty;
+    // Equal top/bottom padding keeps [core] at the box centre = the point.
+    const pad = gap + labelHeight;
+    Widget child = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (hasLabel) const SizedBox(height: pad),
+        SizedBox(width: coreSize, height: coreSize, child: core),
+        if (hasLabel) ...[
+          const SizedBox(height: gap),
+          SizedBox(height: labelHeight, child: _markerLabel(label)),
+        ],
+      ],
+    );
+    if (onLongPressStart != null) {
+      child = GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onLongPressStart: (d) => _showSubspacePointMenu(p, d.globalPosition),
-        child: Center(child: _editPointDot(main: p.isMain)),
+        onLongPressStart: onLongPressStart,
+        child: child,
+      );
+    }
+    return Marker(
+      point: point,
+      width: hasLabel ? 140 : coreSize,
+      height: hasLabel ? coreSize + 2 * pad : coreSize,
+      alignment: Alignment.center,
+      child: child,
+    );
+  }
+
+  /// The tiny name plate drawn under labelled markers — small text on a faint
+  /// white plate so it reads over any map colour.
+  Widget _markerLabel(String text) {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.82),
+          borderRadius: BorderRadius.circular(3),
+        ),
+        child: Text(
+          text,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+              fontSize: 9, height: 1.0, color: Colors.black87),
+        ),
       ),
     );
   }
@@ -801,13 +864,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
     }
   }
 
-  /// A small icon marker for one POI, coloured by category.
+  /// A small icon marker for one POI, coloured by category, with its name (when
+  /// the OSM data carries one) shown as tiny text below the icon.
   Marker _poiMarker(PoiResult p) {
-    return Marker(
-      point: LatLng(p.lat, p.lng),
-      width: 26,
-      height: 26,
-      child: Container(
+    return _labeledMarker(
+      LatLng(p.lat, p.lng),
+      coreSize: 26,
+      label: p.name,
+      core: Container(
         decoration: BoxDecoration(
           color: Colors.white,
           shape: BoxShape.circle,
@@ -1864,6 +1928,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                 selectedCircle.centerLat,
                                 selectedCircle.centerLng,
                               ),
+                              label: selectedCircle.label,
                             ),
                           if (selectedPlane != null) ...[
                             _editPointMarker(
