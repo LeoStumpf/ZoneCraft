@@ -11,6 +11,7 @@ import '../data/database.dart';
 import '../data/geo_import.dart';
 import '../data/repository.dart';
 import '../data/serialization.dart';
+import 'admin_area_dialog.dart';
 
 /// File-pick + parse helpers shared by the layers drawer: per-layer export,
 /// importing an external track/area into a freehand layer, and importing a
@@ -125,6 +126,62 @@ Future<void> importTrackIntoLayer(
       content: Text(n == 0
           ? 'Nothing usable to import (need ${wantArea ? '3+' : '2+'} points)'
           : 'Imported $n ${wantArea ? 'area' : 'track'}${n == 1 ? '' : 's'}'),
+    ));
+  } catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text('Import failed: $e')));
+  }
+}
+
+/// Searches for an administrative area by name (Nominatim) and imports its
+/// boundary as a freehand area — a new layer, or merged into an existing
+/// freearea layer. [layers] is the current list (for the merge-target picker).
+Future<void> importAdminAreaFlow(
+  BuildContext context,
+  Repository repo,
+  List<Layer> layers,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final place = await showAdminAreaSearchDialog(context);
+  if (place == null || !context.mounted) return;
+
+  // One area object per outer ring (a multipolygon yields several). Need 3+
+  // points to form an area; drop any degenerate ring.
+  final usable = place.rings.where((r) => r.length >= 3).toList();
+  if (usable.isEmpty) {
+    messenger.showSnackBar(
+      const SnackBar(content: Text('That area has no usable boundary')),
+    );
+    return;
+  }
+  final objects = <ExportObject>[
+    for (var i = 0; i < usable.length; i++)
+      ExportObject(
+        kind: 'freearea',
+        coords: usable[i],
+        label: usable.length == 1 ? place.shortName : '${place.shortName} ${i + 1}',
+      ),
+  ];
+  final layer = ExportLayer(
+    name: place.shortName,
+    colorArgb: 0xFF43A047,
+    type: 'freearea',
+    isInverted: false,
+    objects: objects,
+  );
+
+  final target = await _askNewOrMerge(context, layers, 'freearea');
+  if (target == null) return; // cancelled
+
+  try {
+    final int count;
+    if (target.mergeLayerId != null) {
+      count = await repo.mergeIntoLayer(target.mergeLayerId!, layer);
+    } else {
+      count = await repo.importData(ExportData([layer]));
+    }
+    messenger.showSnackBar(SnackBar(
+      content: Text('Imported ${place.shortName} '
+          '($count area${count == 1 ? '' : 's'})'),
     ));
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text('Import failed: $e')));

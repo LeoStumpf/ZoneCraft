@@ -74,6 +74,12 @@ class LayersDrawer extends ConsumerWidget {
                         onPressed: () =>
                             importLayerFlow(context, repo, layers),
                       ),
+                      IconButton(
+                        tooltip: 'Import admin area (e.g. city border)',
+                        icon: const Icon(Icons.public),
+                        onPressed: () =>
+                            importAdminAreaFlow(context, repo, layers),
+                      ),
                       PopupMenuButton<String>(
                         tooltip: 'Add layer',
                         onSelected: (type) => addLayer(layers.length, type),
