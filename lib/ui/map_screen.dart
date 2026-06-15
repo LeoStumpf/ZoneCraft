@@ -760,6 +760,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
         'cafe' => Icons.local_cafe_outlined,
         'restaurant' => Icons.restaurant_outlined,
         'pharmacy' => Icons.local_pharmacy_outlined,
+        'library' => Icons.local_library_outlined,
+        'aquarium' => Icons.set_meal_outlined,
+        'zoo' => Icons.pets_outlined,
+        'golf_course' => Icons.golf_course_outlined,
+        'consulate' => Icons.flag_outlined,
+        'transit_station' => Icons.directions_transit_outlined,
+        'hospital' => Icons.local_hospital_outlined,
+        'cinema' => Icons.local_movies_outlined,
         _ => Icons.place_outlined,
       };
 

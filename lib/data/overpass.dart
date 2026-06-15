@@ -12,6 +12,7 @@ class PoiCategory {
     required this.tagKey,
     required this.tagValue,
     required this.bit,
+    this.seedable = false,
   });
 
   /// Stable identifier (also used to pick the marker icon in the UI).
@@ -22,6 +23,11 @@ class PoiCategory {
 
   /// Single-bit mask for this category in the persisted set.
   final int bit;
+
+  /// Whether this category should be offered when seeding circle/subspace
+  /// layers from nearby POIs. Only named places (cafés, hospitals, …) are
+  /// useful there; ubiquitous unnamed furniture (benches, bins, …) is not.
+  final bool seedable;
 }
 
 /// The fixed catalogue of POI categories. Bits are positional, so the order
@@ -62,20 +68,84 @@ const poiCategories = <PoiCategory>[
       label: 'Cafés',
       tagKey: 'amenity',
       tagValue: 'cafe',
-      bit: 1 << 5),
+      bit: 1 << 5,
+      seedable: true),
   PoiCategory(
       key: 'restaurant',
       label: 'Restaurants',
       tagKey: 'amenity',
       tagValue: 'restaurant',
-      bit: 1 << 6),
+      bit: 1 << 6,
+      seedable: true),
   PoiCategory(
       key: 'pharmacy',
       label: 'Pharmacies',
       tagKey: 'amenity',
       tagValue: 'pharmacy',
-      bit: 1 << 7),
+      bit: 1 << 7,
+      seedable: true),
+  PoiCategory(
+      key: 'library',
+      label: 'Libraries',
+      tagKey: 'amenity',
+      tagValue: 'library',
+      bit: 1 << 8,
+      seedable: true),
+  PoiCategory(
+      key: 'aquarium',
+      label: 'Aquariums',
+      tagKey: 'tourism',
+      tagValue: 'aquarium',
+      bit: 1 << 9,
+      seedable: true),
+  PoiCategory(
+      key: 'zoo',
+      label: 'Zoos',
+      tagKey: 'tourism',
+      tagValue: 'zoo',
+      bit: 1 << 10,
+      seedable: true),
+  PoiCategory(
+      key: 'golf_course',
+      label: 'Golf courses',
+      tagKey: 'leisure',
+      tagValue: 'golf_course',
+      bit: 1 << 11,
+      seedable: true),
+  PoiCategory(
+      key: 'consulate',
+      label: 'Foreign consulates',
+      tagKey: 'office',
+      tagValue: 'diplomatic',
+      bit: 1 << 12,
+      seedable: true),
+  PoiCategory(
+      key: 'transit_station',
+      label: 'Transit stations',
+      tagKey: 'public_transport',
+      tagValue: 'station',
+      bit: 1 << 13,
+      seedable: true),
+  PoiCategory(
+      key: 'hospital',
+      label: 'Hospitals',
+      tagKey: 'amenity',
+      tagValue: 'hospital',
+      bit: 1 << 14,
+      seedable: true),
+  PoiCategory(
+      key: 'cinema',
+      label: 'Movie theatres',
+      tagKey: 'amenity',
+      tagValue: 'cinema',
+      bit: 1 << 15,
+      seedable: true),
 ];
+
+/// The categories offered when seeding circle/subspace layers — named places
+/// only. See [PoiCategory.seedable].
+final seedablePoiCategories =
+    poiCategories.where((c) => c.seedable).toList(growable: false);
 
 /// The categories enabled in [mask].
 Set<PoiCategory> poiCategoriesFromMask(int mask) =>

@@ -43,7 +43,7 @@ class _PoiImportDialog extends StatefulWidget {
 
 class _PoiImportDialogState extends State<_PoiImportDialog> {
   final _formKey = GlobalKey<FormState>();
-  PoiCategory _category = poiCategories.first;
+  PoiCategory _category = seedablePoiCategories.first;
   final _searchRadius = TextEditingController(text: '1000');
   final _circleRadius = TextEditingController(text: '100');
 
@@ -87,7 +87,7 @@ class _PoiImportDialogState extends State<_PoiImportDialog> {
               initialValue: _category,
               decoration: const InputDecoration(labelText: 'Category'),
               items: [
-                for (final c in poiCategories)
+                for (final c in seedablePoiCategories)
                   DropdownMenuItem(value: c, child: Text(c.label)),
               ],
               onChanged: (c) => setState(() => _category = c ?? _category),
