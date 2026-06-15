@@ -721,17 +721,84 @@ class _MapScreenState extends ConsumerState<MapScreen>
       point: point,
       width: size,
       height: size,
-      child: Container(
-        decoration: BoxDecoration(
-          color: main ? Colors.white : Colors.black87,
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: main ? Colors.black87 : Colors.white,
-            width: main ? 4 : 2.5,
-          ),
+      child: _editPointDot(main: main),
+    );
+  }
+
+  /// The decorated dot used by edit-point markers. The [main] subspace point is
+  /// drawn larger and white-filled so it stands out from the others.
+  Widget _editPointDot({bool main = false}) {
+    final size = main ? 22.0 : 18.0;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: main ? Colors.white : Colors.black87,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: main ? Colors.black87 : Colors.white,
+          width: main ? 4 : 2.5,
         ),
       ),
     );
+  }
+
+  /// A subspace point handle: like [_editPointMarker] but long-pressable to open
+  /// a menu that makes it the main (active) point. The dot sits inside a larger
+  /// transparent box so the small handle is easy to long-press.
+  Marker _subspacePointMarker(SubspacePoint p) {
+    return Marker(
+      point: LatLng(p.lat, p.lng),
+      width: 40,
+      height: 40,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onLongPressStart: (d) => _showSubspacePointMenu(p, d.globalPosition),
+        child: Center(child: _editPointDot(main: p.isMain)),
+      ),
+    );
+  }
+
+  /// Popup menu for a long-pressed subspace point: set it as the main point.
+  Future<void> _showSubspacePointMenu(
+      SubspacePoint p, Offset globalPosition) async {
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final title = (p.label != null && p.label!.isNotEmpty)
+        ? p.label!
+        : 'Subspace point';
+    final selected = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        globalPosition.dx,
+        globalPosition.dy,
+        overlay.size.width - globalPosition.dx,
+        overlay.size.height - globalPosition.dy,
+      ),
+      items: [
+        PopupMenuItem<String>(
+          enabled: false,
+          child: Text(title, style: Theme.of(context).textTheme.labelMedium),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem<String>(
+          value: 'main',
+          enabled: !p.isMain,
+          child: Row(
+            children: [
+              Icon(p.isMain ? Icons.check_circle : Icons.radio_button_unchecked,
+                  size: 18),
+              const SizedBox(width: 8),
+              Text(p.isMain ? 'Already the main point' : 'Set as main point'),
+            ],
+          ),
+        ),
+      ],
+    );
+    if (selected == 'main' && mounted) {
+      await ref.read(repositoryProvider).setMainPoint(p.subspaceId, p.id);
+      if (mounted) _hint('Main point updated.');
+    }
   }
 
   /// A small icon marker for one POI, coloured by category.
@@ -1807,10 +1874,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             ),
                           ],
                           for (final p in selectedSubspacePoints)
-                            _editPointMarker(
-                              LatLng(p.lat, p.lng),
-                              main: p.isMain,
-                            ),
+                            _subspacePointMarker(p),
                           for (final p in selectedFreeLinePoints)
                             _editPointMarker(LatLng(p.lat, p.lng)),
                           for (final p in selectedFreeAreaPoints)
