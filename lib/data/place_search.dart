@@ -5,18 +5,21 @@ import 'package:latlong2/latlong.dart';
 
 import 'geo_import.dart';
 
-/// Looks up named places (cities, districts, countries, parks…) by name via
-/// OpenStreetMap's Nominatim geocoder, returning their **boundary polygons** so
-/// an administrative area can be imported as a freehand area. Pure-ish: the HTTP
-/// call is the only side effect, and the parsing is split out for testing.
+/// Looks up named OSM features (places, rivers, roads, parks, boundaries…) by
+/// name via OpenStreetMap's Nominatim geocoder, returning their geometry so a
+/// feature can be imported into a freehand layer — areas as a freehand **area**,
+/// lines (rivers, railways, coastlines…) as a freehand **line**. Pure-ish: the
+/// HTTP call is the only side effect, and the parsing is split out for testing.
 
-/// One geocoder hit that carries an importable polygon. [rings] are the outer
-/// rings (a multipolygon yields more than one), each already stripped of its
-/// repeated closing vertex.
+/// One geocoder hit that carries importable geometry. [areas] are polygon outer
+/// rings (a multipolygon yields more than one, each stripped of its repeated
+/// closing vertex); [lines] are poly-lines (a multilinestring yields more than
+/// one). A hit may have either or both.
 class PlaceResult {
   const PlaceResult({
     required this.displayName,
-    required this.rings,
+    required this.areas,
+    required this.lines,
     this.category,
     this.type,
   });
@@ -24,21 +27,31 @@ class PlaceResult {
   /// Full human label, e.g. "Munich, Bavaria, Germany".
   final String displayName;
 
-  /// Outer rings of the place's polygon(s).
-  final List<List<LatLng>> rings;
+  /// Outer rings of the feature's polygon(s).
+  final List<List<LatLng>> areas;
 
-  /// OSM `class`/`category`, e.g. `boundary`, `place`, `leisure`.
+  /// Poly-lines of the feature's line geometry.
+  final List<List<LatLng>> lines;
+
+  /// OSM `class`/`category`, e.g. `boundary`, `waterway`, `highway`, `leisure`.
   final String? category;
 
-  /// OSM `type`, e.g. `administrative`, `city`, `park`.
+  /// OSM `type`, e.g. `administrative`, `river`, `park`.
   final String? type;
+
+  /// Which freehand layer this feature naturally imports into. Areas win when
+  /// the feature has both (a river is a line even if a tiny area sneaks in).
+  GeometryKind get dominantKind =>
+      areas.isNotEmpty ? GeometryKind.area : GeometryKind.line;
 
   /// A short name for layers/objects: the first comma-separated segment.
   String get shortName => displayName.split(',').first.trim();
 
-  /// Total vertices across all rings (shown so the user knows how heavy the
+  /// Total vertices across all geometry (shown so the user knows how heavy the
   /// import will be).
-  int get pointCount => rings.fold(0, (n, r) => n + r.length);
+  int get pointCount =>
+      areas.fold(0, (n, r) => n + r.length) +
+      lines.fold(0, (n, r) => n + r.length);
 }
 
 /// Caps how many candidates Nominatim returns.
@@ -59,8 +72,9 @@ Uri buildPlaceSearchUri(String query) =>
       'addressdetails': '0',
     });
 
-/// Parses a Nominatim `jsonv2` response, keeping only hits with polygon
-/// geometry. Returns empty on any structural surprise rather than throwing.
+/// Parses a Nominatim `jsonv2` response, keeping hits that carry line or area
+/// geometry (points are dropped). Returns empty on any structural surprise
+/// rather than throwing.
 List<PlaceResult> parsePlaceSearchResponse(String body) {
   final List<PlaceResult> out = [];
   final dynamic decoded;
@@ -74,16 +88,22 @@ List<PlaceResult> parsePlaceSearchResponse(String body) {
     if (e is! Map) continue;
     final geojson = e['geojson'];
     if (geojson is! Map) continue;
-    // Reuse the generic GeoJSON parser to extract polygon outer rings.
+    // Reuse the generic GeoJSON parser, which extracts both line and area
+    // features from (Multi)LineString / (Multi)Polygon.
     final feats = parseGeoJsonGeometry(jsonEncode(geojson));
-    final rings = [
+    final areas = [
       for (final f in feats)
         if (f.kind == GeometryKind.area) f.coords,
     ];
-    if (rings.isEmpty) continue;
+    final lines = [
+      for (final f in feats)
+        if (f.kind == GeometryKind.line) f.coords,
+    ];
+    if (areas.isEmpty && lines.isEmpty) continue;
     out.add(PlaceResult(
-      displayName: (e['display_name'] as String?)?.trim() ?? 'Unnamed place',
-      rings: rings,
+      displayName: (e['display_name'] as String?)?.trim() ?? 'Unnamed feature',
+      areas: areas,
+      lines: lines,
       category: e['category'] as String?,
       type: e['type'] as String?,
     ));
@@ -91,7 +111,7 @@ List<PlaceResult> parsePlaceSearchResponse(String body) {
   return out;
 }
 
-/// Searches Nominatim for [query]. Returns the polygon-bearing matches on
+/// Searches Nominatim for [query]. Returns the geometry-bearing matches on
 /// success (possibly empty), or **null** on any network/HTTP/timeout error.
 /// Never throws.
 Future<List<PlaceResult>?> searchPlaces(

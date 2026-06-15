@@ -1,25 +1,27 @@
 import 'package:flutter/material.dart';
 
+import '../data/geo_import.dart';
 import '../data/place_search.dart';
 
-/// A search dialog that geocodes a place name (Nominatim) and lets the user
-/// pick a boundary to import. Returns the chosen [PlaceResult], or null if
-/// cancelled. Network errors / empty results are surfaced inline.
-Future<PlaceResult?> showAdminAreaSearchDialog(BuildContext context) {
+/// A search dialog that geocodes an OSM feature name (Nominatim) and lets the
+/// user pick a result to import — areas become a freehand area, lines (rivers,
+/// roads, coastlines…) a freehand line. Returns the chosen [PlaceResult], or
+/// null if cancelled. Network errors / empty results are surfaced inline.
+Future<PlaceResult?> showFeatureSearchDialog(BuildContext context) {
   return showDialog<PlaceResult>(
     context: context,
-    builder: (_) => const _AdminAreaDialog(),
+    builder: (_) => const _FeatureSearchDialog(),
   );
 }
 
-class _AdminAreaDialog extends StatefulWidget {
-  const _AdminAreaDialog();
+class _FeatureSearchDialog extends StatefulWidget {
+  const _FeatureSearchDialog();
 
   @override
-  State<_AdminAreaDialog> createState() => _AdminAreaDialogState();
+  State<_FeatureSearchDialog> createState() => _FeatureSearchDialogState();
 }
 
-class _AdminAreaDialogState extends State<_AdminAreaDialog> {
+class _FeatureSearchDialogState extends State<_FeatureSearchDialog> {
   final _controller = TextEditingController();
   bool _searching = false;
   String? _error;
@@ -47,24 +49,25 @@ class _AdminAreaDialogState extends State<_AdminAreaDialog> {
         _error = 'Search failed — offline or rate-limited. Try again shortly.';
       } else {
         _results = res;
-        if (res.isEmpty) _error = 'No areas with a boundary found for “$q”.';
+        if (res.isEmpty) _error = 'No map features found for “$q”.';
       }
     });
   }
 
   String _subtitle(PlaceResult r) {
+    final shape = r.dominantKind == GeometryKind.area ? 'area' : 'line';
     final kind = [r.category, r.type]
         .where((s) => s != null && s.isNotEmpty)
         .join(' · ');
-    final pts = '${r.pointCount} pts';
-    return kind.isEmpty ? pts : '$kind · $pts';
+    final tail = '$shape · ${r.pointCount} pts';
+    return kind.isEmpty ? tail : '$kind · $tail';
   }
 
   @override
   Widget build(BuildContext context) {
     final results = _results;
     return AlertDialog(
-      title: const Text('Import admin area'),
+      title: const Text('Import map feature'),
       content: SizedBox(
         width: 360,
         child: Column(
@@ -77,8 +80,8 @@ class _AdminAreaDialogState extends State<_AdminAreaDialog> {
               textInputAction: TextInputAction.search,
               onSubmitted: (_) => _search(),
               decoration: InputDecoration(
-                labelText: 'Place name',
-                hintText: 'e.g. Munich, Bavaria',
+                labelText: 'Feature name',
+                hintText: 'e.g. Munich, or Isar',
                 isDense: true,
                 suffixIcon: IconButton(
                   tooltip: 'Search',
@@ -112,7 +115,9 @@ class _AdminAreaDialogState extends State<_AdminAreaDialog> {
                     return ListTile(
                       dense: true,
                       contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.public),
+                      leading: Icon(r.dominantKind == GeometryKind.area
+                          ? Icons.hexagon_outlined
+                          : Icons.polyline),
                       title: Text(r.displayName,
                           maxLines: 2, overflow: TextOverflow.ellipsis),
                       subtitle: Text(_subtitle(r)),
@@ -123,8 +128,9 @@ class _AdminAreaDialogState extends State<_AdminAreaDialog> {
               )
             else
               Text(
-                'Type a city, district or country name, then search. The '
-                'matching boundary is imported as a freehand area.',
+                'Type a place, river, road or boundary name, then search. The '
+                'match is imported as a freehand area (boundaries, parks, lakes…) '
+                'or a freehand line (rivers, roads, coastlines…).',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
           ],

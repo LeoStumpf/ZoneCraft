@@ -11,7 +11,7 @@ import '../data/database.dart';
 import '../data/geo_import.dart';
 import '../data/repository.dart';
 import '../data/serialization.dart';
-import 'admin_area_dialog.dart';
+import 'feature_search_dialog.dart';
 
 /// File-pick + parse helpers shared by the layers drawer: per-layer export,
 /// importing an external track/area into a freehand layer, and importing a
@@ -132,46 +132,54 @@ Future<void> importTrackIntoLayer(
   }
 }
 
-/// Searches for an administrative area by name (Nominatim) and imports its
-/// boundary as a freehand area — a new layer, or merged into an existing
-/// freearea layer. [layers] is the current list (for the merge-target picker).
-Future<void> importAdminAreaFlow(
+/// Searches for a named OSM feature (Nominatim) and imports its geometry into a
+/// freehand layer — areas (boundaries, parks, lakes…) as a freehand area, lines
+/// (rivers, roads, coastlines…) as a freehand line — a new layer or merged into
+/// an existing same-type one. [layers] is the current list (for the picker).
+Future<void> importFeatureFlow(
   BuildContext context,
   Repository repo,
   List<Layer> layers,
 ) async {
   final messenger = ScaffoldMessenger.of(context);
-  final place = await showAdminAreaSearchDialog(context);
+  final place = await showFeatureSearchDialog(context);
   if (place == null || !context.mounted) return;
 
-  // One area object per outer ring (a multipolygon yields several). Need 3+
-  // points to form an area; drop any degenerate ring.
-  final usable = place.rings.where((r) => r.length >= 3).toList();
+  // Route by geometry: areas → freearea (3+ points/ring), lines → freeline
+  // (2+ points). The dominant kind picks the target when a hit has both.
+  final isArea = place.dominantKind == GeometryKind.area;
+  final type = isArea ? 'freearea' : 'freeline';
+  final minPts = isArea ? 3 : 2;
+  final usable = (isArea ? place.areas : place.lines)
+      .where((c) => c.length >= minPts)
+      .toList();
   if (usable.isEmpty) {
     messenger.showSnackBar(
-      const SnackBar(content: Text('That area has no usable boundary')),
+      const SnackBar(content: Text('That feature has no usable geometry')),
     );
     return;
   }
   final objects = <ExportObject>[
     for (var i = 0; i < usable.length; i++)
       ExportObject(
-        kind: 'freearea',
+        kind: type,
         coords: usable[i],
-        label: usable.length == 1 ? place.shortName : '${place.shortName} ${i + 1}',
+        label:
+            usable.length == 1 ? place.shortName : '${place.shortName} ${i + 1}',
       ),
   ];
   final layer = ExportLayer(
     name: place.shortName,
-    colorArgb: 0xFF43A047,
-    type: 'freearea',
+    colorArgb: isArea ? 0xFF43A047 : 0xFF2196F3,
+    type: type,
     isInverted: false,
     objects: objects,
   );
 
-  final target = await _askNewOrMerge(context, layers, 'freearea');
+  final target = await _askNewOrMerge(context, layers, type);
   if (target == null) return; // cancelled
 
+  final noun = isArea ? 'area' : 'line';
   try {
     final int count;
     if (target.mergeLayerId != null) {
@@ -181,7 +189,7 @@ Future<void> importAdminAreaFlow(
     }
     messenger.showSnackBar(SnackBar(
       content: Text('Imported ${place.shortName} '
-          '($count area${count == 1 ? '' : 's'})'),
+          '($count $noun${count == 1 ? '' : 's'})'),
     ));
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text('Import failed: $e')));
