@@ -7,6 +7,7 @@ import '../geo/freeline.dart';
 import '../geo/geodesic.dart';
 import '../geo/plane.dart';
 import '../geo/subspace.dart';
+import 'area_geometry.dart';
 
 /// Renders one layer's objects as a single composited region.
 ///
@@ -68,6 +69,18 @@ class RegionLayer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final camera = MapCamera.of(context);
+    // Resolve the (camera-independent) offset/band geometry once per change; the
+    // cache returns the same instance on a plain camera move, so the per-frame
+    // paint only projects and fills these rings.
+    final resolvedAreas = <ResolvedArea>[
+      for (final a in freeAreas)
+        areaGeometryCache.resolve(
+          a,
+          [for (final p in freeAreaPoints) if (p.freeAreaId == a.id) p],
+          bandMeters: uncertaintyMeters,
+          inverted: layer.isInverted,
+        ),
+    ];
     return IgnorePointer(
       child: CustomPaint(
         size: camera.size,
@@ -83,6 +96,7 @@ class RegionLayer extends StatelessWidget {
           freeLinePoints: freeLinePoints,
           freeAreas: freeAreas,
           freeAreaPoints: freeAreaPoints,
+          resolvedAreas: resolvedAreas,
           heightRegions: heightRegions,
           heightPolygons: heightPolygons,
           heightPolygonPoints: heightPolygonPoints,
@@ -106,6 +120,7 @@ class _RegionPainter extends CustomPainter {
     required this.freeLinePoints,
     required this.freeAreas,
     required this.freeAreaPoints,
+    required this.resolvedAreas,
     required this.heightRegions,
     required this.heightPolygons,
     required this.heightPolygonPoints,
@@ -123,6 +138,10 @@ class _RegionPainter extends CustomPainter {
   final List<FreeLinePoint> freeLinePoints;
   final List<FreeArea> freeAreas;
   final List<FreeAreaPoint> freeAreaPoints;
+
+  /// Pre-resolved, camera-independent geometry for [freeAreas], one per object.
+  final List<ResolvedArea> resolvedAreas;
+
   final List<HeightRegion> heightRegions;
   final List<HeightPolygon> heightPolygons;
   final List<HeightPolygonPoint> heightPolygonPoints;
@@ -297,26 +316,28 @@ class _RegionPainter extends CustomPainter {
     canvas.drawPath(bounded(outline), strokePaint);
   }
 
-  /// Paints a freehand-area layer. The nominal boundary (the outline) is the
-  /// union of the drawn rings with each object's signed offset applied; the
-  /// solid fills the interior (or, when inverted, the complement). The
-  /// uncertainty band is a uniform strip of [uncertaintyMeters] hugging the
-  /// boundary on the **uncoloured** side. Both the offset and the band are built
-  /// by *buffering* the boundary rather than walking its vertices, so they keep
-  /// a constant width around concave/convex corners alike — a vertex walk
-  /// self-crosses at reflex corners into spikes and islands on a city outline.
+  /// Paints a freehand-area layer from its **pre-resolved** geometry
+  /// ([resolvedAreas]). The expensive offset/band buffering happened once
+  /// off-frame (see [resolveAreaGeometry]); here we only project the cached
+  /// lat/lng rings to screen and fill. The solid is the interior (or the
+  /// viewport complement when inverted); the band is the annulus between the
+  /// boundary and its band edge — a fill, not a wide stroke; the outline traces
+  /// the boundary.
   void _paintFreeAreas(Canvas canvas, Size size) {
     Path? coreUnion;
-    for (final a in freeAreas) {
-      final pts = freeAreaPoints.where((p) => p.freeAreaId == a.id).toList();
-      if (pts.length < 3) continue;
-      final offs = <Offset>[
-        for (final p in pts) camera.latLngToScreenOffset(LatLng(p.lat, p.lng)),
-      ];
-      final path = _offsetCorePath(offs, a.offsetMeters);
+    Path? bandEdgeUnion;
+    for (final r in resolvedAreas) {
+      if (r.isEmpty) continue;
+      final cp = _contoursToPath(r.core);
       coreUnion = coreUnion == null
-          ? path
-          : Path.combine(PathOperation.union, coreUnion, path);
+          ? cp
+          : Path.combine(PathOperation.union, coreUnion, cp);
+      if (r.bandEdge.isNotEmpty) {
+        final bp = _contoursToPath(r.bandEdge);
+        bandEdgeUnion = bandEdgeUnion == null
+            ? bp
+            : Path.combine(PathOperation.union, bandEdgeUnion, bp);
+      }
     }
     final core = coreUnion;
     if (core == null) return;
@@ -325,9 +346,7 @@ class _RegionPainter extends CustomPainter {
       ..style = PaintingStyle.fill
       ..color = color.withValues(alpha: 0.45);
     final bandPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeJoin = StrokeJoin.round
-      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.fill
       ..color = color.withValues(alpha: 0.20);
     final strokePaint = Paint()
       ..style = PaintingStyle.stroke
@@ -346,83 +365,34 @@ class _RegionPainter extends CustomPainter {
         : core;
     canvas.drawPath(bounded(solid), solidPaint);
 
-    final bandPx =
-        uncertaintyMeters > 0 ? _metersToPixels(camera.center, uncertaintyMeters) : 0.0;
-    if (bandPx > 0) {
-      // Stroke the boundary at twice the band width (centred on the line, so the
-      // kept half is exactly `band` wide) and clip to the uncoloured side. Clip
-      // the boundary itself to a little past the band's reach first, so the
-      // stroke only processes near-viewport geometry (bounding Skia's coords);
-      // any rect edges that introduces sit beyond the band reach, outside the
-      // visible clip.
-      final reach = Path()..addRect((Offset.zero & size).inflate(bandPx + 24));
-      final nearBoundary = Path.combine(PathOperation.intersect, core, reach);
-      final uncoloured = inverted
-          ? core
-          : Path.combine(PathOperation.difference, viewport, core);
-      canvas.save();
-      canvas.clipPath(uncoloured);
-      canvas.drawPath(nearBoundary, bandPaint..strokeWidth = 2 * bandPx);
-      canvas.restore();
+    // Band: the annulus between the boundary and its band edge (outside the
+    // boundary normally, inside it when inverted).
+    if (bandEdgeUnion != null) {
+      final band = inverted
+          ? Path.combine(PathOperation.difference, core, bandEdgeUnion)
+          : Path.combine(PathOperation.difference, bandEdgeUnion, core);
+      canvas.drawPath(bounded(band), bandPaint);
     }
 
     // Outline traces the nominal boundary.
     canvas.drawPath(bounded(core), strokePaint);
   }
 
-  /// The nominal interior of one freehand ring [offs] (screen space) with its
-  /// signed [offsetMeters] applied: positive shrinks (erodes), negative grows
-  /// (dilates). Robust on concave outlines — instead of walking vertices it
-  /// buffers the boundary and subtracts it from / adds it to the ring, a
-  /// Minkowski erosion/dilation via path-ops.
-  Path _offsetCorePath(List<Offset> offs, double offsetMeters) {
-    final base = _offsetsToPath(offs);
-    if (offsetMeters == 0 || offs.length < 3) return base;
-    final rPx = _metersToPixels(camera.center, offsetMeters.abs());
-    if (rPx <= 0) return base;
-    final buffer = _boundaryBuffer(offs, rPx);
-    return offsetMeters > 0
-        ? Path.combine(PathOperation.difference, base, buffer)
-        : Path.combine(PathOperation.union, base, buffer);
-  }
-
-  /// A closed screen-space path through [offs].
-  Path _offsetsToPath(List<Offset> offs) {
-    final path = Path();
-    if (offs.isEmpty) return path;
-    path.moveTo(offs.first.dx, offs.first.dy);
-    for (var i = 1; i < offs.length; i++) {
-      path.lineTo(offs[i].dx, offs[i].dy);
-    }
-    path.close();
-    return path;
-  }
-
-  /// All points within [rPx] of the boundary through [offs]: the union of a
-  /// rectangle swept along each edge and a disk at each vertex (to round the
-  /// corners). Rectangles share one winding and disks another, so each set
-  /// unions under the non-zero rule before they're merged with path-ops.
-  Path _boundaryBuffer(List<Offset> offs, double rPx) {
-    final n = offs.length;
-    final rects = Path();
-    final disks = Path();
-    for (var i = 0; i < n; i++) {
-      final a = offs[i];
-      final b = offs[(i + 1) % n];
-      final d = b - a;
-      final len = d.distance;
-      if (len > 0) {
-        final nx = -d.dy / len * rPx;
-        final ny = d.dx / len * rPx;
-        rects.moveTo(a.dx + nx, a.dy + ny);
-        rects.lineTo(b.dx + nx, b.dy + ny);
-        rects.lineTo(b.dx - nx, b.dy - ny);
-        rects.lineTo(a.dx - nx, a.dy - ny);
-        rects.close();
+  /// A screen-space even-odd path through [contours] (so holes/islands read
+  /// correctly), projecting each lat/lng vertex with the current camera.
+  Path _contoursToPath(List<List<LatLng>> contours) {
+    final path = Path()..fillType = PathFillType.evenOdd;
+    for (final ring in contours) {
+      if (ring.length < 3) continue;
+      final o0 = camera.latLngToScreenOffset(ring[0]);
+      path.moveTo(o0.dx, o0.dy);
+      for (var i = 1; i < ring.length; i++) {
+        final o = camera.latLngToScreenOffset(ring[i]);
+        path.lineTo(o.dx, o.dy);
       }
-      disks.addOval(Rect.fromCircle(center: a, radius: rPx));
+      path.close();
     }
-    return Path.combine(PathOperation.union, rects, disks);
+    return path;
   }
 
   /// Paints a height layer: each region's stored polygons fill with an even-odd
