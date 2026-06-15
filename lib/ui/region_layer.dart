@@ -8,6 +8,7 @@ import '../geo/geodesic.dart';
 import '../geo/plane.dart';
 import '../geo/subspace.dart';
 import 'area_geometry.dart';
+import 'region_geometry.dart';
 
 /// Renders one layer's objects as a single composited region.
 ///
@@ -199,68 +200,89 @@ class _RegionPainter extends CustomPainter {
     for (final c in circles) {
       final center = LatLng(c.centerLat, c.centerLng);
       // Outline stays at the drawn radius; the band sits just outside it (normal)
-      // or just inside it (inverted).
+      // or just inside it (inverted). Rings are memoised by centre+radius, so a
+      // pan/zoom just re-projects them instead of recomputing the geodesic ring.
       final outerRadius = inverted ? c.radiusMeters : c.radiusMeters + band;
       final coreRadius = inverted ? c.radiusMeters - band : c.radiusMeters;
-      final outerRing = geodesicCircle(center, outerRadius, points: _ringPoints);
-      if (outerRing.isEmpty) continue; // invalid geometry -> skip
-      addOuter(outerRing);
+      if (outerRadius <= 0) continue; // invalid geometry -> skip
+      addOuter(regionGeometryCache.circleRing(center, outerRadius, _ringPoints));
       if (coreRadius > 0) {
-        addCore(geodesicCircle(center, coreRadius, points: _ringPoints));
+        addCore(regionGeometryCache.circleRing(center, coreRadius, _ringPoints));
       }
     }
     // Plane/subspace clip to the viewport as a spherical quad; unproject its
     // (slightly inflated) corners once. Null at extreme zoom / near-pole.
     final corners = _viewportCorners(size);
+    // Unbounded regions (plane/subspace/freeline) are cached against a generous
+    // bound and reused while the live view still fits inside it, so a pan/zoom
+    // re-projects cached rings instead of re-clipping every frame.
+    final viewport = corners == null ? null : ViewBound.ofCorners(corners);
 
-    if (planes.isNotEmpty && corners != null) {
+    if (planes.isNotEmpty && viewport != null) {
       for (final p in planes) {
-        final region = planeRegion(
-          a: LatLng(p.aLat, p.aLng),
-          b: LatLng(p.bLat, p.bLng),
-          nearA: p.nearA,
-          bandMeters: band,
-          viewportCorners: corners,
-          bandInward: inverted,
-        );
+        final sig = '${p.aLat}|${p.aLng}|${p.bLat}|${p.bLng}|'
+            '${p.nearA}|$band|$inverted';
+        final region = regionGeometryCache.boundRegion(p.id, sig, viewport,
+            (bound) {
+          final r = planeRegion(
+            a: LatLng(p.aLat, p.aLng),
+            b: LatLng(p.bLat, p.bLng),
+            nearA: p.nearA,
+            bandMeters: band,
+            viewportCorners: bound.quad,
+            bandInward: inverted,
+          );
+          return (outer: r.outer, core: r.core);
+        });
         addOuter(region.outer);
         addCore(region.core);
       }
     }
 
-    if (subspaces.isNotEmpty && corners != null) {
+    if (subspaces.isNotEmpty && viewport != null) {
       for (final s in subspaces) {
         final pts = subspacePoints.where((p) => p.subspaceId == s.id).toList();
         final mainPt = pts.where((p) => p.isMain).firstOrNull;
         if (mainPt == null) continue; // no main point -> nothing to fill
+        final main = LatLng(mainPt.lat, mainPt.lng);
         final others = <LatLng>[
           for (final p in pts)
             if (p.id != mainPt.id) LatLng(p.lat, p.lng),
         ];
-        final region = subspaceRegion(
-          main: LatLng(mainPt.lat, mainPt.lng),
-          others: others,
-          bandMeters: band,
-          viewportCorners: corners,
-          bandInward: inverted,
-        );
+        final sig = '${hashPoints([main, ...others])}|$band|$inverted';
+        final region = regionGeometryCache.boundRegion(s.id, sig, viewport,
+            (bound) {
+          final r = subspaceRegion(
+            main: main,
+            others: others,
+            bandMeters: band,
+            viewportCorners: bound.quad,
+            bandInward: inverted,
+          );
+          return (outer: r.outer, core: r.core);
+        });
         addOuter(region.outer);
         addCore(region.core);
       }
     }
 
-    if (freeLines.isNotEmpty) {
-      final span = _spanMeters(corners);
+    if (freeLines.isNotEmpty && viewport != null) {
       for (final l in freeLines) {
         final pts = freeLinePoints.where((p) => p.freeLineId == l.id).toList();
         if (pts.length < 2) continue;
-        final region = freeLineRegion(
-          points: <LatLng>[for (final p in pts) LatLng(p.lat, p.lng)],
-          offsetMeters: l.offsetMeters,
-          bandMeters: band,
-          spanMeters: span,
-          bandInward: inverted,
-        );
+        final line = <LatLng>[for (final p in pts) LatLng(p.lat, p.lng)];
+        final sig = '${hashPoints(line)}|${l.offsetMeters}|$band|$inverted';
+        final region = regionGeometryCache.boundRegion(l.id, sig, viewport,
+            (bound) {
+          final r = freeLineRegion(
+            points: line,
+            offsetMeters: l.offsetMeters,
+            bandMeters: band,
+            spanMeters: bound.diagonalMeters,
+            bandInward: inverted,
+          );
+          return (outer: r.outer, core: r.core);
+        });
         addOuter(region.outer);
         addCore(region.core);
       }
@@ -500,14 +522,6 @@ class _RegionPainter extends CustomPainter {
       out.add(ll);
     }
     return out;
-  }
-
-  /// A characteristic viewport size in metres (its diagonal), used to extend
-  /// freehand lines and their fill cap well past the view. Falls back to a
-  /// globe-scale value when the corners are unavailable.
-  double _spanMeters(List<LatLng>? corners) {
-    if (corners == null) return 40000000;
-    return _distance.distance(corners[0], corners[2]);
   }
 
   Path _ringToPath(List<LatLng> ring) {
