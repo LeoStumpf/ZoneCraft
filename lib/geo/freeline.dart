@@ -15,18 +15,21 @@ import 'package:latlong2/latlong.dart';
 /// with [Distance], so a fixed `offsetMeters` keeps a constant real-world width
 /// regardless of latitude — unlike the old single-reference pixel scale.
 ///
-/// To match the engine's `band = outer − core` model, the boundary is shifted
-/// toward the filled side by the signed `offsetMeters`: [outer] shifts
-/// `offsetMeters − bandMeters`, [core] `offsetMeters + bandMeters`. A positive
-/// offset pushes the boundary into the filled side; a negative one past the line.
+/// To match the engine's `band = outer − core` model one ring is the nominal
+/// boundary (shifted by `offsetMeters`) and the other offsets it by `bandMeters`
+/// to put the band on the **uncoloured** side: normally (`bandInward` false)
+/// [outer] grows past the line (`offsetMeters − bandMeters`) and [core] is the
+/// nominal filled side; when the layer is inverted (`bandInward` true) [outer]
+/// is the nominal filled side and [core] is shrunk inward (`offsetMeters +
+/// bandMeters`). A positive offset pushes the boundary into the filled side.
 class FreeLineRegion {
   const FreeLineRegion(this.outer, this.core);
 
-  /// The filled side enlarged by half the band, as a lat/lng ring. Empty when
+  /// The filled side on the band's outer edge, as a lat/lng ring. Empty when
   /// fewer than two finite points are given or the geometry is degenerate.
   final List<LatLng> outer;
 
-  /// The filled side shrunk by half the band.
+  /// The filled side on the band's inner edge.
   final List<LatLng> core;
 }
 
@@ -41,6 +44,7 @@ FreeLineRegion freeLineRegion({
   required double offsetMeters,
   required double bandMeters,
   required double spanMeters,
+  bool bandInward = false,
 }) {
   final pts = <LatLng>[
     for (final p in points)
@@ -87,10 +91,12 @@ FreeLineRegion freeLineRegion({
     ];
   }
 
-  return FreeLineRegion(
-    build(offsetMeters - bandMeters),
-    build(offsetMeters + bandMeters),
-  );
+  // Nominal boundary (shifted by offset) on the coloured side; the other ring
+  // offset by the band onto the uncoloured side (past the line by default,
+  // into the filled side when inverted).
+  final outerShift = bandInward ? offsetMeters : offsetMeters - bandMeters;
+  final coreShift = bandInward ? offsetMeters + bandMeters : offsetMeters;
+  return FreeLineRegion(build(outerShift), build(coreShift));
 }
 
 /// [Distance.offset] with the bearing normalised to the required −180..180.

@@ -3,7 +3,6 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' hide Circle, Path;
 
 import '../data/database.dart';
-import '../geo/freearea.dart';
 import '../geo/freeline.dart';
 import '../geo/geodesic.dart';
 import '../geo/plane.dart';
@@ -145,6 +144,15 @@ class _RegionPainter extends CustomPainter {
       return;
     }
 
+    // Freehand areas derive their band by buffering the (often wrinkly, concave)
+    // boundary rather than offsetting its vertices — a vertex offset self-crosses
+    // at reflex corners and gaps at convex ones, which on a city-sized outline
+    // turns the band into spikes. Handle them separately so the buffer is robust.
+    if (freeAreas.isNotEmpty) {
+      _paintFreeAreas(canvas, size);
+      return;
+    }
+
     Path? outerUnion;
     Path? coreUnion;
 
@@ -164,24 +172,24 @@ class _RegionPainter extends CustomPainter {
           : Path.combine(PathOperation.union, coreUnion!, path);
     }
 
+    // Every type keeps its nominal boundary (the outline) fixed and puts the
+    // uncertainty band on the **uncoloured** side: normal layers grow the region
+    // outward, inverted layers shrink it inward (the fill is `viewport − outer`).
+    final band = uncertaintyMeters > 0 ? uncertaintyMeters : 0.0;
+
     for (final c in circles) {
       final center = LatLng(c.centerLat, c.centerLng);
-      final outerRing =
-          geodesicCircle(center, c.radiusMeters, points: _ringPoints);
+      // Outline stays at the drawn radius; the band sits just outside it (normal)
+      // or just inside it (inverted).
+      final outerRadius = inverted ? c.radiusMeters : c.radiusMeters + band;
+      final coreRadius = inverted ? c.radiusMeters - band : c.radiusMeters;
+      final outerRing = geodesicCircle(center, outerRadius, points: _ringPoints);
       if (outerRing.isEmpty) continue; // invalid geometry -> skip
       addOuter(outerRing);
-      final coreRadius = c.radiusMeters - uncertaintyMeters;
       if (coreRadius > 0) {
         addCore(geodesicCircle(center, coreRadius, points: _ringPoints));
       }
     }
-
-    // Freehand line/area bands straddle their divide, so use half the global
-    // uncertainty each way. Plane/subspace cells instead keep a solid *strict*
-    // cell and grow the band fully **outward** from the divide, so they take the
-    // whole uncertainty (see [cellBand] below).
-    final band = uncertaintyMeters > 0 ? uncertaintyMeters / 2 : 0.0;
-    final cellBand = uncertaintyMeters > 0 ? uncertaintyMeters : 0.0;
     // Plane/subspace clip to the viewport as a spherical quad; unproject its
     // (slightly inflated) corners once. Null at extreme zoom / near-pole.
     final corners = _viewportCorners(size);
@@ -192,7 +200,7 @@ class _RegionPainter extends CustomPainter {
           a: LatLng(p.aLat, p.aLng),
           b: LatLng(p.bLat, p.bLng),
           nearA: p.nearA,
-          bandMeters: cellBand,
+          bandMeters: band,
           viewportCorners: corners,
           bandInward: inverted,
         );
@@ -213,7 +221,7 @@ class _RegionPainter extends CustomPainter {
         final region = subspaceRegion(
           main: LatLng(mainPt.lat, mainPt.lng),
           others: others,
-          bandMeters: cellBand,
+          bandMeters: band,
           viewportCorners: corners,
           bandInward: inverted,
         );
@@ -232,20 +240,7 @@ class _RegionPainter extends CustomPainter {
           offsetMeters: l.offsetMeters,
           bandMeters: band,
           spanMeters: span,
-        );
-        addOuter(region.outer);
-        addCore(region.core);
-      }
-    }
-
-    if (freeAreas.isNotEmpty) {
-      for (final a in freeAreas) {
-        final pts = freeAreaPoints.where((p) => p.freeAreaId == a.id).toList();
-        if (pts.length < 3) continue;
-        final region = freeAreaRegion(
-          ring: <LatLng>[for (final p in pts) LatLng(p.lat, p.lng)],
-          offsetMeters: a.offsetMeters,
-          bandMeters: band,
+          bandInward: inverted,
         );
         addOuter(region.outer);
         addCore(region.core);
@@ -279,17 +274,155 @@ class _RegionPainter extends CustomPainter {
       ..strokeWidth = 1.5
       ..color = color;
 
-    // The outline traces the *nominal* boundary. For plane/subspace that's the
-    // strict cell (the true divide = the core edge), with the band as an outward
-    // halo; for the other types the nominal edge is the outer ring. When the
-    // layer is inverted the fill is bounded by `outer`, so trace that instead.
-    final bisectorCell = planes.isNotEmpty || subspaces.isNotEmpty;
-    final outline = (bisectorCell && !inverted) ? core : outer;
+    // The outline traces the *nominal* boundary, which every type keeps fixed
+    // regardless of invert: normally that's `core` (the band grows outward from
+    // it); when inverted the band shrinks inward so the nominal edge is `outer`.
+    final outline = inverted ? outer : core;
+
+    // Clip every path to the viewport via path-ops (double precision) before
+    // rasterising. A large object (e.g. an imported city border) projects its
+    // far vertices to screen coordinates well outside the view; Skia's scan
+    // converter mis-rasterises such paths and drops part of the fill — a clean
+    // straight cut across the shape. `canvas.clipRect` only masks the bad
+    // output, so it can't fix this; intersecting the geometry bounds the
+    // coordinates the rasteriser sees. Inflate past the canvas clip so any clip
+    // edges this introduces fall outside the visible area (they're masked by the
+    // `clipRect` above), keeping the stroked outline from tracing the viewport.
+    final clip = Path()..addRect((Offset.zero & size).inflate(4));
+    Path bounded(Path p) => Path.combine(PathOperation.intersect, p, clip);
 
     // Regions are disjoint, so paint order is irrelevant.
-    canvas.drawPath(solid, solidPaint);
-    canvas.drawPath(bandPath, bandPaint);
-    canvas.drawPath(outline, strokePaint);
+    canvas.drawPath(bounded(solid), solidPaint);
+    canvas.drawPath(bounded(bandPath), bandPaint);
+    canvas.drawPath(bounded(outline), strokePaint);
+  }
+
+  /// Paints a freehand-area layer. The nominal boundary (the outline) is the
+  /// union of the drawn rings with each object's signed offset applied; the
+  /// solid fills the interior (or, when inverted, the complement). The
+  /// uncertainty band is a uniform strip of [uncertaintyMeters] hugging the
+  /// boundary on the **uncoloured** side. Both the offset and the band are built
+  /// by *buffering* the boundary rather than walking its vertices, so they keep
+  /// a constant width around concave/convex corners alike — a vertex walk
+  /// self-crosses at reflex corners into spikes and islands on a city outline.
+  void _paintFreeAreas(Canvas canvas, Size size) {
+    Path? coreUnion;
+    for (final a in freeAreas) {
+      final pts = freeAreaPoints.where((p) => p.freeAreaId == a.id).toList();
+      if (pts.length < 3) continue;
+      final offs = <Offset>[
+        for (final p in pts) camera.latLngToScreenOffset(LatLng(p.lat, p.lng)),
+      ];
+      final path = _offsetCorePath(offs, a.offsetMeters);
+      coreUnion = coreUnion == null
+          ? path
+          : Path.combine(PathOperation.union, coreUnion, path);
+    }
+    final core = coreUnion;
+    if (core == null) return;
+
+    final solidPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = color.withValues(alpha: 0.45);
+    final bandPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeJoin = StrokeJoin.round
+      ..strokeCap = StrokeCap.round
+      ..color = color.withValues(alpha: 0.20);
+    final strokePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..color = color;
+
+    // Clip fills to the viewport via path-ops so the rasteriser never sees the
+    // huge off-screen coordinates a city-sized ring projects to (see the note in
+    // [paint]). Inflate past the canvas clip so introduced edges stay hidden.
+    final viewport = Path()..addRect((Offset.zero & size).inflate(4));
+    Path bounded(Path p) => Path.combine(PathOperation.intersect, p, viewport);
+
+    // Solid: interior normally, the viewport complement when inverted.
+    final solid = inverted
+        ? Path.combine(PathOperation.difference, viewport, core)
+        : core;
+    canvas.drawPath(bounded(solid), solidPaint);
+
+    final bandPx =
+        uncertaintyMeters > 0 ? _metersToPixels(camera.center, uncertaintyMeters) : 0.0;
+    if (bandPx > 0) {
+      // Stroke the boundary at twice the band width (centred on the line, so the
+      // kept half is exactly `band` wide) and clip to the uncoloured side. Clip
+      // the boundary itself to a little past the band's reach first, so the
+      // stroke only processes near-viewport geometry (bounding Skia's coords);
+      // any rect edges that introduces sit beyond the band reach, outside the
+      // visible clip.
+      final reach = Path()..addRect((Offset.zero & size).inflate(bandPx + 24));
+      final nearBoundary = Path.combine(PathOperation.intersect, core, reach);
+      final uncoloured = inverted
+          ? core
+          : Path.combine(PathOperation.difference, viewport, core);
+      canvas.save();
+      canvas.clipPath(uncoloured);
+      canvas.drawPath(nearBoundary, bandPaint..strokeWidth = 2 * bandPx);
+      canvas.restore();
+    }
+
+    // Outline traces the nominal boundary.
+    canvas.drawPath(bounded(core), strokePaint);
+  }
+
+  /// The nominal interior of one freehand ring [offs] (screen space) with its
+  /// signed [offsetMeters] applied: positive shrinks (erodes), negative grows
+  /// (dilates). Robust on concave outlines — instead of walking vertices it
+  /// buffers the boundary and subtracts it from / adds it to the ring, a
+  /// Minkowski erosion/dilation via path-ops.
+  Path _offsetCorePath(List<Offset> offs, double offsetMeters) {
+    final base = _offsetsToPath(offs);
+    if (offsetMeters == 0 || offs.length < 3) return base;
+    final rPx = _metersToPixels(camera.center, offsetMeters.abs());
+    if (rPx <= 0) return base;
+    final buffer = _boundaryBuffer(offs, rPx);
+    return offsetMeters > 0
+        ? Path.combine(PathOperation.difference, base, buffer)
+        : Path.combine(PathOperation.union, base, buffer);
+  }
+
+  /// A closed screen-space path through [offs].
+  Path _offsetsToPath(List<Offset> offs) {
+    final path = Path();
+    if (offs.isEmpty) return path;
+    path.moveTo(offs.first.dx, offs.first.dy);
+    for (var i = 1; i < offs.length; i++) {
+      path.lineTo(offs[i].dx, offs[i].dy);
+    }
+    path.close();
+    return path;
+  }
+
+  /// All points within [rPx] of the boundary through [offs]: the union of a
+  /// rectangle swept along each edge and a disk at each vertex (to round the
+  /// corners). Rectangles share one winding and disks another, so each set
+  /// unions under the non-zero rule before they're merged with path-ops.
+  Path _boundaryBuffer(List<Offset> offs, double rPx) {
+    final n = offs.length;
+    final rects = Path();
+    final disks = Path();
+    for (var i = 0; i < n; i++) {
+      final a = offs[i];
+      final b = offs[(i + 1) % n];
+      final d = b - a;
+      final len = d.distance;
+      if (len > 0) {
+        final nx = -d.dy / len * rPx;
+        final ny = d.dx / len * rPx;
+        rects.moveTo(a.dx + nx, a.dy + ny);
+        rects.lineTo(b.dx + nx, b.dy + ny);
+        rects.lineTo(b.dx - nx, b.dy - ny);
+        rects.lineTo(a.dx - nx, a.dy - ny);
+        rects.close();
+      }
+      disks.addOval(Rect.fromCircle(center: a, radius: rPx));
+    }
+    return Path.combine(PathOperation.union, rects, disks);
   }
 
   /// Paints a height layer: each region's stored polygons fill with an even-odd

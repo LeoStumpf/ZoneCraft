@@ -10,17 +10,20 @@ import 'package:latlong2/latlong.dart';
 /// geodesic here, by moving each vertex on the ground with [Distance] along its
 /// inward normal bearing — so a fixed `offsetMeters` holds a constant real-world
 /// width regardless of latitude. To match the engine's `band = outer − core`
-/// model the ring is inset by the signed `offsetMeters`: [outer] insets by
-/// `offsetMeters − bandMeters`, [core] by `offsetMeters + bandMeters`. A positive
-/// offset shrinks the filled interior inward; a negative one grows it outward.
+/// model one ring is the nominal interior (inset by `offsetMeters`) and the
+/// other offsets it by `bandMeters` to put the band on the **uncoloured** side:
+/// normally (`bandInward` false) [outer] grows past the ring (`offsetMeters −
+/// bandMeters`) and [core] is the nominal interior; when the layer is inverted
+/// (`bandInward` true) [outer] is the nominal interior and [core] is shrunk
+/// inward (`offsetMeters + bandMeters`).
 class FreeAreaRegion {
   const FreeAreaRegion(this.outer, this.core);
 
-  /// The interior enlarged by half the band, as a lat/lng ring. Empty when fewer
+  /// The interior on the band's outer edge, as a lat/lng ring. Empty when fewer
   /// than three finite points are given or an inset collapses the ring.
   final List<LatLng> outer;
 
-  /// The interior shrunk by half the band.
+  /// The interior on the band's inner edge.
   final List<LatLng> core;
 }
 
@@ -33,16 +36,19 @@ FreeAreaRegion freeAreaRegion({
   required List<LatLng> ring,
   required double offsetMeters,
   required double bandMeters,
+  bool bandInward = false,
 }) {
   final pts = <LatLng>[
     for (final p in ring)
       if (p.latitude.isFinite && p.longitude.isFinite) p,
   ];
   if (pts.length < 3) return const FreeAreaRegion(<LatLng>[], <LatLng>[]);
-  return FreeAreaRegion(
-    _inset(pts, offsetMeters - bandMeters),
-    _inset(pts, offsetMeters + bandMeters),
-  );
+  // Keep the nominal ring (inset by offset) on the coloured side; offset the
+  // other ring by the band onto the uncoloured side (outward by default, inward
+  // when inverted), so the band hugs the divide on its uncoloured side.
+  final outerInset = bandInward ? offsetMeters : offsetMeters - bandMeters;
+  final coreInset = bandInward ? offsetMeters + bandMeters : offsetMeters;
+  return FreeAreaRegion(_inset(pts, outerInset), _inset(pts, coreInset));
 }
 
 /// Insets the simple ring [p] inward by signed metres [d] (positive shrinks,

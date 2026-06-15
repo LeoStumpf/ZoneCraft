@@ -47,13 +47,21 @@ void main() {
     expect(area(r.core), closeTo(area(box), 1e-12));
   });
 
-  test('band: outer grows and core shrinks relative to the ring', () {
+  test('band grows outward from the nominal ring (normal layer)', () {
+    // Default: core is the nominal ring, outer grows past it (band outside).
     final r = freeAreaRegion(ring: box, offsetMeters: 0, bandMeters: 500);
-    expect(area(r.outer), greaterThan(area(box)));
-    expect(area(r.core), lessThan(area(box)));
-    // Core vertices sit inside the original ring; outer vertices outside it.
-    expect(r.core.every((v) => inside(box, v)), isTrue);
+    expect(area(r.core), closeTo(area(box), 1e-12)); // core = nominal ring
+    expect(area(r.outer), greaterThan(area(box))); // outer grown outward
     expect(r.outer.every((v) => !inside(box, v)), isTrue);
+  });
+
+  test('bandInward shrinks the band inside the ring (inverted layer)', () {
+    // Inverted: outer is the nominal ring, core shrinks inward (band inside).
+    final r = freeAreaRegion(
+        ring: box, offsetMeters: 0, bandMeters: 500, bandInward: true);
+    expect(area(r.outer), closeTo(area(box), 1e-12)); // outer = nominal ring
+    expect(area(r.core), lessThan(area(box))); // core shrunk inward
+    expect(r.core.every((v) => inside(box, v)), isTrue);
   });
 
   test('positive offset moves each vertex inward by ~offsetMeters', () {
