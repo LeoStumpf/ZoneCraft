@@ -100,7 +100,15 @@ lib/
 ## Plans
 
 **All planning docs live in the `planning/` folder, which is gitignored — they are local-only
-and never committed.** New plans/notes go there too.
+and never committed.** New plans/notes go there too. This is strict: **no planning/checklist/TODO
+`.md` files may live anywhere outside `planning/`** (the repo root keeps only genuine public docs
+— `README.md`, `PRIVACY.md`, `THIRD_PARTY_NOTICES.md`, `CLAUDE.md`). Likewise, generated
+release artifacts (Play Store screenshots, icons, feature graphics) go under
+`planning/play-store-assets/`, never committed.
+
+**Never commit/push anything referencing the old "jetlag" project name** — that name may only
+appear inside the gitignored `planning/` folder. If a tracked file (e.g. iOS `project.pbxproj`)
+ever picks one up, fix it to `com.leostumpf.zonecraft` / `ZoneCraft`.
 
 - `planning/PLAN.md` — current state + open points (the roadmap).
 - `planning/IMPLEMENTATION_PLAN.md` — architecture reference (rendering contract, data model,
