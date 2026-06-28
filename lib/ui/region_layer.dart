@@ -398,7 +398,7 @@ class _RegionPainter extends CustomPainter {
 
     Path? coreUnion; // the right-hand filled side, ∩ disk
     Path? diskUnion;
-    final boundary = Path(); // the dividing line(s), for outline + band buffer
+    final boundary = Path(); // the (offset-free) dividing line(s), for outline+band
     LatLng? bandRef; // a point to scale band metres → pixels
 
     for (final l in freeLines) {
@@ -422,8 +422,10 @@ class _RegionPainter extends CustomPainter {
       // = its right side), XOR'd inside the disk so a loop/re-crossing just flips
       // the side. Memoised (camera-independent) so a heavy import is re-split
       // only when its inputs change.
+      // Offset-free cut geometry (the offset is a render-time buffer below), so
+      // it is memoised independent of the offset.
       final sig = '${hashPoints(line)}|${inc.center.latitude}|'
-          '${inc.center.longitude}|${inc.radiusMeters}|${l.offsetMeters}';
+          '${inc.center.longitude}|${inc.radiusMeters}';
       final r = regionGeometryCache.halfDisk(
           l.id,
           sig,
@@ -431,7 +433,6 @@ class _RegionPainter extends CustomPainter {
                 points: line,
                 center: inc.center,
                 radiusMeters: inc.radiusMeters,
-                offsetMeters: l.offsetMeters,
               ));
 
       Path? corePath;
@@ -446,6 +447,29 @@ class _RegionPainter extends CustomPainter {
               corePath == null ? rp : Path.combine(PathOperation.xor, corePath, rp);
         }
       }
+
+      // Apply the signed offset by buffering the divider and growing/shrinking
+      // the filled side by |offset|. A buffer (overlapping segment quads + round
+      // joins) never self-intersects into an island, so a tight river bend no
+      // longer sprouts the spurious fold a vertex offset did.
+      if (corePath != null && l.offsetMeters != 0 && r.boundaries.isNotEmpty) {
+        final dPx = _metersToPixels(inc.center, l.offsetMeters.abs());
+        if (dPx > 0.5) {
+          final ribbon = Path.combine(
+              PathOperation.intersect, _ribbon(r.boundaries, dPx), diskPath);
+          corePath = l.offsetMeters > 0
+              ? Path.combine(PathOperation.difference, corePath, ribbon)
+              : Path.combine(
+                  PathOperation.intersect,
+                  Path.combine(PathOperation.union, corePath, ribbon),
+                  diskPath);
+        }
+      }
+
+      // Outline + band trace the offset-free divider — always a simple line, so
+      // they never inherit the self-cross a shifted divider would have. (With an
+      // offset the filled region is the buffered one above; the divider line
+      // still marks the river it was cut along.)
       for (final b in r.boundaries) {
         _addPolyline(boundary, b);
       }
@@ -496,7 +520,8 @@ class _RegionPainter extends CustomPainter {
         : 0.0;
     if (bandPx > 0) {
       canvas.save();
-      canvas.clipPath(bounded(Path.combine(PathOperation.intersect, uncoloured, disk)));
+      canvas.clipPath(
+          bounded(Path.combine(PathOperation.intersect, uncoloured, disk)));
       canvas.drawPath(boundary, bandPaint..strokeWidth = 2 * bandPx);
       canvas.restore();
     }
@@ -506,6 +531,36 @@ class _RegionPainter extends CustomPainter {
     canvas.clipPath(bounded(disk));
     canvas.drawPath(boundary, strokePaint);
     canvas.restore();
+  }
+
+  /// A filled screen-space buffer of [runs] — every point within [radiusPx] of
+  /// the polylines. Built as the union (non-zero winding) of one quad per segment
+  /// plus a disc at each vertex (round joins), so it is robust: overlapping or
+  /// self-crossing pieces just merge instead of carving even-odd holes. Used to
+  /// grow/shrink the freeline's filled side by a metric offset without the
+  /// island artefacts a vertex offset produces at tight bends.
+  Path _ribbon(List<List<LatLng>> runs, double radiusPx) {
+    final path = Path();
+    for (final run in runs) {
+      if (run.length < 2) continue;
+      final pts = [for (final p in run) camera.latLngToScreenOffset(p)];
+      for (var i = 0; i < pts.length - 1; i++) {
+        final a = pts[i], b = pts[i + 1];
+        final d = b - a;
+        final len = d.distance;
+        if (len == 0) continue;
+        final n = Offset(-d.dy / len, d.dx / len) * radiusPx; // left normal
+        path.moveTo(a.dx + n.dx, a.dy + n.dy);
+        path.lineTo(b.dx + n.dx, b.dy + n.dy);
+        path.lineTo(b.dx - n.dx, b.dy - n.dy);
+        path.lineTo(a.dx - n.dx, a.dy - n.dy);
+        path.close();
+      }
+      for (final p in pts) {
+        path.addOval(Rect.fromCircle(center: p, radius: radiusPx));
+      }
+    }
+    return path;
   }
 
   /// Appends [ring] as an **open** subpath (no close) to [path] — used to build

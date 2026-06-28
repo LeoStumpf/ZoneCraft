@@ -36,7 +36,6 @@ void main() {
       points: const <LatLng>[LatLng(0, 0)],
       center: center,
       radiusMeters: radius,
-      offsetMeters: 0,
     );
     expect(r.fillRings, isEmpty);
     expect(r.boundaries, isEmpty);
@@ -49,7 +48,6 @@ void main() {
       points: const <LatLng>[LatLng(1.0, -0.05), LatLng(1.0, 0.05)],
       center: center,
       radiusMeters: radius,
-      offsetMeters: 0,
     );
     expect(south.missesDisk, isTrue);
     expect(south.centreOnRight, isTrue);
@@ -58,7 +56,6 @@ void main() {
       points: const <LatLng>[LatLng(1.0, 0.05), LatLng(1.0, -0.05)],
       center: center,
       radiusMeters: radius,
-      offsetMeters: 0,
     );
     expect(north.missesDisk, isTrue);
     expect(north.centreOnRight, isFalse);
@@ -70,7 +67,6 @@ void main() {
       points: const <LatLng>[LatLng(0, -0.05), LatLng(0, 0.05)],
       center: center,
       radiusMeters: radius,
-      offsetMeters: 0,
     );
     expect(r.boundaries, isNotEmpty); // the dividing line is exposed
     expect(filled(r, const LatLng(-0.005, 0)), isTrue); // south → filled
@@ -90,7 +86,6 @@ void main() {
       ],
       center: center,
       radiusMeters: radius,
-      offsetMeters: 0,
     );
     expect(r.fillRings, isNotEmpty);
     expect(filled(r, const LatLng(-0.012, 0)), isTrue);
@@ -112,7 +107,6 @@ void main() {
       ],
       center: center,
       radiusMeters: radius,
-      offsetMeters: 0,
     );
     // Exactly one cut run (the channel); no fragment/connector runs.
     expect(r.fillRings.length, 1);
@@ -138,7 +132,6 @@ void main() {
       ],
       center: center,
       radiusMeters: radius,
-      offsetMeters: 0,
     );
     expect(r.missesDisk, isFalse); // the crossing survives the gap
     expect(r.fillRings.length, 1);
@@ -146,16 +139,8 @@ void main() {
     expect(filled(r, const LatLng(0, -0.005)), isFalse); // west → empty
   });
 
-  test('offset pushes the filled side outward across the line', () {
-    // West→east line; right side = south. A +1 km offset pushes the boundary
-    // 1 km into the filled (south) side, so a point 500 m south flips to empty.
-    final r = freeLineDiskRegion(
-      points: const <LatLng>[LatLng(0, -0.05), LatLng(0, 0.05)],
-      center: center,
-      radiusMeters: radius,
-      offsetMeters: 1000,
-    );
-    expect(filled(r, const LatLng(-0.0045, 0)), isFalse); // ~500 m south, now empty
-    expect(filled(r, const LatLng(-0.02, 0)), isTrue); // deeper south, still filled
-  });
+  // The signed offset is no longer baked into this geometry — it is applied by
+  // the painter as a buffer of `boundaries` (grow/shrink the filled side), which
+  // never self-intersects into a spurious island at a tight bend. So the cut
+  // geometry above stays simple regardless of any offset.
 }

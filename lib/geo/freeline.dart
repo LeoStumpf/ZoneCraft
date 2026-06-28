@@ -23,12 +23,17 @@ class FreeLineRegion {
       : missesDisk = false,
         centreOnRight = false;
 
-  /// Even-odd cut rings (one per run) → the filled side when XOR'd ∩ disk.
-  /// Empty when fewer than two finite points are given or the line misses the
-  /// disk entirely (the painter then fills all/none by the centre's side).
+  /// Even-odd cut rings (one per run) → the filled side when XOR'd ∩ disk. Always
+  /// **offset-free**, so the even-odd fill stays simple: a signed offset is
+  /// applied by the painter as a buffer of [boundaries] (which never
+  /// self-intersects into a spurious island at a tight bend), not by shifting
+  /// these vertices. Empty when fewer than two finite points are given or the
+  /// line misses the disk entirely (the painter fills all/none by the centre).
   final List<List<LatLng>> fillRings;
 
-  /// The dividing line(s) inside the disk, as open polylines, for outline + band.
+  /// The dividing line(s) inside the disk, as open polylines (offset-free). The
+  /// painter buffers these by |offset| to grow/shrink the filled side, and it
+  /// traces the coloured region's own edge for the outline + uncertainty band.
   final List<List<LatLng>> boundaries;
 
   /// True when the line does not reach the disk at all; [centreOnRight] then says
@@ -62,12 +67,13 @@ class _V {
 /// Builds the right-hand cut runs for the polyline [points], to be filled
 /// even-odd and bounded to the inclusion circle ([center], [radiusMeters]). The
 /// work is done in a local tangent plane around [center] (accurate at city
-/// scale), then converted back to lat/lng.
+/// scale), then converted back to lat/lng. The result is **offset-free**: a
+/// signed offset is applied later by the painter, as a buffer of the returned
+/// `boundaries`, so the even-odd fill never self-intersects.
 FreeLineRegion freeLineDiskRegion({
   required List<LatLng> points,
   required LatLng center,
   required double radiusMeters,
-  required double offsetMeters,
 }) {
   final pts = <LatLng>[
     for (final p in points)
@@ -92,30 +98,6 @@ FreeLineRegion freeLineDiskRegion({
   final r = radiusMeters;
   final p = [for (final q in pts) toPlane(q)];
 
-  // Per-segment right normals (right of travel = dir rotated −90°), averaged at
-  // each vertex so the offset miters cleanly.
-  final segN = <_V>[
-    for (var i = 0; i < p.length - 1; i++)
-      () {
-        final d = (p[i + 1] - p[i]).unit;
-        return _V(d.y, -d.x);
-      }(),
-  ];
-  final vNorm = <_V>[
-    for (var i = 0; i < p.length; i++)
-      () {
-        final a = i > 0 ? segN[i - 1] : null;
-        final b = i < segN.length ? segN[i] : null;
-        if (a == null) return b!;
-        if (b == null) return a;
-        final s = a + b;
-        return s.len < 1e-9 ? a : s.unit;
-      }(),
-  ];
-
-  List<_V> offsetLine(double shift) =>
-      [for (var i = 0; i < p.length; i++) p[i] + vNorm[i].scale(shift)];
-
   // An imported feature is often stitched from disjoint OSM ways joined by long
   // straight connectors (tens of km). Those connectors are not part of the real
   // line and must not act as cuts, so the line is broken wherever a segment is a
@@ -136,13 +118,10 @@ FreeLineRegion freeLineDiskRegion({
   // that both get dropped, leaving the whole disk on one side (nothing fills).
   final jumpLen = max(max(8 * median, 1500.0), 2 * r);
 
-  // The cut runs (offset by the user's signed offset), shared by the fill and
-  // the boundary. The band is no longer a second offset region — the painter
-  // buffers these boundary lines — so there is no flip between two cut sides.
-  final runs = _cutRuns(offsetLine(offsetMeters), r, jumpLen);
+  final runs = _cutRuns(p, r, jumpLen);
   if (runs.isEmpty) {
     // The line misses the disk: the whole disk is one side.
-    return FreeLineRegion.miss(_pointRight(const _V(0, 0), offsetLine(offsetMeters)));
+    return FreeLineRegion.miss(_pointRight(const _V(0, 0), p));
   }
 
   final fillRings = <List<LatLng>>[];
