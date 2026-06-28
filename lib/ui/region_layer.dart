@@ -386,20 +386,20 @@ class _RegionPainter extends CustomPainter {
     canvas.drawPath(bounded(core), strokePaint);
   }
 
-  /// Paints a freehand-line layer. Each line is bounded to an **inclusion
-  /// circle**, so the filled region is `(disk) ∩ (one side of the line)` — a
-  /// clean half-disk — and the per-layer invert fills the *other* half of the
-  /// same disk (not the viewport complement). The half-plane `outer`/`core`
-  /// rings come from [freeLineRegion] (its straight extension + far cap only
-  /// need to overshoot the disk before we clip), then we intersect with the
-  /// circle in screen space. The band (`outer − core`) auto-vanishes along the
-  /// arc and shows only along the dividing chord, on the uncoloured side.
+  /// Paints a freehand-line layer. Each line **cuts** its inclusion circle: the
+  /// filled side is the even-odd XOR of the cut runs ∩ the disk, and the layer's
+  /// invert fills the other side (`disk − filled`). The uncertainty band is the
+  /// strip of the *uncoloured* side closest to the dividing line — obtained by
+  /// stroking the boundary line (only the line, never the circle arc) by twice
+  /// the uncertainty radius and clipping it to the uncoloured side — so it can
+  /// never end up on the far side. The outline traces the dividing line.
   void _paintFreeLines(Canvas canvas, Size size) {
-    final band = uncertaintyMeters > 0 ? uncertaintyMeters : 0.0;
+    final bandMeters = uncertaintyMeters > 0 ? uncertaintyMeters : 0.0;
 
-    Path? outerUnion;
-    Path? coreUnion;
+    Path? coreUnion; // the right-hand filled side, ∩ disk
     Path? diskUnion;
+    final boundary = Path(); // the dividing line(s), for outline + band buffer
+    LatLng? bandRef; // a point to scale band metres → pixels
 
     for (final l in freeLines) {
       final pts = freeLinePoints.where((p) => p.freeLineId == l.id).toList();
@@ -416,15 +416,14 @@ class _RegionPainter extends CustomPainter {
           regionGeometryCache.circleRing(inc.center, inc.radiusMeters, _ringPoints);
       if (ring.length < 3) continue;
       final diskPath = _ringToPath(ring);
+      bandRef ??= inc.center;
 
-      // Treat the line as a cut: each continuous run becomes an even-odd ring
-      // (filled = the run's right side), intersect each with the disk and XOR
-      // the runs — so a river that loops or crosses the disk more than once just
-      // flips the side. Memoised (camera-independent) so a heavy imported river
-      // is re-split only when its inputs change.
+      // Treat the line as a cut: each continuous run is an even-odd ring (filled
+      // = its right side), XOR'd inside the disk so a loop/re-crossing just flips
+      // the side. Memoised (camera-independent) so a heavy import is re-split
+      // only when its inputs change.
       final sig = '${hashPoints(line)}|${inc.center.latitude}|'
-          '${inc.center.longitude}|${inc.radiusMeters}|${l.offsetMeters}|'
-          '$band|$inverted';
+          '${inc.center.longitude}|${inc.radiusMeters}|${l.offsetMeters}';
       final r = regionGeometryCache.halfDisk(
           l.id,
           sig,
@@ -433,36 +432,27 @@ class _RegionPainter extends CustomPainter {
                 center: inc.center,
                 radiusMeters: inc.radiusMeters,
                 offsetMeters: l.offsetMeters,
-                bandMeters: band,
-                bandInward: inverted,
               ));
 
-      // The right-hand region for a set of cut runs, clipped to the disk: XOR
-      // the runs so each crossing flips the side. When the line misses the disk
-      // the whole disk is one side (fill all / nothing by the centre).
-      Path? regionOf(List<List<LatLng>> runs) {
-        if (r.missesDisk) return r.centreOnRight ? diskPath : null;
-        Path? acc;
-        for (final run in runs) {
-          if (run.length < 3) continue;
+      Path? corePath;
+      if (r.missesDisk) {
+        corePath = r.centreOnRight ? diskPath : null;
+      } else {
+        for (final fr in r.fillRings) {
+          if (fr.length < 3) continue;
           final rp = Path.combine(
-              PathOperation.intersect, _ringToPathEvenOdd(run), diskPath);
-          acc = acc == null ? rp : Path.combine(PathOperation.xor, acc, rp);
+              PathOperation.intersect, _ringToPathEvenOdd(fr), diskPath);
+          corePath =
+              corePath == null ? rp : Path.combine(PathOperation.xor, corePath, rp);
         }
-        return acc;
       }
-
-      final outerPath = regionOf(r.outer);
-      final corePath = regionOf(r.core);
+      for (final b in r.boundaries) {
+        _addPolyline(boundary, b);
+      }
 
       diskUnion = diskUnion == null
           ? diskPath
           : Path.combine(PathOperation.union, diskUnion, diskPath);
-      if (outerPath != null) {
-        outerUnion = outerUnion == null
-            ? outerPath
-            : Path.combine(PathOperation.union, outerUnion, outerPath);
-      }
       if (corePath != null) {
         coreUnion = coreUnion == null
             ? corePath
@@ -470,39 +460,64 @@ class _RegionPainter extends CustomPainter {
       }
     }
 
-    final outer = outerUnion;
-    if (outer == null || diskUnion == null) return;
+    final disk = diskUnion;
+    if (disk == null) return;
     final core = coreUnion ?? Path();
 
-    final bandPath = Path.combine(PathOperation.difference, outer, core);
-
-    // Solid: the chosen half-disk normally; the *other* half of the disk when
-    // inverted (the disk complement, not the viewport).
-    final solid = inverted
-        ? Path.combine(PathOperation.difference, diskUnion, outer)
-        : core;
+    // Coloured side, and the uncoloured complement within the disk.
+    final coloured =
+        inverted ? Path.combine(PathOperation.difference, disk, core) : core;
+    final uncoloured =
+        inverted ? core : Path.combine(PathOperation.difference, disk, core);
 
     final solidPaint = Paint()
       ..style = PaintingStyle.fill
       ..color = color.withValues(alpha: 0.45);
     final bandPaint = Paint()
-      ..style = PaintingStyle.fill
+      ..style = PaintingStyle.stroke
+      ..strokeJoin = StrokeJoin.round
+      ..strokeCap = StrokeCap.round
       ..color = color.withValues(alpha: 0.20);
     final strokePaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5
       ..color = color;
 
-    // Outline traces the nominal boundary (core normally, outer when inverted),
-    // i.e. the half-disk perimeter — the dividing chord plus its cap arc.
-    final outline = inverted ? outer : core;
-
     final clip = Path()..addRect((Offset.zero & size).inflate(4));
     Path bounded(Path p) => Path.combine(PathOperation.intersect, p, clip);
 
-    canvas.drawPath(bounded(solid), solidPaint);
-    canvas.drawPath(bounded(bandPath), bandPaint);
-    canvas.drawPath(bounded(outline), strokePaint);
+    canvas.drawPath(bounded(coloured), solidPaint);
+
+    // Band: the uncertainty-wide strip of the uncoloured side hugging the line.
+    // Stroke the dividing line at 2× the radius and clip it to the uncoloured
+    // side ∩ disk, so only the near strip (never the arc) lights up.
+    final bandPx = bandMeters > 0 && bandRef != null
+        ? _metersToPixels(bandRef, bandMeters)
+        : 0.0;
+    if (bandPx > 0) {
+      canvas.save();
+      canvas.clipPath(bounded(Path.combine(PathOperation.intersect, uncoloured, disk)));
+      canvas.drawPath(boundary, bandPaint..strokeWidth = 2 * bandPx);
+      canvas.restore();
+    }
+
+    // Outline: the dividing line, clipped to the disk.
+    canvas.save();
+    canvas.clipPath(bounded(disk));
+    canvas.drawPath(boundary, strokePaint);
+    canvas.restore();
+  }
+
+  /// Appends [ring] as an **open** subpath (no close) to [path] — used to build
+  /// the freehand-line boundary for stroking.
+  void _addPolyline(Path path, List<LatLng> ring) {
+    if (ring.length < 2) return;
+    final o0 = camera.latLngToScreenOffset(ring[0]);
+    path.moveTo(o0.dx, o0.dy);
+    for (var i = 1; i < ring.length; i++) {
+      final o = camera.latLngToScreenOffset(ring[i]);
+      path.lineTo(o.dx, o.dy);
+    }
   }
 
   /// A screen-space even-odd path through [contours] (so holes/islands read

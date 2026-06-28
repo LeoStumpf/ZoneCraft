@@ -9,40 +9,38 @@ import 'package:latlong2/latlong.dart';
 /// handling — they are simply "the other side" again — so a meandering river
 /// never scatters the fill or closes with a stray chord.
 ///
-/// Each returned *run* is one continuous piece of the line clipped to the disk
-/// neighbourhood and closed by a far arc; filled **even-odd** it gives one side
-/// of that piece. The painter intersects each run with the disk and **XORs** the
-/// runs together (a river that enters/leaves the disk more than once just flips
-/// the side at each crossing) — the right-hand side by default; the layer's
-/// invert fills the complement (`disk − right`).
-///
-/// To match the engine's `band = outer − core` model the [outer] runs are the
-/// nominal cut grown onto the uncoloured side by `bandMeters` and the [core]
-/// runs the nominal cut, both offset by `offsetMeters` first (a positive offset
-/// pushes the cut into the filled side). `bandInward` swaps which gets the band.
+/// Each continuous piece of the line clipped to the disk is one *run*. [fillRings]
+/// closes each run with a far arc; filled **even-odd** and XOR'd inside the disk
+/// they give one side of the cut (the right-hand side; the layer's invert fills
+/// the complement `disk − right`). [boundaries] are the same runs as **open**
+/// polylines — the dividing line itself, inside the disk — which the painter
+/// strokes for the outline and buffers (by the uncertainty radius) for the band,
+/// so the band is always the strip of the *uncoloured* side closest to the line
+/// (the arc is never banded). A positive `offsetMeters` pushes the cut into the
+/// filled side before any of this.
 class FreeLineRegion {
-  const FreeLineRegion(this.outer, this.core)
+  const FreeLineRegion(this.fillRings, this.boundaries)
       : missesDisk = false,
         centreOnRight = false;
 
-  /// Even-odd cut rings (one per continuous run) for the band's outer edge.
+  /// Even-odd cut rings (one per run) → the filled side when XOR'd ∩ disk.
   /// Empty when fewer than two finite points are given or the line misses the
   /// disk entirely (the painter then fills all/none by the centre's side).
-  final List<List<LatLng>> outer;
+  final List<List<LatLng>> fillRings;
 
-  /// Even-odd cut rings for the band's inner edge.
-  final List<List<LatLng>> core;
+  /// The dividing line(s) inside the disk, as open polylines, for outline + band.
+  final List<List<LatLng>> boundaries;
 
-  /// True when the line does not reach the disk at all and [outer]/[core] are
-  /// empty; [centreOnRight] then says whether the whole disk is the filled side.
+  /// True when the line does not reach the disk at all; [centreOnRight] then says
+  /// whether the whole disk is the filled side.
   final bool missesDisk;
 
   /// Whether the disk centre is on the right (filled) side when [missesDisk].
   final bool centreOnRight;
 
   const FreeLineRegion.miss(this.centreOnRight)
-      : outer = const [],
-        core = const [],
+      : fillRings = const [],
+        boundaries = const [],
         missesDisk = true;
 }
 
@@ -70,8 +68,6 @@ FreeLineRegion freeLineDiskRegion({
   required LatLng center,
   required double radiusMeters,
   required double offsetMeters,
-  required double bandMeters,
-  bool bandInward = false,
 }) {
   final pts = <LatLng>[
     for (final p in points)
@@ -134,27 +130,23 @@ FreeLineRegion freeLineDiskRegion({
   // untouched. The floor keeps a very dense line from breaking on minor jitter.
   final jumpLen = max(8 * median, 1500.0);
 
-  // Does any real piece of the line reach the disk?
-  final nominal = offsetLine(offsetMeters);
-  if (_cutRuns(nominal, r, jumpLen).isEmpty) {
+  // The cut runs (offset by the user's signed offset), shared by the fill and
+  // the boundary. The band is no longer a second offset region — the painter
+  // buffers these boundary lines — so there is no flip between two cut sides.
+  final runs = _cutRuns(offsetLine(offsetMeters), r, jumpLen);
+  if (runs.isEmpty) {
     // The line misses the disk: the whole disk is one side.
-    return FreeLineRegion.miss(_pointRight(const _V(0, 0), nominal));
+    return FreeLineRegion.miss(_pointRight(const _V(0, 0), offsetLine(offsetMeters)));
   }
 
-  final outerShift = bandInward ? offsetMeters : offsetMeters - bandMeters;
-  final coreShift = bandInward ? offsetMeters + bandMeters : offsetMeters;
-
-  List<List<LatLng>> build(double shift) {
-    final runs = _cutRuns(offsetLine(shift), r, jumpLen);
-    final out = <List<LatLng>>[];
-    for (final run in runs) {
-      final ring = _cutRing(run, r);
-      if (ring.length >= 3) out.add([for (final v in ring) toLatLng(v)]);
-    }
-    return out;
+  final fillRings = <List<LatLng>>[];
+  final boundaries = <List<LatLng>>[];
+  for (final run in runs) {
+    final ring = _cutRing(run, r);
+    if (ring.length >= 3) fillRings.add([for (final v in ring) toLatLng(v)]);
+    boundaries.add([for (final v in run) toLatLng(v)]);
   }
-
-  return FreeLineRegion(build(outerShift), build(coreShift));
+  return FreeLineRegion(fillRings, boundaries);
 }
 
 /// Extracts the cut runs of [line] within the disk of radius [r]. The line is
