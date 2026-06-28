@@ -26,6 +26,9 @@ class ExportObject {
     this.thresholdMeters,
     this.aboveThreshold,
     this.sampleZoom,
+    this.inclusionLat,
+    this.inclusionLng,
+    this.inclusionRadiusMeters,
   });
 
   /// One of: circle, plane, subspace, freeline, freearea, height.
@@ -39,6 +42,11 @@ class ExportObject {
   final bool? nearA;
   // freeline / freearea
   final double? offsetMeters;
+  // freeline: the inclusion circle that bounds the line to a half-disk (null =
+  // derived from the line's extent on import)
+  final double? inclusionLat;
+  final double? inclusionLng;
+  final double? inclusionRadiusMeters;
   // subspace: index into [coords] of the main point
   final int? mainIndex;
   // height: elevation threshold, direction and sample zoom (the generated
@@ -123,6 +131,10 @@ Map<String, dynamic> _objectToFeature(ExportObject o, int layerIndex) {
     if (o.thresholdMeters != null) 'thresholdMeters': o.thresholdMeters,
     if (o.aboveThreshold != null) 'aboveThreshold': o.aboveThreshold,
     if (o.sampleZoom != null) 'sampleZoom': o.sampleZoom,
+    if (o.inclusionLat != null) 'inclusionLat': o.inclusionLat,
+    if (o.inclusionLng != null) 'inclusionLng': o.inclusionLng,
+    if (o.inclusionRadiusMeters != null)
+      'inclusionRadiusMeters': o.inclusionRadiusMeters,
   };
   final Map<String, dynamic> geometry;
   switch (o.kind) {
@@ -226,6 +238,9 @@ ExportObject? _featureToObject(Map f) {
     thresholdMeters: (props['thresholdMeters'] as num?)?.toDouble(),
     aboveThreshold: props['aboveThreshold'] as bool?,
     sampleZoom: (props['sampleZoom'] as num?)?.toInt(),
+    inclusionLat: (props['inclusionLat'] as num?)?.toDouble(),
+    inclusionLng: (props['inclusionLng'] as num?)?.toDouble(),
+    inclusionRadiusMeters: (props['inclusionRadiusMeters'] as num?)?.toDouble(),
   );
 }
 

@@ -110,6 +110,14 @@ class FreeLines extends Table {
 
   /// Signed offset in metres (see class doc). 0 = boundary sits on the line.
   RealColumn get offsetMeters => real().withDefault(const Constant(0))();
+
+  /// The line is bounded to an **inclusion circle**: the filled region is
+  /// `(disk) ∩ (one side of the line)`, so the two sides read as two clean
+  /// half-disks. Null until set (legacy rows / unset) — the renderer then
+  /// derives a default circle from the line's own extent.
+  RealColumn get inclusionLat => real().nullable()();
+  RealColumn get inclusionLng => real().nullable()();
+  RealColumn get inclusionRadiusMeters => real().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 
   @override
@@ -342,7 +350,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 14;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -402,6 +410,11 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 13) {
             await m.addColumn(subspacePoints, subspacePoints.label);
+          }
+          if (from < 14) {
+            await m.addColumn(freeLines, freeLines.inclusionLat);
+            await m.addColumn(freeLines, freeLines.inclusionLng);
+            await m.addColumn(freeLines, freeLines.inclusionRadiusMeters);
           }
         },
         beforeOpen: (details) async {

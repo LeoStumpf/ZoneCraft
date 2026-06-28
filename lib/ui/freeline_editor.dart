@@ -1,11 +1,13 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../data/database.dart';
 import '../data/repository.dart';
 import '../geo/coords.dart';
 import '../state/providers.dart';
+import 'region_geometry.dart';
 
 /// Docked bottom-sheet editor for a freehand line (polyline). Lists the line's
 /// ordered points — each a single "lat, lng" field with a place-by-tap button
@@ -35,8 +37,18 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
   final Map<String, FocusNode> _focus = {};
   late final TextEditingController _label;
   late final TextEditingController _offset;
+  late final TextEditingController _radius;
 
   Repository get _repo => ref.read(repositoryProvider);
+
+  /// The inclusion circle currently in effect (stored, or derived from the line
+  /// when unset), for prefilling the radius field and persisting a stable centre.
+  ({LatLng center, double radiusMeters}) get _inclusion => effectiveInclusion(
+        lat: widget.freeLine.inclusionLat,
+        lng: widget.freeLine.inclusionLng,
+        radiusMeters: widget.freeLine.inclusionRadiusMeters,
+        points: [for (final p in widget.points) LatLng(p.lat, p.lng)],
+      );
 
   @override
   void initState() {
@@ -44,6 +56,8 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
     _label = TextEditingController(text: widget.freeLine.label ?? '');
     _offset =
         TextEditingController(text: widget.freeLine.offsetMeters.round().toString());
+    _radius =
+        TextEditingController(text: _inclusion.radiusMeters.round().toString());
   }
 
   @override
@@ -75,6 +89,7 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
     }
     _label.dispose();
     _offset.dispose();
+    _radius.dispose();
     super.dispose();
   }
 
@@ -92,6 +107,26 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
       ..showSnackBar(
         SnackBar(content: Text('Tap the map to place point ${displayIndex + 1}')),
       );
+  }
+
+  void _armCenter() {
+    ref.read(freeLineCenterPlacementProvider.notifier).arm(true);
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(const SnackBar(
+          content: Text('Tap the map to place the inclusion circle’s centre')));
+  }
+
+  void _setRadius(double r) {
+    // Persist a stable centre alongside the radius, so a line whose circle was
+    // only ever derived (legacy/unset) stops drifting when its points change.
+    final inc = _inclusion;
+    _repo.updateFreeLine(
+      widget.freeLine.id,
+      inclusionRadiusMeters: r,
+      inclusionLat: widget.freeLine.inclusionLat ?? inc.center.latitude,
+      inclusionLng: widget.freeLine.inclusionLng ?? inc.center.longitude,
+    );
   }
 
   Future<void> _addPoint() async {
@@ -114,6 +149,7 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
   @override
   Widget build(BuildContext context) {
     final armed = ref.watch(freeLinePlacementProvider);
+    final centerArmed = ref.watch(freeLineCenterPlacementProvider);
     final id = widget.freeLine.id;
     final lineLayers = widget.layers.where((l) => l.type == 'freeline').toList();
 
@@ -164,8 +200,9 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
                 ],
               ),
               Text(
-                'Fills one side of the drawn line. Use the layer’s Invert to '
-                'flip sides. Ends are extended straight to split the whole view.',
+                'Fills one half of an inclusion circle, split by the drawn line. '
+                'Use the layer’s Invert to fill the other half. Set the circle’s '
+                'radius below and move its centre by tapping the map.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 8),
@@ -190,6 +227,39 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
                     label: const Text('Add point'),
                   ),
                   const Spacer(),
+                  TextButton.icon(
+                    onPressed: _armCenter,
+                    icon: Icon(centerArmed
+                        ? Icons.adjust
+                        : Icons.adjust_outlined),
+                    style: centerArmed
+                        ? TextButton.styleFrom(
+                            foregroundColor:
+                                Theme.of(context).colorScheme.primary)
+                        : null,
+                    label: const Text('Move centre'),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _radius,
+                      decoration: const InputDecoration(
+                        labelText: 'Inclusion radius (m)',
+                        helperText: 'Circle the line splits in two',
+                        isDense: true,
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true),
+                      onChanged: (s) {
+                        final n = double.tryParse(s);
+                        if (n != null && n.isFinite && n > 0) _setRadius(n);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   SizedBox(
                     width: 130,
                     child: TextField(

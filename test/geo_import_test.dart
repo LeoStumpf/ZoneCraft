@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:zonecraft/data/geo_import.dart';
 
 void main() {
@@ -102,6 +103,48 @@ void main() {
           '"coordinates":[[1,2],[3,4]]}}'));
       final feats = parseExternalGeometry('x.geojson', bytes);
       expect(feats, hasLength(1));
+    });
+  });
+
+  group('stitchPolylines', () {
+    test('chains contiguous parts into one ordered polyline', () {
+      final parts = [
+        [const LatLng(0, 0), const LatLng(0, 1)],
+        [const LatLng(0, 1), const LatLng(0, 2)],
+        [const LatLng(0, 2), const LatLng(0, 3)],
+      ];
+      final line = stitchPolylines(parts);
+      expect(line.first, const LatLng(0, 0));
+      expect(line.last, const LatLng(0, 3));
+      // monotonically increasing longitude across the join
+      for (var i = 1; i < line.length; i++) {
+        expect(line[i].longitude, greaterThanOrEqualTo(line[i - 1].longitude));
+      }
+    });
+
+    test('reverses a part whose orientation is flipped', () {
+      final parts = [
+        [const LatLng(0, 0), const LatLng(0, 1)],
+        [const LatLng(0, 2), const LatLng(0, 1)], // reversed orientation
+      ];
+      final line = stitchPolylines(parts);
+      expect(line.last, const LatLng(0, 2));
+    });
+
+    test('handles a single part and empty input', () {
+      expect(
+        stitchPolylines([
+          [const LatLng(1, 1), const LatLng(2, 2)]
+        ]),
+        hasLength(2),
+      );
+      expect(stitchPolylines(const []), isEmpty);
+      expect(
+        stitchPolylines([
+          [const LatLng(1, 1)] // too short, dropped
+        ]),
+        isEmpty,
+      );
     });
   });
 }

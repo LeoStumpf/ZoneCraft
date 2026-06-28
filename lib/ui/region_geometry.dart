@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:latlong2/latlong.dart';
 
 import '../geo/geodesic.dart';
@@ -65,6 +67,14 @@ class ViewBound {
         LatLng(minLat, minLng),
       ];
 
+  LatLng get center => LatLng((minLat + maxLat) / 2, (minLng + maxLng) / 2);
+
+  bool containsPoint(LatLng p) =>
+      p.latitude >= minLat &&
+      p.latitude <= maxLat &&
+      p.longitude >= minLng &&
+      p.longitude <= maxLng;
+
   static const Distance _distance = Distance(calculator: Haversine());
 
   /// Diagonal length in metres — a characteristic size for freeline extension.
@@ -120,6 +130,36 @@ class _BoundEntry {
   final ViewBound bound;
   final Rings rings;
 }
+
+/// The inclusion circle that bounds a freehand line to a clean half-disk. Uses
+/// the stored [lat]/[lng]/[radiusMeters] when all are present and the radius is
+/// positive; otherwise derives a sensible default from the line's own [points]
+/// — centred on their bounding-box midpoint with a radius covering the line
+/// (`diagonal * 0.75`, never below [_minDerivedRadius]). Legacy rows (no stored
+/// circle) thus still render as a bounded half-disk.
+({LatLng center, double radiusMeters}) effectiveInclusion({
+  required double? lat,
+  required double? lng,
+  required double? radiusMeters,
+  required List<LatLng> points,
+}) {
+  if (lat != null &&
+      lng != null &&
+      radiusMeters != null &&
+      lat.isFinite &&
+      lng.isFinite &&
+      radiusMeters.isFinite &&
+      radiusMeters > 0) {
+    return (center: LatLng(lat, lng), radiusMeters: radiusMeters);
+  }
+  final bound = ViewBound.ofCorners(points);
+  final r = math.max(bound.diagonalMeters * 0.75, _minDerivedRadius);
+  return (center: bound.center, radiusMeters: r);
+}
+
+/// Floor for a derived inclusion radius, so a tiny drawn line still gets a
+/// usable disk.
+const double _minDerivedRadius = 300;
 
 /// A cheap order-sensitive hash of [points], for cache signatures.
 int hashPoints(Iterable<LatLng> points) {

@@ -187,6 +187,20 @@ final freeLinePlacementProvider =
     NotifierProvider<FreeLinePlacementNotifier, String?>(
         FreeLinePlacementNotifier.new);
 
+/// While a freehand line is selected, whether the next map tap relocates its
+/// inclusion-circle centre. (Mirrors [heightPlacementProvider] for the height
+/// region centre.)
+class FreeLineCenterPlacementNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void arm(bool on) => state = on;
+}
+
+final freeLineCenterPlacementProvider =
+    NotifierProvider<FreeLineCenterPlacementNotifier, bool>(
+        FreeLineCenterPlacementNotifier.new);
+
 /// Id of the currently selected freehand area, or null. Mutually exclusive with
 /// the other object selections.
 class SelectedFreeAreaNotifier extends Notifier<String?> {

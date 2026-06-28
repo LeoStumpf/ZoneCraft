@@ -23,6 +23,7 @@ import 'height_editor.dart';
 import 'layers_panel.dart';
 import 'plane_editor.dart';
 import 'poi_import_dialog.dart';
+import 'region_geometry.dart';
 import 'region_layer.dart';
 import 'subspace_editor.dart';
 
@@ -725,6 +726,29 @@ class _MapScreenState extends ConsumerState<MapScreen>
     );
   }
 
+  /// Handle marking a freehand line's inclusion-circle centre — a crosshair so
+  /// it reads differently from the line's point dots. Tapping it arms a centre
+  /// relocation (same as the editor's "Move centre" button).
+  Marker _inclusionCenterMarker(LatLng point) {
+    return _labeledMarker(
+      point,
+      coreSize: 28,
+      core: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () =>
+            ref.read(freeLineCenterPlacementProvider.notifier).arm(true),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.black87, width: 2),
+          ),
+          child: const Icon(Icons.add, size: 18, color: Colors.black87),
+        ),
+      ),
+    );
+  }
+
   /// The decorated dot used by edit-point markers. The [main] subspace point is
   /// drawn larger and white-filled so it stands out from the others.
   Widget _editPointDot({bool main = false}) {
@@ -1061,6 +1085,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     ref.read(subspacePlacementProvider.notifier).arm(null);
     ref.read(selectedFreeLineProvider.notifier).select(null);
     ref.read(freeLinePlacementProvider.notifier).arm(null);
+    ref.read(freeLineCenterPlacementProvider.notifier).arm(false);
     ref.read(selectedFreeAreaProvider.notifier).select(null);
     ref.read(freeAreaPlacementProvider.notifier).arm(null);
     ref.read(selectedHeightRegionProvider.notifier).select(null);
@@ -1303,7 +1328,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
       _selectFreeLine(existing.id);
       return;
     }
-    final id = await repo.createFreeLine(layerId: layer.id);
+    // Bound the new line to an inclusion circle centred on the map, sized so the
+    // two seed points sit comfortably inside it; the line fills a clean half of
+    // this disk (Invert flips to the other half).
+    final id = await repo.createFreeLine(
+      layerId: layer.id,
+      inclusionLat: center.latitude,
+      inclusionLng: center.longitude,
+      inclusionRadiusMeters: dist * 3,
+    );
     final w = _hitTest.offset(center, dist, -90); // west
     final e = _hitTest.offset(center, dist, 90); // east
     await repo.addFreeLinePoint(
@@ -1364,6 +1397,20 @@ class _MapScreenState extends ConsumerState<MapScreen>
               centerLng: latlng.longitude,
             );
         ref.read(heightPlacementProvider.notifier).arm(false);
+        return;
+      }
+    }
+
+    // Placement mode: relocate the selected freehand line's inclusion centre.
+    if (ref.read(freeLineCenterPlacementProvider)) {
+      final selId = ref.read(selectedFreeLineProvider);
+      if (selId != null) {
+        await ref.read(repositoryProvider).updateFreeLine(
+              selId,
+              inclusionLat: latlng.latitude,
+              inclusionLng: latlng.longitude,
+            );
+        ref.read(freeLineCenterPlacementProvider.notifier).arm(false);
         return;
       }
     }
@@ -1573,6 +1620,20 @@ class _MapScreenState extends ConsumerState<MapScreen>
         : freeLinePoints
             .where((p) => p.freeLineId == selectedFreeLine.id)
             .toList();
+    // The inclusion circle bounding the selected line, drawn as an edit guide
+    // with a draggable-by-tap centre handle.
+    final selectedFreeLineInclusion = selectedFreeLine == null
+        ? null
+        : effectiveInclusion(
+            lat: selectedFreeLine.inclusionLat,
+            lng: selectedFreeLine.inclusionLng,
+            radiusMeters: selectedFreeLine.inclusionRadiusMeters,
+            points: [for (final p in selectedFreeLinePoints) LatLng(p.lat, p.lng)],
+          );
+    final selectedFreeLineCircle = selectedFreeLineInclusion == null
+        ? const <LatLng>[]
+        : geodesicCircle(selectedFreeLineInclusion.center,
+            selectedFreeLineInclusion.radiusMeters);
     final selectedFreeArea = freeAreas
         .where((a) => a.id == ref.watch(selectedFreeAreaProvider))
         .firstOrNull;
@@ -1771,6 +1832,21 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               : const <HeightPolygonPoint>[],
                           uncertaintyMeters: uncertainty,
                         ),
+                    // Outline of the selected line's inclusion circle, so the
+                    // half-disk it splits is visible while editing.
+                    if (selectedFreeLineCircle.isNotEmpty)
+                      PolylineLayer(
+                        polylines: [
+                          Polyline(
+                            points: [
+                              ...selectedFreeLineCircle,
+                              selectedFreeLineCircle.first,
+                            ],
+                            color: Colors.black54,
+                            strokeWidth: 1.5,
+                          ),
+                        ],
+                      ),
                     // Dashed outline of the freehand object being edited, so the
                     // drawn polyline/ring is visible while placing points.
                     if (selectedFreeLine != null &&
@@ -1942,6 +2018,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             _subspacePointMarker(p),
                           for (final p in selectedFreeLinePoints)
                             _editPointMarker(LatLng(p.lat, p.lng)),
+                          if (selectedFreeLineInclusion != null)
+                            _inclusionCenterMarker(
+                                selectedFreeLineInclusion.center),
                           for (final p in selectedFreeAreaPoints)
                             _editPointMarker(LatLng(p.lat, p.lng)),
                         ],

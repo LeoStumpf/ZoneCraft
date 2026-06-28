@@ -315,13 +315,22 @@ class Repository {
         .watch();
   }
 
-  Future<String> createFreeLine({required String layerId, String? label}) async {
+  Future<String> createFreeLine({
+    required String layerId,
+    String? label,
+    double? inclusionLat,
+    double? inclusionLng,
+    double? inclusionRadiusMeters,
+  }) async {
     final id = _uuid.v4();
     await _db.into(_db.freeLines).insert(
           FreeLinesCompanion.insert(
             id: id,
             layerId: layerId,
             label: Value(label),
+            inclusionLat: Value(inclusionLat),
+            inclusionLng: Value(inclusionLng),
+            inclusionRadiusMeters: Value(inclusionRadiusMeters),
           ),
         );
     return id;
@@ -331,6 +340,9 @@ class Repository {
     String id, {
     String? layerId,
     double? offsetMeters,
+    double? inclusionLat,
+    double? inclusionLng,
+    double? inclusionRadiusMeters,
     Value<String?> label = const Value.absent(),
   }) {
     return (_db.update(_db.freeLines)..where((l) => l.id.equals(id))).write(
@@ -338,6 +350,13 @@ class Repository {
         layerId: layerId == null ? const Value.absent() : Value(layerId),
         offsetMeters:
             offsetMeters == null ? const Value.absent() : Value(offsetMeters),
+        inclusionLat:
+            inclusionLat == null ? const Value.absent() : Value(inclusionLat),
+        inclusionLng:
+            inclusionLng == null ? const Value.absent() : Value(inclusionLng),
+        inclusionRadiusMeters: inclusionRadiusMeters == null
+            ? const Value.absent()
+            : Value(inclusionRadiusMeters),
         label: label,
       ),
     );
@@ -923,6 +942,9 @@ class Repository {
               kind: 'freeline',
               coords: [for (final p in pts) LatLng(p.lat, p.lng)],
               offsetMeters: l.offsetMeters,
+              inclusionLat: l.inclusionLat,
+              inclusionLng: l.inclusionLng,
+              inclusionRadiusMeters: l.inclusionRadiusMeters,
               label: l.label,
             ));
           }
@@ -1044,7 +1066,13 @@ class Repository {
         }
       case 'freeline':
         if (o.coords.length < 2) return false;
-        final lid = await createFreeLine(layerId: layerId, label: o.label);
+        final lid = await createFreeLine(
+          layerId: layerId,
+          label: o.label,
+          inclusionLat: o.inclusionLat,
+          inclusionLng: o.inclusionLng,
+          inclusionRadiusMeters: o.inclusionRadiusMeters,
+        );
         if ((o.offsetMeters ?? 0) != 0) {
           await updateFreeLine(lid, offsetMeters: o.offsetMeters);
         }

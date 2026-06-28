@@ -2985,6 +2985,39 @@ class $FreeLinesTable extends FreeLines
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _inclusionLatMeta = const VerificationMeta(
+    'inclusionLat',
+  );
+  @override
+  late final GeneratedColumn<double> inclusionLat = GeneratedColumn<double>(
+    'inclusion_lat',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _inclusionLngMeta = const VerificationMeta(
+    'inclusionLng',
+  );
+  @override
+  late final GeneratedColumn<double> inclusionLng = GeneratedColumn<double>(
+    'inclusion_lng',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _inclusionRadiusMetersMeta =
+      const VerificationMeta('inclusionRadiusMeters');
+  @override
+  late final GeneratedColumn<double> inclusionRadiusMeters =
+      GeneratedColumn<double>(
+        'inclusion_radius_meters',
+        aliasedName,
+        true,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -3003,6 +3036,9 @@ class $FreeLinesTable extends FreeLines
     layerId,
     label,
     offsetMeters,
+    inclusionLat,
+    inclusionLng,
+    inclusionRadiusMeters,
     createdAt,
   ];
   @override
@@ -3045,6 +3081,33 @@ class $FreeLinesTable extends FreeLines
         ),
       );
     }
+    if (data.containsKey('inclusion_lat')) {
+      context.handle(
+        _inclusionLatMeta,
+        inclusionLat.isAcceptableOrUnknown(
+          data['inclusion_lat']!,
+          _inclusionLatMeta,
+        ),
+      );
+    }
+    if (data.containsKey('inclusion_lng')) {
+      context.handle(
+        _inclusionLngMeta,
+        inclusionLng.isAcceptableOrUnknown(
+          data['inclusion_lng']!,
+          _inclusionLngMeta,
+        ),
+      );
+    }
+    if (data.containsKey('inclusion_radius_meters')) {
+      context.handle(
+        _inclusionRadiusMetersMeta,
+        inclusionRadiusMeters.isAcceptableOrUnknown(
+          data['inclusion_radius_meters']!,
+          _inclusionRadiusMetersMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -3076,6 +3139,18 @@ class $FreeLinesTable extends FreeLines
         DriftSqlType.double,
         data['${effectivePrefix}offset_meters'],
       )!,
+      inclusionLat: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}inclusion_lat'],
+      ),
+      inclusionLng: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}inclusion_lng'],
+      ),
+      inclusionRadiusMeters: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}inclusion_radius_meters'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -3096,12 +3171,23 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
 
   /// Signed offset in metres (see class doc). 0 = boundary sits on the line.
   final double offsetMeters;
+
+  /// The line is bounded to an **inclusion circle**: the filled region is
+  /// `(disk) ∩ (one side of the line)`, so the two sides read as two clean
+  /// half-disks. Null until set (legacy rows / unset) — the renderer then
+  /// derives a default circle from the line's own extent.
+  final double? inclusionLat;
+  final double? inclusionLng;
+  final double? inclusionRadiusMeters;
   final DateTime createdAt;
   const FreeLine({
     required this.id,
     required this.layerId,
     this.label,
     required this.offsetMeters,
+    this.inclusionLat,
+    this.inclusionLng,
+    this.inclusionRadiusMeters,
     required this.createdAt,
   });
   @override
@@ -3113,6 +3199,15 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
       map['label'] = Variable<String>(label);
     }
     map['offset_meters'] = Variable<double>(offsetMeters);
+    if (!nullToAbsent || inclusionLat != null) {
+      map['inclusion_lat'] = Variable<double>(inclusionLat);
+    }
+    if (!nullToAbsent || inclusionLng != null) {
+      map['inclusion_lng'] = Variable<double>(inclusionLng);
+    }
+    if (!nullToAbsent || inclusionRadiusMeters != null) {
+      map['inclusion_radius_meters'] = Variable<double>(inclusionRadiusMeters);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -3125,6 +3220,15 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
           ? const Value.absent()
           : Value(label),
       offsetMeters: Value(offsetMeters),
+      inclusionLat: inclusionLat == null && nullToAbsent
+          ? const Value.absent()
+          : Value(inclusionLat),
+      inclusionLng: inclusionLng == null && nullToAbsent
+          ? const Value.absent()
+          : Value(inclusionLng),
+      inclusionRadiusMeters: inclusionRadiusMeters == null && nullToAbsent
+          ? const Value.absent()
+          : Value(inclusionRadiusMeters),
       createdAt: Value(createdAt),
     );
   }
@@ -3139,6 +3243,11 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
       layerId: serializer.fromJson<String>(json['layerId']),
       label: serializer.fromJson<String?>(json['label']),
       offsetMeters: serializer.fromJson<double>(json['offsetMeters']),
+      inclusionLat: serializer.fromJson<double?>(json['inclusionLat']),
+      inclusionLng: serializer.fromJson<double?>(json['inclusionLng']),
+      inclusionRadiusMeters: serializer.fromJson<double?>(
+        json['inclusionRadiusMeters'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -3150,6 +3259,11 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
       'layerId': serializer.toJson<String>(layerId),
       'label': serializer.toJson<String?>(label),
       'offsetMeters': serializer.toJson<double>(offsetMeters),
+      'inclusionLat': serializer.toJson<double?>(inclusionLat),
+      'inclusionLng': serializer.toJson<double?>(inclusionLng),
+      'inclusionRadiusMeters': serializer.toJson<double?>(
+        inclusionRadiusMeters,
+      ),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -3159,12 +3273,20 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
     String? layerId,
     Value<String?> label = const Value.absent(),
     double? offsetMeters,
+    Value<double?> inclusionLat = const Value.absent(),
+    Value<double?> inclusionLng = const Value.absent(),
+    Value<double?> inclusionRadiusMeters = const Value.absent(),
     DateTime? createdAt,
   }) => FreeLine(
     id: id ?? this.id,
     layerId: layerId ?? this.layerId,
     label: label.present ? label.value : this.label,
     offsetMeters: offsetMeters ?? this.offsetMeters,
+    inclusionLat: inclusionLat.present ? inclusionLat.value : this.inclusionLat,
+    inclusionLng: inclusionLng.present ? inclusionLng.value : this.inclusionLng,
+    inclusionRadiusMeters: inclusionRadiusMeters.present
+        ? inclusionRadiusMeters.value
+        : this.inclusionRadiusMeters,
     createdAt: createdAt ?? this.createdAt,
   );
   FreeLine copyWithCompanion(FreeLinesCompanion data) {
@@ -3175,6 +3297,15 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
       offsetMeters: data.offsetMeters.present
           ? data.offsetMeters.value
           : this.offsetMeters,
+      inclusionLat: data.inclusionLat.present
+          ? data.inclusionLat.value
+          : this.inclusionLat,
+      inclusionLng: data.inclusionLng.present
+          ? data.inclusionLng.value
+          : this.inclusionLng,
+      inclusionRadiusMeters: data.inclusionRadiusMeters.present
+          ? data.inclusionRadiusMeters.value
+          : this.inclusionRadiusMeters,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -3186,13 +3317,25 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
           ..write('layerId: $layerId, ')
           ..write('label: $label, ')
           ..write('offsetMeters: $offsetMeters, ')
+          ..write('inclusionLat: $inclusionLat, ')
+          ..write('inclusionLng: $inclusionLng, ')
+          ..write('inclusionRadiusMeters: $inclusionRadiusMeters, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, layerId, label, offsetMeters, createdAt);
+  int get hashCode => Object.hash(
+    id,
+    layerId,
+    label,
+    offsetMeters,
+    inclusionLat,
+    inclusionLng,
+    inclusionRadiusMeters,
+    createdAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -3201,6 +3344,9 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
           other.layerId == this.layerId &&
           other.label == this.label &&
           other.offsetMeters == this.offsetMeters &&
+          other.inclusionLat == this.inclusionLat &&
+          other.inclusionLng == this.inclusionLng &&
+          other.inclusionRadiusMeters == this.inclusionRadiusMeters &&
           other.createdAt == this.createdAt);
 }
 
@@ -3209,6 +3355,9 @@ class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
   final Value<String> layerId;
   final Value<String?> label;
   final Value<double> offsetMeters;
+  final Value<double?> inclusionLat;
+  final Value<double?> inclusionLng;
+  final Value<double?> inclusionRadiusMeters;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const FreeLinesCompanion({
@@ -3216,6 +3365,9 @@ class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
     this.layerId = const Value.absent(),
     this.label = const Value.absent(),
     this.offsetMeters = const Value.absent(),
+    this.inclusionLat = const Value.absent(),
+    this.inclusionLng = const Value.absent(),
+    this.inclusionRadiusMeters = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -3224,6 +3376,9 @@ class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
     required String layerId,
     this.label = const Value.absent(),
     this.offsetMeters = const Value.absent(),
+    this.inclusionLat = const Value.absent(),
+    this.inclusionLng = const Value.absent(),
+    this.inclusionRadiusMeters = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -3233,6 +3388,9 @@ class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
     Expression<String>? layerId,
     Expression<String>? label,
     Expression<double>? offsetMeters,
+    Expression<double>? inclusionLat,
+    Expression<double>? inclusionLng,
+    Expression<double>? inclusionRadiusMeters,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -3241,6 +3399,10 @@ class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
       if (layerId != null) 'layer_id': layerId,
       if (label != null) 'label': label,
       if (offsetMeters != null) 'offset_meters': offsetMeters,
+      if (inclusionLat != null) 'inclusion_lat': inclusionLat,
+      if (inclusionLng != null) 'inclusion_lng': inclusionLng,
+      if (inclusionRadiusMeters != null)
+        'inclusion_radius_meters': inclusionRadiusMeters,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -3251,6 +3413,9 @@ class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
     Value<String>? layerId,
     Value<String?>? label,
     Value<double>? offsetMeters,
+    Value<double?>? inclusionLat,
+    Value<double?>? inclusionLng,
+    Value<double?>? inclusionRadiusMeters,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
@@ -3259,6 +3424,10 @@ class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
       layerId: layerId ?? this.layerId,
       label: label ?? this.label,
       offsetMeters: offsetMeters ?? this.offsetMeters,
+      inclusionLat: inclusionLat ?? this.inclusionLat,
+      inclusionLng: inclusionLng ?? this.inclusionLng,
+      inclusionRadiusMeters:
+          inclusionRadiusMeters ?? this.inclusionRadiusMeters,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -3279,6 +3448,17 @@ class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
     if (offsetMeters.present) {
       map['offset_meters'] = Variable<double>(offsetMeters.value);
     }
+    if (inclusionLat.present) {
+      map['inclusion_lat'] = Variable<double>(inclusionLat.value);
+    }
+    if (inclusionLng.present) {
+      map['inclusion_lng'] = Variable<double>(inclusionLng.value);
+    }
+    if (inclusionRadiusMeters.present) {
+      map['inclusion_radius_meters'] = Variable<double>(
+        inclusionRadiusMeters.value,
+      );
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -3295,6 +3475,9 @@ class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
           ..write('layerId: $layerId, ')
           ..write('label: $label, ')
           ..write('offsetMeters: $offsetMeters, ')
+          ..write('inclusionLat: $inclusionLat, ')
+          ..write('inclusionLng: $inclusionLng, ')
+          ..write('inclusionRadiusMeters: $inclusionRadiusMeters, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -9605,6 +9788,9 @@ typedef $$FreeLinesTableCreateCompanionBuilder =
       required String layerId,
       Value<String?> label,
       Value<double> offsetMeters,
+      Value<double?> inclusionLat,
+      Value<double?> inclusionLng,
+      Value<double?> inclusionRadiusMeters,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -9614,6 +9800,9 @@ typedef $$FreeLinesTableUpdateCompanionBuilder =
       Value<String> layerId,
       Value<String?> label,
       Value<double> offsetMeters,
+      Value<double?> inclusionLat,
+      Value<double?> inclusionLng,
+      Value<double?> inclusionRadiusMeters,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -9683,6 +9872,21 @@ class $$FreeLinesTableFilterComposer
 
   ColumnFilters<double> get offsetMeters => $composableBuilder(
     column: $table.offsetMeters,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get inclusionLat => $composableBuilder(
+    column: $table.inclusionLat,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get inclusionLng => $composableBuilder(
+    column: $table.inclusionLng,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get inclusionRadiusMeters => $composableBuilder(
+    column: $table.inclusionRadiusMeters,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -9764,6 +9968,21 @@ class $$FreeLinesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<double> get inclusionLat => $composableBuilder(
+    column: $table.inclusionLat,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get inclusionLng => $composableBuilder(
+    column: $table.inclusionLng,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get inclusionRadiusMeters => $composableBuilder(
+    column: $table.inclusionRadiusMeters,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -9810,6 +10029,21 @@ class $$FreeLinesTableAnnotationComposer
 
   GeneratedColumn<double> get offsetMeters => $composableBuilder(
     column: $table.offsetMeters,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get inclusionLat => $composableBuilder(
+    column: $table.inclusionLat,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get inclusionLng => $composableBuilder(
+    column: $table.inclusionLng,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get inclusionRadiusMeters => $composableBuilder(
+    column: $table.inclusionRadiusMeters,
     builder: (column) => column,
   );
 
@@ -9897,6 +10131,9 @@ class $$FreeLinesTableTableManager
                 Value<String> layerId = const Value.absent(),
                 Value<String?> label = const Value.absent(),
                 Value<double> offsetMeters = const Value.absent(),
+                Value<double?> inclusionLat = const Value.absent(),
+                Value<double?> inclusionLng = const Value.absent(),
+                Value<double?> inclusionRadiusMeters = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FreeLinesCompanion(
@@ -9904,6 +10141,9 @@ class $$FreeLinesTableTableManager
                 layerId: layerId,
                 label: label,
                 offsetMeters: offsetMeters,
+                inclusionLat: inclusionLat,
+                inclusionLng: inclusionLng,
+                inclusionRadiusMeters: inclusionRadiusMeters,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -9913,6 +10153,9 @@ class $$FreeLinesTableTableManager
                 required String layerId,
                 Value<String?> label = const Value.absent(),
                 Value<double> offsetMeters = const Value.absent(),
+                Value<double?> inclusionLat = const Value.absent(),
+                Value<double?> inclusionLng = const Value.absent(),
+                Value<double?> inclusionRadiusMeters = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FreeLinesCompanion.insert(
@@ -9920,6 +10163,9 @@ class $$FreeLinesTableTableManager
                 layerId: layerId,
                 label: label,
                 offsetMeters: offsetMeters,
+                inclusionLat: inclusionLat,
+                inclusionLng: inclusionLng,
+                inclusionRadiusMeters: inclusionRadiusMeters,
                 createdAt: createdAt,
                 rowid: rowid,
               ),

@@ -173,6 +173,14 @@ class _RegionPainter extends CustomPainter {
       return;
     }
 
+    // Freehand lines are bounded to an inclusion circle (each fills a clean
+    // half-disk), so the invert complement is the disk — not the viewport.
+    // Handle them separately rather than on the shared unbounded path.
+    if (freeLines.isNotEmpty) {
+      _paintFreeLines(canvas, size);
+      return;
+    }
+
     Path? outerUnion;
     Path? coreUnion;
 
@@ -257,28 +265,6 @@ class _RegionPainter extends CustomPainter {
             others: others,
             bandMeters: band,
             viewportCorners: bound.quad,
-            bandInward: inverted,
-          );
-          return (outer: r.outer, core: r.core);
-        });
-        addOuter(region.outer);
-        addCore(region.core);
-      }
-    }
-
-    if (freeLines.isNotEmpty && viewport != null) {
-      for (final l in freeLines) {
-        final pts = freeLinePoints.where((p) => p.freeLineId == l.id).toList();
-        if (pts.length < 2) continue;
-        final line = <LatLng>[for (final p in pts) LatLng(p.lat, p.lng)];
-        final sig = '${hashPoints(line)}|${l.offsetMeters}|$band|$inverted';
-        final region = regionGeometryCache.boundRegion(l.id, sig, viewport,
-            (bound) {
-          final r = freeLineRegion(
-            points: line,
-            offsetMeters: l.offsetMeters,
-            bandMeters: band,
-            spanMeters: bound.diagonalMeters,
             bandInward: inverted,
           );
           return (outer: r.outer, core: r.core);
@@ -398,6 +384,104 @@ class _RegionPainter extends CustomPainter {
 
     // Outline traces the nominal boundary.
     canvas.drawPath(bounded(core), strokePaint);
+  }
+
+  /// Paints a freehand-line layer. Each line is bounded to an **inclusion
+  /// circle**, so the filled region is `(disk) ∩ (one side of the line)` — a
+  /// clean half-disk — and the per-layer invert fills the *other* half of the
+  /// same disk (not the viewport complement). The half-plane `outer`/`core`
+  /// rings come from [freeLineRegion] (its straight extension + far cap only
+  /// need to overshoot the disk before we clip), then we intersect with the
+  /// circle in screen space. The band (`outer − core`) auto-vanishes along the
+  /// arc and shows only along the dividing chord, on the uncoloured side.
+  void _paintFreeLines(Canvas canvas, Size size) {
+    final band = uncertaintyMeters > 0 ? uncertaintyMeters : 0.0;
+
+    Path? outerUnion;
+    Path? coreUnion;
+    Path? diskUnion;
+
+    for (final l in freeLines) {
+      final pts = freeLinePoints.where((p) => p.freeLineId == l.id).toList();
+      if (pts.length < 2) continue;
+      final line = <LatLng>[for (final p in pts) LatLng(p.lat, p.lng)];
+
+      final inc = effectiveInclusion(
+        lat: l.inclusionLat,
+        lng: l.inclusionLng,
+        radiusMeters: l.inclusionRadiusMeters,
+        points: line,
+      );
+      final ring =
+          regionGeometryCache.circleRing(inc.center, inc.radiusMeters, _ringPoints);
+      if (ring.length < 3) continue;
+      final diskPath = _ringToPath(ring);
+
+      final r = freeLineRegion(
+        points: line,
+        offsetMeters: l.offsetMeters,
+        bandMeters: band,
+        spanMeters: inc.radiusMeters,
+        bandInward: inverted,
+      );
+
+      // Clip each half-plane ring to the inclusion disk → half-disk.
+      Path? clipToDisk(List<LatLng> r) {
+        if (r.length < 3) return null;
+        return Path.combine(PathOperation.intersect, _ringToPath(r), diskPath);
+      }
+
+      final outerPath = clipToDisk(r.outer);
+      final corePath = clipToDisk(r.core);
+
+      diskUnion = diskUnion == null
+          ? diskPath
+          : Path.combine(PathOperation.union, diskUnion, diskPath);
+      if (outerPath != null) {
+        outerUnion = outerUnion == null
+            ? outerPath
+            : Path.combine(PathOperation.union, outerUnion, outerPath);
+      }
+      if (corePath != null) {
+        coreUnion = coreUnion == null
+            ? corePath
+            : Path.combine(PathOperation.union, coreUnion, corePath);
+      }
+    }
+
+    final outer = outerUnion;
+    if (outer == null || diskUnion == null) return;
+    final core = coreUnion ?? Path();
+
+    final bandPath = Path.combine(PathOperation.difference, outer, core);
+
+    // Solid: the chosen half-disk normally; the *other* half of the disk when
+    // inverted (the disk complement, not the viewport).
+    final solid = inverted
+        ? Path.combine(PathOperation.difference, diskUnion, outer)
+        : core;
+
+    final solidPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = color.withValues(alpha: 0.45);
+    final bandPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = color.withValues(alpha: 0.20);
+    final strokePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..color = color;
+
+    // Outline traces the nominal boundary (core normally, outer when inverted),
+    // i.e. the half-disk perimeter — the dividing chord plus its cap arc.
+    final outline = inverted ? outer : core;
+
+    final clip = Path()..addRect((Offset.zero & size).inflate(4));
+    Path bounded(Path p) => Path.combine(PathOperation.intersect, p, clip);
+
+    canvas.drawPath(bounded(solid), solidPaint);
+    canvas.drawPath(bounded(bandPath), bandPaint);
+    canvas.drawPath(bounded(outline), strokePaint);
   }
 
   /// A screen-space even-odd path through [contours] (so holes/islands read

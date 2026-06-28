@@ -106,9 +106,6 @@ and never committed.** New plans/notes go there too. This is strict: **no planni
 release artifacts (Play Store screenshots, icons, feature graphics) go under
 `planning/play-store-assets/`, never committed.
 
-**Never commit/push anything referencing the old "jetlag" project name** — that name may only
-appear inside the gitignored `planning/` folder. If a tracked file (e.g. iOS `project.pbxproj`)
-ever picks one up, fix it to `com.leostumpf.zonecraft` / `ZoneCraft`.
 
 - `planning/PLAN.md` — current state + open points (the roadmap).
 - `planning/IMPLEMENTATION_PLAN.md` — architecture reference (rendering contract, data model,

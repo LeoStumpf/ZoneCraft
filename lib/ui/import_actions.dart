@@ -145,29 +145,43 @@ Future<void> importFeatureFlow(
   final place = await showFeatureSearchDialog(context);
   if (place == null || !context.mounted) return;
 
-  // Route by geometry: areas → freearea (3+ points/ring), lines → freeline
-  // (2+ points). The dominant kind picks the target when a hit has both.
+  // Route by geometry. Areas → freearea, one object per outer ring (a
+  // multipolygon is genuinely several regions). A line feature → freeline, a
+  // SINGLE object: its MultiLineString parts (e.g. a river's member ways) are
+  // stitched into one continuous divide, so it fills one side instead of many
+  // disjoint half-planes that union to cover the whole map.
   final isArea = place.dominantKind == GeometryKind.area;
   final type = isArea ? 'freearea' : 'freeline';
-  final minPts = isArea ? 3 : 2;
-  final usable = (isArea ? place.areas : place.lines)
-      .where((c) => c.length >= minPts)
-      .toList();
-  if (usable.isEmpty) {
-    messenger.showSnackBar(
-      const SnackBar(content: Text('That feature has no usable geometry')),
-    );
-    return;
+  final List<ExportObject> objects;
+  if (isArea) {
+    final rings = place.areas.where((c) => c.length >= 3).toList();
+    if (rings.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('That feature has no usable geometry')),
+      );
+      return;
+    }
+    objects = [
+      for (var i = 0; i < rings.length; i++)
+        ExportObject(
+          kind: 'freearea',
+          coords: rings[i],
+          label:
+              rings.length == 1 ? place.shortName : '${place.shortName} ${i + 1}',
+        ),
+    ];
+  } else {
+    final line = stitchPolylines(place.lines);
+    if (line.length < 2) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('That feature has no usable geometry')),
+      );
+      return;
+    }
+    objects = [
+      ExportObject(kind: 'freeline', coords: line, label: place.shortName),
+    ];
   }
-  final objects = <ExportObject>[
-    for (var i = 0; i < usable.length; i++)
-      ExportObject(
-        kind: type,
-        coords: usable[i],
-        label:
-            usable.length == 1 ? place.shortName : '${place.shortName} ${i + 1}',
-      ),
-  ];
   final layer = ExportLayer(
     name: place.shortName,
     colorArgb: isArea ? 0xFF43A047 : 0xFF2196F3,

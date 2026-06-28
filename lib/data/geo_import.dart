@@ -297,6 +297,65 @@ List<LatLng> _gpxPoints(Iterable<XmlElement> pts) {
 
 // --- shared -----------------------------------------------------------------
 
+/// Joins line [parts] into a single ordered polyline by greedily chaining the
+/// nearest endpoints (reversing parts as needed). Used to turn a feature's
+/// MultiLineString — e.g. a river's many member ways — into ONE continuous
+/// divide, so it imports as a single freehand line filling one side rather than
+/// many disjoint segments whose half-planes union to cover everything.
+///
+/// Always attaches the nearest remaining part, so genuinely disjoint parts are
+/// still chained (joined by a straight jump); for a real river the parts are
+/// contiguous so the jumps vanish. Returns empty if no part has ≥2 points.
+List<LatLng> stitchPolylines(List<List<LatLng>> parts) {
+  final segs = <List<LatLng>>[
+    for (final p in parts) if (p.length >= 2) List<LatLng>.of(p),
+  ];
+  if (segs.isEmpty) return const [];
+  // Start from the longest part for a stable spine.
+  segs.sort((a, b) => b.length.compareTo(a.length));
+  final path = segs.removeAt(0);
+  while (segs.isNotEmpty) {
+    final head = path.first, tail = path.last;
+    var best = double.infinity;
+    var bestIdx = 0;
+    var atTail = true, reverse = false;
+    for (var i = 0; i < segs.length; i++) {
+      final s = segs[i];
+      // tail→s.first: append as-is; tail→s.last: append reversed;
+      // head→s.last: prepend as-is; head→s.first: prepend reversed.
+      final cands = <(double, bool, bool)>[
+        (_d2(tail, s.first), true, false),
+        (_d2(tail, s.last), true, true),
+        (_d2(head, s.last), false, false),
+        (_d2(head, s.first), false, true),
+      ];
+      for (final (d, at, rev) in cands) {
+        if (d < best) {
+          best = d;
+          bestIdx = i;
+          atTail = at;
+          reverse = rev;
+        }
+      }
+    }
+    var s = segs.removeAt(bestIdx);
+    if (reverse) s = s.reversed.toList();
+    if (atTail) {
+      path.addAll(s);
+    } else {
+      path.insertAll(0, s);
+    }
+  }
+  return path;
+}
+
+/// Squared planar distance in degrees — adequate for "which endpoint is nearest".
+double _d2(LatLng a, LatLng b) {
+  final dLat = a.latitude - b.latitude;
+  final dLng = a.longitude - b.longitude;
+  return dLat * dLat + dLng * dLng;
+}
+
 /// Drops a ring's repeated closing vertex (first == last) if present.
 void _dropClosing(List<LatLng> ring) {
   if (ring.length >= 2 &&
