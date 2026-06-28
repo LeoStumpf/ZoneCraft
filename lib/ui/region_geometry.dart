@@ -1,5 +1,6 @@
 import 'package:latlong2/latlong.dart';
 
+import '../geo/freeline.dart';
 import '../geo/geodesic.dart';
 
 /// Caches the camera-independent (or slowly-changing) lat/lng geometry of the
@@ -101,16 +102,17 @@ class RegionGeometryCache {
     return _circles[key] = geodesicCircle(center, radiusMeters, points: points);
   }
 
-  /// Half-disk rings for a freehand line [id], memoised by [signature]. The
-  /// split is camera-independent (it depends only on the line, circle, offset
-  /// and band), so a heavy imported river is re-split only when its inputs
-  /// change — a pan/zoom just re-projects the cached rings.
-  Rings halfDisk(String id, String signature, Rings Function() build) {
+  /// Cut runs for a freehand line [id], memoised by [signature]. The split is
+  /// camera-independent (it depends only on the line, circle, offset and band),
+  /// so a heavy imported river is re-split only when its inputs change — a
+  /// pan/zoom just re-projects the cached runs.
+  FreeLineRegion halfDisk(
+      String id, String signature, FreeLineRegion Function() build) {
     final e = _halfDisk[id];
-    if (e != null && e.signature == signature) return e.rings;
-    final rings = build();
-    _halfDisk[id] = _RingsEntry(signature, rings);
-    return rings;
+    if (e != null && e.signature == signature) return e.region;
+    final region = build();
+    _halfDisk[id] = _RingsEntry(signature, region);
+    return region;
   }
 
   /// Rings for an unbounded region [id], rebuilt only when [signature] changes
@@ -143,9 +145,9 @@ class _BoundEntry {
 }
 
 class _RingsEntry {
-  const _RingsEntry(this.signature, this.rings);
+  const _RingsEntry(this.signature, this.region);
   final String signature;
-  final Rings rings;
+  final FreeLineRegion region;
 }
 
 /// The inclusion circle that bounds a freehand line to a clean half-disk. Uses

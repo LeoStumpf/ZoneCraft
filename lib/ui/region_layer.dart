@@ -417,34 +417,43 @@ class _RegionPainter extends CustomPainter {
       if (ring.length < 3) continue;
       final diskPath = _ringToPath(ring);
 
-      // Split the inclusion disk along the (offset) line into clean halves: the
-      // boundary is the line's in-disk path + the circle arc, so a wiggly river
-      // never scatters the fill. Memoised (camera-independent) so a heavy
-      // imported river is re-split only when its inputs change.
+      // Treat the line as a cut: each continuous run becomes an even-odd ring
+      // (filled = the run's right side), intersect each with the disk and XOR
+      // the runs — so a river that loops or crosses the disk more than once just
+      // flips the side. Memoised (camera-independent) so a heavy imported river
+      // is re-split only when its inputs change.
       final sig = '${hashPoints(line)}|${inc.center.latitude}|'
           '${inc.center.longitude}|${inc.radiusMeters}|${l.offsetMeters}|'
           '$band|$inverted';
-      final r = regionGeometryCache.halfDisk(l.id, sig, () {
-        final reg = freeLineDiskRegion(
-          points: line,
-          center: inc.center,
-          radiusMeters: inc.radiusMeters,
-          offsetMeters: l.offsetMeters,
-          bandMeters: band,
-          bandInward: inverted,
-        );
-        return (outer: reg.outer, core: reg.core);
-      });
+      final r = regionGeometryCache.halfDisk(
+          l.id,
+          sig,
+          () => freeLineDiskRegion(
+                points: line,
+                center: inc.center,
+                radiusMeters: inc.radiusMeters,
+                offsetMeters: l.offsetMeters,
+                bandMeters: band,
+                bandInward: inverted,
+              ));
 
-      // Intersect with the disk as a safety net against the offset/extension
-      // poking slightly past the rim.
-      Path? clipToDisk(List<LatLng> r) {
-        if (r.length < 3) return null;
-        return Path.combine(PathOperation.intersect, _ringToPath(r), diskPath);
+      // The right-hand region for a set of cut runs, clipped to the disk: XOR
+      // the runs so each crossing flips the side. When the line misses the disk
+      // the whole disk is one side (fill all / nothing by the centre).
+      Path? regionOf(List<List<LatLng>> runs) {
+        if (r.missesDisk) return r.centreOnRight ? diskPath : null;
+        Path? acc;
+        for (final run in runs) {
+          if (run.length < 3) continue;
+          final rp = Path.combine(
+              PathOperation.intersect, _ringToPathEvenOdd(run), diskPath);
+          acc = acc == null ? rp : Path.combine(PathOperation.xor, acc, rp);
+        }
+        return acc;
       }
 
-      final outerPath = clipToDisk(r.outer);
-      final corePath = clipToDisk(r.core);
+      final outerPath = regionOf(r.outer);
+      final corePath = regionOf(r.core);
 
       diskUnion = diskUnion == null
           ? diskPath
@@ -633,6 +642,12 @@ class _RegionPainter extends CustomPainter {
     path.close();
     return path;
   }
+
+  /// Like [_ringToPath] but with the **even-odd** fill rule, so a self-crossing
+  /// cut ring (a looping freehand line) resolves to the correct alternating
+  /// "this side / the other side" regions instead of a winding-filled blob.
+  Path _ringToPathEvenOdd(List<LatLng> ring) =>
+      _ringToPath(ring)..fillType = PathFillType.evenOdd;
 
   @override
   bool shouldRepaint(covariant _RegionPainter old) {
