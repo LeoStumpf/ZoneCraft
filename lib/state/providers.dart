@@ -86,12 +86,24 @@ final seedProvider = FutureProvider<String>((ref) {
   return ref.watch(repositoryProvider).ensureDefaultLayer();
 });
 
-/// Id of the layer that new circles are added to. `null` means "first layer".
+/// Sentinel [activeLayerProvider] value meaning "the user explicitly chose to
+/// have no active layer" — distinct from `null`, which means "nothing chosen
+/// yet, fall back to the top layer".
+const String noActiveLayer = '__none__';
+
+/// Id of the active layer (new objects are added to it, and only its objects
+/// can be selected). `null` = nothing chosen yet (defaults to the top layer);
+/// [noActiveLayer] = explicitly none.
 class ActiveLayerNotifier extends Notifier<String?> {
   @override
   String? build() => null;
 
   void select(String? id) => state = id;
+
+  /// Toggle a layer active: tapping the already-active layer deselects to
+  /// [noActiveLayer]; otherwise the layer becomes active.
+  void toggle(String id, {required bool isActive}) =>
+      state = isActive ? noActiveLayer : id;
 }
 
 final activeLayerProvider =
@@ -109,6 +121,19 @@ class SelectedCircleNotifier extends Notifier<String?> {
 final selectedCircleProvider =
     NotifierProvider<SelectedCircleNotifier, String?>(
         SelectedCircleNotifier.new);
+
+/// While a circle is selected, whether the next map tap relocates its centre.
+/// (Mirrors [heightPlacementProvider].)
+class CirclePlacementNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void arm(bool on) => state = on;
+}
+
+final circlePlacementProvider =
+    NotifierProvider<CirclePlacementNotifier, bool>(
+        CirclePlacementNotifier.new);
 
 /// Id of the currently selected plane, or null. Mutually exclusive with
 /// [selectedCircleProvider] (an object of one type is selected at a time).
@@ -252,9 +277,11 @@ class HeightPlacementNotifier extends Notifier<bool> {
 final heightPlacementProvider =
     NotifierProvider<HeightPlacementNotifier, bool>(HeightPlacementNotifier.new);
 
-/// Resolves the effective active layer id given the current layer list,
-/// falling back to the top-most layer when nothing is explicitly selected.
+/// Resolves the effective active layer id given the current layer list:
+/// [noActiveLayer] ⇒ none; a still-present selection ⇒ itself; otherwise (nothing
+/// chosen yet, or the selection was deleted) falls back to the top-most layer.
 String? effectiveActiveLayerId(List<Layer> layers, String? selected) {
+  if (selected == noActiveLayer) return null; // explicitly none
   if (layers.isEmpty) return null;
   if (selected != null && layers.any((l) => l.id == selected)) return selected;
   return layers.last.id; // last == top of stack

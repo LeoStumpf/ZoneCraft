@@ -207,7 +207,6 @@ class LayersDrawer extends ConsumerWidget {
                         layer: layer,
                         objectCount: count,
                         isActive: layer.id == activeId,
-                        canDelete: layers.length > 1,
                       );
                     },
                   ),
@@ -249,13 +248,11 @@ class _LayerTile extends ConsumerWidget {
     required this.layer,
     required this.objectCount,
     required this.isActive,
-    required this.canDelete,
   });
 
   final Layer layer;
   final int objectCount;
   final bool isActive;
-  final bool canDelete;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -274,7 +271,10 @@ class _LayerTile extends ConsumerWidget {
 
     return ListTile(
       selected: isActive,
-      onTap: () => ref.read(activeLayerProvider.notifier).select(layer.id),
+      // Tap to make active; tap the active layer again to have no active layer.
+      onTap: () => ref
+          .read(activeLayerProvider.notifier)
+          .toggle(layer.id, isActive: isActive),
       leading: IconButton(
         tooltip: layer.isVisible ? 'Hide' : 'Show',
         icon: Icon(layer.isVisible
@@ -340,8 +340,7 @@ class _LayerTile extends ConsumerWidget {
                   child: Text('Import track…'),
                 ),
               const PopupMenuItem(value: 'export', child: Text('Export layer…')),
-              if (canDelete)
-                const PopupMenuItem(value: 'delete', child: Text('Delete')),
+              const PopupMenuItem(value: 'delete', child: Text('Delete')),
             ],
           ),
           const Icon(Icons.drag_handle),

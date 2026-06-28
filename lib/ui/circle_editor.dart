@@ -33,6 +33,7 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
   static const _maxRadius = 1000000.0;
 
   late final TextEditingController _center;
+  final FocusNode _centerFocus = FocusNode();
   late final TextEditingController _label;
   late double _radius;
 
@@ -49,10 +50,38 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
   }
 
   @override
+  void didUpdateWidget(CircleEditorSheet old) {
+    super.didUpdateWidget(old);
+    // Keep the centre field in sync when the centre is moved by tapping the map.
+    if (!_centerFocus.hasFocus) {
+      final t = formatLatLng(widget.circle.centerLat, widget.circle.centerLng);
+      if (_center.text != t) _center.text = t;
+    }
+    if (widget.circle.radiusMeters != _radius) {
+      _radius = widget.circle.radiusMeters;
+    }
+  }
+
+  @override
   void dispose() {
     _center.dispose();
+    _centerFocus.dispose();
     _label.dispose();
     super.dispose();
+  }
+
+  void _armPlacement() {
+    ref.read(circlePlacementProvider.notifier).arm(true);
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        const SnackBar(content: Text('Tap the map to place the centre')),
+      );
+  }
+
+  void _close() {
+    ref.read(circlePlacementProvider.notifier).arm(false);
+    ref.read(selectedCircleProvider.notifier).select(null);
   }
 
   void _setRadius(double meters) {
@@ -65,6 +94,7 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final armed = ref.watch(circlePlacementProvider);
     final sliderValue =
         (math.log(_radius.clamp(_minRadius, _maxRadius)) / math.ln10)
             .clamp(math.log(_minRadius) / math.ln10, math.log(_maxRadius) / math.ln10);
@@ -92,14 +122,13 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
                     color: Colors.red,
                     onPressed: () async {
                       await _repo.deleteCircle(widget.circle.id);
-                      ref.read(selectedCircleProvider.notifier).select(null);
+                      _close();
                     },
                   ),
                   IconButton(
                     tooltip: 'Close',
                     icon: const Icon(Icons.close),
-                    onPressed: () =>
-                        ref.read(selectedCircleProvider.notifier).select(null),
+                    onPressed: _close,
                   ),
                 ],
               ),
@@ -129,22 +158,37 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
                 value: sliderValue.toDouble(),
                 onChanged: (v) => _setRadius(math.pow(10, v).toDouble()),
               ),
-              TextField(
-                controller: _center,
-                decoration: const InputDecoration(
-                  labelText: 'Centre (lat, lng)',
-                  hintText: '48.137154, 11.575382',
-                  isDense: true,
-                ),
-                keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true, signed: true),
-                onChanged: (s) {
-                  final p = parseLatLng(s);
-                  if (p != null) {
-                    _repo.updateCircle(widget.circle.id,
-                        centerLat: p.latitude, centerLng: p.longitude);
-                  }
-                },
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _center,
+                      focusNode: _centerFocus,
+                      decoration: const InputDecoration(
+                        labelText: 'Centre (lat, lng)',
+                        hintText: '48.137154, 11.575382',
+                        isDense: true,
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true, signed: true),
+                      onChanged: (s) {
+                        final p = parseLatLng(s);
+                        if (p != null) {
+                          _repo.updateCircle(widget.circle.id,
+                              centerLat: p.latitude, centerLng: p.longitude);
+                        }
+                      },
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Move centre by tapping the map',
+                    icon: Icon(
+                        armed ? Icons.touch_app : Icons.touch_app_outlined),
+                    color:
+                        armed ? Theme.of(context).colorScheme.primary : null,
+                    onPressed: _armPlacement,
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
               TextField(

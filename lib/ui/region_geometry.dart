@@ -166,20 +166,19 @@ class _RingsEntry {
   required double? radiusMeters,
   required List<LatLng> points,
 }) {
-  if (lat != null &&
-      lng != null &&
-      radiusMeters != null &&
-      lat.isFinite &&
-      lng.isFinite &&
-      radiusMeters.isFinite &&
-      radiusMeters > 0) {
-    return (center: LatLng(lat, lng), radiusMeters: radiusMeters);
-  }
-  final bound = ViewBound.ofCorners(points);
-  final r = (bound.diagonalMeters * 0.75)
-      .clamp(_minDerivedRadius, _maxDerivedRadius)
-      .toDouble();
-  return (center: _arcMidpoint(points), radiusMeters: r);
+  // Use whichever parts are stored and derive only the missing ones, so editing
+  // just the centre (move-centre leaves the radius null) or just the radius
+  // takes effect instead of silently falling back to the fully-derived circle.
+  final hasCenter = lat != null && lng != null && lat.isFinite && lng.isFinite;
+  final hasRadius =
+      radiusMeters != null && radiusMeters.isFinite && radiusMeters > 0;
+  final center = hasCenter ? LatLng(lat, lng) : _arcMidpoint(points);
+  final r = hasRadius
+      ? radiusMeters
+      : (ViewBound.ofCorners(points).diagonalMeters * 0.75)
+          .clamp(_minDerivedRadius, _maxDerivedRadius)
+          .toDouble();
+  return (center: center, radiusMeters: r);
 }
 
 /// The point halfway along [pts] by ground distance — always *on* the line, so a

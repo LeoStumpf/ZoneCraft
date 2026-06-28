@@ -1079,6 +1079,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
   void _clearSelection() {
     ref.read(selectedCircleProvider.notifier).select(null);
+    ref.read(circlePlacementProvider.notifier).arm(false);
     ref.read(selectedPlaneProvider.notifier).select(null);
     ref.read(planePlacementProvider.notifier).arm(null);
     ref.read(selectedSubspaceProvider.notifier).select(null);
@@ -1387,6 +1388,20 @@ class _MapScreenState extends ConsumerState<MapScreen>
     List<FreeAreaPoint> freeAreaPoints,
     List<HeightRegion> heightRegions,
   ) async {
+    // Placement mode: relocate the selected circle's centre.
+    if (ref.read(circlePlacementProvider)) {
+      final selId = ref.read(selectedCircleProvider);
+      if (selId != null) {
+        await ref.read(repositoryProvider).updateCircle(
+              selId,
+              centerLat: latlng.latitude,
+              centerLng: latlng.longitude,
+            );
+        ref.read(circlePlacementProvider.notifier).arm(false);
+        return;
+      }
+    }
+
     // Placement mode: relocate the selected height region's centre.
     if (ref.read(heightPlacementProvider)) {
       final selId = ref.read(selectedHeightRegionProvider);
@@ -1489,9 +1504,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
       return;
     }
 
-    // Topmost object across visible layers (regardless of type) wins.
+    // Only the active layer's objects are selectable: tapping an object in any
+    // other layer does nothing (so you interact with exactly the layer you chose
+    // in the drawer). With no active layer, nothing is selectable.
+    final activeId =
+        effectiveActiveLayerId(layers, ref.read(activeLayerProvider));
     for (final layer in layers.reversed) {
-      if (!layer.isVisible) continue;
+      if (layer.id != activeId || !layer.isVisible) continue;
       if (layer.type == 'circles') {
         final hit = _circleInLayer(latlng, layer.id, circles);
         if (hit != null) {
@@ -1543,6 +1562,43 @@ class _MapScreenState extends ConsumerState<MapScreen>
         ref.read(selectedFreeAreaProvider) != null ||
         ref.read(selectedHeightRegionProvider) != null) {
       _clearSelection();
+    }
+  }
+
+  /// Long-press on the map: in an active **circles** layer, offer to drop a new
+  /// circle centred at the pressed point (a quicker route than the Add button,
+  /// which uses the map centre). Other layer types ignore the long-press.
+  Future<void> _handleMapLongPress(
+    Offset globalPosition,
+    LatLng latlng,
+    Layer? activeLayer,
+  ) async {
+    if (activeLayer == null || activeLayer.type != 'circles') return;
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final selected = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        globalPosition.dx,
+        globalPosition.dy,
+        overlay.size.width - globalPosition.dx,
+        overlay.size.height - globalPosition.dy,
+      ),
+      items: const [
+        PopupMenuItem<String>(
+          value: 'circle',
+          child: Row(
+            children: [
+              Icon(Icons.add_circle_outline, size: 18),
+              SizedBox(width: 8),
+              Text('New circle here'),
+            ],
+          ),
+        ),
+      ],
+    );
+    if (selected == 'circle' && mounted) {
+      await _addCircleAt(latlng, activeLayer);
     }
   }
 
@@ -1754,6 +1810,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       freeAreaPoints,
                       heightRegions,
                     ),
+                    onLongPress: (tapPos, latlng) => _handleMapLongPress(
+                        tapPos.global, latlng, activeLayer),
                   ),
                   children: [
                     TileLayer(

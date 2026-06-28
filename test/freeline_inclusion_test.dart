@@ -54,14 +54,29 @@ void main() {
     expect(inc.radiusMeters, 300);
   });
 
-  test('a non-positive stored radius falls back to the derived circle', () {
+  test('derives only the missing part (stored centre, no radius)', () {
+    // Moving the centre stores lat/lng but leaves the radius null/0; the stored
+    // centre must still be honoured (only the radius is derived), otherwise a
+    // move-centre would silently snap back to the fully-derived circle.
     final inc = effectiveInclusion(
       lat: 10,
       lng: 20,
       radiusMeters: 0,
       points: line,
     );
-    expect(inc.center.latitude, closeTo(0, 1e-9));
-    expect(inc.radiusMeters, greaterThan(300));
+    expect(inc.center.latitude, 10); // stored centre kept
+    expect(inc.center.longitude, 20);
+    expect(inc.radiusMeters, greaterThan(300)); // radius derived
+  });
+
+  test('derives only the missing part (stored radius, no centre)', () {
+    final inc = effectiveInclusion(
+      lat: null,
+      lng: null,
+      radiusMeters: 1234,
+      points: line,
+    );
+    expect(inc.radiusMeters, 1234); // stored radius kept
+    expect(inc.center.longitude, closeTo(0, 1e-9)); // centre derived (on the line)
   });
 }
