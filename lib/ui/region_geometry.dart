@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:latlong2/latlong.dart';
 
 import '../geo/geodesic.dart';
@@ -92,6 +90,7 @@ final regionGeometryCache = RegionGeometryCache();
 class RegionGeometryCache {
   final Map<String, List<LatLng>> _circles = {};
   final Map<String, _BoundEntry> _bound = {};
+  final Map<String, _RingsEntry> _halfDisk = {};
 
   /// A geodesic circle ring, memoised by centre+radius (camera-independent).
   List<LatLng> circleRing(LatLng center, double radiusMeters, int points) {
@@ -100,6 +99,18 @@ class RegionGeometryCache {
     if (hit != null) return hit;
     if (_circles.length > 4000) _circles.clear(); // bound memory
     return _circles[key] = geodesicCircle(center, radiusMeters, points: points);
+  }
+
+  /// Half-disk rings for a freehand line [id], memoised by [signature]. The
+  /// split is camera-independent (it depends only on the line, circle, offset
+  /// and band), so a heavy imported river is re-split only when its inputs
+  /// change — a pan/zoom just re-projects the cached rings.
+  Rings halfDisk(String id, String signature, Rings Function() build) {
+    final e = _halfDisk[id];
+    if (e != null && e.signature == signature) return e.rings;
+    final rings = build();
+    _halfDisk[id] = _RingsEntry(signature, rings);
+    return rings;
   }
 
   /// Rings for an unbounded region [id], rebuilt only when [signature] changes
@@ -131,12 +142,22 @@ class _BoundEntry {
   final Rings rings;
 }
 
+class _RingsEntry {
+  const _RingsEntry(this.signature, this.rings);
+  final String signature;
+  final Rings rings;
+}
+
 /// The inclusion circle that bounds a freehand line to a clean half-disk. Uses
 /// the stored [lat]/[lng]/[radiusMeters] when all are present and the radius is
-/// positive; otherwise derives a sensible default from the line's own [points]
-/// — centred on their bounding-box midpoint with a radius covering the line
-/// (`diagonal * 0.75`, never below [_minDerivedRadius]). Legacy rows (no stored
-/// circle) thus still render as a bounded half-disk.
+/// positive; otherwise derives a **local, visible** default from the line's own
+/// [points] — centred on the line's arc-length midpoint (always a point *on* the
+/// line) with a radius of `diagonal * 0.75` clamped to
+/// `[_minDerivedRadius, _maxDerivedRadius]`. The clamp matters for imports: a
+/// whole-river line (hundreds of km) would otherwise derive a continent-sized
+/// circle far off the river, so the visible area falls entirely on one side.
+/// Centring on the line and capping the radius keeps the split visible; the user
+/// then moves/resizes the circle to their area of interest.
 ({LatLng center, double radiusMeters}) effectiveInclusion({
   required double? lat,
   required double? lng,
@@ -153,13 +174,45 @@ class _BoundEntry {
     return (center: LatLng(lat, lng), radiusMeters: radiusMeters);
   }
   final bound = ViewBound.ofCorners(points);
-  final r = math.max(bound.diagonalMeters * 0.75, _minDerivedRadius);
-  return (center: bound.center, radiusMeters: r);
+  final r = (bound.diagonalMeters * 0.75)
+      .clamp(_minDerivedRadius, _maxDerivedRadius)
+      .toDouble();
+  return (center: _arcMidpoint(points), radiusMeters: r);
+}
+
+/// The point halfway along [pts] by ground distance — always *on* the line, so a
+/// derived inclusion circle sits over the line rather than over its (possibly
+/// far-off) bounding-box centre.
+LatLng _arcMidpoint(List<LatLng> pts) {
+  if (pts.length < 2) return pts.first;
+  const d = Distance(calculator: Haversine());
+  var total = 0.0;
+  for (var i = 0; i < pts.length - 1; i++) {
+    total += d(pts[i], pts[i + 1]);
+  }
+  final half = total / 2;
+  var acc = 0.0;
+  for (var i = 0; i < pts.length - 1; i++) {
+    final seg = d(pts[i], pts[i + 1]);
+    if (acc + seg >= half) {
+      final t = seg > 0 ? (half - acc) / seg : 0.0;
+      return LatLng(
+        pts[i].latitude + (pts[i + 1].latitude - pts[i].latitude) * t,
+        pts[i].longitude + (pts[i + 1].longitude - pts[i].longitude) * t,
+      );
+    }
+    acc += seg;
+  }
+  return pts.last;
 }
 
 /// Floor for a derived inclusion radius, so a tiny drawn line still gets a
 /// usable disk.
 const double _minDerivedRadius = 300;
+
+/// Cap for a derived inclusion radius, so a whole-river import stays a local,
+/// visible circle rather than a continent-sized one.
+const double _maxDerivedRadius = 5000;
 
 /// A cheap order-sensitive hash of [points], for cache signatures.
 int hashPoints(Iterable<LatLng> points) {

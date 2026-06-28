@@ -417,15 +417,27 @@ class _RegionPainter extends CustomPainter {
       if (ring.length < 3) continue;
       final diskPath = _ringToPath(ring);
 
-      final r = freeLineRegion(
-        points: line,
-        offsetMeters: l.offsetMeters,
-        bandMeters: band,
-        spanMeters: inc.radiusMeters,
-        bandInward: inverted,
-      );
+      // Split the inclusion disk along the (offset) line into clean halves: the
+      // boundary is the line's in-disk path + the circle arc, so a wiggly river
+      // never scatters the fill. Memoised (camera-independent) so a heavy
+      // imported river is re-split only when its inputs change.
+      final sig = '${hashPoints(line)}|${inc.center.latitude}|'
+          '${inc.center.longitude}|${inc.radiusMeters}|${l.offsetMeters}|'
+          '$band|$inverted';
+      final r = regionGeometryCache.halfDisk(l.id, sig, () {
+        final reg = freeLineDiskRegion(
+          points: line,
+          center: inc.center,
+          radiusMeters: inc.radiusMeters,
+          offsetMeters: l.offsetMeters,
+          bandMeters: band,
+          bandInward: inverted,
+        );
+        return (outer: reg.outer, core: reg.core);
+      });
 
-      // Clip each half-plane ring to the inclusion disk → half-disk.
+      // Intersect with the disk as a safety net against the offset/extension
+      // poking slightly past the rim.
       Path? clipToDisk(List<LatLng> r) {
         if (r.length < 3) return null;
         return Path.combine(PathOperation.intersect, _ringToPath(r), diskPath);
