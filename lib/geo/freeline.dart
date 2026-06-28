@@ -127,8 +127,14 @@ FreeLineRegion freeLineDiskRegion({
   final median = segLens.isEmpty ? 0.0 : segLens[segLens.length ~/ 2];
   // 8× the median catches the gross connector outliers in a stitched import
   // while leaving a normally-spaced line (hand-drawn, or sparse-but-uniform)
-  // untouched. The floor keeps a very dense line from breaking on minor jitter.
-  final jumpLen = max(8 * median, 1500.0);
+  // untouched. The 1500 m floor keeps a very dense line from breaking on minor
+  // jitter; the disk-diameter (2·r) floor keeps a *sparse* line from breaking on
+  // an ordinary gap that is still local to the disk. A genuine connector is far
+  // longer than the region of interest (tens of km vs a ≤5 km disk), so a gap
+  // shorter than the disk's width is bridged, not cut at — otherwise a break
+  // landing inside the disk splits the real crossing into two dangling fragments
+  // that both get dropped, leaving the whole disk on one side (nothing fills).
+  final jumpLen = max(max(8 * median, 1500.0), 2 * r);
 
   // The cut runs (offset by the user's signed offset), shared by the fill and
   // the boundary. The band is no longer a second offset region — the painter

@@ -122,6 +122,30 @@ void main() {
     expect(filled(r, const LatLng(0, -0.005)), isFalse); // west → empty
   });
 
+  test('bridges an ordinary gap inside the disk (sparse import still cuts)', () {
+    // A dense south→north channel crossing the disk, but with a single moderate
+    // gap (~2.3 km, both ends well inside the 2 km-radius disk) where the import
+    // is sparse. That gap is larger than the 1.5 km jitter floor but smaller than
+    // the disk's width, so it must be *bridged*, not treated as a connector. A
+    // connector-break here would split the crossing into two dangling fragments,
+    // both dropped, leaving the disk entirely on one side (the real-world bug:
+    // an imported river that fills nothing).
+    final r = freeLineDiskRegion(
+      points: <LatLng>[
+        for (var i = -50; i <= -16; i++) LatLng(i * 0.001, 0.0), // dense approach
+        const LatLng(0.005, 0.0), // ~2.3 km gap from lat -0.016, still inside
+        for (var i = 6; i <= 50; i++) LatLng(i * 0.001, 0.0), // dense continuation
+      ],
+      center: center,
+      radiusMeters: radius,
+      offsetMeters: 0,
+    );
+    expect(r.missesDisk, isFalse); // the crossing survives the gap
+    expect(r.fillRings.length, 1);
+    expect(filled(r, const LatLng(0, 0.005)), isTrue); // east → filled
+    expect(filled(r, const LatLng(0, -0.005)), isFalse); // west → empty
+  });
+
   test('offset pushes the filled side outward across the line', () {
     // West→east line; right side = south. A +1 km offset pushes the boundary
     // 1 km into the filled (south) side, so a point 500 m south flips to empty.
