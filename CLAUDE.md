@@ -49,6 +49,12 @@ overlays (public-transport tiles, OSMAnd POIs, admin borders), offline resilienc
 - **Build & verify with the script:** before wrapping up a task, run
   `./scripts/build.sh --install --run` (analyze + test + build + install + launch) and check
   the change on the device. Use `--skip-checks` only for quick iteration.
+- **Always commit and push directly to `main`** (the project's "master"/integration branch).
+  **Do not create feature branches and do not open PRs** — work on `main`, commit there, and
+  push there. After completing **every** task, **always commit and push to `main`
+  automatically** without waiting to be asked. (This overrides the default "branch first when
+  on the default branch / commit only when asked" behaviour — for this repo, direct-to-`main`
+  is the rule.)
 - After completing **all** the steps of a task, **update the docs** — drop the delivered
   item from `planning/PLAN.md`'s open points and, if it introduced a new pattern/invariant,
   add it to `planning/IMPLEMENTATION_PLAN.md` (the architecture reference) — then **commit and
