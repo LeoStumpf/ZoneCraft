@@ -207,6 +207,8 @@ class LayersDrawer extends ConsumerWidget {
                         layer: layer,
                         objectCount: count,
                         isActive: layer.id == activeId,
+                        canCombine: display.any(
+                            (l) => l.type == layer.type && l.id != layer.id),
                       );
                     },
                   ),
@@ -248,11 +250,15 @@ class _LayerTile extends ConsumerWidget {
     required this.layer,
     required this.objectCount,
     required this.isActive,
+    required this.canCombine,
   });
 
   final Layer layer;
   final int objectCount;
   final bool isActive;
+
+  /// Whether another same-type layer exists to merge this one into.
+  final bool canCombine;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -321,6 +327,19 @@ class _LayerTile extends ConsumerWidget {
                   await importTrackIntoLayer(context, repo, layer);
                 case 'export':
                   await exportSingleLayer(context, repo, layer);
+                case 'combine':
+                  final layers =
+                      ref.read(layersProvider).asData?.value ?? const <Layer>[];
+                  final targets = layers
+                      .where((l) => l.type == layer.type && l.id != layer.id)
+                      .toList();
+                  final mergedInto =
+                      await combineLayerFlow(context, repo, layer, targets);
+                  // If the combined-away layer was active, follow to the target.
+                  if (mergedInto != null &&
+                      ref.read(activeLayerProvider) == layer.id) {
+                    ref.read(activeLayerProvider.notifier).select(mergedInto);
+                  }
                 case 'delete':
                   await repo.deleteLayer(layer.id);
               }
@@ -340,6 +359,9 @@ class _LayerTile extends ConsumerWidget {
                   child: Text('Import track…'),
                 ),
               const PopupMenuItem(value: 'export', child: Text('Export layer…')),
+              if (canCombine)
+                const PopupMenuItem(
+                    value: 'combine', child: Text('Combine…')),
               const PopupMenuItem(value: 'delete', child: Text('Delete')),
             ],
           ),

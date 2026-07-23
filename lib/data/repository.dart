@@ -66,6 +66,61 @@ class Repository {
     return (_db.delete(_db.layers)..where((l) => l.id.equals(id))).go();
   }
 
+  /// Irreversibly merges [sourceId] into [targetId] (must be the same type):
+  /// re-points every object of the source to the target layer, then deletes the
+  /// emptied source. Lossless — no geometry re-simplification, height polygons
+  /// preserved — because only the objects' `layerId` FK is reassigned (child
+  /// point/polygon rows key off their parent object, so they follow). Throws
+  /// [ArgumentError] on a missing layer or a type mismatch.
+  Future<void> combineLayers({
+    required String sourceId,
+    required String targetId,
+  }) async {
+    if (sourceId == targetId) return;
+    final src = await (_db.select(_db.layers)
+          ..where((l) => l.id.equals(sourceId)))
+        .getSingleOrNull();
+    final tgt = await (_db.select(_db.layers)
+          ..where((l) => l.id.equals(targetId)))
+        .getSingleOrNull();
+    if (src == null || tgt == null) throw ArgumentError('Layer no longer exists');
+    if (src.type != tgt.type) {
+      throw ArgumentError('Layers must be the same type');
+    }
+    await _db.transaction(() async {
+      // Only the table for this layer's type holds rows to re-point.
+      switch (src.type) {
+        case 'planes':
+          await (_db.update(_db.planes)
+                ..where((t) => t.layerId.equals(sourceId)))
+              .write(PlanesCompanion(layerId: Value(targetId)));
+        case 'subspace':
+          await (_db.update(_db.subspaces)
+                ..where((t) => t.layerId.equals(sourceId)))
+              .write(SubspacesCompanion(layerId: Value(targetId)));
+        case 'freeline':
+          await (_db.update(_db.freeLines)
+                ..where((t) => t.layerId.equals(sourceId)))
+              .write(FreeLinesCompanion(layerId: Value(targetId)));
+        case 'freearea':
+          await (_db.update(_db.freeAreas)
+                ..where((t) => t.layerId.equals(sourceId)))
+              .write(FreeAreasCompanion(layerId: Value(targetId)));
+        case 'height':
+          await (_db.update(_db.heightRegions)
+                ..where((t) => t.layerId.equals(sourceId)))
+              .write(HeightRegionsCompanion(layerId: Value(targetId)));
+        default:
+          await (_db.update(_db.circles)
+                ..where((t) => t.layerId.equals(sourceId)))
+              .write(CirclesCompanion(layerId: Value(targetId)));
+      }
+      // The source now holds no objects, so deleting it won't cascade the
+      // re-pointed rows away.
+      await (_db.delete(_db.layers)..where((l) => l.id.equals(sourceId))).go();
+    });
+  }
+
   /// Persists a new ordering. [orderedIds] is bottom-to-top draw order.
   Future<void> reorderLayers(List<String> orderedIds) async {
     await _db.batch((b) {

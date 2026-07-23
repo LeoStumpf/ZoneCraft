@@ -303,6 +303,65 @@ class _ImportChoice {
   final String? mergeLayerId;
 }
 
+/// Irreversibly merges [source] into another same-type layer picked from
+/// [targets]: shows a target picker, then a confirmation, then calls
+/// [Repository.combineLayers]. Returns the target layer id it merged into (so
+/// the caller can re-select the active layer), or null if cancelled.
+Future<String?> combineLayerFlow(
+  BuildContext context,
+  Repository repo,
+  Layer source,
+  List<Layer> targets,
+) async {
+  if (targets.isEmpty) return null;
+  final targetId = await showDialog<String>(
+    context: context,
+    builder: (ctx) => SimpleDialog(
+      title: Text('Combine “${source.name}” into…'),
+      children: [
+        for (final l in targets)
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, l.id),
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.merge),
+              title: Text(l.name),
+            ),
+          ),
+      ],
+    ),
+  );
+  if (targetId == null || !context.mounted) return null;
+  final target = targets.firstWhere((l) => l.id == targetId);
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Combine layers?'),
+      content: Text(
+        'Move all objects from “${source.name}” into “${target.name}” and '
+        'delete “${source.name}”. They take on “${target.name}”’s colour and '
+        'settings. This can’t be undone.',
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel')),
+        FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Combine')),
+      ],
+    ),
+  );
+  if (ok != true || !context.mounted) return null;
+  await repo.combineLayers(sourceId: source.id, targetId: target.id);
+  if (context.mounted) {
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text('Combined into “${target.name}”.')));
+  }
+  return target.id;
+}
+
 Future<_ImportChoice?> _askNewOrMerge(
   BuildContext context,
   List<Layer> layers,

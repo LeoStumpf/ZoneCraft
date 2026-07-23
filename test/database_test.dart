@@ -126,6 +126,56 @@ void main() {
     expect(areaPts.length, greaterThanOrEqualTo(3));
   });
 
+  test('combineLayers re-points objects into the target and deletes the source',
+      () async {
+    final a = await repo.createLayer(name: 'A', colorArgb: 0xFF0000FF);
+    final b = await repo.createLayer(name: 'B', colorArgb: 0xFF00FF00);
+    await repo.createCircle(
+        layerId: a, centerLat: 48.1, centerLng: 11.5, radiusMeters: 100);
+    await repo.createCircle(
+        layerId: a, centerLat: 48.2, centerLng: 11.6, radiusMeters: 200);
+    await repo.createCircle(
+        layerId: b, centerLat: 48.3, centerLng: 11.7, radiusMeters: 300);
+
+    await repo.combineLayers(sourceId: a, targetId: b);
+
+    // Source layer gone, target remains.
+    final layers = await repo.watchLayers().first;
+    expect(layers.map((l) => l.id), [b]);
+    // All three circles now belong to the target.
+    final circles = await repo.watchAllCircles().first;
+    expect(circles, hasLength(3));
+    expect(circles.every((c) => c.layerId == b), isTrue);
+  });
+
+  test('combineLayers keeps child rows and rejects a type mismatch', () async {
+    final a = await repo.createLayer(
+        name: 'LineA', colorArgb: 0xFF0000FF, type: 'freeline');
+    final b = await repo.createLayer(
+        name: 'LineB', colorArgb: 0xFF00FF00, type: 'freeline');
+    final lineA = await repo.createFreeLine(layerId: a);
+    await repo.addFreeLinePoints(
+        lineA, [const LatLng(48.0, 11.0), const LatLng(48.1, 11.1)]);
+    final lineB = await repo.createFreeLine(layerId: b);
+    await repo.addFreeLinePoints(
+        lineB, [const LatLng(49.0, 12.0), const LatLng(49.1, 12.1)]);
+
+    await repo.combineLayers(sourceId: a, targetId: b);
+
+    final lines = await repo.watchAllFreeLines().first;
+    expect(lines, hasLength(2));
+    expect(lines.every((l) => l.layerId == b), isTrue);
+    // Child points followed their parent line (4 total, intact).
+    expect(await repo.watchAllFreeLinePoints().first, hasLength(4));
+
+    // A different-type target is rejected.
+    final circleLayer = await repo.createLayer(name: 'C', colorArgb: 0xFF112233);
+    expect(
+      () => repo.combineLayers(sourceId: b, targetId: circleLayer),
+      throwsArgumentError,
+    );
+  });
+
   test('settings default to 500 and persist updates', () async {
     expect((await repo.watchSettings().first).uncertaintyMeters, 500);
     await repo.updateUncertainty(250);
