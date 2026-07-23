@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:latlong2/latlong.dart' show LatLng;
 import 'package:uuid/uuid.dart';
 
+import '../geo/simplify.dart';
 import 'database.dart';
 import 'serialization.dart';
 
@@ -1172,14 +1173,18 @@ class Repository {
         if ((o.offsetMeters ?? 0) != 0) {
           await updateFreeLine(lid, offsetMeters: o.offsetMeters);
         }
-        await addFreeLinePoints(lid, o.coords);
+        // Thin heavy imported tracks/borders (GPS jitter, thousand-point
+        // city lines) — RDP keeps the endpoints and overall shape.
+        await addFreeLinePoints(
+            lid, simplifyLine(o.coords, kImportSimplifyMeters));
       case 'freearea':
         if (o.coords.length < 3) return false;
         final aid = await createFreeArea(layerId: layerId, label: o.label);
         if ((o.offsetMeters ?? 0) != 0) {
           await updateFreeArea(aid, offsetMeters: o.offsetMeters);
         }
-        await addFreeAreaPoints(aid, o.coords);
+        await addFreeAreaPoints(
+            aid, simplifyRing(o.coords, kImportSimplifyMeters, minPoints: 3));
       case 'height':
         final r = o.radiusMeters;
         if (o.coords.isEmpty || r == null || !r.isFinite || r <= 0) {

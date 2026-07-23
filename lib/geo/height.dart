@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:image/image.dart' as img;
 import 'package:latlong2/latlong.dart';
 
+import 'simplify.dart';
+
 /// Elevation-contour geometry for the height layer: decode Terrarium terrain
 /// tiles, sample an elevation grid over a bounded circle, trace the threshold
 /// iso-contour with marching squares, and clip the result to the circle.
@@ -240,8 +242,12 @@ List<List<double>> buildHeightRings(HeightGenRequest req) {
       for (final p in loop) LatLng(latAt(p.y - 1), lngAt(p.x - 1)),
     ];
     final clipped = _clipToConvex(ring, clipPoly, center);
-    if (clipped.length < 3) continue;
-    out.add([for (final p in clipped) ...[p.latitude, p.longitude]]);
+    // Thin the marching-squares stair-steps (many collinear points) before
+    // storing; runs in this isolate so the cost stays off the UI thread.
+    final simplified =
+        simplifyRing(clipped, kHeightSimplifyMeters, minPoints: 4);
+    if (simplified.length < 3) continue;
+    out.add([for (final p in simplified) ...[p.latitude, p.longitude]]);
   }
   return out;
 }

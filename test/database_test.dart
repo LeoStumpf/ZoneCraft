@@ -1,8 +1,10 @@
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:latlong2/latlong.dart';
 
 import 'package:zonecraft/data/database.dart';
 import 'package:zonecraft/data/repository.dart';
+import 'package:zonecraft/data/serialization.dart';
 
 void main() {
   late AppDatabase db;
@@ -77,6 +79,51 @@ void main() {
     await repo.deleteLayer(layerId);
     expect(await repo.watchAllSubspaces().first, isEmpty);
     expect(await repo.watchAllSubspacePoints().first, isEmpty);
+  });
+
+  test('import simplifies heavy freeline/freearea geometry', () async {
+    // A 50-point meridian (all collinear on a great circle) and a padded square.
+    final densLine = [for (var i = 0; i < 50; i++) LatLng(48.0 + i * 0.001, 11.0)];
+    final squareRing = <LatLng>[];
+    const corners = [
+      LatLng(48.0, 11.0),
+      LatLng(48.0, 11.02),
+      LatLng(48.02, 11.02),
+      LatLng(48.02, 11.0),
+    ];
+    for (var e = 0; e < 4; e++) {
+      final c0 = corners[e];
+      final c1 = corners[(e + 1) % 4];
+      for (var k = 0; k < 5; k++) {
+        squareRing.add(LatLng(
+          c0.latitude + (c1.latitude - c0.latitude) * k / 5,
+          c0.longitude + (c1.longitude - c0.longitude) * k / 5,
+        ));
+      }
+    }
+
+    await repo.importData(ExportData([
+      ExportLayer(
+        name: 'line',
+        colorArgb: 0xFF00FF00,
+        type: 'freeline',
+        isInverted: false,
+        objects: [ExportObject(kind: 'freeline', coords: densLine)],
+      ),
+      ExportLayer(
+        name: 'area',
+        colorArgb: 0xFF0000FF,
+        type: 'freearea',
+        isInverted: false,
+        objects: [ExportObject(kind: 'freearea', coords: squareRing)],
+      ),
+    ]));
+
+    final linePts = await repo.watchAllFreeLinePoints().first;
+    expect(linePts, hasLength(2)); // collinear -> just the endpoints
+    final areaPts = await repo.watchAllFreeAreaPoints().first;
+    expect(areaPts.length, lessThan(squareRing.length)); // corners only (~4)
+    expect(areaPts.length, greaterThanOrEqualTo(3));
   });
 
   test('settings default to 500 and persist updates', () async {
