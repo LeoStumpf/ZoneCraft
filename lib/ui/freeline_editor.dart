@@ -19,6 +19,7 @@ class FreeLineEditorSheet extends ConsumerStatefulWidget {
     required this.freeLine,
     required this.points,
     required this.layers,
+    required this.onAddPoint,
   });
 
   final FreeLine freeLine;
@@ -26,6 +27,9 @@ class FreeLineEditorSheet extends ConsumerStatefulWidget {
   /// The line's points, ordered.
   final List<FreeLinePoint> points;
   final List<Layer> layers;
+
+  /// Adds a point near the map centre (visible, then draggable to fine-tune).
+  final VoidCallback onAddPoint;
 
   @override
   ConsumerState<FreeLineEditorSheet> createState() =>
@@ -129,18 +133,6 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
     );
   }
 
-  Future<void> _addPoint() async {
-    final anchor = widget.points.lastOrNull;
-    final lat = anchor?.lat ?? 0.0;
-    final lng = (anchor?.lng ?? 0.0) + 0.005;
-    final id = await _repo.addFreeLinePoint(
-      freeLineId: widget.freeLine.id,
-      lat: lat,
-      lng: lng,
-    );
-    if (!mounted) return;
-    _armPlacement(id, widget.points.length);
-  }
 
   Future<void> _deletePoint(FreeLinePoint p) async {
     await _repo.deleteFreeLinePoint(p.id);
@@ -222,7 +214,7 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
               Row(
                 children: [
                   TextButton.icon(
-                    onPressed: _addPoint,
+                    onPressed: widget.onAddPoint,
                     icon: const Icon(Icons.add_location_alt_outlined),
                     label: const Text('Add point'),
                   ),
@@ -326,11 +318,51 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
           color: armed ? Theme.of(context).colorScheme.primary : null,
           onPressed: () => _armPlacement(p.id, index),
         ),
-        IconButton(
-          tooltip: 'Delete point ${index + 1}',
-          icon: const Icon(Icons.remove_circle_outline),
-          // Keep at least two points so the line still divides the view.
-          onPressed: widget.points.length <= 2 ? null : () => _deletePoint(p),
+        PopupMenuButton<String>(
+          tooltip: 'Point ${index + 1} options',
+          icon: const Icon(Icons.more_vert),
+          itemBuilder: (context) => [
+            PopupMenuItem(
+              value: 'up',
+              enabled: index > 0,
+              child: const Row(children: [
+                Icon(Icons.arrow_upward, size: 18),
+                SizedBox(width: 8),
+                Text('Move up'),
+              ]),
+            ),
+            PopupMenuItem(
+              value: 'down',
+              enabled: index < widget.points.length - 1,
+              child: const Row(children: [
+                Icon(Icons.arrow_downward, size: 18),
+                SizedBox(width: 8),
+                Text('Move down'),
+              ]),
+            ),
+            PopupMenuItem(
+              value: 'remove',
+              // Keep at least two points so the line still divides the view.
+              enabled: widget.points.length > 2,
+              child: const Row(children: [
+                Icon(Icons.remove_circle_outline, size: 18),
+                SizedBox(width: 8),
+                Text('Remove'),
+              ]),
+            ),
+          ],
+          onSelected: (v) {
+            switch (v) {
+              case 'up':
+                _repo.swapFreeLinePointOrder(
+                    p.id, widget.points[index - 1].id);
+              case 'down':
+                _repo.swapFreeLinePointOrder(
+                    p.id, widget.points[index + 1].id);
+              case 'remove':
+                _deletePoint(p);
+            }
+          },
         ),
       ],
     );

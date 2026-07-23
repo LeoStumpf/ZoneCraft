@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_dragmarker/flutter_map_dragmarker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
@@ -17,6 +19,7 @@ import '../geo/geodesic.dart';
 import '../geo/tiles.dart';
 import '../state/providers.dart';
 import 'circle_editor.dart';
+import 'collapsible_sheet.dart';
 import 'freearea_editor.dart';
 import 'freeline_editor.dart';
 import 'height_editor.dart';
@@ -38,6 +41,25 @@ class _MapScreenState extends ConsumerState<MapScreen>
     with WidgetsBindingObserver {
   final _mapController = MapController();
   final _scaffoldKey = GlobalKey<ScaffoldState>();
+  // Wraps the FlutterMap so a handle's lat/lng can be projected to a global
+  // screen position (for popup menus anchored on a dragged point).
+  final _mapKey = GlobalKey();
+  // Live-drag throttle: at most one point drags at a time, so a single gate
+  // keeps the persisted-per-frame writes off the UI thread's back.
+  DateTime _lastDragWriteAt = DateTime.fromMillisecondsSinceEpoch(0);
+  // The position a handle held when its drag began, so a move can be undone.
+  LatLng? _dragOrigin;
+  // Shows the "handles are draggable" hint once per app session, the first time
+  // an object is selected.
+  bool _editHintShown = false;
+  // Tap-to-place mode for seeding a new point-set object: while set, map taps
+  // drop points into this (empty) layer instead of selecting. Holds the layer
+  // id + type; a banner offers "Done".
+  String? _placeLayerId;
+  String? _placeType;
+  // Vertex ids marked (by tapping their handle) for bulk delete; all belong to
+  // the currently selected object. Cleared on any selection change.
+  final Set<String> _markedPoints = {};
   static const _hitTest = Distance(calculator: Haversine());
 
   /// The user's last known position, shown as a marker. Null until the user
@@ -606,6 +628,19 @@ class _MapScreenState extends ConsumerState<MapScreen>
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
+  /// SnackBar shown after a handle drag, offering to put the point back where it
+  /// started ([revert] rewrites the original lat/lng).
+  void _showMoveUndo(String what, VoidCallback revert) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(
+        content: Text('$what moved'),
+        duration: const Duration(seconds: 4),
+        action: SnackBarAction(label: 'Undo', onPressed: revert),
+      ));
+  }
+
   /// Toggles tap-to-measure-elevation mode. Clears any previous probe result.
   /// Arming this disarms the distance probe — only one measure mode at a time.
   void _toggleProbe() {
@@ -713,40 +748,157 @@ class _MapScreenState extends ConsumerState<MapScreen>
     return '${m < 0 ? '−' : ''}$withSep m';
   }
 
-  /// A small non-interactive dot marking an edit point (circle centre / plane
-  /// endpoint / subspace point). The white ring keeps it visible over any map
-  /// colour; the [main] point of a subspace is drawn larger and white-filled.
-  Marker _editPointMarker(LatLng point, {bool main = false, String? label}) {
-    final size = main ? 22.0 : 18.0;
-    return _labeledMarker(
-      point,
-      coreSize: size,
-      core: _editPointDot(main: main),
-      label: label,
+  /// A draggable edit handle centred on [point]: drag it to move the underlying
+  /// point — persisted live via [onMoved] as it moves (throttled) so the region
+  /// reshapes under the finger, with a "· UNDO" offered on release — and
+  /// long-press it to open a menu ([onMenu], given the handle's global screen
+  /// position). The dot sits inside a generous 40 px box so it is easy to grab;
+  /// [main] draws it larger/white (the subspace main point), [core] overrides the
+  /// dot (e.g. a centre crosshair), and [label] shows a tiny name plate below it.
+  /// [undoLabel] names the thing moved in the undo SnackBar (null suppresses it —
+  /// e.g. for bounding-circle centres where there's no natural single-step undo).
+  /// [onTapToggle] (vertex handles) marks the point for bulk delete, drawn with
+  /// an accent ring when [marked].
+  DragMarker _dragHandle(
+    LatLng point, {
+    required Key key,
+    required void Function(LatLng) onMoved,
+    bool main = false,
+    String? label,
+    Widget? core,
+    void Function(Offset globalPos)? onMenu,
+    String? undoLabel,
+    bool live = true,
+    bool marked = false,
+    VoidCallback? onTapToggle,
+  }) {
+    const labelHeight = 14.0;
+    const gap = 1.0;
+    const coreSize = 40.0;
+    const pad = gap + labelHeight;
+    final hasLabel = label != null && label.isNotEmpty;
+    // Equal top/bottom padding keeps the core at the box centre = the point,
+    // so DragMarker's default centre alignment anchors the dot on [point].
+    final width = hasLabel ? 140.0 : coreSize;
+    final height = hasLabel ? coreSize + 2 * pad : coreSize;
+    final dot = core ?? _editPointDot(main: main);
+    return DragMarker(
+      key: key,
+      point: point,
+      size: Size(width, height),
+      onTap: onTapToggle == null ? null : (_) => onTapToggle(),
+      onDragStart: (_, latlng) => _dragOrigin = latlng,
+      onDragUpdate: !live
+          ? null
+          : (_, latlng) {
+              // Persist at ~20 fps so the region redraws live without flooding
+              // the DB.
+              final now = DateTime.now();
+              if (now.difference(_lastDragWriteAt).inMilliseconds < 50) return;
+              _lastDragWriteAt = now;
+              if (latlng.latitude.isFinite && latlng.longitude.isFinite) {
+                onMoved(latlng);
+              }
+            },
+      onDragEnd: (_, latlng) {
+        if (!latlng.latitude.isFinite || !latlng.longitude.isFinite) return;
+        onMoved(latlng);
+        final origin = _dragOrigin;
+        _dragOrigin = null;
+        // Only worth an undo if the point actually moved.
+        if (undoLabel != null &&
+            origin != null &&
+            (origin.latitude != latlng.latitude ||
+                origin.longitude != latlng.longitude)) {
+          _showMoveUndo(undoLabel, () => onMoved(origin));
+        }
+      },
+      onLongPress:
+          onMenu == null ? null : (latlng) => onMenu(_globalPosOf(latlng)),
+      builder: (context, pos, isDragging) {
+        // Marked (for bulk delete): an accent ring around the dot.
+        final core = marked
+            ? Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                      color: Theme.of(context).colorScheme.primary, width: 3),
+                ),
+                child: Center(child: dot),
+              )
+            : dot;
+        final child = Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (hasLabel) const SizedBox(height: pad),
+            SizedBox(
+                width: coreSize, height: coreSize, child: Center(child: core)),
+            if (hasLabel) ...[
+              const SizedBox(height: gap),
+              SizedBox(height: labelHeight, child: _markerLabel(label)),
+            ],
+          ],
+        );
+        // A slight lift while dragging gives tactile feedback.
+        return isDragging ? Transform.scale(scale: 1.25, child: child) : child;
+      },
     );
   }
 
-  /// Handle marking a freehand line's inclusion-circle centre — a crosshair so
-  /// it reads differently from the line's point dots. Tapping it arms a centre
-  /// relocation (same as the editor's "Move centre" button).
-  Marker _inclusionCenterMarker(LatLng point) {
-    return _labeledMarker(
-      point,
-      coreSize: 28,
-      core: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () =>
-            ref.read(freeLineCenterPlacementProvider.notifier).arm(true),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.black87, width: 2),
-          ),
-          child: const Icon(Icons.add, size: 18, color: Colors.black87),
-        ),
+  /// The crosshair core used for a bounding-circle centre handle (freehand-line
+  /// inclusion / height region) — reads differently from the plain point dots.
+  Widget _crosshairCore() {
+    return Container(
+      width: 28,
+      height: 28,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.black87, width: 2),
       ),
+      child: const Icon(Icons.add, size: 18, color: Colors.black87),
     );
+  }
+
+  /// A handle on the east edge of a bounding circle: drag it to resize, setting
+  /// the radius to its geodesic distance from [center] (applied via [onResize]
+  /// on release — resize is end-only to avoid the ring chasing the finger).
+  DragMarker _radiusHandle(
+    LatLng center,
+    double radiusMeters, {
+    required Key key,
+    required void Function(double meters) onResize,
+  }) {
+    return _dragHandle(
+      _hitTest.offset(center, radiusMeters, 90), // due east of the centre
+      key: key,
+      live: false,
+      undoLabel: null,
+      core: Container(
+        width: 24,
+        height: 24,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.black87, width: 2),
+        ),
+        child: const Icon(Icons.open_in_full, size: 13, color: Colors.black87),
+      ),
+      onMoved: (ll) {
+        final m = _hitTest.distance(center, ll);
+        if (m.isFinite && m > 1) onResize(m);
+      },
+    );
+  }
+
+  /// Projects a handle's [point] to a global screen position, used to anchor a
+  /// popup menu on it (DragMarker's long-press callback only reports lat/lng).
+  Offset _globalPosOf(LatLng point) {
+    final local = _mapController.camera.latLngToScreenOffset(point);
+    final box = _mapKey.currentContext?.findRenderObject() as RenderBox?;
+    return box?.localToGlobal(local) ?? local;
   }
 
   /// The decorated dot used by edit-point markers. The [main] subspace point is
@@ -764,20 +916,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
           width: main ? 4 : 2.5,
         ),
       ),
-    );
-  }
-
-  /// A subspace point handle: like [_editPointMarker] but long-pressable to open
-  /// a menu that makes it the main (active) point, and labelled with its name
-  /// (when set). The dot sits inside a larger transparent box so the small
-  /// handle is easy to long-press.
-  Marker _subspacePointMarker(SubspacePoint p) {
-    return _labeledMarker(
-      LatLng(p.lat, p.lng),
-      coreSize: 40,
-      core: Center(child: _editPointDot(main: p.isMain)),
-      label: p.label,
-      onLongPressStart: (d) => _showSubspacePointMenu(p, d.globalPosition),
     );
   }
 
@@ -846,15 +984,36 @@ class _MapScreenState extends ConsumerState<MapScreen>
     );
   }
 
-  /// Popup menu for a long-pressed subspace point: set it as the main point.
-  Future<void> _showSubspacePointMenu(
-      SubspacePoint p, Offset globalPosition) async {
+  /// One row in an on-map point menu.
+  static PopupMenuItem<String> _pointMenuItem(
+    String value,
+    IconData icon,
+    String text, {
+    bool enabled = true,
+  }) {
+    return PopupMenuItem<String>(
+      value: value,
+      enabled: enabled,
+      child: Row(
+        children: [
+          Icon(icon, size: 18),
+          const SizedBox(width: 8),
+          Text(text),
+        ],
+      ),
+    );
+  }
+
+  /// Opens a context menu anchored at [globalPosition] with a disabled [title]
+  /// header followed by [items], and returns the chosen value (or null).
+  Future<String?> _showPointMenu(
+    String title,
+    Offset globalPosition,
+    List<PopupMenuEntry<String>> items,
+  ) {
     final overlay =
         Overlay.of(context).context.findRenderObject() as RenderBox;
-    final title = (p.label != null && p.label!.isNotEmpty)
-        ? p.label!
-        : 'Subspace point';
-    final selected = await showMenu<String>(
+    return showMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(
         globalPosition.dx,
@@ -868,23 +1027,145 @@ class _MapScreenState extends ConsumerState<MapScreen>
           child: Text(title, style: Theme.of(context).textTheme.labelMedium),
         ),
         const PopupMenuDivider(),
-        PopupMenuItem<String>(
-          value: 'main',
-          enabled: !p.isMain,
-          child: Row(
-            children: [
-              Icon(p.isMain ? Icons.check_circle : Icons.radio_button_unchecked,
-                  size: 18),
-              const SizedBox(width: 8),
-              Text(p.isMain ? 'Already the main point' : 'Set as main point'),
-            ],
-          ),
-        ),
+        ...items,
       ],
     );
-    if (selected == 'main' && mounted) {
-      await ref.read(repositoryProvider).setMainPoint(p.subspaceId, p.id);
-      if (mounted) _hint('Main point updated.');
+  }
+
+  /// Prompts for a point/object name, pre-filled with [current]. Returns the new
+  /// name (empty string clears it) or null if the user cancelled.
+  Future<String?> _promptPointName(String title, String? current) async {
+    final controller = TextEditingController(text: current ?? '');
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(
+            labelText: 'Name',
+            hintText: 'Leave empty to clear',
+          ),
+          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return result;
+  }
+
+  /// Popup menu for a long-pressed subspace point: set as main, rename, or
+  /// remove (honouring the editor's invariants — keep ≥1 point and promote a new
+  /// main when the current main is removed).
+  Future<void> _showSubspacePointMenu(
+      SubspacePoint p, List<SubspacePoint> siblings, Offset pos) async {
+    final title =
+        (p.label != null && p.label!.isNotEmpty) ? p.label! : 'Subspace point';
+    final selected = await _showPointMenu(title, pos, [
+      _pointMenuItem('main', p.isMain ? Icons.check_circle : Icons.radio_button_unchecked,
+          p.isMain ? 'Already the main point' : 'Set as main point',
+          enabled: !p.isMain),
+      _pointMenuItem('rename', Icons.label_outline, 'Rename…'),
+      _pointMenuItem('remove', Icons.remove_circle_outline, 'Remove point',
+          enabled: siblings.length > 1),
+    ]);
+    if (selected == null || !mounted) return;
+    final repo = ref.read(repositoryProvider);
+    switch (selected) {
+      case 'main':
+        await repo.setMainPoint(p.subspaceId, p.id);
+        if (mounted) _hint('Main point updated.');
+      case 'rename':
+        final name = await _promptPointName('Name point', p.label);
+        if (name == null || !mounted) return;
+        await repo.updateSubspacePoint(p.id,
+            label: Value(name.isEmpty ? null : name));
+      case 'remove':
+        final wasMain = p.isMain;
+        final remaining = siblings.where((q) => q.id != p.id).toList();
+        await repo.deleteSubspacePoint(p.id);
+        if (wasMain && remaining.isNotEmpty) {
+          await repo.setMainPoint(p.subspaceId, remaining.first.id);
+        }
+        if (mounted) _hint('Point removed.');
+    }
+  }
+
+  /// Popup menu for a long-pressed freehand vertex (line or area). Vertices have
+  /// no label, so the only action is removal — guarded so a line keeps ≥2 points
+  /// and an area keeps ≥3.
+  Future<void> _showFreeVertexMenu(
+    Offset pos, {
+    required String title,
+    required bool canRemove,
+    required Future<void> Function() onRemove,
+  }) async {
+    final selected = await _showPointMenu(title, pos, [
+      _pointMenuItem('remove', Icons.remove_circle_outline, 'Remove point',
+          enabled: canRemove),
+    ]);
+    if (selected == 'remove' && mounted) {
+      await onRemove();
+      if (mounted) _hint('Point removed.');
+    }
+  }
+
+  /// Popup menu for a long-pressed circle centre: rename the circle or delete it.
+  Future<void> _showCircleMenu(Circle c, Offset pos) async {
+    final title =
+        (c.label != null && c.label!.isNotEmpty) ? c.label! : 'Circle';
+    final selected = await _showPointMenu(title, pos, [
+      _pointMenuItem('rename', Icons.label_outline, 'Rename…'),
+      _pointMenuItem('delete', Icons.delete_outline, 'Delete circle'),
+    ]);
+    if (selected == null || !mounted) return;
+    final repo = ref.read(repositoryProvider);
+    switch (selected) {
+      case 'rename':
+        final name = await _promptPointName('Name circle', c.label);
+        if (name == null || !mounted) return;
+        await repo.updateCircle(c.id, label: Value(name.isEmpty ? null : name));
+      case 'delete':
+        await repo.deleteCircle(c.id);
+        if (mounted) _hint('Circle deleted.');
+    }
+  }
+
+  /// Popup menu for a long-pressed plane endpoint: rename the plane, swap which
+  /// side is included, or delete it.
+  Future<void> _showPlaneMenu(Plane pl, Offset pos) async {
+    final title =
+        (pl.label != null && pl.label!.isNotEmpty) ? pl.label! : 'Plane';
+    final selected = await _showPointMenu(title, pos, [
+      _pointMenuItem('rename', Icons.label_outline, 'Rename…'),
+      _pointMenuItem('swap', Icons.swap_horiz, 'Swap included side'),
+      _pointMenuItem('delete', Icons.delete_outline, 'Delete plane'),
+    ]);
+    if (selected == null || !mounted) return;
+    final repo = ref.read(repositoryProvider);
+    switch (selected) {
+      case 'rename':
+        final name = await _promptPointName('Name plane', pl.label);
+        if (name == null || !mounted) return;
+        await repo.updatePlane(pl.id, label: Value(name.isEmpty ? null : name));
+      case 'swap':
+        await repo.updatePlane(pl.id, nearA: !pl.nearA);
+        if (mounted) _hint('Included side swapped.');
+      case 'delete':
+        await repo.deletePlane(pl.id);
+        if (mounted) _hint('Plane deleted.');
     }
   }
 
@@ -1091,6 +1372,74 @@ class _MapScreenState extends ConsumerState<MapScreen>
     ref.read(freeAreaPlacementProvider.notifier).arm(null);
     ref.read(selectedHeightRegionProvider.notifier).select(null);
     ref.read(heightPlacementProvider.notifier).arm(false);
+    // Marks belong to the object being edited; drop them when it deselects.
+    if (_markedPoints.isNotEmpty) _markedPoints.clear();
+  }
+
+  /// Toggles whether [pointId] is marked for bulk delete.
+  void _toggleMarked(String pointId) {
+    setState(() {
+      if (!_markedPoints.remove(pointId)) _markedPoints.add(pointId);
+    });
+  }
+
+  /// Deletes every marked vertex of the selected object at once, keeping the
+  /// type's minimum (subspace ≥1, line ≥2, area ≥3) — refuses (with a hint) if
+  /// the deletion would drop below it. Promotes a new subspace main if needed.
+  Future<void> _deleteMarked() async {
+    final repo = ref.read(repositoryProvider);
+    final marked = _markedPoints.toList();
+    if (marked.isEmpty) return;
+    final subId = ref.read(selectedSubspaceProvider);
+    final lineId = ref.read(selectedFreeLineProvider);
+    final areaId = ref.read(selectedFreeAreaProvider);
+    if (subId != null) {
+      final pts = (ref.read(subspacePointsProvider).asData?.value ?? const [])
+          .where((p) => p.subspaceId == subId)
+          .toList();
+      final toDelete = pts.where((p) => _markedPoints.contains(p.id)).toList();
+      if (pts.length - toDelete.length < 1) {
+        _hint('Keep at least one point.');
+        return;
+      }
+      final removingMain = toDelete.any((p) => p.isMain);
+      for (final p in toDelete) {
+        await repo.deleteSubspacePoint(p.id);
+      }
+      if (removingMain) {
+        final remaining =
+            pts.where((p) => !_markedPoints.contains(p.id)).toList();
+        if (remaining.isNotEmpty) {
+          await repo.setMainPoint(subId, remaining.first.id);
+        }
+      }
+    } else if (lineId != null) {
+      final pts = (ref.read(freeLinePointsProvider).asData?.value ?? const [])
+          .where((p) => p.freeLineId == lineId)
+          .toList();
+      final toDelete = pts.where((p) => _markedPoints.contains(p.id)).toList();
+      if (pts.length - toDelete.length < 2) {
+        _hint('Keep at least two points.');
+        return;
+      }
+      for (final p in toDelete) {
+        await repo.deleteFreeLinePoint(p.id);
+      }
+    } else if (areaId != null) {
+      final pts = (ref.read(freeAreaPointsProvider).asData?.value ?? const [])
+          .where((p) => p.freeAreaId == areaId)
+          .toList();
+      final toDelete = pts.where((p) => _markedPoints.contains(p.id)).toList();
+      if (pts.length - toDelete.length < 3) {
+        _hint('Keep at least three points.');
+        return;
+      }
+      for (final p in toDelete) {
+        await repo.deleteFreeAreaPoint(p.id);
+      }
+    }
+    setState(() => _markedPoints.clear());
+    if (mounted) _hint('${marked.length} points removed.');
   }
 
   void _selectCircle(String id) {
@@ -1276,6 +1625,106 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// Adds to a subspace layer: a point to the layer's existing object, or a new
   /// object seeded with a main point at [center] plus two flanking points (so
   /// the main cell is immediately visible). Selects the object either way.
+  /// Enters tap-to-place mode for [layer] (an empty point-set layer): the next
+  /// map taps drop the object's initial points where tapped, instead of a fixed
+  /// seed at the map centre. Clears any selection so the banner is unobstructed.
+  void _enterPlacement(Layer layer) {
+    _clearSelection();
+    setState(() {
+      _placeLayerId = layer.id;
+      _placeType = layer.type;
+    });
+    _hint('Tap the map to drop points, then tap Done.');
+  }
+
+  /// Leaves tap-to-place mode and selects the object just built (so its editor
+  /// and draggable handles appear).
+  void _exitPlacement() {
+    final layerId = _placeLayerId;
+    final type = _placeType;
+    setState(() {
+      _placeLayerId = null;
+      _placeType = null;
+    });
+    if (layerId == null) return;
+    switch (type) {
+      case 'subspace':
+        final o = (ref.read(subspacesProvider).asData?.value ?? const [])
+            .where((s) => s.layerId == layerId)
+            .firstOrNull;
+        if (o != null) _selectSubspace(o.id);
+      case 'freeline':
+        final o = (ref.read(freeLinesProvider).asData?.value ?? const [])
+            .where((l) => l.layerId == layerId)
+            .firstOrNull;
+        if (o != null) _selectFreeLine(o.id);
+      case 'freearea':
+        final o = (ref.read(freeAreasProvider).asData?.value ?? const [])
+            .where((a) => a.layerId == layerId)
+            .firstOrNull;
+        if (o != null) _selectFreeArea(o.id);
+    }
+  }
+
+  /// Drops one point at [latlng] while in tap-to-place mode, creating the object
+  /// on the first tap and appending on later ones.
+  Future<void> _placeTapAt(LatLng latlng) async {
+    final repo = ref.read(repositoryProvider);
+    final layerId = _placeLayerId!;
+    switch (_placeType) {
+      case 'subspace':
+        final existing = (ref.read(subspacesProvider).asData?.value ?? const [])
+            .where((s) => s.layerId == layerId)
+            .firstOrNull;
+        if (existing == null) {
+          final id = await repo.createSubspace(layerId: layerId);
+          await repo.addSubspacePoint(
+              subspaceId: id,
+              lat: latlng.latitude,
+              lng: latlng.longitude,
+              isMain: true);
+        } else {
+          await repo.addSubspacePoint(
+              subspaceId: existing.id,
+              lat: latlng.latitude,
+              lng: latlng.longitude);
+        }
+      case 'freeline':
+        final existing = (ref.read(freeLinesProvider).asData?.value ?? const [])
+            .where((l) => l.layerId == layerId)
+            .firstOrNull;
+        if (existing == null) {
+          final id = await repo.createFreeLine(
+            layerId: layerId,
+            inclusionLat: latlng.latitude,
+            inclusionLng: latlng.longitude,
+            inclusionRadiusMeters: _defaultRadius() * 3,
+          );
+          await repo.addFreeLinePoint(
+              freeLineId: id, lat: latlng.latitude, lng: latlng.longitude);
+        } else {
+          await repo.addFreeLinePoint(
+              freeLineId: existing.id,
+              lat: latlng.latitude,
+              lng: latlng.longitude);
+        }
+      case 'freearea':
+        final existing = (ref.read(freeAreasProvider).asData?.value ?? const [])
+            .where((a) => a.layerId == layerId)
+            .firstOrNull;
+        if (existing == null) {
+          final id = await repo.createFreeArea(layerId: layerId);
+          await repo.addFreeAreaPoint(
+              freeAreaId: id, lat: latlng.latitude, lng: latlng.longitude);
+        } else {
+          await repo.addFreeAreaPoint(
+              freeAreaId: existing.id,
+              lat: latlng.latitude,
+              lng: latlng.longitude);
+        }
+    }
+  }
+
   Future<void> _addSubspaceAt(
     LatLng center,
     Layer layer,
@@ -1388,6 +1837,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
     List<FreeAreaPoint> freeAreaPoints,
     List<HeightRegion> heightRegions,
   ) async {
+    // Tap-to-place mode: drop points into the new object instead of selecting.
+    if (_placeLayerId != null) {
+      await _placeTapAt(latlng);
+      return;
+    }
+
     // Placement mode: relocate the selected circle's centre.
     if (ref.read(circlePlacementProvider)) {
       final selId = ref.read(selectedCircleProvider);
@@ -1565,15 +2020,76 @@ class _MapScreenState extends ConsumerState<MapScreen>
     }
   }
 
-  /// Long-press on the map: in an active **circles** layer, offer to drop a new
-  /// circle centred at the pressed point (a quicker route than the Add button,
-  /// which uses the map centre). Other layer types ignore the long-press.
+  /// Long-press on the map: drop a point at the pressed location. In a
+  /// **circles** layer it offers a new circle there; in a **subspace**,
+  /// **freeline**, or **freearea** layer with an object selected it adds a
+  /// vertex there — appended (subspace) or inserted on the nearest segment
+  /// (freeline/freearea), so it's a quicker route than the Add button (which
+  /// uses the map centre). The new vertex is immediately draggable.
   Future<void> _handleMapLongPress(
     Offset globalPosition,
     LatLng latlng,
     Layer? activeLayer,
   ) async {
-    if (activeLayer == null || activeLayer.type != 'circles') return;
+    if (activeLayer == null) return;
+    final repo = ref.read(repositoryProvider);
+    switch (activeLayer.type) {
+      case 'circles':
+        if (await _longPressAddMenu(
+            globalPosition, Icons.add_circle_outline, 'New circle here')) {
+          if (mounted) await _addCircleAt(latlng, activeLayer);
+        }
+      case 'subspace':
+        final selId = ref.read(selectedSubspaceProvider);
+        if (selId == null) return;
+        if (await _longPressAddMenu(globalPosition,
+            Icons.add_location_alt_outlined, 'Add point here')) {
+          await repo.addSubspacePoint(
+              subspaceId: selId, lat: latlng.latitude, lng: latlng.longitude);
+        }
+      case 'freeline':
+        final selId = ref.read(selectedFreeLineProvider);
+        if (selId == null) return;
+        if (await _longPressAddMenu(globalPosition,
+            Icons.add_location_alt_outlined, 'Insert point here')) {
+          final pts = (ref.read(freeLinePointsProvider).asData?.value ??
+                  const <FreeLinePoint>[])
+              .where((p) => p.freeLineId == selId)
+              .map((p) => (ll: LatLng(p.lat, p.lng), order: p.sortOrder))
+              .toList()
+            ..sort((a, b) => a.order.compareTo(b.order));
+          await repo.insertFreeLinePointAt(
+            freeLineId: selId,
+            sortOrder: _insertOrderFor(pts, latlng, closed: false),
+            lat: latlng.latitude,
+            lng: latlng.longitude,
+          );
+        }
+      case 'freearea':
+        final selId = ref.read(selectedFreeAreaProvider);
+        if (selId == null) return;
+        if (await _longPressAddMenu(globalPosition,
+            Icons.add_location_alt_outlined, 'Insert point here')) {
+          final pts = (ref.read(freeAreaPointsProvider).asData?.value ??
+                  const <FreeAreaPoint>[])
+              .where((p) => p.freeAreaId == selId)
+              .map((p) => (ll: LatLng(p.lat, p.lng), order: p.sortOrder))
+              .toList()
+            ..sort((a, b) => a.order.compareTo(b.order));
+          await repo.insertFreeAreaPointAt(
+            freeAreaId: selId,
+            sortOrder: _insertOrderFor(pts, latlng, closed: true),
+            lat: latlng.latitude,
+            lng: latlng.longitude,
+          );
+        }
+    }
+  }
+
+  /// Shows a one-item "add here" popup at [globalPosition]; returns whether it
+  /// was chosen (vs. dismissed).
+  Future<bool> _longPressAddMenu(
+      Offset globalPosition, IconData icon, String text) async {
     final overlay =
         Overlay.of(context).context.findRenderObject() as RenderBox;
     final selected = await showMenu<String>(
@@ -1584,22 +2100,51 @@ class _MapScreenState extends ConsumerState<MapScreen>
         overlay.size.width - globalPosition.dx,
         overlay.size.height - globalPosition.dy,
       ),
-      items: const [
+      items: [
         PopupMenuItem<String>(
-          value: 'circle',
+          value: 'ok',
           child: Row(
             children: [
-              Icon(Icons.add_circle_outline, size: 18),
-              SizedBox(width: 8),
-              Text('New circle here'),
+              Icon(icon, size: 18),
+              const SizedBox(width: 8),
+              Text(text),
             ],
           ),
         ),
       ],
     );
-    if (selected == 'circle' && mounted) {
-      await _addCircleAt(latlng, activeLayer);
+    return selected == 'ok';
+  }
+
+  /// The sort_order to give a vertex inserted at [tap] so it lands on the
+  /// nearest segment of the ordered [pts] (measured in screen space). For a
+  /// [closed] ring the wrap-around edge (last→first) is considered; inserting on
+  /// it appends after the last point.
+  int _insertOrderFor(
+    List<({LatLng ll, int order})> pts,
+    LatLng tap, {
+    required bool closed,
+  }) {
+    if (pts.isEmpty) return 0;
+    final cam = _mapController.camera;
+    final t = cam.latLngToScreenOffset(tap);
+    final n = pts.length;
+    final appendOrder = pts.last.order + 1;
+    var bestDist = double.infinity;
+    var bestOrder = appendOrder;
+    final segCount = closed ? n : n - 1;
+    for (var i = 0; i < segCount; i++) {
+      final a = cam.latLngToScreenOffset(pts[i].ll);
+      final b = cam.latLngToScreenOffset(pts[(i + 1) % n].ll);
+      final d = _distToSegment(t, a, b);
+      if (d < bestDist) {
+        bestDist = d;
+        // Wrap edge (last→first) appends; otherwise the new point lands between
+        // vertices i and i+1 by taking the follower's order and shifting it.
+        bestOrder = (closed && i == n - 1) ? appendOrder : pts[i + 1].order;
+      }
     }
+    return bestOrder;
   }
 
   @override
@@ -1714,6 +2259,17 @@ class _MapScreenState extends ConsumerState<MapScreen>
         selectedFreeLine != null ||
         selectedFreeArea != null ||
         selectedHeightRegion != null;
+    // First selection of the session: point out that handles now drag and that
+    // long-press adds/edits — the gestures are otherwise invisible.
+    if (hasSelection && !_editHintShown) {
+      _editHintShown = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _hint('Drag a point to move it · long-press it for options · '
+              'long-press the map to add one');
+        }
+      });
+    }
     final activeId = effectiveActiveLayerId(
       layers,
       ref.watch(activeLayerProvider),
@@ -1757,6 +2313,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
           : Stack(
               children: [
                 FlutterMap(
+                  key: _mapKey,
                   mapController: _mapController,
                   options: MapOptions(
                     initialCenter: hasSavedCamera
@@ -2050,37 +2607,173 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               ),
                         ],
                       ),
-                    // Visual handles for the object being edited: the circle's
-                    // centre, the plane's two points, or the subspace's points
-                    // (its main point shown distinct).
+                    // Draggable handles for the object being edited: drag to
+                    // move a point (persisted on release), long-press for its
+                    // menu. Circle/plane/subspace/freehand points and the
+                    // freehand-line & height bounding-circle centres.
                     if (hasSelection)
-                      MarkerLayer(
+                      DragMarkers(
                         markers: [
-                          if (selectedCircle != null)
-                            _editPointMarker(
+                          if (selectedCircle != null) ...[
+                            _dragHandle(
                               LatLng(
                                 selectedCircle.centerLat,
                                 selectedCircle.centerLng,
                               ),
+                              key: ValueKey('circle-${selectedCircle.id}'),
                               label: selectedCircle.label,
+                              undoLabel: 'Circle',
+                              onMoved: (ll) => ref
+                                  .read(repositoryProvider)
+                                  .updateCircle(selectedCircle.id,
+                                      centerLat: ll.latitude,
+                                      centerLng: ll.longitude),
+                              onMenu: (pos) =>
+                                  _showCircleMenu(selectedCircle, pos),
                             ),
+                            _radiusHandle(
+                              LatLng(
+                                selectedCircle.centerLat,
+                                selectedCircle.centerLng,
+                              ),
+                              selectedCircle.radiusMeters,
+                              key: ValueKey('circle-r-${selectedCircle.id}'),
+                              onResize: (m) => ref
+                                  .read(repositoryProvider)
+                                  .updateCircle(selectedCircle.id,
+                                      radiusMeters: m),
+                            ),
+                          ],
                           if (selectedPlane != null) ...[
-                            _editPointMarker(
+                            _dragHandle(
                               LatLng(selectedPlane.aLat, selectedPlane.aLng),
+                              key: ValueKey('plane-${selectedPlane.id}-A'),
+                              label: selectedPlane.label,
+                              undoLabel: 'Point',
+                              onMoved: (ll) => ref
+                                  .read(repositoryProvider)
+                                  .updatePlane(selectedPlane.id,
+                                      aLat: ll.latitude, aLng: ll.longitude),
+                              onMenu: (pos) =>
+                                  _showPlaneMenu(selectedPlane, pos),
                             ),
-                            _editPointMarker(
+                            _dragHandle(
                               LatLng(selectedPlane.bLat, selectedPlane.bLng),
+                              key: ValueKey('plane-${selectedPlane.id}-B'),
+                              undoLabel: 'Point',
+                              onMoved: (ll) => ref
+                                  .read(repositoryProvider)
+                                  .updatePlane(selectedPlane.id,
+                                      bLat: ll.latitude, bLng: ll.longitude),
+                              onMenu: (pos) =>
+                                  _showPlaneMenu(selectedPlane, pos),
                             ),
                           ],
                           for (final p in selectedSubspacePoints)
-                            _subspacePointMarker(p),
+                            _dragHandle(
+                              LatLng(p.lat, p.lng),
+                              key: ValueKey('sub-${p.id}'),
+                              main: p.isMain,
+                              label: p.label,
+                              undoLabel: 'Point',
+                              marked: _markedPoints.contains(p.id),
+                              onTapToggle: () => _toggleMarked(p.id),
+                              onMoved: (ll) => ref
+                                  .read(repositoryProvider)
+                                  .updateSubspacePoint(p.id,
+                                      lat: ll.latitude, lng: ll.longitude),
+                              onMenu: (pos) => _showSubspacePointMenu(
+                                  p, selectedSubspacePoints, pos),
+                            ),
                           for (final p in selectedFreeLinePoints)
-                            _editPointMarker(LatLng(p.lat, p.lng)),
-                          if (selectedFreeLineInclusion != null)
-                            _inclusionCenterMarker(
-                                selectedFreeLineInclusion.center),
+                            _dragHandle(
+                              LatLng(p.lat, p.lng),
+                              key: ValueKey('fl-${p.id}'),
+                              undoLabel: 'Point',
+                              marked: _markedPoints.contains(p.id),
+                              onTapToggle: () => _toggleMarked(p.id),
+                              onMoved: (ll) => ref
+                                  .read(repositoryProvider)
+                                  .updateFreeLinePoint(p.id,
+                                      lat: ll.latitude, lng: ll.longitude),
+                              onMenu: (pos) => _showFreeVertexMenu(
+                                pos,
+                                title: 'Line point',
+                                canRemove: selectedFreeLinePoints.length > 2,
+                                onRemove: () => ref
+                                    .read(repositoryProvider)
+                                    .deleteFreeLinePoint(p.id),
+                              ),
+                            ),
+                          if (selectedFreeLineInclusion != null) ...[
+                            _dragHandle(
+                              selectedFreeLineInclusion.center,
+                              key: ValueKey(
+                                  'fl-center-${selectedFreeLine!.id}'),
+                              core: _crosshairCore(),
+                              undoLabel: 'Centre',
+                              onMoved: (ll) => ref
+                                  .read(repositoryProvider)
+                                  .updateFreeLine(selectedFreeLine.id,
+                                      inclusionLat: ll.latitude,
+                                      inclusionLng: ll.longitude),
+                            ),
+                            _radiusHandle(
+                              selectedFreeLineInclusion.center,
+                              selectedFreeLineInclusion.radiusMeters,
+                              key: ValueKey('fl-r-${selectedFreeLine.id}'),
+                              onResize: (m) => ref
+                                  .read(repositoryProvider)
+                                  .updateFreeLine(selectedFreeLine.id,
+                                      inclusionRadiusMeters: m),
+                            ),
+                          ],
                           for (final p in selectedFreeAreaPoints)
-                            _editPointMarker(LatLng(p.lat, p.lng)),
+                            _dragHandle(
+                              LatLng(p.lat, p.lng),
+                              key: ValueKey('fa-${p.id}'),
+                              undoLabel: 'Point',
+                              marked: _markedPoints.contains(p.id),
+                              onTapToggle: () => _toggleMarked(p.id),
+                              onMoved: (ll) => ref
+                                  .read(repositoryProvider)
+                                  .updateFreeAreaPoint(p.id,
+                                      lat: ll.latitude, lng: ll.longitude),
+                              onMenu: (pos) => _showFreeVertexMenu(
+                                pos,
+                                title: 'Area point',
+                                canRemove: selectedFreeAreaPoints.length > 3,
+                                onRemove: () => ref
+                                    .read(repositoryProvider)
+                                    .deleteFreeAreaPoint(p.id),
+                              ),
+                            ),
+                          if (selectedHeightRegion != null) ...[
+                            _dragHandle(
+                              LatLng(selectedHeightRegion.centerLat,
+                                  selectedHeightRegion.centerLng),
+                              key: ValueKey(
+                                  'height-${selectedHeightRegion.id}'),
+                              core: _crosshairCore(),
+                              undoLabel: 'Centre',
+                              onMoved: (ll) => ref
+                                  .read(repositoryProvider)
+                                  .updateHeightRegion(selectedHeightRegion.id,
+                                      centerLat: ll.latitude,
+                                      centerLng: ll.longitude),
+                            ),
+                            _radiusHandle(
+                              LatLng(selectedHeightRegion.centerLat,
+                                  selectedHeightRegion.centerLng),
+                              selectedHeightRegion.radiusMeters,
+                              key: ValueKey(
+                                  'height-r-${selectedHeightRegion.id}'),
+                              onResize: (m) => ref
+                                  .read(repositoryProvider)
+                                  .updateHeightRegion(selectedHeightRegion.id,
+                                      radiusMeters: m),
+                            ),
+                          ],
                         ],
                       ),
                     RichAttributionWidget(
@@ -2114,6 +2807,72 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     ),
                   ),
                 ),
+                // Tap-to-place banner: guides the user and offers Done.
+                if (_placeLayerId != null)
+                  SafeArea(
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Material(
+                          color: Theme.of(context).colorScheme.surface,
+                          elevation: 2,
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.touch_app_outlined, size: 16),
+                                const SizedBox(width: 6),
+                                const Text('Tap to add points'),
+                                const SizedBox(width: 4),
+                                TextButton(
+                                  onPressed: _exitPlacement,
+                                  child: const Text('Done'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                // Bulk-delete banner: appears while any vertices are marked.
+                if (_markedPoints.isNotEmpty)
+                  SafeArea(
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Material(
+                          color: Theme.of(context).colorScheme.surface,
+                          elevation: 2,
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text('${_markedPoints.length} selected'),
+                                TextButton.icon(
+                                  onPressed: _deleteMarked,
+                                  icon: const Icon(Icons.delete_outline,
+                                      size: 18),
+                                  label: const Text('Delete'),
+                                ),
+                                TextButton(
+                                  onPressed: () =>
+                                      setState(() => _markedPoints.clear()),
+                                  child: const Text('Clear'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 // Elevation readout: the measured point and/or current location.
                 if (_probeMode ||
                     _probePoint != null ||
@@ -2320,7 +3079,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           ? null
                           : () {
                               final c = _mapController.camera.center;
-                              if (isSubspaceLayer) {
+                              // Empty point-set layer: tap-to-place the initial
+                              // points instead of dropping a fixed seed.
+                              if ((isSubspaceLayer && !subspaceExists) ||
+                                  (isFreeLineLayer && !freeLineExists) ||
+                                  (isFreeAreaLayer && !freeAreaExists)) {
+                                _enterPlacement(activeLayer);
+                              } else if (isSubspaceLayer) {
                                 _addSubspaceAt(c, activeLayer, subspaces);
                               } else if (isFreeLineLayer) {
                                 _addFreeLineAt(c, activeLayer, freeLines);
@@ -2368,7 +3133,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
                 ),
               ],
             ),
-      bottomSheet: selectedCircle != null
+      bottomSheet: !hasSelection
+          ? null
+          : CollapsibleSheet(
+              // Reset to expanded whenever the selected object changes.
+              key: ValueKey('sheet-'
+                  '${selectedCircle?.id ?? selectedPlane?.id ?? selectedSubspace?.id ?? selectedFreeLine?.id ?? selectedFreeArea?.id ?? selectedHeightRegion?.id}'),
+              child: selectedCircle != null
           ? CircleEditorSheet(
               key: ValueKey(selectedCircle.id),
               circle: selectedCircle,
@@ -2386,6 +3157,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
               subspace: selectedSubspace,
               points: selectedSubspacePoints,
               layers: layers,
+              onAddPoint: () => _addSubspaceAt(
+                _mapController.camera.center,
+                layers.firstWhere((l) => l.id == selectedSubspace.layerId),
+                subspaces,
+              ),
             )
           : selectedFreeLine != null
           ? FreeLineEditorSheet(
@@ -2393,6 +3169,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
               freeLine: selectedFreeLine,
               points: selectedFreeLinePoints,
               layers: layers,
+              onAddPoint: () => _addFreeLineAt(
+                _mapController.camera.center,
+                layers.firstWhere((l) => l.id == selectedFreeLine.layerId),
+                freeLines,
+              ),
             )
           : selectedFreeArea != null
           ? FreeAreaEditorSheet(
@@ -2400,6 +3181,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
               freeArea: selectedFreeArea,
               points: selectedFreeAreaPoints,
               layers: layers,
+              onAddPoint: () => _addFreeAreaAt(
+                _mapController.camera.center,
+                layers.firstWhere((l) => l.id == selectedFreeArea.layerId),
+                freeAreas,
+              ),
             )
           : selectedHeightRegion != null
           ? HeightEditorSheet(
@@ -2410,7 +3196,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   .length,
               layers: layers,
             )
-          : null,
+          : const SizedBox.shrink(),
+            ),
     );
   }
 }

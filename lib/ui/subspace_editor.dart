@@ -18,6 +18,7 @@ class SubspaceEditorSheet extends ConsumerStatefulWidget {
     required this.subspace,
     required this.points,
     required this.layers,
+    required this.onAddPoint,
   });
 
   final Subspace subspace;
@@ -25,6 +26,9 @@ class SubspaceEditorSheet extends ConsumerStatefulWidget {
   /// The subspace's points, ordered.
   final List<SubspacePoint> points;
   final List<Layer> layers;
+
+  /// Adds a point near the map centre (visible, then draggable to fine-tune).
+  final VoidCallback onAddPoint;
 
   @override
   ConsumerState<SubspaceEditorSheet> createState() =>
@@ -92,22 +96,6 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
       ..showSnackBar(
         SnackBar(content: Text('Tap the map to place point ${displayIndex + 1}')),
       );
-  }
-
-  Future<void> _addPoint() async {
-    // Seed near the main point (or the first point) with a small offset, then
-    // arm placement so the user can drop it exactly by tapping the map.
-    final anchor = widget.points.where((p) => p.isMain).firstOrNull ??
-        widget.points.firstOrNull;
-    final lat = anchor?.lat ?? 0.0;
-    final lng = (anchor?.lng ?? 0.0) + 0.005;
-    final id = await _repo.addSubspacePoint(
-      subspaceId: widget.subspace.id,
-      lat: lat,
-      lng: lng,
-    );
-    if (!mounted) return;
-    _armPlacement(id, widget.points.length);
   }
 
   Future<void> _deletePoint(SubspacePoint p) async {
@@ -210,7 +198,7 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
               Row(
                 children: [
                   TextButton.icon(
-                    onPressed: _addPoint,
+                    onPressed: widget.onAddPoint,
                     icon: const Icon(Icons.add_location_alt_outlined),
                     label: const Text('Add point'),
                   ),
@@ -230,6 +218,43 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
         ),
       ),
     );
+  }
+
+  /// Prompts for a point name, pre-filled with the current label, and writes it
+  /// back (empty clears it). The same rename is available from the map handle's
+  /// long-press menu; this is the in-editor route.
+  Future<void> _renamePoint(SubspacePoint p) async {
+    final controller = TextEditingController(text: p.label ?? '');
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Name point'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(
+            labelText: 'Name',
+            hintText: 'Leave empty to clear',
+          ),
+          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name == null || !mounted) return;
+    await _repo.updateSubspacePoint(p.id,
+        label: Value(name.isEmpty ? null : name));
   }
 
   Widget _pointRow(SubspacePoint p, int index, bool armed) {
@@ -257,6 +282,11 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
               }
             },
           ),
+        ),
+        IconButton(
+          tooltip: 'Rename point ${index + 1}',
+          icon: const Icon(Icons.label_outline),
+          onPressed: () => _renamePoint(p),
         ),
         IconButton(
           tooltip: 'Move point ${index + 1} by tapping the map',

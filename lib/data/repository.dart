@@ -263,11 +263,17 @@ class Repository {
     return id;
   }
 
-  Future<void> updateSubspacePoint(String id, {double? lat, double? lng}) {
+  Future<void> updateSubspacePoint(
+    String id, {
+    double? lat,
+    double? lng,
+    Value<String?> label = const Value.absent(),
+  }) {
     return (_db.update(_db.subspacePoints)..where((p) => p.id.equals(id))).write(
       SubspacePointsCompanion(
         lat: lat == null ? const Value.absent() : Value(lat),
         lng: lng == null ? const Value.absent() : Value(lng),
+        label: label,
       ),
     );
   }
@@ -385,6 +391,35 @@ class Repository {
     return id;
   }
 
+  /// Inserts a point into [freeLineId] at ordered position [sortOrder]
+  /// (shifting every point at or after that order down by one), so a vertex can
+  /// be dropped *between* two existing ones — e.g. a long-press on a segment.
+  Future<String> insertFreeLinePointAt({
+    required String freeLineId,
+    required int sortOrder,
+    required double lat,
+    required double lng,
+  }) async {
+    final id = _uuid.v4();
+    await _db.transaction(() async {
+      await _db.customStatement(
+        'UPDATE free_line_points SET sort_order = sort_order + 1 '
+        'WHERE free_line_id = ? AND sort_order >= ?',
+        [freeLineId, sortOrder],
+      );
+      await _db.into(_db.freeLinePoints).insert(
+            FreeLinePointsCompanion.insert(
+              id: id,
+              freeLineId: freeLineId,
+              lat: lat,
+              lng: lng,
+              sortOrder: sortOrder,
+            ),
+          );
+    });
+    return id;
+  }
+
   /// Appends many points to [freeLineId] in one batch (used by track import,
   /// where a city border can carry thousands of vertices).
   Future<void> addFreeLinePoints(String freeLineId, List<LatLng> pts) async {
@@ -418,6 +453,22 @@ class Repository {
 
   Future<void> deleteFreeLinePoint(String id) {
     return (_db.delete(_db.freeLinePoints)..where((p) => p.id.equals(id))).go();
+  }
+
+  /// Swaps the ordering of two line points (used to reorder a vertex up/down).
+  Future<void> swapFreeLinePointOrder(String idA, String idB) async {
+    await _db.transaction(() async {
+      final a = await (_db.select(_db.freeLinePoints)
+            ..where((p) => p.id.equals(idA)))
+          .getSingle();
+      final b = await (_db.select(_db.freeLinePoints)
+            ..where((p) => p.id.equals(idB)))
+          .getSingle();
+      await (_db.update(_db.freeLinePoints)..where((p) => p.id.equals(idA)))
+          .write(FreeLinePointsCompanion(sortOrder: Value(b.sortOrder)));
+      await (_db.update(_db.freeLinePoints)..where((p) => p.id.equals(idB)))
+          .write(FreeLinePointsCompanion(sortOrder: Value(a.sortOrder)));
+    });
   }
 
   Future<int> _maxFreeLinePointOrder(String freeLineId) async {
@@ -493,6 +544,35 @@ class Repository {
     return id;
   }
 
+  /// Inserts a point into [freeAreaId] at ordered position [sortOrder]
+  /// (shifting every point at or after that order down by one), so a vertex can
+  /// be dropped *between* two existing ones — e.g. a long-press on an edge.
+  Future<String> insertFreeAreaPointAt({
+    required String freeAreaId,
+    required int sortOrder,
+    required double lat,
+    required double lng,
+  }) async {
+    final id = _uuid.v4();
+    await _db.transaction(() async {
+      await _db.customStatement(
+        'UPDATE free_area_points SET sort_order = sort_order + 1 '
+        'WHERE free_area_id = ? AND sort_order >= ?',
+        [freeAreaId, sortOrder],
+      );
+      await _db.into(_db.freeAreaPoints).insert(
+            FreeAreaPointsCompanion.insert(
+              id: id,
+              freeAreaId: freeAreaId,
+              lat: lat,
+              lng: lng,
+              sortOrder: sortOrder,
+            ),
+          );
+    });
+    return id;
+  }
+
   /// Appends many points to [freeAreaId] in one batch (used by area import).
   Future<void> addFreeAreaPoints(String freeAreaId, List<LatLng> pts) async {
     if (pts.isEmpty) return;
@@ -525,6 +605,22 @@ class Repository {
 
   Future<void> deleteFreeAreaPoint(String id) {
     return (_db.delete(_db.freeAreaPoints)..where((p) => p.id.equals(id))).go();
+  }
+
+  /// Swaps the ordering of two area ring points (used to reorder a vertex).
+  Future<void> swapFreeAreaPointOrder(String idA, String idB) async {
+    await _db.transaction(() async {
+      final a = await (_db.select(_db.freeAreaPoints)
+            ..where((p) => p.id.equals(idA)))
+          .getSingle();
+      final b = await (_db.select(_db.freeAreaPoints)
+            ..where((p) => p.id.equals(idB)))
+          .getSingle();
+      await (_db.update(_db.freeAreaPoints)..where((p) => p.id.equals(idA)))
+          .write(FreeAreaPointsCompanion(sortOrder: Value(b.sortOrder)));
+      await (_db.update(_db.freeAreaPoints)..where((p) => p.id.equals(idB)))
+          .write(FreeAreaPointsCompanion(sortOrder: Value(a.sortOrder)));
+    });
   }
 
   Future<int> _maxFreeAreaPointOrder(String freeAreaId) async {
