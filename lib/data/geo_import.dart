@@ -297,63 +297,89 @@ List<LatLng> _gpxPoints(Iterable<XmlElement> pts) {
 
 // --- shared -----------------------------------------------------------------
 
-/// Joins line [parts] into a single ordered polyline by greedily chaining the
-/// nearest endpoints (reversing parts as needed). Used to turn a feature's
-/// MultiLineString — e.g. a river's many member ways — into ONE continuous
-/// divide, so it imports as a single freehand line filling one side rather than
-/// many disjoint segments whose half-planes union to cover everything.
+const _stitchDistance = Distance(calculator: Haversine());
+
+/// Endpoints within this many metres are treated as a **shared node** — the same
+/// feature continuing — and joined. A larger gap means a *separate* feature, so
+/// we never fabricate a straight connector across it (see [stitchPolylines]).
+const double _maxStitchGapMeters = 50.0;
+
+/// Joins line [parts] into a single ordered polyline by chaining only parts whose
+/// endpoints effectively coincide (a shared OSM node, ≤ [_maxStitchGapMeters]),
+/// reversing parts as needed. A feature split into many *contiguous* member ways
+/// — e.g. a river's main channel — stitches into one continuous divide, so it
+/// imports as a single freehand line filling one clean side.
 ///
-/// Always attaches the nearest remaining part, so genuinely disjoint parts are
-/// still chained (joined by a straight jump); for a real river the parts are
-/// contiguous so the jumps vanish. Returns empty if no part has ≥2 points.
+/// Genuinely **disconnected** parts (a river's separate side channels, canals,
+/// island splits) are NOT wired together with a fabricated straight jump —
+/// doing so used to inject false "cuts" that broke the freehand-line region.
+/// Instead the parts form separate connected runs and the **longest** run (by
+/// geodesic length — the main channel) is returned. Returns empty if no part has
+/// ≥2 points.
 List<LatLng> stitchPolylines(List<List<LatLng>> parts) {
-  final segs = <List<LatLng>>[
+  final remaining = <List<LatLng>>[
     for (final p in parts) if (p.length >= 2) List<LatLng>.of(p),
   ];
-  if (segs.isEmpty) return const [];
-  // Start from the longest part for a stable spine.
-  segs.sort((a, b) => b.length.compareTo(a.length));
-  final path = segs.removeAt(0);
-  while (segs.isNotEmpty) {
-    final head = path.first, tail = path.last;
-    var best = double.infinity;
-    var bestIdx = 0;
-    var atTail = true, reverse = false;
-    for (var i = 0; i < segs.length; i++) {
-      final s = segs[i];
-      // tail→s.first: append as-is; tail→s.last: append reversed;
-      // head→s.last: prepend as-is; head→s.first: prepend reversed.
-      final cands = <(double, bool, bool)>[
-        (_d2(tail, s.first), true, false),
-        (_d2(tail, s.last), true, true),
-        (_d2(head, s.last), false, false),
-        (_d2(head, s.first), false, true),
-      ];
-      for (final (d, at, rev) in cands) {
-        if (d < best) {
-          best = d;
-          bestIdx = i;
-          atTail = at;
-          reverse = rev;
+  if (remaining.isEmpty) return const [];
+
+  double gap(LatLng a, LatLng b) => _stitchDistance.as(LengthUnit.Meter, a, b);
+
+  final components = <List<LatLng>>[];
+  while (remaining.isNotEmpty) {
+    // Start each component from the longest remaining part for a stable spine.
+    remaining.sort((a, b) => b.length.compareTo(a.length));
+    final path = remaining.removeAt(0);
+    var grew = true;
+    while (grew && remaining.isNotEmpty) {
+      grew = false;
+      final head = path.first, tail = path.last;
+      var best = double.infinity;
+      var bestIdx = -1;
+      var atTail = true, reverse = false;
+      for (var i = 0; i < remaining.length; i++) {
+        final s = remaining[i];
+        // tail→s.first: append; tail→s.last: append reversed;
+        // head→s.last: prepend; head→s.first: prepend reversed.
+        final cands = <(double, bool, bool)>[
+          (gap(tail, s.first), true, false),
+          (gap(tail, s.last), true, true),
+          (gap(head, s.last), false, false),
+          (gap(head, s.first), false, true),
+        ];
+        for (final (d, at, rev) in cands) {
+          if (d < best) {
+            best = d;
+            bestIdx = i;
+            atTail = at;
+            reverse = rev;
+          }
         }
       }
+      // Only extend across a (near-)shared node; a larger gap ends this run.
+      if (bestIdx >= 0 && best <= _maxStitchGapMeters) {
+        var s = remaining.removeAt(bestIdx);
+        if (reverse) s = s.reversed.toList();
+        if (atTail) {
+          path.addAll(s);
+        } else {
+          path.insertAll(0, s);
+        }
+        grew = true;
+      }
     }
-    var s = segs.removeAt(bestIdx);
-    if (reverse) s = s.reversed.toList();
-    if (atTail) {
-      path.addAll(s);
-    } else {
-      path.insertAll(0, s);
-    }
+    components.add(path);
   }
-  return path;
-}
 
-/// Squared planar distance in degrees — adequate for "which endpoint is nearest".
-double _d2(LatLng a, LatLng b) {
-  final dLat = a.latitude - b.latitude;
-  final dLng = a.longitude - b.longitude;
-  return dLat * dLat + dLng * dLng;
+  double lengthMeters(List<LatLng> line) {
+    var total = 0.0;
+    for (var i = 1; i < line.length; i++) {
+      total += gap(line[i - 1], line[i]);
+    }
+    return total;
+  }
+
+  components.sort((a, b) => lengthMeters(b).compareTo(lengthMeters(a)));
+  return components.first;
 }
 
 /// Drops a ring's repeated closing vertex (first == last) if present.

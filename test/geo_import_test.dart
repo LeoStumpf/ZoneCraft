@@ -146,5 +146,44 @@ void main() {
         isEmpty,
       );
     });
+
+    const distance = Distance(calculator: Haversine());
+    double maxGap(List<LatLng> line) {
+      var m = 0.0;
+      for (var i = 1; i < line.length; i++) {
+        final d = distance.as(LengthUnit.Meter, line[i - 1], line[i]);
+        if (d > m) m = d;
+      }
+      return m;
+    }
+
+    test('does not fabricate a connector between far-apart channels', () {
+      // A main channel (meridian, ~111 m steps) and a separate channel far east.
+      final main = [for (var i = 0; i <= 10; i++) LatLng(48.0 + i * 0.001, 11.0)];
+      final side = [const LatLng(48.0, 11.05), const LatLng(48.003, 11.05)];
+      final line = stitchPolylines([main, side]);
+      // The longer (main) channel is returned; the side channel is dropped and
+      // NOT joined by a multi-km straight jump.
+      expect(line, hasLength(main.length));
+      expect(maxGap(line), lessThan(200)); // within-channel steps only
+    });
+
+    test('still joins parts across a small (shared-node) gap', () {
+      final a = [const LatLng(48.0, 11.0), const LatLng(48.005, 11.0)];
+      final gapStart = distance.offset(a.last, 20, 0); // 20 m north (< 50 m)
+      final b = [gapStart, distance.offset(gapStart, 500, 0)];
+      final line = stitchPolylines([a, b]);
+      expect(line, hasLength(a.length + b.length)); // bridged into one run
+    });
+
+    test('a near-but-separate channel (gap > threshold) is not merged', () {
+      final main = [for (var i = 0; i <= 8; i++) LatLng(48.0 + i * 0.001, 11.0)];
+      // ~149 m east of the main channel — a distinct parallel channel.
+      final side = [const LatLng(48.0, 11.002), const LatLng(48.002, 11.002)];
+      final line = stitchPolylines([main, side]);
+      expect(line, hasLength(main.length));
+      // None of the side channel's vertices leaked into the result.
+      expect(line.every((p) => p.longitude == 11.0), isTrue);
+    });
   });
 }
