@@ -235,6 +235,11 @@ class LayersDrawer extends ConsumerWidget {
                   ),
                 ),
                 const Divider(height: 1),
+                // The base map, pinned as the bottom-most layer: hideable and
+                // opacity-adjustable like any layer, but never reorderable or
+                // deletable.
+                const _BasemapTile(),
+                const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.settings_outlined),
                   title: const Text('Settings'),
@@ -297,6 +302,9 @@ class _LayerTile extends ConsumerWidget {
     final subtitle =
         StringBuffer('$objectCount $noun${objectCount == 1 ? '' : 's'}');
     if (layer.isInverted) subtitle.write(' · inverted');
+    if (layer.opacity < 0.999) {
+      subtitle.write(' · ${(layer.opacity * 100).round()}% opacity');
+    }
 
     return ListTile(
       selected: isActive,
@@ -343,6 +351,13 @@ class _LayerTile extends ConsumerWidget {
                   await _rename(context, repo);
                 case 'color':
                   await _pickColor(context, ref);
+                case 'opacity':
+                  await showOpacityDialog(
+                    context,
+                    title: 'Layer transparency',
+                    value: layer.opacity,
+                    onChanged: (v) => repo.updateLayer(layer.id, opacity: v),
+                  );
                 case 'inverse':
                   await repo.updateLayer(layer.id,
                       isInverted: !layer.isInverted);
@@ -370,6 +385,8 @@ class _LayerTile extends ConsumerWidget {
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'rename', child: Text('Rename')),
               const PopupMenuItem(value: 'color', child: Text('Colour')),
+              const PopupMenuItem(
+                  value: 'opacity', child: Text('Transparency…')),
               // 'height' layers use an above/below toggle, not viewport
               // invert; 'poi' layers are markers with nothing to invert.
               if (layer.type != 'height' && layer.type != 'poi')
@@ -449,6 +466,98 @@ class _LayerTile extends ConsumerWidget {
           .updateLayer(layer.id, colorArgb: result.toARGB32());
     }
   }
+}
+
+/// The base map as a pinned bottom "layer": a hide toggle and a transparency
+/// control, mirroring a layer tile — but with no rename/colour/reorder/delete,
+/// since the map can be hidden but never removed. Its state lives in
+/// `AppSettings` (`basemapVisible` / `basemapOpacity`).
+class _BasemapTile extends ConsumerWidget {
+  const _BasemapTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final repo = ref.read(repositoryProvider);
+    final settings = ref.watch(settingsProvider).asData?.value;
+    final visible = settings?.basemapVisible ?? true;
+    final opacity = settings?.basemapOpacity ?? 1.0;
+    final subtitle = StringBuffer('Base map');
+    if (opacity < 0.999) {
+      subtitle.write(' · ${(opacity * 100).round()}% opacity');
+    }
+    return ListTile(
+      leading: IconButton(
+        tooltip: visible ? 'Hide' : 'Show',
+        icon: Icon(
+            visible ? Icons.visibility : Icons.visibility_off_outlined),
+        onPressed:
+            settings == null ? null : () => repo.updateBasemapVisible(!visible),
+      ),
+      title: Row(
+        children: const [
+          Icon(Icons.map_outlined, size: 16),
+          SizedBox(width: 6),
+          Expanded(child: Text('Map')),
+        ],
+      ),
+      subtitle: Text(subtitle.toString()),
+      trailing: IconButton(
+        tooltip: 'Transparency',
+        icon: const Icon(Icons.opacity),
+        onPressed: settings == null
+            ? null
+            : () => showOpacityDialog(
+                  context,
+                  title: 'Map transparency',
+                  value: opacity,
+                  onChanged: (v) => repo.updateBasemapOpacity(v),
+                ),
+      ),
+    );
+  }
+}
+
+/// A modal 0–100% opacity slider shared by layer tiles and the base-map tile.
+/// [onChanged] fires **live** as the slider moves so the map updates
+/// immediately; there is no Save button — the change is already applied.
+Future<void> showOpacityDialog(
+  BuildContext context, {
+  required String title,
+  required double value,
+  required ValueChanged<double> onChanged,
+}) {
+  var current = value.clamp(0.0, 1.0);
+  return showDialog<void>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setState) => AlertDialog(
+        title: Text(title),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('${(current * 100).round()}% opaque'),
+            Slider(
+              min: 0,
+              max: 1,
+              divisions: 20,
+              value: current,
+              label: '${(current * 100).round()}%',
+              onChanged: (v) {
+                setState(() => current = v);
+                onChanged(v);
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 const _palette = <Color>[

@@ -49,6 +49,7 @@ class Repository {
     int? colorArgb,
     bool? isVisible,
     bool? isInverted,
+    double? opacity,
   }) {
     return (_db.update(_db.layers)..where((l) => l.id.equals(id))).write(
       LayersCompanion(
@@ -58,6 +59,7 @@ class Repository {
             isVisible == null ? const Value.absent() : Value(isVisible),
         isInverted:
             isInverted == null ? const Value.absent() : Value(isInverted),
+        opacity: opacity == null ? const Value.absent() : Value(opacity),
       ),
     );
   }
@@ -906,6 +908,8 @@ class Repository {
                   poiCategories: 0,
                   borderLevels: 0,
                   toolsExpanded: true,
+                  basemapVisible: true,
+                  basemapOpacity: 1.0,
                 )
               : rows.first,
         );
@@ -957,6 +961,26 @@ class Repository {
           AppSettingsCompanion.insert(
             id: const Value(1),
             toolsExpanded: Value(expanded),
+          ),
+        );
+  }
+
+  /// Upserts the base-map visibility toggle into the single settings row.
+  Future<void> updateBasemapVisible(bool visible) {
+    return _db.into(_db.appSettings).insertOnConflictUpdate(
+          AppSettingsCompanion.insert(
+            id: const Value(1),
+            basemapVisible: Value(visible),
+          ),
+        );
+  }
+
+  /// Upserts the base-map opacity (0–1) into the single settings row.
+  Future<void> updateBasemapOpacity(double opacity) {
+    return _db.into(_db.appSettings).insertOnConflictUpdate(
+          AppSettingsCompanion.insert(
+            id: const Value(1),
+            basemapOpacity: Value(opacity),
           ),
         );
   }

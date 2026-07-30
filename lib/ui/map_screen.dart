@@ -2035,6 +2035,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final uncertainty = settings?.uncertaintyMeters ?? 0;
     final transportOverlay = settings?.transportOverlay ?? false;
     final toolsExpanded = settings?.toolsExpanded ?? true;
+    final basemapVisible = settings?.basemapVisible ?? true;
+    final basemapOpacity = settings?.basemapOpacity ?? 1.0;
     // React to border-level changes.
     final borderMask = settings?.borderLevels ?? 0;
     if (borderMask != _borderMask) {
@@ -2213,12 +2215,21 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         tapPos.global, latlng, activeLayer),
                   ),
                   children: [
-                    TileLayer(
-                      urlTemplate: _baseTileUrl,
-                      userAgentPackageName: 'com.zonecraft.zonecraft',
-                      tileProvider: _tileProvider,
-                      maxZoom: 19,
-                    ),
+                    // Base OSM tiles — a pinned bottom "layer": hideable and
+                    // opacity-adjustable from the layers drawer. Opacity is a
+                    // no-op at 1.0 (Flutter skips the layer), so the common case
+                    // costs nothing; when hidden the tiles are dropped entirely
+                    // and the map's background colour shows through.
+                    if (basemapVisible)
+                      Opacity(
+                        opacity: basemapOpacity.clamp(0.0, 1.0),
+                        child: TileLayer(
+                          urlTemplate: _baseTileUrl,
+                          userAgentPackageName: 'com.zonecraft.zonecraft',
+                          tileProvider: _tileProvider,
+                          maxZoom: 19,
+                        ),
+                      ),
                     // Optional transparent public-transport overlays, above the
                     // base map but below the zone layers. ÖPNVKarte carries
                     // buses/trams/stops; OpenRailwayMap the rail network.
@@ -2238,26 +2249,34 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     ],
                     // One composited region per visible layer, bottom-to-top.
                     // POI layers hold markers, not a region — they render via
-                    // their own clustering marker layer.
+                    // their own clustering marker layer. Each layer is wrapped
+                    // in Opacity so its per-layer transparency multiplies the
+                    // whole layer's paint uniformly (a no-op at 1.0, so default
+                    // layers are unchanged and pay nothing).
                     for (final layer in layers)
                       if (layer.isVisible && layer.type == 'poi')
-                        PoiMarkersLayer(
-                          key: ValueKey(layer.id),
-                          layer: layer,
-                          sets: poiSets
-                              .where((s) => s.layerId == layer.id)
-                              .toList(),
-                          points: poiPoints,
-                          onClusterTap: (center) => _mapController.move(
-                            center,
-                            (_mapController.camera.zoom + 1.5)
-                                .clamp(2.0, 19.0),
+                        Opacity(
+                          opacity: layer.opacity.clamp(0.0, 1.0),
+                          child: PoiMarkersLayer(
+                            key: ValueKey(layer.id),
+                            layer: layer,
+                            sets: poiSets
+                                .where((s) => s.layerId == layer.id)
+                                .toList(),
+                            points: poiPoints,
+                            onClusterTap: (center) => _mapController.move(
+                              center,
+                              (_mapController.camera.zoom + 1.5)
+                                  .clamp(2.0, 19.0),
+                            ),
                           ),
                         )
                       else if (layer.isVisible)
-                        RegionLayer(
-                          key: ValueKey(layer.id),
-                          layer: layer,
+                        Opacity(
+                          opacity: layer.opacity.clamp(0.0, 1.0),
+                          child: RegionLayer(
+                            key: ValueKey(layer.id),
+                            layer: layer,
                           circles: layer.type == 'circles'
                               ? circles
                                     .where((c) => c.layerId == layer.id)
@@ -2303,7 +2322,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           heightPolygonPoints: layer.type == 'height'
                               ? heightPolygonPoints
                               : const <HeightPolygonPoint>[],
-                          uncertaintyMeters: uncertainty,
+                            uncertaintyMeters: uncertainty,
+                          ),
                         ),
                     // Outline of the selected line's inclusion circle, so the
                     // half-disk it splits is visible while editing.

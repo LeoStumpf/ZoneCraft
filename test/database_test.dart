@@ -204,6 +204,34 @@ void main() {
     expect((await repo.watchSettings().first).borderLevels, 0x09);
   });
 
+  test('layer opacity defaults to 1.0 and updates', () async {
+    final id = await repo.createLayer(name: 'L', colorArgb: 0xFF0000FF);
+    final created = await (db.select(db.layers)..where((l) => l.id.equals(id)))
+        .getSingle();
+    expect(created.opacity, 1.0);
+    await repo.updateLayer(id, opacity: 0.4);
+    final updated = await (db.select(db.layers)..where((l) => l.id.equals(id)))
+        .getSingle();
+    expect(updated.opacity, 0.4);
+    // Opacity edits must not disturb the other attributes.
+    expect(updated.colorArgb, 0xFF0000FF);
+    expect(updated.isVisible, isTrue);
+  });
+
+  test('base-map settings default to visible/opaque and persist', () async {
+    final initial = await repo.watchSettings().first;
+    expect(initial.basemapVisible, isTrue);
+    expect(initial.basemapOpacity, 1.0);
+    await repo.updateUncertainty(600);
+    await repo.updateBasemapVisible(false);
+    await repo.updateBasemapOpacity(0.3);
+    final saved = await repo.watchSettings().first;
+    expect(saved.basemapVisible, isFalse);
+    expect(saved.basemapOpacity, 0.3);
+    // Base-map edits share the settings row — must not clobber uncertainty.
+    expect(saved.uncertaintyMeters, 600);
+  });
+
   test('clearAll wipes objects, resets settings, re-seeds a layer', () async {
     final layerId = await repo.createLayer(name: 'L', colorArgb: 0xFF0000FF);
     await repo.createCircle(

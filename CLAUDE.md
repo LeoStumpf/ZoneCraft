@@ -17,7 +17,9 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   `outer`+`core` screen-space polygon; these union via `Path.combine`, then paint core (solid)
   + band (`outer−core`, lighter) + outline, or `viewport−outer` when the layer is **inverted**.
   Global uncertainty widens the band; freehand objects add a signed per-object `offsetMeters`.
-- **Layers drawer** (show/hide, reorder, recolour, rename, invert, add/delete) + **compass**,
+- **Layers drawer** (show/hide, reorder, recolour, retransparency, rename, invert, add/delete),
+  plus a pinned bottom **Map** tile (the base OSM tiles as a hideable, opacity-adjustable
+  layer that can never be deleted or reordered; its state lives in `AppSettings`) + **compass**,
   opt-in **Locate me** (also reads the terrain elevation there), a **Measure-elevation**
   probe (tap any point for its height), **persisted camera**, and a **Settings** screen
   (uncertainty, clear-all, and the overlay toggles below).
@@ -34,7 +36,7 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   exported alone and files imported as a new layer or **merged** into an existing same-type
   one (`ui/import_actions.dart`); generic **GeoJSON/KML/KMZ/GPX** tracks import into freehand
   layers (`data/geo_import.dart`).
-- **Drift schema is at v15**; migrations are append-only `if (from < N)` blocks.
+- **Drift schema is at v16**; migrations are append-only `if (from < N)` blocks.
 
 ## Current status
 
@@ -46,7 +48,7 @@ clear-all, overlay toggles), opt-in locate-me, persisted camera, optional overla
 (public-transport tiles, admin borders), offline resilience (cache-first tiles + prefetch,
 persisted border overlay), and import/export (whole-DB + per-layer + external
 GeoJSON/KML/KMZ/GPX; freeline imports prompt for their inclusion-circle radius).
-Drift schema is **v15**.
+Drift schema is **v16**.
 
 `planning/PLAN.md` has no open roadmap items; future polish ideas are listed there.
 

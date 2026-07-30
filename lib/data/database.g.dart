@@ -88,6 +88,18 @@ class $LayersTable extends Layers with TableInfo<$LayersTable, Layer> {
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _opacityMeta = const VerificationMeta(
+    'opacity',
+  );
+  @override
+  late final GeneratedColumn<double> opacity = GeneratedColumn<double>(
+    'opacity',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1.0),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -109,6 +121,7 @@ class $LayersTable extends Layers with TableInfo<$LayersTable, Layer> {
     sortOrder,
     type,
     isInverted,
+    opacity,
     createdAt,
   ];
   @override
@@ -170,6 +183,12 @@ class $LayersTable extends Layers with TableInfo<$LayersTable, Layer> {
         isInverted.isAcceptableOrUnknown(data['is_inverted']!, _isInvertedMeta),
       );
     }
+    if (data.containsKey('opacity')) {
+      context.handle(
+        _opacityMeta,
+        opacity.isAcceptableOrUnknown(data['opacity']!, _opacityMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -213,6 +232,10 @@ class $LayersTable extends Layers with TableInfo<$LayersTable, Layer> {
         DriftSqlType.bool,
         data['${effectivePrefix}is_inverted'],
       )!,
+      opacity: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}opacity'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -240,6 +263,11 @@ class Layer extends DataClass implements Insertable<Layer> {
 
   /// When true, render the complement (outside the objects) instead.
   final bool isInverted;
+
+  /// Layer opacity in [0, 1], multiplying the whole layer's paint (fills,
+  /// band, outline / markers). 1 = fully opaque (the default); lower values let
+  /// the map and lower layers show through.
+  final double opacity;
   final DateTime createdAt;
   const Layer({
     required this.id,
@@ -249,6 +277,7 @@ class Layer extends DataClass implements Insertable<Layer> {
     required this.sortOrder,
     required this.type,
     required this.isInverted,
+    required this.opacity,
     required this.createdAt,
   });
   @override
@@ -261,6 +290,7 @@ class Layer extends DataClass implements Insertable<Layer> {
     map['sort_order'] = Variable<int>(sortOrder);
     map['type'] = Variable<String>(type);
     map['is_inverted'] = Variable<bool>(isInverted);
+    map['opacity'] = Variable<double>(opacity);
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -274,6 +304,7 @@ class Layer extends DataClass implements Insertable<Layer> {
       sortOrder: Value(sortOrder),
       type: Value(type),
       isInverted: Value(isInverted),
+      opacity: Value(opacity),
       createdAt: Value(createdAt),
     );
   }
@@ -291,6 +322,7 @@ class Layer extends DataClass implements Insertable<Layer> {
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
       type: serializer.fromJson<String>(json['type']),
       isInverted: serializer.fromJson<bool>(json['isInverted']),
+      opacity: serializer.fromJson<double>(json['opacity']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -305,6 +337,7 @@ class Layer extends DataClass implements Insertable<Layer> {
       'sortOrder': serializer.toJson<int>(sortOrder),
       'type': serializer.toJson<String>(type),
       'isInverted': serializer.toJson<bool>(isInverted),
+      'opacity': serializer.toJson<double>(opacity),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -317,6 +350,7 @@ class Layer extends DataClass implements Insertable<Layer> {
     int? sortOrder,
     String? type,
     bool? isInverted,
+    double? opacity,
     DateTime? createdAt,
   }) => Layer(
     id: id ?? this.id,
@@ -326,6 +360,7 @@ class Layer extends DataClass implements Insertable<Layer> {
     sortOrder: sortOrder ?? this.sortOrder,
     type: type ?? this.type,
     isInverted: isInverted ?? this.isInverted,
+    opacity: opacity ?? this.opacity,
     createdAt: createdAt ?? this.createdAt,
   );
   Layer copyWithCompanion(LayersCompanion data) {
@@ -339,6 +374,7 @@ class Layer extends DataClass implements Insertable<Layer> {
       isInverted: data.isInverted.present
           ? data.isInverted.value
           : this.isInverted,
+      opacity: data.opacity.present ? data.opacity.value : this.opacity,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -353,6 +389,7 @@ class Layer extends DataClass implements Insertable<Layer> {
           ..write('sortOrder: $sortOrder, ')
           ..write('type: $type, ')
           ..write('isInverted: $isInverted, ')
+          ..write('opacity: $opacity, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -367,6 +404,7 @@ class Layer extends DataClass implements Insertable<Layer> {
     sortOrder,
     type,
     isInverted,
+    opacity,
     createdAt,
   );
   @override
@@ -380,6 +418,7 @@ class Layer extends DataClass implements Insertable<Layer> {
           other.sortOrder == this.sortOrder &&
           other.type == this.type &&
           other.isInverted == this.isInverted &&
+          other.opacity == this.opacity &&
           other.createdAt == this.createdAt);
 }
 
@@ -391,6 +430,7 @@ class LayersCompanion extends UpdateCompanion<Layer> {
   final Value<int> sortOrder;
   final Value<String> type;
   final Value<bool> isInverted;
+  final Value<double> opacity;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const LayersCompanion({
@@ -401,6 +441,7 @@ class LayersCompanion extends UpdateCompanion<Layer> {
     this.sortOrder = const Value.absent(),
     this.type = const Value.absent(),
     this.isInverted = const Value.absent(),
+    this.opacity = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -412,6 +453,7 @@ class LayersCompanion extends UpdateCompanion<Layer> {
     required int sortOrder,
     this.type = const Value.absent(),
     this.isInverted = const Value.absent(),
+    this.opacity = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -426,6 +468,7 @@ class LayersCompanion extends UpdateCompanion<Layer> {
     Expression<int>? sortOrder,
     Expression<String>? type,
     Expression<bool>? isInverted,
+    Expression<double>? opacity,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -437,6 +480,7 @@ class LayersCompanion extends UpdateCompanion<Layer> {
       if (sortOrder != null) 'sort_order': sortOrder,
       if (type != null) 'type': type,
       if (isInverted != null) 'is_inverted': isInverted,
+      if (opacity != null) 'opacity': opacity,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -450,6 +494,7 @@ class LayersCompanion extends UpdateCompanion<Layer> {
     Value<int>? sortOrder,
     Value<String>? type,
     Value<bool>? isInverted,
+    Value<double>? opacity,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
@@ -461,6 +506,7 @@ class LayersCompanion extends UpdateCompanion<Layer> {
       sortOrder: sortOrder ?? this.sortOrder,
       type: type ?? this.type,
       isInverted: isInverted ?? this.isInverted,
+      opacity: opacity ?? this.opacity,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -490,6 +536,9 @@ class LayersCompanion extends UpdateCompanion<Layer> {
     if (isInverted.present) {
       map['is_inverted'] = Variable<bool>(isInverted.value);
     }
+    if (opacity.present) {
+      map['opacity'] = Variable<double>(opacity.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -509,6 +558,7 @@ class LayersCompanion extends UpdateCompanion<Layer> {
           ..write('sortOrder: $sortOrder, ')
           ..write('type: $type, ')
           ..write('isInverted: $isInverted, ')
+          ..write('opacity: $opacity, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -1641,6 +1691,33 @@ class $AppSettingsTable extends AppSettings
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _basemapVisibleMeta = const VerificationMeta(
+    'basemapVisible',
+  );
+  @override
+  late final GeneratedColumn<bool> basemapVisible = GeneratedColumn<bool>(
+    'basemap_visible',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("basemap_visible" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _basemapOpacityMeta = const VerificationMeta(
+    'basemapOpacity',
+  );
+  @override
+  late final GeneratedColumn<double> basemapOpacity = GeneratedColumn<double>(
+    'basemap_opacity',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1.0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1652,6 +1729,8 @@ class $AppSettingsTable extends AppSettings
     poiCategories,
     borderLevels,
     toolsExpanded,
+    basemapVisible,
+    basemapOpacity,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1731,6 +1810,24 @@ class $AppSettingsTable extends AppSettings
         ),
       );
     }
+    if (data.containsKey('basemap_visible')) {
+      context.handle(
+        _basemapVisibleMeta,
+        basemapVisible.isAcceptableOrUnknown(
+          data['basemap_visible']!,
+          _basemapVisibleMeta,
+        ),
+      );
+    }
+    if (data.containsKey('basemap_opacity')) {
+      context.handle(
+        _basemapOpacityMeta,
+        basemapOpacity.isAcceptableOrUnknown(
+          data['basemap_opacity']!,
+          _basemapOpacityMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1776,6 +1873,14 @@ class $AppSettingsTable extends AppSettings
         DriftSqlType.bool,
         data['${effectivePrefix}tools_expanded'],
       )!,
+      basemapVisible: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}basemap_visible'],
+      )!,
+      basemapOpacity: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}basemap_opacity'],
+      )!,
     );
   }
 
@@ -1811,6 +1916,14 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
   /// Whether the right-side utility FABs are shown (vs. collapsed behind the
   /// expand/hide toggle). Persisted so the choice survives a relaunch.
   final bool toolsExpanded;
+
+  /// Whether the base OSM tile layer is drawn. The base map behaves like a
+  /// pinned bottom "layer": it can be hidden (this flag) but never deleted.
+  final bool basemapVisible;
+
+  /// Opacity of the base OSM tile layer in [0, 1] — how strongly the map shows
+  /// through beneath the zone layers. 1 = fully opaque (the default).
+  final double basemapOpacity;
   const AppSetting({
     required this.id,
     required this.uncertaintyMeters,
@@ -1821,6 +1934,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     required this.poiCategories,
     required this.borderLevels,
     required this.toolsExpanded,
+    required this.basemapVisible,
+    required this.basemapOpacity,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1840,6 +1955,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     map['poi_categories'] = Variable<int>(poiCategories);
     map['border_levels'] = Variable<int>(borderLevels);
     map['tools_expanded'] = Variable<bool>(toolsExpanded);
+    map['basemap_visible'] = Variable<bool>(basemapVisible);
+    map['basemap_opacity'] = Variable<double>(basemapOpacity);
     return map;
   }
 
@@ -1860,6 +1977,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       poiCategories: Value(poiCategories),
       borderLevels: Value(borderLevels),
       toolsExpanded: Value(toolsExpanded),
+      basemapVisible: Value(basemapVisible),
+      basemapOpacity: Value(basemapOpacity),
     );
   }
 
@@ -1878,6 +1997,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       poiCategories: serializer.fromJson<int>(json['poiCategories']),
       borderLevels: serializer.fromJson<int>(json['borderLevels']),
       toolsExpanded: serializer.fromJson<bool>(json['toolsExpanded']),
+      basemapVisible: serializer.fromJson<bool>(json['basemapVisible']),
+      basemapOpacity: serializer.fromJson<double>(json['basemapOpacity']),
     );
   }
   @override
@@ -1893,6 +2014,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       'poiCategories': serializer.toJson<int>(poiCategories),
       'borderLevels': serializer.toJson<int>(borderLevels),
       'toolsExpanded': serializer.toJson<bool>(toolsExpanded),
+      'basemapVisible': serializer.toJson<bool>(basemapVisible),
+      'basemapOpacity': serializer.toJson<double>(basemapOpacity),
     };
   }
 
@@ -1906,6 +2029,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     int? poiCategories,
     int? borderLevels,
     bool? toolsExpanded,
+    bool? basemapVisible,
+    double? basemapOpacity,
   }) => AppSetting(
     id: id ?? this.id,
     uncertaintyMeters: uncertaintyMeters ?? this.uncertaintyMeters,
@@ -1916,6 +2041,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     poiCategories: poiCategories ?? this.poiCategories,
     borderLevels: borderLevels ?? this.borderLevels,
     toolsExpanded: toolsExpanded ?? this.toolsExpanded,
+    basemapVisible: basemapVisible ?? this.basemapVisible,
+    basemapOpacity: basemapOpacity ?? this.basemapOpacity,
   );
   AppSetting copyWithCompanion(AppSettingsCompanion data) {
     return AppSetting(
@@ -1938,6 +2065,12 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       toolsExpanded: data.toolsExpanded.present
           ? data.toolsExpanded.value
           : this.toolsExpanded,
+      basemapVisible: data.basemapVisible.present
+          ? data.basemapVisible.value
+          : this.basemapVisible,
+      basemapOpacity: data.basemapOpacity.present
+          ? data.basemapOpacity.value
+          : this.basemapOpacity,
     );
   }
 
@@ -1952,7 +2085,9 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
           ..write('transportOverlay: $transportOverlay, ')
           ..write('poiCategories: $poiCategories, ')
           ..write('borderLevels: $borderLevels, ')
-          ..write('toolsExpanded: $toolsExpanded')
+          ..write('toolsExpanded: $toolsExpanded, ')
+          ..write('basemapVisible: $basemapVisible, ')
+          ..write('basemapOpacity: $basemapOpacity')
           ..write(')'))
         .toString();
   }
@@ -1968,6 +2103,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     poiCategories,
     borderLevels,
     toolsExpanded,
+    basemapVisible,
+    basemapOpacity,
   );
   @override
   bool operator ==(Object other) =>
@@ -1981,7 +2118,9 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
           other.transportOverlay == this.transportOverlay &&
           other.poiCategories == this.poiCategories &&
           other.borderLevels == this.borderLevels &&
-          other.toolsExpanded == this.toolsExpanded);
+          other.toolsExpanded == this.toolsExpanded &&
+          other.basemapVisible == this.basemapVisible &&
+          other.basemapOpacity == this.basemapOpacity);
 }
 
 class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
@@ -1994,6 +2133,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
   final Value<int> poiCategories;
   final Value<int> borderLevels;
   final Value<bool> toolsExpanded;
+  final Value<bool> basemapVisible;
+  final Value<double> basemapOpacity;
   const AppSettingsCompanion({
     this.id = const Value.absent(),
     this.uncertaintyMeters = const Value.absent(),
@@ -2004,6 +2145,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     this.poiCategories = const Value.absent(),
     this.borderLevels = const Value.absent(),
     this.toolsExpanded = const Value.absent(),
+    this.basemapVisible = const Value.absent(),
+    this.basemapOpacity = const Value.absent(),
   });
   AppSettingsCompanion.insert({
     this.id = const Value.absent(),
@@ -2015,6 +2158,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     this.poiCategories = const Value.absent(),
     this.borderLevels = const Value.absent(),
     this.toolsExpanded = const Value.absent(),
+    this.basemapVisible = const Value.absent(),
+    this.basemapOpacity = const Value.absent(),
   });
   static Insertable<AppSetting> custom({
     Expression<int>? id,
@@ -2026,6 +2171,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     Expression<int>? poiCategories,
     Expression<int>? borderLevels,
     Expression<bool>? toolsExpanded,
+    Expression<bool>? basemapVisible,
+    Expression<double>? basemapOpacity,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -2037,6 +2184,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
       if (poiCategories != null) 'poi_categories': poiCategories,
       if (borderLevels != null) 'border_levels': borderLevels,
       if (toolsExpanded != null) 'tools_expanded': toolsExpanded,
+      if (basemapVisible != null) 'basemap_visible': basemapVisible,
+      if (basemapOpacity != null) 'basemap_opacity': basemapOpacity,
     });
   }
 
@@ -2050,6 +2199,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     Value<int>? poiCategories,
     Value<int>? borderLevels,
     Value<bool>? toolsExpanded,
+    Value<bool>? basemapVisible,
+    Value<double>? basemapOpacity,
   }) {
     return AppSettingsCompanion(
       id: id ?? this.id,
@@ -2061,6 +2212,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
       poiCategories: poiCategories ?? this.poiCategories,
       borderLevels: borderLevels ?? this.borderLevels,
       toolsExpanded: toolsExpanded ?? this.toolsExpanded,
+      basemapVisible: basemapVisible ?? this.basemapVisible,
+      basemapOpacity: basemapOpacity ?? this.basemapOpacity,
     );
   }
 
@@ -2094,6 +2247,12 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     if (toolsExpanded.present) {
       map['tools_expanded'] = Variable<bool>(toolsExpanded.value);
     }
+    if (basemapVisible.present) {
+      map['basemap_visible'] = Variable<bool>(basemapVisible.value);
+    }
+    if (basemapOpacity.present) {
+      map['basemap_opacity'] = Variable<double>(basemapOpacity.value);
+    }
     return map;
   }
 
@@ -2108,7 +2267,9 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
           ..write('transportOverlay: $transportOverlay, ')
           ..write('poiCategories: $poiCategories, ')
           ..write('borderLevels: $borderLevels, ')
-          ..write('toolsExpanded: $toolsExpanded')
+          ..write('toolsExpanded: $toolsExpanded, ')
+          ..write('basemapVisible: $basemapVisible, ')
+          ..write('basemapOpacity: $basemapOpacity')
           ..write(')'))
         .toString();
   }
@@ -8151,6 +8312,7 @@ typedef $$LayersTableCreateCompanionBuilder =
       required int sortOrder,
       Value<String> type,
       Value<bool> isInverted,
+      Value<double> opacity,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -8163,6 +8325,7 @@ typedef $$LayersTableUpdateCompanionBuilder =
       Value<int> sortOrder,
       Value<String> type,
       Value<bool> isInverted,
+      Value<double> opacity,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -8342,6 +8505,11 @@ class $$LayersTableFilterComposer
 
   ColumnFilters<bool> get isInverted => $composableBuilder(
     column: $table.isInverted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get opacity => $composableBuilder(
+    column: $table.opacity,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -8570,6 +8738,11 @@ class $$LayersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<double> get opacity => $composableBuilder(
+    column: $table.opacity,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -8607,6 +8780,9 @@ class $$LayersTableAnnotationComposer
     column: $table.isInverted,
     builder: (column) => column,
   );
+
+  GeneratedColumn<double> get opacity =>
+      $composableBuilder(column: $table.opacity, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -8830,6 +9006,7 @@ class $$LayersTableTableManager
                 Value<int> sortOrder = const Value.absent(),
                 Value<String> type = const Value.absent(),
                 Value<bool> isInverted = const Value.absent(),
+                Value<double> opacity = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LayersCompanion(
@@ -8840,6 +9017,7 @@ class $$LayersTableTableManager
                 sortOrder: sortOrder,
                 type: type,
                 isInverted: isInverted,
+                opacity: opacity,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -8852,6 +9030,7 @@ class $$LayersTableTableManager
                 required int sortOrder,
                 Value<String> type = const Value.absent(),
                 Value<bool> isInverted = const Value.absent(),
+                Value<double> opacity = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LayersCompanion.insert(
@@ -8862,6 +9041,7 @@ class $$LayersTableTableManager
                 sortOrder: sortOrder,
                 type: type,
                 isInverted: isInverted,
+                opacity: opacity,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -9817,6 +9997,8 @@ typedef $$AppSettingsTableCreateCompanionBuilder =
       Value<int> poiCategories,
       Value<int> borderLevels,
       Value<bool> toolsExpanded,
+      Value<bool> basemapVisible,
+      Value<double> basemapOpacity,
     });
 typedef $$AppSettingsTableUpdateCompanionBuilder =
     AppSettingsCompanion Function({
@@ -9829,6 +10011,8 @@ typedef $$AppSettingsTableUpdateCompanionBuilder =
       Value<int> poiCategories,
       Value<int> borderLevels,
       Value<bool> toolsExpanded,
+      Value<bool> basemapVisible,
+      Value<double> basemapOpacity,
     });
 
 class $$AppSettingsTableFilterComposer
@@ -9882,6 +10066,16 @@ class $$AppSettingsTableFilterComposer
 
   ColumnFilters<bool> get toolsExpanded => $composableBuilder(
     column: $table.toolsExpanded,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get basemapVisible => $composableBuilder(
+    column: $table.basemapVisible,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get basemapOpacity => $composableBuilder(
+    column: $table.basemapOpacity,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -9939,6 +10133,16 @@ class $$AppSettingsTableOrderingComposer
     column: $table.toolsExpanded,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get basemapVisible => $composableBuilder(
+    column: $table.basemapVisible,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get basemapOpacity => $composableBuilder(
+    column: $table.basemapOpacity,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$AppSettingsTableAnnotationComposer
@@ -9986,6 +10190,16 @@ class $$AppSettingsTableAnnotationComposer
     column: $table.toolsExpanded,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get basemapVisible => $composableBuilder(
+    column: $table.basemapVisible,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get basemapOpacity => $composableBuilder(
+    column: $table.basemapOpacity,
+    builder: (column) => column,
+  );
 }
 
 class $$AppSettingsTableTableManager
@@ -10028,6 +10242,8 @@ class $$AppSettingsTableTableManager
                 Value<int> poiCategories = const Value.absent(),
                 Value<int> borderLevels = const Value.absent(),
                 Value<bool> toolsExpanded = const Value.absent(),
+                Value<bool> basemapVisible = const Value.absent(),
+                Value<double> basemapOpacity = const Value.absent(),
               }) => AppSettingsCompanion(
                 id: id,
                 uncertaintyMeters: uncertaintyMeters,
@@ -10038,6 +10254,8 @@ class $$AppSettingsTableTableManager
                 poiCategories: poiCategories,
                 borderLevels: borderLevels,
                 toolsExpanded: toolsExpanded,
+                basemapVisible: basemapVisible,
+                basemapOpacity: basemapOpacity,
               ),
           createCompanionCallback:
               ({
@@ -10050,6 +10268,8 @@ class $$AppSettingsTableTableManager
                 Value<int> poiCategories = const Value.absent(),
                 Value<int> borderLevels = const Value.absent(),
                 Value<bool> toolsExpanded = const Value.absent(),
+                Value<bool> basemapVisible = const Value.absent(),
+                Value<double> basemapOpacity = const Value.absent(),
               }) => AppSettingsCompanion.insert(
                 id: id,
                 uncertaintyMeters: uncertaintyMeters,
@@ -10060,6 +10280,8 @@ class $$AppSettingsTableTableManager
                 poiCategories: poiCategories,
                 borderLevels: borderLevels,
                 toolsExpanded: toolsExpanded,
+                basemapVisible: basemapVisible,
+                basemapOpacity: basemapOpacity,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))

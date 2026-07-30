@@ -22,6 +22,11 @@ class Layers extends Table {
 
   /// When true, render the complement (outside the objects) instead.
   BoolColumn get isInverted => boolean().withDefault(const Constant(false))();
+
+  /// Layer opacity in [0, 1], multiplying the whole layer's paint (fills,
+  /// band, outline / markers). 1 = fully opaque (the default); lower values let
+  /// the map and lower layers show through.
+  RealColumn get opacity => real().withDefault(const Constant(1.0))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 
   @override
@@ -356,6 +361,15 @@ class AppSettings extends Table {
   BoolColumn get toolsExpanded =>
       boolean().withDefault(const Constant(true))();
 
+  /// Whether the base OSM tile layer is drawn. The base map behaves like a
+  /// pinned bottom "layer": it can be hidden (this flag) but never deleted.
+  BoolColumn get basemapVisible =>
+      boolean().withDefault(const Constant(true))();
+
+  /// Opacity of the base OSM tile layer in [0, 1] — how strongly the map shows
+  /// through beneath the zone layers. 1 = fully opaque (the default).
+  RealColumn get basemapOpacity => real().withDefault(const Constant(1.0))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -388,7 +402,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 16;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -457,6 +471,11 @@ class AppDatabase extends _$AppDatabase {
           if (from < 15) {
             await m.createTable(poiSets);
             await m.createTable(poiPoints);
+          }
+          if (from < 16) {
+            await m.addColumn(layers, layers.opacity);
+            await m.addColumn(appSettings, appSettings.basemapVisible);
+            await m.addColumn(appSettings, appSettings.basemapOpacity);
           }
         },
         beforeOpen: (details) async {
