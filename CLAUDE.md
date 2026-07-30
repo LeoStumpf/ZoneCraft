@@ -5,11 +5,14 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
 
 ## At a glance (current app)
 
-- **Six object types**, one per layer: `circles` (geodesic), `planes` (closer-of-two-points
+- **Seven object types**, one per layer: `circles` (geodesic), `planes` (closer-of-two-points
   half-plane), `subspace` (closest-of-N Voronoi cell), `freeline` (drawn polyline dividing the
   view), `freearea` (drawn closed polygon), `height` (terrain above/below an elevation, bounded
-  to a circle; generated from terrain tiles via marching squares, stored as fill polygons).
-  Each has a `geo/*.dart` region builder and a `ui/*_editor.dart` docked editor.
+  to a circle; generated from terrain tiles via marching squares, stored as fill polygons),
+  `poi` (a category of OSM POIs fetched **once** from Overpass within a chosen radius and
+  stored offline; rendered as icon markers that collapse into count-badge clusters when they'd
+  overlap — no region compositing, no editor; the FAB re-imports more sets).
+  The region types have a `geo/*.dart` region builder and a `ui/*_editor.dart` docked editor.
 - **Compositing engine** (`ui/region_layer.dart`): per layer, every object yields an
   `outer`+`core` screen-space polygon; these union via `Path.combine`, then paint core (solid)
   + band (`outer−core`, lighter) + outline, or `viewport−outer` when the layer is **inverted**.
@@ -18,8 +21,9 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   opt-in **Locate me** (also reads the terrain elevation there), a **Measure-elevation**
   probe (tap any point for its height), **persisted camera**, and a **Settings** screen
   (uncertainty, clear-all, and the overlay toggles below).
-- **Optional overlays** (Overpass / tiles, all in Settings): public-transport tiles, OSMAnd
-  POIs, administrative borders.
+- **Optional overlays** (Overpass / tiles, all in Settings): public-transport tiles and
+  administrative borders. (Map POIs used to be a third settings overlay; they are now the
+  `poi` **layer type** — imported per area, offline, clustered.)
 - **Offline caching:** a Drift-backed `TileCache` + custom `CachedTileProvider`
   (`data/cached_tile_provider.dart`) serve map tiles cache-first then network, plus a
   one-tile-ring **viewport prefetch** (`map_screen._prefetchTiles`, slippy maths in
@@ -30,17 +34,19 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   exported alone and files imported as a new layer or **merged** into an existing same-type
   one (`ui/import_actions.dart`); generic **GeoJSON/KML/KMZ/GPX** tracks import into freehand
   layers (`data/geo_import.dart`).
-- **Drift schema is at v13**; migrations are append-only `if (from < N)` blocks.
+- **Drift schema is at v15**; migrations are append-only `if (from < N)` blocks.
 
 ## Current status
 
-Feature-complete for everything planned so far: six object types with the shared
-compositing engine (union / band / invert; the `height` type uses even-odd fill and is
-bounded, so it skips band/invert), the layers drawer + per-type editors, settings
-(uncertainty, clear-all, overlay toggles), opt-in locate-me, persisted camera, optional
-overlays (public-transport tiles, OSMAnd POIs, admin borders), offline resilience
-(cache-first tiles + prefetch, persisted POI/border overlays), and import/export
-(whole-DB + per-layer + external GeoJSON/KML/KMZ/GPX). Drift schema is **v13**.
+Feature-complete for everything planned so far: seven object types — six region types with
+the shared compositing engine (union / band / invert; the `height` type uses even-odd fill
+and is bounded, so it skips band/invert) plus the marker-based `poi` type (offline sets,
+screen-space clustering) — the layers drawer + per-type editors, settings (uncertainty,
+clear-all, overlay toggles), opt-in locate-me, persisted camera, optional overlays
+(public-transport tiles, admin borders), offline resilience (cache-first tiles + prefetch,
+persisted border overlay), and import/export (whole-DB + per-layer + external
+GeoJSON/KML/KMZ/GPX; freeline imports prompt for their inclusion-circle radius).
+Drift schema is **v15**.
 
 `planning/PLAN.md` has no open roadmap items; future polish ideas are listed there.
 
@@ -86,7 +92,8 @@ lib/
   data/        Drift database (Layers, Circles, Planes, Subspaces,
                SubspacePoints, FreeLines, FreeLinePoints, FreeAreas,
                FreeAreaPoints, HeightRegions, HeightPolygons, HeightPolygonPoints,
-               TileCache, OverpassCache, AppSettings) + repository; Overpass POI
+               PoiSets, PoiPoints, TileCache, OverpassCache, AppSettings)
+               + repository; Overpass POI
                client (overpass.dart) + admin-border client (borders.dart);
                offline tile cache (cached_tile_provider.dart); GeoJSON/KML
                import-export (serialization.dart); generic GeoJSON/KML/KMZ/GPX
@@ -97,10 +104,13 @@ lib/
                freearea.dart), height contouring/marching-squares (height.dart),
                slippy-tile maths (tiles.dart), lat/lng parsing
   state/       Riverpod providers (layers, circles, planes, subspaces,
-               freehand lines/areas, height regions/polygons, settings, selection)
+               freehand lines/areas, height regions/polygons, poi sets/points,
+               settings, selection)
   ui/          map_screen, layers_panel, circle_editor, plane_editor,
                subspace_editor, freeline_editor, freearea_editor, height_editor,
-               import_actions, settings_screen, region_layer
+               import_actions, settings_screen, region_layer, poi_layer
+               (clustered POI markers), screen_cluster (greedy screen-space
+               clustering), screen_clip (viewport pre-clip for Skia safety)
 ```
 
 ## Plans

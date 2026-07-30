@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart' show XTypeGroup, openFile;
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart' show LatLng;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -12,6 +13,7 @@ import '../data/geo_import.dart';
 import '../data/repository.dart';
 import '../data/serialization.dart';
 import 'feature_search_dialog.dart';
+import 'region_geometry.dart';
 
 /// File-pick + parse helpers shared by the layers drawer: per-layer export,
 /// importing an external track/area into a freehand layer, and importing a
@@ -84,6 +86,95 @@ Future<void> exportSingleLayer(
   }
 }
 
+/// Prompts for the inclusion-circle radius applied to freshly imported
+/// freehand lines (the circle within which the line splits the map into two
+/// half-disks). Prefilled with [defaultMeters], the radius the renderer would
+/// otherwise derive. Returns null when cancelled.
+Future<double?> askFreeLineRadius(
+  BuildContext context, {
+  required double defaultMeters,
+}) {
+  final controller =
+      TextEditingController(text: defaultMeters.round().toString());
+  return showDialog<double>(
+    context: context,
+    builder: (ctx) {
+      String? error;
+      return StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('Line area of interest'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'The imported line divides the map only within a circle '
+                'around it. Choose that circle\'s radius — you can move and '
+                'resize it later in the line editor.',
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: 'Radius (m)',
+                  errorText: error,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final n = double.tryParse(controller.text.trim());
+                if (n == null || !n.isFinite || n <= 0) {
+                  setState(() => error = 'Enter metres > 0');
+                  return;
+                }
+                Navigator.pop(ctx, n);
+              },
+              child: const Text('Import'),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+/// [o] (a freeline) with its inclusion circle set to [radiusMeters], centred on
+/// the line's arc-length midpoint (the same centre the renderer would derive).
+ExportObject _withInclusion(ExportObject o, double radiusMeters) {
+  final inc = effectiveInclusion(
+    lat: null,
+    lng: null,
+    radiusMeters: radiusMeters,
+    points: o.coords,
+  );
+  return ExportObject(
+    kind: o.kind,
+    coords: o.coords,
+    label: o.label,
+    offsetMeters: o.offsetMeters,
+    inclusionLat: inc.center.latitude,
+    inclusionLng: inc.center.longitude,
+    inclusionRadiusMeters: radiusMeters,
+  );
+}
+
+/// The inclusion radius the renderer would derive for [coords] — used to
+/// prefill the radius prompt.
+double _derivedRadius(List<LatLng> coords) => effectiveInclusion(
+      lat: null,
+      lng: null,
+      radiusMeters: null,
+      points: coords,
+    ).radiusMeters;
+
 /// Imports an external track/area file (GeoJSON/KML/KMZ/GPX) into an existing
 /// freehand [layer], adding each line/area as a new object on it.
 Future<void> importTrackIntoLayer(
@@ -104,7 +195,7 @@ Future<void> importTrackIntoLayer(
       );
       return;
     }
-    final objects = <ExportObject>[
+    var objects = <ExportObject>[
       for (final f in feats)
         ExportObject(
           kind: wantArea ? 'freearea' : 'freeline',
@@ -112,6 +203,15 @@ Future<void> importTrackIntoLayer(
           label: f.label,
         ),
     ];
+    // Freehand lines are bounded to an inclusion circle — let the user pick
+    // its radius right at import (each line keeps its own derived centre).
+    if (!wantArea) {
+      if (!context.mounted) return;
+      final r = await askFreeLineRadius(context,
+          defaultMeters: _derivedRadius(objects.first.coords));
+      if (r == null) return; // cancelled
+      objects = [for (final o in objects) _withInclusion(o, r)];
+    }
     final n = await repo.mergeIntoLayer(
       layer.id,
       ExportLayer(
@@ -178,8 +278,16 @@ Future<void> importFeatureFlow(
       );
       return;
     }
+    // Pick the inclusion-circle radius right at import (a whole river spans
+    // hundreds of km — the circle bounds it to the user's area of interest).
+    final r = await askFreeLineRadius(context,
+        defaultMeters: _derivedRadius(line));
+    if (r == null || !context.mounted) return; // cancelled
     objects = [
-      ExportObject(kind: 'freeline', coords: line, label: place.shortName),
+      _withInclusion(
+        ExportObject(kind: 'freeline', coords: line, label: place.shortName),
+        r,
+      ),
     ];
   }
   final layer = ExportLayer(
@@ -227,6 +335,7 @@ Future<void> importLayerFlow(
 
     // 1. Prefer our own tagged GeoJSON (lossless, all object types).
     ExportData? data = importFromGeoJson(utf8.decode(bytes, allowMalformed: true));
+    final fromZonecraft = data != null;
     // 2. Fall back to generic geometry → synthesize freehand layers.
     data ??= _syntheticLayers(picked.name, bytes);
     if (data == null || data.layers.isEmpty || data.objectCount == 0) {
@@ -234,6 +343,35 @@ Future<void> importLayerFlow(
         const SnackBar(content: Text("Couldn't read any layers from that file")),
       );
       return;
+    }
+
+    if (!context.mounted) return;
+    // Synthesized freehand lines get their inclusion-circle radius chosen at
+    // import (ZoneCraft GeoJSON already carries each line's stored circle).
+    if (!fromZonecraft &&
+        data.layers.any(
+            (l) => l.type == 'freeline' && l.objects.isNotEmpty)) {
+      final firstLine = data.layers
+          .firstWhere((l) => l.type == 'freeline' && l.objects.isNotEmpty)
+          .objects
+          .first;
+      final r = await askFreeLineRadius(context,
+          defaultMeters: _derivedRadius(firstLine.coords));
+      if (r == null) return; // cancelled
+      data = ExportData([
+        for (final l in data.layers)
+          l.type == 'freeline'
+              ? ExportLayer(
+                  name: l.name,
+                  colorArgb: l.colorArgb,
+                  type: l.type,
+                  isInverted: l.isInverted,
+                  objects: [
+                    for (final o in l.objects) _withInclusion(o, r),
+                  ],
+                )
+              : l,
+      ]);
     }
 
     if (!context.mounted) return;

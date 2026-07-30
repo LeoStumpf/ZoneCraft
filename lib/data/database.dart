@@ -231,6 +231,42 @@ class HeightPolygonPoints extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// One POI import on a `poi` layer: a category fetched once (Overpass) within a
+/// bounded circle (centre + radius) and stored offline — the layer never
+/// refetches. A `poi` layer may hold several sets (further imports add more
+/// categories/areas). The actual markers live in [PoiPoints].
+class PoiSets extends Table {
+  TextColumn get id => text()();
+  TextColumn get layerId =>
+      text().references(Layers, #id, onDelete: KeyAction.cascade)();
+
+  /// [PoiCategory.key] of the imported category (picks the marker icon).
+  TextColumn get categoryKey => text()();
+  RealColumn get centerLat => real()();
+  RealColumn get centerLng => real()();
+  RealColumn get radiusMeters => real()();
+  TextColumn get label => text().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// One stored POI of a [PoiSets] import: its position and OSM `name` (if any).
+class PoiPoints extends Table {
+  TextColumn get id => text()();
+  TextColumn get poiSetId =>
+      text().references(PoiSets, #id, onDelete: KeyAction.cascade)();
+  RealColumn get lat => real()();
+  RealColumn get lng => real()();
+  TextColumn get name => text().nullable()();
+  IntColumn get sortOrder => integer()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 /// On-disk cache of map tile images, keyed by their full fetch [url] (so the base
 /// OSM layer and the transport overlays — which have distinct URLs — share one
 /// table). Filled as tiles are browsed/prefetched; evicted least-recently-used
@@ -339,6 +375,8 @@ class AppSettings extends Table {
     HeightRegions,
     HeightPolygons,
     HeightPolygonPoints,
+    PoiSets,
+    PoiPoints,
     TileCache,
     OverpassCache,
   ],
@@ -350,7 +388,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -415,6 +453,10 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(freeLines, freeLines.inclusionLat);
             await m.addColumn(freeLines, freeLines.inclusionLng);
             await m.addColumn(freeLines, freeLines.inclusionRadiusMeters);
+          }
+          if (from < 15) {
+            await m.createTable(poiSets);
+            await m.createTable(poiPoints);
           }
         },
         beforeOpen: (details) async {

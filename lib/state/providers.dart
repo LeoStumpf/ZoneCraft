@@ -76,6 +76,16 @@ final heightPolygonPointsProvider =
   return ref.watch(repositoryProvider).watchAllHeightPolygonPoints();
 });
 
+/// Reactive list of every POI set across all layers.
+final poiSetsProvider = StreamProvider<List<PoiSet>>((ref) {
+  return ref.watch(repositoryProvider).watchAllPoiSets();
+});
+
+/// Reactive list of every stored POI (across all sets), ordered.
+final poiPointsProvider = StreamProvider<List<PoiPoint>>((ref) {
+  return ref.watch(repositoryProvider).watchAllPoiPoints();
+});
+
 /// App-wide settings (currently the global uncertainty radius).
 final settingsProvider = StreamProvider<AppSetting>((ref) {
   return ref.watch(repositoryProvider).watchSettings();

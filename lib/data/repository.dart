@@ -110,6 +110,10 @@ class Repository {
           await (_db.update(_db.heightRegions)
                 ..where((t) => t.layerId.equals(sourceId)))
               .write(HeightRegionsCompanion(layerId: Value(targetId)));
+        case 'poi':
+          await (_db.update(_db.poiSets)
+                ..where((t) => t.layerId.equals(sourceId)))
+              .write(PoiSetsCompanion(layerId: Value(targetId)));
         default:
           await (_db.update(_db.circles)
                 ..where((t) => t.layerId.equals(sourceId)))
@@ -821,6 +825,71 @@ class Repository {
         .write(HeightRegionsCompanion(generatedAt: Value(DateTime.now())));
   }
 
+  // --- POI sets -------------------------------------------------------------
+
+  Stream<List<PoiSet>> watchAllPoiSets() {
+    return _db.select(_db.poiSets).watch();
+  }
+
+  /// All stored POIs across every set, ordered by [PoiPoints.sortOrder].
+  Stream<List<PoiPoint>> watchAllPoiPoints() {
+    return (_db.select(_db.poiPoints)
+          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
+        .watch();
+  }
+
+  /// Creates a POI set (one import: a category within a bounded circle) on a
+  /// `poi` layer. Returns its id; the POIs themselves go in via [addPoiPoints].
+  Future<String> createPoiSet({
+    required String layerId,
+    required String categoryKey,
+    required double centerLat,
+    required double centerLng,
+    required double radiusMeters,
+    String? label,
+  }) async {
+    final id = _uuid.v4();
+    await _db.into(_db.poiSets).insert(
+          PoiSetsCompanion.insert(
+            id: id,
+            layerId: layerId,
+            categoryKey: categoryKey,
+            centerLat: centerLat,
+            centerLng: centerLng,
+            radiusMeters: radiusMeters,
+            label: Value(label),
+          ),
+        );
+    return id;
+  }
+
+  /// Appends the fetched POIs to [poiSetId] in one batch.
+  Future<void> addPoiPoints(
+    String poiSetId,
+    List<({double lat, double lng, String? name})> pts,
+  ) async {
+    if (pts.isEmpty) return;
+    await _db.batch((b) {
+      for (var i = 0; i < pts.length; i++) {
+        b.insert(
+          _db.poiPoints,
+          PoiPointsCompanion.insert(
+            id: _uuid.v4(),
+            poiSetId: poiSetId,
+            lat: pts[i].lat,
+            lng: pts[i].lng,
+            name: Value(pts[i].name),
+            sortOrder: i,
+          ),
+        );
+      }
+    });
+  }
+
+  Future<void> deletePoiSet(String id) {
+    return (_db.delete(_db.poiSets)..where((s) => s.id.equals(id))).go();
+  }
+
   // --- Settings -------------------------------------------------------------
 
   /// Watches the single settings row, emitting defaults when it doesn't exist
@@ -1051,6 +1120,10 @@ class Repository {
           ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
         .get();
     final heightRegions = await _db.select(_db.heightRegions).get();
+    final poiSets = await _db.select(_db.poiSets).get();
+    final poiPoints = await (_db.select(_db.poiPoints)
+          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
+        .get();
 
     final out = <ExportLayer>[];
     for (final layer in layers) {
@@ -1120,6 +1193,23 @@ class Repository {
               aboveThreshold: r.aboveThreshold,
               sampleZoom: r.sampleZoom,
               label: r.label,
+            ));
+          }
+        case 'poi':
+          // coords[0] is the set's search centre; coords[1..] are the POIs
+          // themselves, with their names in [ExportObject.pointLabels].
+          for (final s in poiSets.where((s) => s.layerId == layer.id)) {
+            final pts = poiPoints.where((p) => p.poiSetId == s.id).toList();
+            objects.add(ExportObject(
+              kind: 'poi',
+              coords: [
+                LatLng(s.centerLat, s.centerLng),
+                for (final p in pts) LatLng(p.lat, p.lng),
+              ],
+              radiusMeters: s.radiusMeters,
+              categoryKey: s.categoryKey,
+              pointLabels: [for (final p in pts) p.name],
+              label: s.label,
             ));
           }
       }
@@ -1257,6 +1347,28 @@ class Repository {
           sampleZoom: o.sampleZoom ?? 13,
           label: o.label,
         );
+      case 'poi':
+        final r = o.radiusMeters;
+        if (o.coords.isEmpty || r == null || !r.isFinite || r <= 0) {
+          return false;
+        }
+        final sid = await createPoiSet(
+          layerId: layerId,
+          categoryKey: o.categoryKey ?? 'place',
+          centerLat: o.coords.first.latitude,
+          centerLng: o.coords.first.longitude,
+          radiusMeters: r,
+          label: o.label,
+        );
+        final labels = o.pointLabels ?? const <String?>[];
+        await addPoiPoints(sid, [
+          for (var i = 1; i < o.coords.length; i++)
+            (
+              lat: o.coords[i].latitude,
+              lng: o.coords[i].longitude,
+              name: i - 1 < labels.length ? labels[i - 1] : null,
+            ),
+        ]);
       default:
         return false;
     }

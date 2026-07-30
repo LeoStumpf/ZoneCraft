@@ -17,6 +17,10 @@ class LayersDrawer extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final layersAsync = ref.watch(layersProvider);
+    final poiSets =
+        ref.watch(poiSetsProvider).asData?.value ?? const <PoiSet>[];
+    final poiPoints =
+        ref.watch(poiPointsProvider).asData?.value ?? const <PoiPoint>[];
     final circles = ref.watch(circlesProvider).asData?.value ?? const <Circle>[];
     final planes = ref.watch(planesProvider).asData?.value ?? const <Plane>[];
     final subspaces =
@@ -138,6 +142,15 @@ class LayersDrawer extends ConsumerWidget {
                               title: Text('Height layer'),
                             ),
                           ),
+                          const PopupMenuItem(
+                            value: 'poi',
+                            child: ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(Icons.travel_explore),
+                              title: Text('POI layer'),
+                            ),
+                          ),
                         ],
                         child: const Padding(
                           padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -198,6 +211,14 @@ class LayersDrawer extends ConsumerWidget {
                         count = heightRegions
                             .where((r) => r.layerId == layer.id)
                             .length;
+                      } else if (layer.type == 'poi') {
+                        final ids = poiSets
+                            .where((s) => s.layerId == layer.id)
+                            .map((s) => s.id)
+                            .toSet();
+                        count = poiPoints
+                            .where((p) => ids.contains(p.poiSetId))
+                            .length;
                       } else {
                         count =
                             circles.where((c) => c.layerId == layer.id).length;
@@ -241,6 +262,7 @@ IconData _typeIcon(String type) => switch (type) {
       'freeline' => Icons.polyline,
       'freearea' => Icons.hexagon_outlined,
       'height' => Icons.terrain,
+      'poi' => Icons.travel_explore,
       _ => Icons.circle_outlined,
     };
 
@@ -269,6 +291,7 @@ class _LayerTile extends ConsumerWidget {
       'freeline' => 'point',
       'freearea' => 'point',
       'height' => 'area',
+      'poi' => 'POI',
       _ => 'circle',
     };
     final subtitle =
@@ -347,8 +370,9 @@ class _LayerTile extends ConsumerWidget {
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'rename', child: Text('Rename')),
               const PopupMenuItem(value: 'color', child: Text('Colour')),
-              // 'height' layers use an above/below toggle, not viewport invert.
-              if (layer.type != 'height')
+              // 'height' layers use an above/below toggle, not viewport
+              // invert; 'poi' layers are markers with nothing to invert.
+              if (layer.type != 'height' && layer.type != 'poi')
                 PopupMenuItem(
                   value: 'inverse',
                   child: Text(layer.isInverted ? 'Un-invert' : 'Invert'),

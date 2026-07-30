@@ -7,7 +7,6 @@ import 'package:share_plus/share_plus.dart';
 
 import '../data/borders.dart';
 import '../data/database.dart';
-import '../data/overpass.dart';
 import '../data/repository.dart';
 import '../data/serialization.dart';
 import '../state/providers.dart';
@@ -173,7 +172,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final settings = ref.watch(settingsProvider).asData?.value;
     final uncertainty = settings?.uncertaintyMeters ?? 0;
     final transportOverlay = settings?.transportOverlay ?? false;
-    final poiMask = settings?.poiCategories ?? 0;
     final borderMask = settings?.borderLevels ?? 0;
 
     // Seed the text field once from the persisted value; afterwards the field
@@ -251,27 +249,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ? null
                 : (v) => _repo.updateTransportOverlay(v),
           ),
-          const Divider(height: 48),
-          Text('Map points of interest',
-              style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          Text(
-            'Show OSM points of interest as markers — only when zoomed in, to '
-            'match OSMAnd. Fetched from the Overpass API.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: 4),
-          for (final c in poiCategories)
-            CheckboxListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              title: Text(c.label),
-              value: poiMask & c.bit != 0,
-              onChanged: settings == null
-                  ? null
-                  : (v) => _repo
-                      .updatePoiCategories(poiMaskWith(poiMask, c, v ?? false)),
-            ),
           const Divider(height: 48),
           Text('Administrative borders',
               style: Theme.of(context).textTheme.titleMedium),

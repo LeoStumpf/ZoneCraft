@@ -252,4 +252,74 @@ void main() {
     // saveCamera must not clobber the uncertainty (both live in the same row).
     expect(saved.uncertaintyMeters, 500);
   });
+
+  test('poi sets: CRUD, layer-delete cascade and combineLayers', () async {
+    final a = await repo.createLayer(name: 'A', colorArgb: 1, type: 'poi');
+    final b = await repo.createLayer(name: 'B', colorArgb: 2, type: 'poi');
+    final sid = await repo.createPoiSet(
+      layerId: a,
+      categoryKey: 'cafe',
+      centerLat: 48.1,
+      centerLng: 11.5,
+      radiusMeters: 1500,
+      label: 'Cafés',
+    );
+    await repo.addPoiPoints(sid, [
+      (lat: 48.11, lng: 11.51, name: 'Café A'),
+      (lat: 48.09, lng: 11.49, name: null),
+    ]);
+    expect((await repo.watchAllPoiSets().first).length, 1);
+    expect((await repo.watchAllPoiPoints().first).length, 2);
+
+    // Combine moves the set (and, via its FK, the points) to the target.
+    await repo.combineLayers(sourceId: a, targetId: b);
+    final sets = await repo.watchAllPoiSets().first;
+    expect(sets.single.layerId, b);
+    expect((await repo.watchAllPoiPoints().first).length, 2);
+
+    // Deleting the layer cascades sets -> points away.
+    await repo.deleteLayer(b);
+    expect(await repo.watchAllPoiSets().first, isEmpty);
+    expect(await repo.watchAllPoiPoints().first, isEmpty);
+  });
+
+  test('poi layer survives an export/import round-trip', () async {
+    final layerId =
+        await repo.createLayer(name: 'POIs', colorArgb: 3, type: 'poi');
+    final sid = await repo.createPoiSet(
+      layerId: layerId,
+      categoryKey: 'bench',
+      centerLat: 48.0,
+      centerLng: 11.0,
+      radiusMeters: 800,
+      label: 'Benches',
+    );
+    await repo.addPoiPoints(sid, [
+      (lat: 48.001, lng: 11.001, name: 'Park bench'),
+      (lat: 47.999, lng: 10.999, name: null),
+    ]);
+
+    final data = await repo.exportData(onlyLayerId: layerId);
+    expect(data.layers.single.type, 'poi');
+    final o = data.layers.single.objects.single;
+    expect(o.kind, 'poi');
+    expect(o.categoryKey, 'bench');
+    expect(o.radiusMeters, 800);
+    expect(o.coords.length, 3); // centre + 2 POIs
+    expect(o.pointLabels, ['Park bench', null]);
+
+    // Import into a fresh layer and check the stored rows.
+    final n = await repo.importData(data);
+    expect(n, 1);
+    final sets = await repo.watchAllPoiSets().first;
+    expect(sets.length, 2);
+    final imported = sets.firstWhere((s) => s.id != sid);
+    expect(imported.categoryKey, 'bench');
+    expect(imported.radiusMeters, 800);
+    final pts = (await repo.watchAllPoiPoints().first)
+        .where((p) => p.poiSetId == imported.id)
+        .toList();
+    expect(pts.length, 2);
+    expect(pts.map((p) => p.name).toSet(), {'Park bench', null});
+  });
 }

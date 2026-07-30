@@ -21,21 +21,31 @@ class PoiImportConfig {
 }
 
 /// Asks for a POI category + search radius (and, when [needsCircleRadius], a
-/// per-circle radius). Returns null if cancelled.
+/// per-circle radius). Returns null if cancelled. [allCategories] offers the
+/// full catalogue (POI layers show unnamed street furniture just fine); by
+/// default only the seedable named-place categories are listed.
 Future<PoiImportConfig?> showPoiImportDialog(
   BuildContext context, {
   required bool needsCircleRadius,
+  bool allCategories = false,
 }) {
   return showDialog<PoiImportConfig>(
     context: context,
-    builder: (context) => _PoiImportDialog(needsCircleRadius: needsCircleRadius),
+    builder: (context) => _PoiImportDialog(
+      needsCircleRadius: needsCircleRadius,
+      allCategories: allCategories,
+    ),
   );
 }
 
 class _PoiImportDialog extends StatefulWidget {
-  const _PoiImportDialog({required this.needsCircleRadius});
+  const _PoiImportDialog({
+    required this.needsCircleRadius,
+    required this.allCategories,
+  });
 
   final bool needsCircleRadius;
+  final bool allCategories;
 
   @override
   State<_PoiImportDialog> createState() => _PoiImportDialogState();
@@ -43,7 +53,16 @@ class _PoiImportDialog extends StatefulWidget {
 
 class _PoiImportDialogState extends State<_PoiImportDialog> {
   final _formKey = GlobalKey<FormState>();
-  PoiCategory _category = seedablePoiCategories.first;
+  late List<PoiCategory> _choices;
+  late PoiCategory _category;
+
+  @override
+  void initState() {
+    super.initState();
+    _choices = widget.allCategories ? poiCategories : seedablePoiCategories;
+    _category = _choices.first;
+  }
+
   final _searchRadius = TextEditingController(text: '1000');
   final _circleRadius = TextEditingController(text: '100');
 
@@ -87,7 +106,7 @@ class _PoiImportDialogState extends State<_PoiImportDialog> {
               initialValue: _category,
               decoration: const InputDecoration(labelText: 'Category'),
               items: [
-                for (final c in seedablePoiCategories)
+                for (final c in _choices)
                   DropdownMenuItem(value: c, child: Text(c.label)),
               ],
               onChanged: (c) => setState(() => _category = c ?? _category),

@@ -29,9 +29,11 @@ class ExportObject {
     this.inclusionLat,
     this.inclusionLng,
     this.inclusionRadiusMeters,
+    this.categoryKey,
+    this.pointLabels,
   });
 
-  /// One of: circle, plane, subspace, freeline, freearea, height.
+  /// One of: circle, plane, subspace, freeline, freearea, height, poi.
   final String kind;
   final List<LatLng> coords;
   final String? label;
@@ -54,6 +56,10 @@ class ExportObject {
   final double? thresholdMeters;
   final bool? aboveThreshold;
   final int? sampleZoom;
+  // poi: the imported category, and the per-POI names aligned with coords[1..]
+  // (coords[0] is the set's search centre; radiusMeters its search radius)
+  final String? categoryKey;
+  final List<String?>? pointLabels;
 }
 
 /// One exported layer: its display attributes plus its objects.
@@ -135,6 +141,8 @@ Map<String, dynamic> _objectToFeature(ExportObject o, int layerIndex) {
     if (o.inclusionLng != null) 'inclusionLng': o.inclusionLng,
     if (o.inclusionRadiusMeters != null)
       'inclusionRadiusMeters': o.inclusionRadiusMeters,
+    if (o.categoryKey != null) 'categoryKey': o.categoryKey,
+    if (o.pointLabels != null) 'pointLabels': o.pointLabels,
   };
   final Map<String, dynamic> geometry;
   switch (o.kind) {
@@ -148,6 +156,7 @@ Map<String, dynamic> _objectToFeature(ExportObject o, int layerIndex) {
         'coordinates': [for (final c in o.coords) _pt(c)],
       };
     case 'subspace':
+    case 'poi':
       geometry = {
         'type': 'MultiPoint',
         'coordinates': [for (final c in o.coords) _pt(c)],
@@ -241,6 +250,13 @@ ExportObject? _featureToObject(Map f) {
     inclusionLat: (props['inclusionLat'] as num?)?.toDouble(),
     inclusionLng: (props['inclusionLng'] as num?)?.toDouble(),
     inclusionRadiusMeters: (props['inclusionRadiusMeters'] as num?)?.toDouble(),
+    categoryKey: props['categoryKey'] as String?,
+    pointLabels: props['pointLabels'] is List
+        ? [
+            for (final n in props['pointLabels'] as List)
+              n is String ? n : null,
+          ]
+        : null,
   );
 }
 
@@ -303,6 +319,23 @@ String exportToKml(ExportData data) {
       ..writeln('  <Folder>')
       ..writeln('    <name>${_xml(layer.name)}</name>');
     for (final o in layer.objects) {
+      if (o.kind == 'poi') {
+        // One Placemark per stored POI (named markers in Google Earth);
+        // coords[0] is the search centre, not a POI — skip it.
+        for (var i = 1; i < o.coords.length; i++) {
+          final name = o.pointLabels != null && i - 1 < o.pointLabels!.length
+              ? o.pointLabels![i - 1]
+              : null;
+          b.writeln('    <Placemark>');
+          if (name != null && name.isNotEmpty) {
+            b.writeln('      <name>${_xml(name)}</name>');
+          }
+          b.writeln('      <Point><coordinates>'
+              '${_coord(o.coords[i])}</coordinates></Point>');
+          b.writeln('    </Placemark>');
+        }
+        continue;
+      }
       _kmlPlacemark(b, o);
     }
     b.writeln('  </Folder>');

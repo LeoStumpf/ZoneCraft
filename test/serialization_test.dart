@@ -70,6 +70,23 @@ void main() {
             ),
           ],
         ),
+        ExportLayer(
+          name: 'POIs',
+          colorArgb: 0xFF00ACC1,
+          type: 'poi',
+          isInverted: false,
+          objects: const [
+            ExportObject(
+              kind: 'poi',
+              // coords[0] = search centre, then the POIs themselves.
+              coords: [LatLng(48.1, 11.5), LatLng(48.11, 11.51), LatLng(48.09, 11.49)],
+              radiusMeters: 2000,
+              categoryKey: 'cafe',
+              pointLabels: ['Café A', null],
+              label: 'Cafés',
+            ),
+          ],
+        ),
       ]);
 
   void expectSameObject(ExportObject a, ExportObject b) {
@@ -79,6 +96,8 @@ void main() {
     expect(b.nearA, a.nearA);
     expect(b.offsetMeters, a.offsetMeters);
     expect(b.mainIndex, a.mainIndex);
+    expect(b.categoryKey, a.categoryKey);
+    expect(b.pointLabels, a.pointLabels);
     expect(b.coords.length, a.coords.length);
     for (var i = 0; i < a.coords.length; i++) {
       expect(b.coords[i].latitude, closeTo(a.coords[i].latitude, 1e-9));
@@ -132,10 +151,13 @@ void main() {
       final kml = exportToKml(sample());
       expect(kml, startsWith('<?xml'));
       expect(kml, contains('<kml xmlns="http://www.opengis.net/kml/2.2">'));
-      expect('<Folder>'.allMatches(kml).length, 5); // one per layer
+      expect('<Folder>'.allMatches(kml).length, 6); // one per layer
       expect(kml, contains('<Polygon>')); // circle ring + freearea
       expect(kml, contains('<LineString>')); // plane + freeline
       expect(kml, contains('<MultiGeometry>')); // subspace seed points
+      // POIs: one named Placemark per stored point (centre is skipped).
+      expect(kml, contains('<name>Café A</name>'));
+      expect(kml, isNot(contains('11.5,48.1,0'))); // the search centre
     });
 
     test('escapes XML-special characters in names', () {

@@ -26,6 +26,7 @@ import 'height_editor.dart';
 import 'layers_panel.dart';
 import 'plane_editor.dart';
 import 'poi_import_dialog.dart';
+import 'poi_layer.dart';
 import 'region_geometry.dart';
 import 'region_layer.dart';
 import 'subspace_editor.dart';
@@ -127,24 +128,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
   LatLng _lastGoodCenter = const LatLng(48.137, 11.575);
   double _lastGoodZoom = 5;
 
-  // --- Map POIs (Overpass) --------------------------------------------------
-  /// Only fetch POIs at this zoom or closer (matches OSMAnd's detail level;
-  /// avoids clutter and heavy queries when zoomed out).
-  static const double _poiFetchZoom = 15;
-
-  /// Keep already-shown POIs until the zoom drops below this (hysteresis), so
-  /// markers don't flicker when the zoom hovers around the fetch threshold.
-  static const double _poiHideZoom = 13.5;
-  List<PoiResult> _pois = const [];
-  Set<PoiCategory> _enabledPois = const {};
-  int _poiMask = 0;
-  Timer? _poiDebounce;
-  // The (inflated) area the current markers were fetched for, and the category
-  // mask they were fetched with. While the viewport stays inside this area and
-  // the categories are unchanged, no refetch happens — so markers don't churn.
-  LatLngBounds? _poiFetchedBounds;
-  int _poiFetchedMask = -1;
-
   // --- Administrative borders (Overpass) ------------------------------------
   List<BorderLine> _borders = const [];
   Set<BorderLevel> _enabledBorders = const {};
@@ -168,22 +151,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
     _loadCachedOverlays();
   }
 
-  /// Seeds the POI/border overlays from their last-persisted results so they
-  /// appear instantly on launch — including offline — until a fresh fetch (if
-  /// any) replaces them. Mirrors the in-memory coverage state so a redundant
-  /// refetch is suppressed while the view stays inside the cached bounds.
+  /// Seeds the border overlay from its last-persisted result so it appears
+  /// instantly on launch — including offline — until a fresh fetch (if any)
+  /// replaces it. Mirrors the in-memory coverage state so a redundant refetch
+  /// is suppressed while the view stays inside the cached bounds.
   Future<void> _loadCachedOverlays() async {
     final repo = ref.read(repositoryProvider);
-    final poi = await repo.loadOverpassCache('poi');
     final border = await repo.loadOverpassCache('border');
     if (!mounted) return;
     setState(() {
-      if (poi != null) {
-        _pois = decodePoiResults(poi.payload);
-        _poiFetchedBounds = LatLngBounds(
-            LatLng(poi.south, poi.west), LatLng(poi.north, poi.east));
-        _poiFetchedMask = poi.maskBits;
-      }
       if (border != null) {
         _borders = decodeBorderLines(border.payload);
         _bordersFetchedBounds = LatLngBounds(
@@ -206,84 +182,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
   @override
   void dispose() {
     _saveCamera();
-    _poiDebounce?.cancel();
     _bordersDebounce?.cancel();
     _prefetchDebounce?.cancel();
     _tileClient.close();
     WidgetsBinding.instance.removeObserver(this);
     _mapController.dispose();
     super.dispose();
-  }
-
-  /// Debounced POI refresh: coalesces rapid pan/zoom into one fetch when the
-  /// map settles.
-  void _schedulePoiRefresh() {
-    _poiDebounce?.cancel();
-    _poiDebounce = Timer(const Duration(milliseconds: 600), _refreshPois);
-  }
-
-  /// Fetches POIs for the current view if enabled and zoomed in enough; clears
-  /// them otherwise. Skips the request while the viewport stays inside the
-  /// already-fetched area (no churn), fetches an inflated area so small pans
-  /// don't re-query, and on a failed/rate-limited request keeps the existing
-  /// markers rather than clearing them.
-  Future<void> _refreshPois() async {
-    if (!_mapReady || !mounted) return;
-    final cam = _mapController.camera;
-    // Bail on a non-finite camera (a degenerate gesture can briefly produce a
-    // NaN centre/zoom). Reading visibleBounds would throw; recovery happens in
-    // onPositionChanged.
-    if (!cam.center.latitude.isFinite ||
-        !cam.center.longitude.isFinite ||
-        !cam.zoom.isFinite) {
-      return;
-    }
-    if (_enabledPois.isEmpty || cam.zoom < _poiHideZoom) {
-      _poiFetchedBounds = null;
-      if (_pois.isNotEmpty) setState(() => _pois = const []);
-      return;
-    }
-    if (cam.zoom < _poiFetchZoom) {
-      // Hysteresis band: keep whatever is shown, but don't fetch more yet.
-      return;
-    }
-    final vp = cam.visibleBounds;
-    // Still covered by the last fetch (same categories)? keep the markers.
-    if (_poiFetchedMask == _poiMask &&
-        _poiFetchedBounds != null &&
-        _boundsContain(_poiFetchedBounds!, vp)) {
-      return;
-    }
-
-    final q = _inflateBounds(vp, 0.4); // ~40% margin each side
-    final results = await fetchPois(
-      south: q.south,
-      west: q.west,
-      north: q.north,
-      east: q.east,
-      categories: _enabledPois,
-    );
-    if (!mounted) return;
-    if (results == null) {
-      // Failed/rate-limited: keep current markers and retry after a short
-      // backoff (a later pan/zoom reschedules this and cancels the backoff).
-      _poiFetchedBounds = null;
-      _poiDebounce?.cancel();
-      _poiDebounce = Timer(const Duration(seconds: 4), _refreshPois);
-      return;
-    }
-    _poiFetchedBounds = q;
-    _poiFetchedMask = _poiMask;
-    setState(() => _pois = results);
-    unawaited(ref.read(repositoryProvider).saveOverpassCache(
-          'poi',
-          encodePoiResults(results),
-          south: q.south,
-          west: q.west,
-          north: q.north,
-          east: q.east,
-          maskBits: _poiMask,
-        ));
   }
 
   static bool _boundsContain(LatLngBounds outer, LatLngBounds inner) =>
@@ -919,49 +823,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
     );
   }
 
-  /// Places [core] (a fixed [coreSize] square) centred on [point], with an
-  /// optional tiny [label] just below it. The marker box is sized symmetrically
-  /// so the core stays anchored on the point regardless of the label. When
-  /// [onLongPressStart] is given the whole marker is long-pressable.
-  Marker _labeledMarker(
-    LatLng point, {
-    required double coreSize,
-    required Widget core,
-    String? label,
-    GestureLongPressStartCallback? onLongPressStart,
-  }) {
-    const labelHeight = 14.0;
-    const gap = 1.0;
-    final hasLabel = label != null && label.isNotEmpty;
-    // Equal top/bottom padding keeps [core] at the box centre = the point.
-    const pad = gap + labelHeight;
-    Widget child = Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (hasLabel) const SizedBox(height: pad),
-        SizedBox(width: coreSize, height: coreSize, child: core),
-        if (hasLabel) ...[
-          const SizedBox(height: gap),
-          SizedBox(height: labelHeight, child: _markerLabel(label)),
-        ],
-      ],
-    );
-    if (onLongPressStart != null) {
-      child = GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onLongPressStart: onLongPressStart,
-        child: child,
-      );
-    }
-    return Marker(
-      point: point,
-      width: hasLabel ? 140 : coreSize,
-      height: hasLabel ? coreSize + 2 * pad : coreSize,
-      alignment: Alignment.center,
-      child: child,
-    );
-  }
-
   /// The tiny name plate drawn under labelled markers — small text on a faint
   /// white plate so it reads over any map colour.
   Widget _markerLabel(String text) {
@@ -1168,44 +1029,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
         if (mounted) _hint('Plane deleted.');
     }
   }
-
-  /// A small icon marker for one POI, coloured by category, with its name (when
-  /// the OSM data carries one) shown as tiny text below the icon.
-  Marker _poiMarker(PoiResult p) {
-    return _labeledMarker(
-      LatLng(p.lat, p.lng),
-      coreSize: 26,
-      label: p.name,
-      core: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.black26),
-        ),
-        child: Icon(_poiIcon(p.categoryKey), size: 16, color: Colors.black87),
-      ),
-    );
-  }
-
-  static IconData _poiIcon(String categoryKey) => switch (categoryKey) {
-        'bench' => Icons.chair_outlined,
-        'post_box' => Icons.markunread_mailbox_outlined,
-        'drinking_water' => Icons.water_drop_outlined,
-        'toilets' => Icons.wc_outlined,
-        'waste_basket' => Icons.delete_outline,
-        'cafe' => Icons.local_cafe_outlined,
-        'restaurant' => Icons.restaurant_outlined,
-        'pharmacy' => Icons.local_pharmacy_outlined,
-        'library' => Icons.local_library_outlined,
-        'aquarium' => Icons.set_meal_outlined,
-        'zoo' => Icons.pets_outlined,
-        'golf_course' => Icons.golf_course_outlined,
-        'consulate' => Icons.flag_outlined,
-        'transit_station' => Icons.directions_transit_outlined,
-        'hospital' => Icons.local_hospital_outlined,
-        'cinema' => Icons.local_movies_outlined,
-        _ => Icons.place_outlined,
-      };
 
   /// A default radius (metres) scaled so a new circle is visible at the current
   /// zoom: roughly 15% of the visible map width.
@@ -1519,14 +1342,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
     _selectCircle(id);
   }
 
-  /// Imports nearby POIs into a circle or subspace [layer]: prompts for a
-  /// category + radius, fetches POIs of that type around the map centre, then
-  /// (circles) creates one named circle per POI, or (subspace) appends them as
-  /// named points — promoting the nearest-to-centre as the main point when the
-  /// subspace has none yet. POIs without an OSM name are added unnamed.
-  Future<void> _importPois(Layer layer, {required bool isCircleLayer}) async {
-    final config =
-        await showPoiImportDialog(context, needsCircleRadius: isCircleLayer);
+  /// Imports nearby POIs into [layer]: prompts for a category + radius,
+  /// fetches POIs of that type around the map centre **once**, then creates —
+  /// per layer type — one named circle per POI (circles), appended named
+  /// points (subspace; the nearest-to-centre promotes to main when the
+  /// subspace has none yet), or a stored offline POI set with markers (poi).
+  Future<void> _importPois(Layer layer) async {
+    final isCircleLayer = layer.type == 'circles';
+    final isPoiLayer = layer.type == 'poi';
+    final config = await showPoiImportDialog(context,
+        needsCircleRadius: isCircleLayer, allCategories: isPoiLayer);
     if (config == null || !mounted) return;
 
     final center = _mapController.camera.center;
@@ -1550,11 +1375,34 @@ class _MapScreenState extends ConsumerState<MapScreen>
       _hint('Could not fetch POIs (offline or rate-limited).');
       return;
     }
+    // A POI layer stores everything the fetch returned (up to the Overpass
+    // cap); circle/subspace seeding keeps the default tighter cap so the
+    // created geometry stays manageable.
     final within = poisWithinRadius(
-        center.latitude, center.longitude, r, fetched);
+        center.latitude, center.longitude, r, fetched,
+        cap: isPoiLayer ? overpassResultCap : 60);
     final label = config.category.label.toLowerCase();
     if (within.isEmpty) {
       _hint('No $label found within ${r.round()} m.');
+      return;
+    }
+
+    final repo = ref.read(repositoryProvider);
+    if (isPoiLayer) {
+      // Stored as-is (unnamed POIs stay unnamed — the icon carries the type),
+      // bounded to the searched circle so the import is a single offline set.
+      final sid = await repo.createPoiSet(
+        layerId: layer.id,
+        categoryKey: config.category.key,
+        centerLat: center.latitude,
+        centerLng: center.longitude,
+        radiusMeters: r,
+        label: config.category.label,
+      );
+      await repo.addPoiPoints(sid, [
+        for (final p in within) (lat: p.lat, lng: p.lng, name: p.name),
+      ]);
+      if (mounted) _hint('Imported ${within.length} $label.');
       return;
     }
 
@@ -1563,7 +1411,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
     String labelFor(int i) =>
         within[i].name ?? '${config.category.label} ${i + 1}';
 
-    final repo = ref.read(repositoryProvider);
     if (isCircleLayer) {
       for (var i = 0; i < within.length; i++) {
         await repo.createCircle(
@@ -2180,18 +2027,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final heightPolygonPoints =
         ref.watch(heightPolygonPointsProvider).asData?.value ??
         const <HeightPolygonPoint>[];
+    final poiSets =
+        ref.watch(poiSetsProvider).asData?.value ?? const <PoiSet>[];
+    final poiPoints =
+        ref.watch(poiPointsProvider).asData?.value ?? const <PoiPoint>[];
     final settings = ref.watch(settingsProvider).asData?.value;
     final uncertainty = settings?.uncertaintyMeters ?? 0;
     final transportOverlay = settings?.transportOverlay ?? false;
     final toolsExpanded = settings?.toolsExpanded ?? true;
-    // React to POI-category changes: update the enabled set and refetch.
-    final poiMask = settings?.poiCategories ?? 0;
-    if (poiMask != _poiMask) {
-      _poiMask = poiMask;
-      _enabledPois = poiCategoriesFromMask(poiMask);
-      // _poiFetchedMask now differs, so the next refresh refetches.
-      _schedulePoiRefresh();
-    }
     // React to border-level changes.
     final borderMask = settings?.borderLevels ?? 0;
     if (borderMask != _borderMask) {
@@ -2281,6 +2124,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final isFreeLineLayer = activeLayer?.type == 'freeline';
     final isFreeAreaLayer = activeLayer?.type == 'freearea';
     final isHeightLayer = activeLayer?.type == 'height';
+    final isPoiLayer = activeLayer?.type == 'poi';
     // In a subspace layer the Add FAB seeds a new object, or — once one exists —
     // appends a point to it.
     final subspaceExists = isSubspaceLayer &&
@@ -2327,7 +2171,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     minZoom: 2,
                     onMapReady: () {
                       _mapReady = true;
-                      _schedulePoiRefresh();
                       _scheduleBordersRefresh();
                       _schedulePrefetch();
                     },
@@ -2350,7 +2193,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         setState(() => _rotation = camera.rotation);
                       }
                       // Refresh overlays + prefetch tiles once the map settles.
-                      _schedulePoiRefresh();
                       _scheduleBordersRefresh();
                       _schedulePrefetch();
                     },
@@ -2395,8 +2237,24 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       ),
                     ],
                     // One composited region per visible layer, bottom-to-top.
+                    // POI layers hold markers, not a region — they render via
+                    // their own clustering marker layer.
                     for (final layer in layers)
-                      if (layer.isVisible)
+                      if (layer.isVisible && layer.type == 'poi')
+                        PoiMarkersLayer(
+                          key: ValueKey(layer.id),
+                          layer: layer,
+                          sets: poiSets
+                              .where((s) => s.layerId == layer.id)
+                              .toList(),
+                          points: poiPoints,
+                          onClusterTap: (center) => _mapController.move(
+                            center,
+                            (_mapController.camera.zoom + 1.5)
+                                .clamp(2.0, 19.0),
+                          ),
+                        )
+                      else if (layer.isVisible)
                         RegionLayer(
                           key: ValueKey(layer.id),
                           layer: layer,
@@ -2521,12 +2379,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               strokeWidth: 2.5,
                             ),
                         ],
-                      ),
-                    // Map POIs (Overpass), above the zones. Only present when
-                    // enabled and zoomed in past the threshold.
-                    if (_pois.isNotEmpty)
-                      MarkerLayer(
-                        markers: [for (final p in _pois) _poiMarker(p)],
                       ),
                     if (_myPosition != null)
                       MarkerLayer(
@@ -3067,8 +2919,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         tooltip: 'Import nearby POIs',
                         onPressed: activeLayer == null
                             ? null
-                            : () => _importPois(activeLayer,
-                                isCircleLayer: isCircleLayer),
+                            : () => _importPois(activeLayer),
                         child: const Icon(Icons.travel_explore),
                       ),
                     ],
@@ -3079,6 +2930,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           ? null
                           : () {
                               final c = _mapController.camera.center;
+                              // A POI layer's only "add" is importing a set.
+                              if (isPoiLayer) {
+                                _importPois(activeLayer);
+                                return;
+                              }
                               // Empty point-set layer: tap-to-place the initial
                               // points instead of dropping a fixed seed.
                               if ((isSubspaceLayer && !subspaceExists) ||
@@ -3103,30 +2959,41 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           ? Theme.of(context).disabledColor
                           : null,
                       icon: Icon(
-                        isSubspaceLayer
-                            ? Icons.scatter_plot_outlined
-                            : isFreeLineLayer
-                                ? Icons.polyline
-                                : isFreeAreaLayer
-                                    ? Icons.hexagon_outlined
-                                    : isHeightLayer
-                                        ? Icons.terrain
-                                        : isPlaneLayer
-                                            ? Icons.change_history
-                                            : Icons.add_location_alt_outlined,
+                        isPoiLayer
+                            ? Icons.travel_explore
+                            : isSubspaceLayer
+                                ? Icons.scatter_plot_outlined
+                                : isFreeLineLayer
+                                    ? Icons.polyline
+                                    : isFreeAreaLayer
+                                        ? Icons.hexagon_outlined
+                                        : isHeightLayer
+                                            ? Icons.terrain
+                                            : isPlaneLayer
+                                                ? Icons.change_history
+                                                : Icons
+                                                    .add_location_alt_outlined,
                       ),
                       label: Text(
-                        isSubspaceLayer
-                            ? (subspaceExists ? 'Add point' : 'Add subspace')
-                            : isFreeLineLayer
-                                ? (freeLineExists ? 'Add point' : 'Add line')
-                                : isFreeAreaLayer
-                                    ? (freeAreaExists ? 'Add point' : 'Add area')
-                                    : isHeightLayer
-                                        ? 'Add height area'
-                                        : isPlaneLayer
-                                            ? 'Add plane'
-                                            : 'Add circle',
+                        isPoiLayer
+                            ? 'Import POIs'
+                            : isSubspaceLayer
+                                ? (subspaceExists
+                                    ? 'Add point'
+                                    : 'Add subspace')
+                                : isFreeLineLayer
+                                    ? (freeLineExists
+                                        ? 'Add point'
+                                        : 'Add line')
+                                    : isFreeAreaLayer
+                                        ? (freeAreaExists
+                                            ? 'Add point'
+                                            : 'Add area')
+                                        : isHeightLayer
+                                            ? 'Add height area'
+                                            : isPlaneLayer
+                                                ? 'Add plane'
+                                                : 'Add circle',
                       ),
                     ),
                   ],

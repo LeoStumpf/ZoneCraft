@@ -6089,6 +6089,980 @@ class HeightPolygonPointsCompanion extends UpdateCompanion<HeightPolygonPoint> {
   }
 }
 
+class $PoiSetsTable extends PoiSets with TableInfo<$PoiSetsTable, PoiSet> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PoiSetsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _layerIdMeta = const VerificationMeta(
+    'layerId',
+  );
+  @override
+  late final GeneratedColumn<String> layerId = GeneratedColumn<String>(
+    'layer_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES layers (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _categoryKeyMeta = const VerificationMeta(
+    'categoryKey',
+  );
+  @override
+  late final GeneratedColumn<String> categoryKey = GeneratedColumn<String>(
+    'category_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _centerLatMeta = const VerificationMeta(
+    'centerLat',
+  );
+  @override
+  late final GeneratedColumn<double> centerLat = GeneratedColumn<double>(
+    'center_lat',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _centerLngMeta = const VerificationMeta(
+    'centerLng',
+  );
+  @override
+  late final GeneratedColumn<double> centerLng = GeneratedColumn<double>(
+    'center_lng',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _radiusMetersMeta = const VerificationMeta(
+    'radiusMeters',
+  );
+  @override
+  late final GeneratedColumn<double> radiusMeters = GeneratedColumn<double>(
+    'radius_meters',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _labelMeta = const VerificationMeta('label');
+  @override
+  late final GeneratedColumn<String> label = GeneratedColumn<String>(
+    'label',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    layerId,
+    categoryKey,
+    centerLat,
+    centerLng,
+    radiusMeters,
+    label,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'poi_sets';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PoiSet> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('layer_id')) {
+      context.handle(
+        _layerIdMeta,
+        layerId.isAcceptableOrUnknown(data['layer_id']!, _layerIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_layerIdMeta);
+    }
+    if (data.containsKey('category_key')) {
+      context.handle(
+        _categoryKeyMeta,
+        categoryKey.isAcceptableOrUnknown(
+          data['category_key']!,
+          _categoryKeyMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_categoryKeyMeta);
+    }
+    if (data.containsKey('center_lat')) {
+      context.handle(
+        _centerLatMeta,
+        centerLat.isAcceptableOrUnknown(data['center_lat']!, _centerLatMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_centerLatMeta);
+    }
+    if (data.containsKey('center_lng')) {
+      context.handle(
+        _centerLngMeta,
+        centerLng.isAcceptableOrUnknown(data['center_lng']!, _centerLngMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_centerLngMeta);
+    }
+    if (data.containsKey('radius_meters')) {
+      context.handle(
+        _radiusMetersMeta,
+        radiusMeters.isAcceptableOrUnknown(
+          data['radius_meters']!,
+          _radiusMetersMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_radiusMetersMeta);
+    }
+    if (data.containsKey('label')) {
+      context.handle(
+        _labelMeta,
+        label.isAcceptableOrUnknown(data['label']!, _labelMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PoiSet map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PoiSet(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      layerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}layer_id'],
+      )!,
+      categoryKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}category_key'],
+      )!,
+      centerLat: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}center_lat'],
+      )!,
+      centerLng: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}center_lng'],
+      )!,
+      radiusMeters: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}radius_meters'],
+      )!,
+      label: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}label'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PoiSetsTable createAlias(String alias) {
+    return $PoiSetsTable(attachedDatabase, alias);
+  }
+}
+
+class PoiSet extends DataClass implements Insertable<PoiSet> {
+  final String id;
+  final String layerId;
+
+  /// [PoiCategory.key] of the imported category (picks the marker icon).
+  final String categoryKey;
+  final double centerLat;
+  final double centerLng;
+  final double radiusMeters;
+  final String? label;
+  final DateTime createdAt;
+  const PoiSet({
+    required this.id,
+    required this.layerId,
+    required this.categoryKey,
+    required this.centerLat,
+    required this.centerLng,
+    required this.radiusMeters,
+    this.label,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['layer_id'] = Variable<String>(layerId);
+    map['category_key'] = Variable<String>(categoryKey);
+    map['center_lat'] = Variable<double>(centerLat);
+    map['center_lng'] = Variable<double>(centerLng);
+    map['radius_meters'] = Variable<double>(radiusMeters);
+    if (!nullToAbsent || label != null) {
+      map['label'] = Variable<String>(label);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  PoiSetsCompanion toCompanion(bool nullToAbsent) {
+    return PoiSetsCompanion(
+      id: Value(id),
+      layerId: Value(layerId),
+      categoryKey: Value(categoryKey),
+      centerLat: Value(centerLat),
+      centerLng: Value(centerLng),
+      radiusMeters: Value(radiusMeters),
+      label: label == null && nullToAbsent
+          ? const Value.absent()
+          : Value(label),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory PoiSet.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PoiSet(
+      id: serializer.fromJson<String>(json['id']),
+      layerId: serializer.fromJson<String>(json['layerId']),
+      categoryKey: serializer.fromJson<String>(json['categoryKey']),
+      centerLat: serializer.fromJson<double>(json['centerLat']),
+      centerLng: serializer.fromJson<double>(json['centerLng']),
+      radiusMeters: serializer.fromJson<double>(json['radiusMeters']),
+      label: serializer.fromJson<String?>(json['label']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'layerId': serializer.toJson<String>(layerId),
+      'categoryKey': serializer.toJson<String>(categoryKey),
+      'centerLat': serializer.toJson<double>(centerLat),
+      'centerLng': serializer.toJson<double>(centerLng),
+      'radiusMeters': serializer.toJson<double>(radiusMeters),
+      'label': serializer.toJson<String?>(label),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  PoiSet copyWith({
+    String? id,
+    String? layerId,
+    String? categoryKey,
+    double? centerLat,
+    double? centerLng,
+    double? radiusMeters,
+    Value<String?> label = const Value.absent(),
+    DateTime? createdAt,
+  }) => PoiSet(
+    id: id ?? this.id,
+    layerId: layerId ?? this.layerId,
+    categoryKey: categoryKey ?? this.categoryKey,
+    centerLat: centerLat ?? this.centerLat,
+    centerLng: centerLng ?? this.centerLng,
+    radiusMeters: radiusMeters ?? this.radiusMeters,
+    label: label.present ? label.value : this.label,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  PoiSet copyWithCompanion(PoiSetsCompanion data) {
+    return PoiSet(
+      id: data.id.present ? data.id.value : this.id,
+      layerId: data.layerId.present ? data.layerId.value : this.layerId,
+      categoryKey: data.categoryKey.present
+          ? data.categoryKey.value
+          : this.categoryKey,
+      centerLat: data.centerLat.present ? data.centerLat.value : this.centerLat,
+      centerLng: data.centerLng.present ? data.centerLng.value : this.centerLng,
+      radiusMeters: data.radiusMeters.present
+          ? data.radiusMeters.value
+          : this.radiusMeters,
+      label: data.label.present ? data.label.value : this.label,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PoiSet(')
+          ..write('id: $id, ')
+          ..write('layerId: $layerId, ')
+          ..write('categoryKey: $categoryKey, ')
+          ..write('centerLat: $centerLat, ')
+          ..write('centerLng: $centerLng, ')
+          ..write('radiusMeters: $radiusMeters, ')
+          ..write('label: $label, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    layerId,
+    categoryKey,
+    centerLat,
+    centerLng,
+    radiusMeters,
+    label,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PoiSet &&
+          other.id == this.id &&
+          other.layerId == this.layerId &&
+          other.categoryKey == this.categoryKey &&
+          other.centerLat == this.centerLat &&
+          other.centerLng == this.centerLng &&
+          other.radiusMeters == this.radiusMeters &&
+          other.label == this.label &&
+          other.createdAt == this.createdAt);
+}
+
+class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
+  final Value<String> id;
+  final Value<String> layerId;
+  final Value<String> categoryKey;
+  final Value<double> centerLat;
+  final Value<double> centerLng;
+  final Value<double> radiusMeters;
+  final Value<String?> label;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const PoiSetsCompanion({
+    this.id = const Value.absent(),
+    this.layerId = const Value.absent(),
+    this.categoryKey = const Value.absent(),
+    this.centerLat = const Value.absent(),
+    this.centerLng = const Value.absent(),
+    this.radiusMeters = const Value.absent(),
+    this.label = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PoiSetsCompanion.insert({
+    required String id,
+    required String layerId,
+    required String categoryKey,
+    required double centerLat,
+    required double centerLng,
+    required double radiusMeters,
+    this.label = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       layerId = Value(layerId),
+       categoryKey = Value(categoryKey),
+       centerLat = Value(centerLat),
+       centerLng = Value(centerLng),
+       radiusMeters = Value(radiusMeters);
+  static Insertable<PoiSet> custom({
+    Expression<String>? id,
+    Expression<String>? layerId,
+    Expression<String>? categoryKey,
+    Expression<double>? centerLat,
+    Expression<double>? centerLng,
+    Expression<double>? radiusMeters,
+    Expression<String>? label,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (layerId != null) 'layer_id': layerId,
+      if (categoryKey != null) 'category_key': categoryKey,
+      if (centerLat != null) 'center_lat': centerLat,
+      if (centerLng != null) 'center_lng': centerLng,
+      if (radiusMeters != null) 'radius_meters': radiusMeters,
+      if (label != null) 'label': label,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PoiSetsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? layerId,
+    Value<String>? categoryKey,
+    Value<double>? centerLat,
+    Value<double>? centerLng,
+    Value<double>? radiusMeters,
+    Value<String?>? label,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return PoiSetsCompanion(
+      id: id ?? this.id,
+      layerId: layerId ?? this.layerId,
+      categoryKey: categoryKey ?? this.categoryKey,
+      centerLat: centerLat ?? this.centerLat,
+      centerLng: centerLng ?? this.centerLng,
+      radiusMeters: radiusMeters ?? this.radiusMeters,
+      label: label ?? this.label,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (layerId.present) {
+      map['layer_id'] = Variable<String>(layerId.value);
+    }
+    if (categoryKey.present) {
+      map['category_key'] = Variable<String>(categoryKey.value);
+    }
+    if (centerLat.present) {
+      map['center_lat'] = Variable<double>(centerLat.value);
+    }
+    if (centerLng.present) {
+      map['center_lng'] = Variable<double>(centerLng.value);
+    }
+    if (radiusMeters.present) {
+      map['radius_meters'] = Variable<double>(radiusMeters.value);
+    }
+    if (label.present) {
+      map['label'] = Variable<String>(label.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PoiSetsCompanion(')
+          ..write('id: $id, ')
+          ..write('layerId: $layerId, ')
+          ..write('categoryKey: $categoryKey, ')
+          ..write('centerLat: $centerLat, ')
+          ..write('centerLng: $centerLng, ')
+          ..write('radiusMeters: $radiusMeters, ')
+          ..write('label: $label, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PoiPointsTable extends PoiPoints
+    with TableInfo<$PoiPointsTable, PoiPoint> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PoiPointsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _poiSetIdMeta = const VerificationMeta(
+    'poiSetId',
+  );
+  @override
+  late final GeneratedColumn<String> poiSetId = GeneratedColumn<String>(
+    'poi_set_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES poi_sets (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _latMeta = const VerificationMeta('lat');
+  @override
+  late final GeneratedColumn<double> lat = GeneratedColumn<double>(
+    'lat',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _lngMeta = const VerificationMeta('lng');
+  @override
+  late final GeneratedColumn<double> lng = GeneratedColumn<double>(
+    'lng',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    poiSetId,
+    lat,
+    lng,
+    name,
+    sortOrder,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'poi_points';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PoiPoint> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('poi_set_id')) {
+      context.handle(
+        _poiSetIdMeta,
+        poiSetId.isAcceptableOrUnknown(data['poi_set_id']!, _poiSetIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_poiSetIdMeta);
+    }
+    if (data.containsKey('lat')) {
+      context.handle(
+        _latMeta,
+        lat.isAcceptableOrUnknown(data['lat']!, _latMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_latMeta);
+    }
+    if (data.containsKey('lng')) {
+      context.handle(
+        _lngMeta,
+        lng.isAcceptableOrUnknown(data['lng']!, _lngMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_lngMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sortOrderMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PoiPoint map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PoiPoint(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      poiSetId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}poi_set_id'],
+      )!,
+      lat: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}lat'],
+      )!,
+      lng: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}lng'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      ),
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PoiPointsTable createAlias(String alias) {
+    return $PoiPointsTable(attachedDatabase, alias);
+  }
+}
+
+class PoiPoint extends DataClass implements Insertable<PoiPoint> {
+  final String id;
+  final String poiSetId;
+  final double lat;
+  final double lng;
+  final String? name;
+  final int sortOrder;
+  final DateTime createdAt;
+  const PoiPoint({
+    required this.id,
+    required this.poiSetId,
+    required this.lat,
+    required this.lng,
+    this.name,
+    required this.sortOrder,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['poi_set_id'] = Variable<String>(poiSetId);
+    map['lat'] = Variable<double>(lat);
+    map['lng'] = Variable<double>(lng);
+    if (!nullToAbsent || name != null) {
+      map['name'] = Variable<String>(name);
+    }
+    map['sort_order'] = Variable<int>(sortOrder);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  PoiPointsCompanion toCompanion(bool nullToAbsent) {
+    return PoiPointsCompanion(
+      id: Value(id),
+      poiSetId: Value(poiSetId),
+      lat: Value(lat),
+      lng: Value(lng),
+      name: name == null && nullToAbsent ? const Value.absent() : Value(name),
+      sortOrder: Value(sortOrder),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory PoiPoint.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PoiPoint(
+      id: serializer.fromJson<String>(json['id']),
+      poiSetId: serializer.fromJson<String>(json['poiSetId']),
+      lat: serializer.fromJson<double>(json['lat']),
+      lng: serializer.fromJson<double>(json['lng']),
+      name: serializer.fromJson<String?>(json['name']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'poiSetId': serializer.toJson<String>(poiSetId),
+      'lat': serializer.toJson<double>(lat),
+      'lng': serializer.toJson<double>(lng),
+      'name': serializer.toJson<String?>(name),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  PoiPoint copyWith({
+    String? id,
+    String? poiSetId,
+    double? lat,
+    double? lng,
+    Value<String?> name = const Value.absent(),
+    int? sortOrder,
+    DateTime? createdAt,
+  }) => PoiPoint(
+    id: id ?? this.id,
+    poiSetId: poiSetId ?? this.poiSetId,
+    lat: lat ?? this.lat,
+    lng: lng ?? this.lng,
+    name: name.present ? name.value : this.name,
+    sortOrder: sortOrder ?? this.sortOrder,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  PoiPoint copyWithCompanion(PoiPointsCompanion data) {
+    return PoiPoint(
+      id: data.id.present ? data.id.value : this.id,
+      poiSetId: data.poiSetId.present ? data.poiSetId.value : this.poiSetId,
+      lat: data.lat.present ? data.lat.value : this.lat,
+      lng: data.lng.present ? data.lng.value : this.lng,
+      name: data.name.present ? data.name.value : this.name,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PoiPoint(')
+          ..write('id: $id, ')
+          ..write('poiSetId: $poiSetId, ')
+          ..write('lat: $lat, ')
+          ..write('lng: $lng, ')
+          ..write('name: $name, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, poiSetId, lat, lng, name, sortOrder, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PoiPoint &&
+          other.id == this.id &&
+          other.poiSetId == this.poiSetId &&
+          other.lat == this.lat &&
+          other.lng == this.lng &&
+          other.name == this.name &&
+          other.sortOrder == this.sortOrder &&
+          other.createdAt == this.createdAt);
+}
+
+class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
+  final Value<String> id;
+  final Value<String> poiSetId;
+  final Value<double> lat;
+  final Value<double> lng;
+  final Value<String?> name;
+  final Value<int> sortOrder;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const PoiPointsCompanion({
+    this.id = const Value.absent(),
+    this.poiSetId = const Value.absent(),
+    this.lat = const Value.absent(),
+    this.lng = const Value.absent(),
+    this.name = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PoiPointsCompanion.insert({
+    required String id,
+    required String poiSetId,
+    required double lat,
+    required double lng,
+    this.name = const Value.absent(),
+    required int sortOrder,
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       poiSetId = Value(poiSetId),
+       lat = Value(lat),
+       lng = Value(lng),
+       sortOrder = Value(sortOrder);
+  static Insertable<PoiPoint> custom({
+    Expression<String>? id,
+    Expression<String>? poiSetId,
+    Expression<double>? lat,
+    Expression<double>? lng,
+    Expression<String>? name,
+    Expression<int>? sortOrder,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (poiSetId != null) 'poi_set_id': poiSetId,
+      if (lat != null) 'lat': lat,
+      if (lng != null) 'lng': lng,
+      if (name != null) 'name': name,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PoiPointsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? poiSetId,
+    Value<double>? lat,
+    Value<double>? lng,
+    Value<String?>? name,
+    Value<int>? sortOrder,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return PoiPointsCompanion(
+      id: id ?? this.id,
+      poiSetId: poiSetId ?? this.poiSetId,
+      lat: lat ?? this.lat,
+      lng: lng ?? this.lng,
+      name: name ?? this.name,
+      sortOrder: sortOrder ?? this.sortOrder,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (poiSetId.present) {
+      map['poi_set_id'] = Variable<String>(poiSetId.value);
+    }
+    if (lat.present) {
+      map['lat'] = Variable<double>(lat.value);
+    }
+    if (lng.present) {
+      map['lng'] = Variable<double>(lng.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PoiPointsCompanion(')
+          ..write('id: $id, ')
+          ..write('poiSetId: $poiSetId, ')
+          ..write('lat: $lat, ')
+          ..write('lng: $lng, ')
+          ..write('name: $name, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $TileCacheTable extends TileCache
     with TableInfo<$TileCacheTable, TileCacheData> {
   @override
@@ -7045,6 +8019,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $HeightPolygonsTable heightPolygons = $HeightPolygonsTable(this);
   late final $HeightPolygonPointsTable heightPolygonPoints =
       $HeightPolygonPointsTable(this);
+  late final $PoiSetsTable poiSets = $PoiSetsTable(this);
+  late final $PoiPointsTable poiPoints = $PoiPointsTable(this);
   late final $TileCacheTable tileCache = $TileCacheTable(this);
   late final $OverpassCacheTable overpassCache = $OverpassCacheTable(this);
   @override
@@ -7065,6 +8041,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     heightRegions,
     heightPolygons,
     heightPolygonPoints,
+    poiSets,
+    poiPoints,
     tileCache,
     overpassCache,
   ];
@@ -7146,6 +8124,20 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('height_polygon_points', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'layers',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('poi_sets', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'poi_sets',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('poi_points', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -7284,6 +8276,25 @@ final class $$LayersTableReferences
     ).filter((f) => f.layerId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_heightRegionsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$PoiSetsTable, List<PoiSet>> _poiSetsRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.poiSets,
+    aliasName: $_aliasNameGenerator(db.layers.id, db.poiSets.layerId),
+  );
+
+  $$PoiSetsTableProcessedTableManager get poiSetsRefs {
+    final manager = $$PoiSetsTableTableManager(
+      $_db,
+      $_db.poiSets,
+    ).filter((f) => f.layerId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_poiSetsRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -7480,6 +8491,31 @@ class $$LayersTableFilterComposer
           }) => $$HeightRegionsTableFilterComposer(
             $db: $db,
             $table: $db.heightRegions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> poiSetsRefs(
+    Expression<bool> Function($$PoiSetsTableFilterComposer f) f,
+  ) {
+    final $$PoiSetsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.poiSets,
+      getReferencedColumn: (t) => t.layerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PoiSetsTableFilterComposer(
+            $db: $db,
+            $table: $db.poiSets,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -7724,6 +8760,31 @@ class $$LayersTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> poiSetsRefs<T extends Object>(
+    Expression<T> Function($$PoiSetsTableAnnotationComposer a) f,
+  ) {
+    final $$PoiSetsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.poiSets,
+      getReferencedColumn: (t) => t.layerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PoiSetsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.poiSets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LayersTableTableManager
@@ -7746,6 +8807,7 @@ class $$LayersTableTableManager
             bool freeLinesRefs,
             bool freeAreasRefs,
             bool heightRegionsRefs,
+            bool poiSetsRefs,
           })
         > {
   $$LayersTableTableManager(_$AppDatabase db, $LayersTable table)
@@ -7817,6 +8879,7 @@ class $$LayersTableTableManager
                 freeLinesRefs = false,
                 freeAreasRefs = false,
                 heightRegionsRefs = false,
+                poiSetsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -7827,6 +8890,7 @@ class $$LayersTableTableManager
                     if (freeLinesRefs) db.freeLines,
                     if (freeAreasRefs) db.freeAreas,
                     if (heightRegionsRefs) db.heightRegions,
+                    if (poiSetsRefs) db.poiSets,
                   ],
                   addJoins: null,
                   getPrefetchedDataCallback: (items) async {
@@ -7945,6 +9009,23 @@ class $$LayersTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (poiSetsRefs)
+                        await $_getPrefetchedData<Layer, $LayersTable, PoiSet>(
+                          currentTable: table,
+                          referencedTable: $$LayersTableReferences
+                              ._poiSetsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LayersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).poiSetsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.layerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -7972,6 +9053,7 @@ typedef $$LayersTableProcessedTableManager =
         bool freeLinesRefs,
         bool freeAreasRefs,
         bool heightRegionsRefs,
+        bool poiSetsRefs,
       })
     >;
 typedef $$CirclesTableCreateCompanionBuilder =
@@ -12691,6 +13773,820 @@ typedef $$HeightPolygonPointsTableProcessedTableManager =
       HeightPolygonPoint,
       PrefetchHooks Function({bool polygonId})
     >;
+typedef $$PoiSetsTableCreateCompanionBuilder =
+    PoiSetsCompanion Function({
+      required String id,
+      required String layerId,
+      required String categoryKey,
+      required double centerLat,
+      required double centerLng,
+      required double radiusMeters,
+      Value<String?> label,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$PoiSetsTableUpdateCompanionBuilder =
+    PoiSetsCompanion Function({
+      Value<String> id,
+      Value<String> layerId,
+      Value<String> categoryKey,
+      Value<double> centerLat,
+      Value<double> centerLng,
+      Value<double> radiusMeters,
+      Value<String?> label,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$PoiSetsTableReferences
+    extends BaseReferences<_$AppDatabase, $PoiSetsTable, PoiSet> {
+  $$PoiSetsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $LayersTable _layerIdTable(_$AppDatabase db) => db.layers.createAlias(
+    $_aliasNameGenerator(db.poiSets.layerId, db.layers.id),
+  );
+
+  $$LayersTableProcessedTableManager get layerId {
+    final $_column = $_itemColumn<String>('layer_id')!;
+
+    final manager = $$LayersTableTableManager(
+      $_db,
+      $_db.layers,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_layerIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$PoiPointsTable, List<PoiPoint>>
+  _poiPointsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.poiPoints,
+    aliasName: $_aliasNameGenerator(db.poiSets.id, db.poiPoints.poiSetId),
+  );
+
+  $$PoiPointsTableProcessedTableManager get poiPointsRefs {
+    final manager = $$PoiPointsTableTableManager(
+      $_db,
+      $_db.poiPoints,
+    ).filter((f) => f.poiSetId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_poiPointsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$PoiSetsTableFilterComposer
+    extends Composer<_$AppDatabase, $PoiSetsTable> {
+  $$PoiSetsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get categoryKey => $composableBuilder(
+    column: $table.categoryKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get centerLat => $composableBuilder(
+    column: $table.centerLat,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get centerLng => $composableBuilder(
+    column: $table.centerLng,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get radiusMeters => $composableBuilder(
+    column: $table.radiusMeters,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$LayersTableFilterComposer get layerId {
+    final $$LayersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.layerId,
+      referencedTable: $db.layers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LayersTableFilterComposer(
+            $db: $db,
+            $table: $db.layers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> poiPointsRefs(
+    Expression<bool> Function($$PoiPointsTableFilterComposer f) f,
+  ) {
+    final $$PoiPointsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.poiPoints,
+      getReferencedColumn: (t) => t.poiSetId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PoiPointsTableFilterComposer(
+            $db: $db,
+            $table: $db.poiPoints,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$PoiSetsTableOrderingComposer
+    extends Composer<_$AppDatabase, $PoiSetsTable> {
+  $$PoiSetsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get categoryKey => $composableBuilder(
+    column: $table.categoryKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get centerLat => $composableBuilder(
+    column: $table.centerLat,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get centerLng => $composableBuilder(
+    column: $table.centerLng,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get radiusMeters => $composableBuilder(
+    column: $table.radiusMeters,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$LayersTableOrderingComposer get layerId {
+    final $$LayersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.layerId,
+      referencedTable: $db.layers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LayersTableOrderingComposer(
+            $db: $db,
+            $table: $db.layers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PoiSetsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PoiSetsTable> {
+  $$PoiSetsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get categoryKey => $composableBuilder(
+    column: $table.categoryKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get centerLat =>
+      $composableBuilder(column: $table.centerLat, builder: (column) => column);
+
+  GeneratedColumn<double> get centerLng =>
+      $composableBuilder(column: $table.centerLng, builder: (column) => column);
+
+  GeneratedColumn<double> get radiusMeters => $composableBuilder(
+    column: $table.radiusMeters,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get label =>
+      $composableBuilder(column: $table.label, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$LayersTableAnnotationComposer get layerId {
+    final $$LayersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.layerId,
+      referencedTable: $db.layers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LayersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.layers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> poiPointsRefs<T extends Object>(
+    Expression<T> Function($$PoiPointsTableAnnotationComposer a) f,
+  ) {
+    final $$PoiPointsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.poiPoints,
+      getReferencedColumn: (t) => t.poiSetId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PoiPointsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.poiPoints,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$PoiSetsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PoiSetsTable,
+          PoiSet,
+          $$PoiSetsTableFilterComposer,
+          $$PoiSetsTableOrderingComposer,
+          $$PoiSetsTableAnnotationComposer,
+          $$PoiSetsTableCreateCompanionBuilder,
+          $$PoiSetsTableUpdateCompanionBuilder,
+          (PoiSet, $$PoiSetsTableReferences),
+          PoiSet,
+          PrefetchHooks Function({bool layerId, bool poiPointsRefs})
+        > {
+  $$PoiSetsTableTableManager(_$AppDatabase db, $PoiSetsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PoiSetsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PoiSetsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PoiSetsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> layerId = const Value.absent(),
+                Value<String> categoryKey = const Value.absent(),
+                Value<double> centerLat = const Value.absent(),
+                Value<double> centerLng = const Value.absent(),
+                Value<double> radiusMeters = const Value.absent(),
+                Value<String?> label = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PoiSetsCompanion(
+                id: id,
+                layerId: layerId,
+                categoryKey: categoryKey,
+                centerLat: centerLat,
+                centerLng: centerLng,
+                radiusMeters: radiusMeters,
+                label: label,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String layerId,
+                required String categoryKey,
+                required double centerLat,
+                required double centerLng,
+                required double radiusMeters,
+                Value<String?> label = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PoiSetsCompanion.insert(
+                id: id,
+                layerId: layerId,
+                categoryKey: categoryKey,
+                centerLat: centerLat,
+                centerLng: centerLng,
+                radiusMeters: radiusMeters,
+                label: label,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$PoiSetsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({layerId = false, poiPointsRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [if (poiPointsRefs) db.poiPoints],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (layerId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.layerId,
+                                referencedTable: $$PoiSetsTableReferences
+                                    ._layerIdTable(db),
+                                referencedColumn: $$PoiSetsTableReferences
+                                    ._layerIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (poiPointsRefs)
+                    await $_getPrefetchedData<PoiSet, $PoiSetsTable, PoiPoint>(
+                      currentTable: table,
+                      referencedTable: $$PoiSetsTableReferences
+                          ._poiPointsRefsTable(db),
+                      managerFromTypedResult: (p0) =>
+                          $$PoiSetsTableReferences(db, table, p0).poiPointsRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where((e) => e.poiSetId == item.id),
+                      typedResults: items,
+                    ),
+                ];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$PoiSetsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PoiSetsTable,
+      PoiSet,
+      $$PoiSetsTableFilterComposer,
+      $$PoiSetsTableOrderingComposer,
+      $$PoiSetsTableAnnotationComposer,
+      $$PoiSetsTableCreateCompanionBuilder,
+      $$PoiSetsTableUpdateCompanionBuilder,
+      (PoiSet, $$PoiSetsTableReferences),
+      PoiSet,
+      PrefetchHooks Function({bool layerId, bool poiPointsRefs})
+    >;
+typedef $$PoiPointsTableCreateCompanionBuilder =
+    PoiPointsCompanion Function({
+      required String id,
+      required String poiSetId,
+      required double lat,
+      required double lng,
+      Value<String?> name,
+      required int sortOrder,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$PoiPointsTableUpdateCompanionBuilder =
+    PoiPointsCompanion Function({
+      Value<String> id,
+      Value<String> poiSetId,
+      Value<double> lat,
+      Value<double> lng,
+      Value<String?> name,
+      Value<int> sortOrder,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$PoiPointsTableReferences
+    extends BaseReferences<_$AppDatabase, $PoiPointsTable, PoiPoint> {
+  $$PoiPointsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $PoiSetsTable _poiSetIdTable(_$AppDatabase db) => db.poiSets
+      .createAlias($_aliasNameGenerator(db.poiPoints.poiSetId, db.poiSets.id));
+
+  $$PoiSetsTableProcessedTableManager get poiSetId {
+    final $_column = $_itemColumn<String>('poi_set_id')!;
+
+    final manager = $$PoiSetsTableTableManager(
+      $_db,
+      $_db.poiSets,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_poiSetIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$PoiPointsTableFilterComposer
+    extends Composer<_$AppDatabase, $PoiPointsTable> {
+  $$PoiPointsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get lat => $composableBuilder(
+    column: $table.lat,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get lng => $composableBuilder(
+    column: $table.lng,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$PoiSetsTableFilterComposer get poiSetId {
+    final $$PoiSetsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.poiSetId,
+      referencedTable: $db.poiSets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PoiSetsTableFilterComposer(
+            $db: $db,
+            $table: $db.poiSets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PoiPointsTableOrderingComposer
+    extends Composer<_$AppDatabase, $PoiPointsTable> {
+  $$PoiPointsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get lat => $composableBuilder(
+    column: $table.lat,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get lng => $composableBuilder(
+    column: $table.lng,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$PoiSetsTableOrderingComposer get poiSetId {
+    final $$PoiSetsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.poiSetId,
+      referencedTable: $db.poiSets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PoiSetsTableOrderingComposer(
+            $db: $db,
+            $table: $db.poiSets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PoiPointsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PoiPointsTable> {
+  $$PoiPointsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<double> get lat =>
+      $composableBuilder(column: $table.lat, builder: (column) => column);
+
+  GeneratedColumn<double> get lng =>
+      $composableBuilder(column: $table.lng, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$PoiSetsTableAnnotationComposer get poiSetId {
+    final $$PoiSetsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.poiSetId,
+      referencedTable: $db.poiSets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PoiSetsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.poiSets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PoiPointsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PoiPointsTable,
+          PoiPoint,
+          $$PoiPointsTableFilterComposer,
+          $$PoiPointsTableOrderingComposer,
+          $$PoiPointsTableAnnotationComposer,
+          $$PoiPointsTableCreateCompanionBuilder,
+          $$PoiPointsTableUpdateCompanionBuilder,
+          (PoiPoint, $$PoiPointsTableReferences),
+          PoiPoint,
+          PrefetchHooks Function({bool poiSetId})
+        > {
+  $$PoiPointsTableTableManager(_$AppDatabase db, $PoiPointsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PoiPointsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PoiPointsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PoiPointsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> poiSetId = const Value.absent(),
+                Value<double> lat = const Value.absent(),
+                Value<double> lng = const Value.absent(),
+                Value<String?> name = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PoiPointsCompanion(
+                id: id,
+                poiSetId: poiSetId,
+                lat: lat,
+                lng: lng,
+                name: name,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String poiSetId,
+                required double lat,
+                required double lng,
+                Value<String?> name = const Value.absent(),
+                required int sortOrder,
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PoiPointsCompanion.insert(
+                id: id,
+                poiSetId: poiSetId,
+                lat: lat,
+                lng: lng,
+                name: name,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$PoiPointsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({poiSetId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (poiSetId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.poiSetId,
+                                referencedTable: $$PoiPointsTableReferences
+                                    ._poiSetIdTable(db),
+                                referencedColumn: $$PoiPointsTableReferences
+                                    ._poiSetIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$PoiPointsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PoiPointsTable,
+      PoiPoint,
+      $$PoiPointsTableFilterComposer,
+      $$PoiPointsTableOrderingComposer,
+      $$PoiPointsTableAnnotationComposer,
+      $$PoiPointsTableCreateCompanionBuilder,
+      $$PoiPointsTableUpdateCompanionBuilder,
+      (PoiPoint, $$PoiPointsTableReferences),
+      PoiPoint,
+      PrefetchHooks Function({bool poiSetId})
+    >;
 typedef $$TileCacheTableCreateCompanionBuilder =
     TileCacheCompanion Function({
       required String url,
@@ -13203,6 +15099,10 @@ class $AppDatabaseManager {
       $$HeightPolygonsTableTableManager(_db, _db.heightPolygons);
   $$HeightPolygonPointsTableTableManager get heightPolygonPoints =>
       $$HeightPolygonPointsTableTableManager(_db, _db.heightPolygonPoints);
+  $$PoiSetsTableTableManager get poiSets =>
+      $$PoiSetsTableTableManager(_db, _db.poiSets);
+  $$PoiPointsTableTableManager get poiPoints =>
+      $$PoiPointsTableTableManager(_db, _db.poiPoints);
   $$TileCacheTableTableManager get tileCache =>
       $$TileCacheTableTableManager(_db, _db.tileCache);
   $$OverpassCacheTableTableManager get overpassCache =>
