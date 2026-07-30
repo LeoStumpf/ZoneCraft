@@ -204,15 +204,19 @@ void main() {
     expect((await repo.watchSettings().first).borderLevels, 0x09);
   });
 
-  test('layer opacity defaults to 1.0 and updates', () async {
-    final id = await repo.createLayer(name: 'L', colorArgb: 0xFF0000FF);
-    final created = await (db.select(db.layers)..where((l) => l.id.equals(id)))
-        .getSingle();
-    expect(created.opacity, 1.0);
-    await repo.updateLayer(id, opacity: 0.4);
-    final updated = await (db.select(db.layers)..where((l) => l.id.equals(id)))
-        .getSingle();
-    expect(updated.opacity, 0.4);
+  test('layer opacity defaults per type and updates', () async {
+    // Region layers default to a translucent fill; POI layers to fully opaque.
+    final region = await repo.createLayer(name: 'L', colorArgb: 0xFF0000FF);
+    final poi =
+        await repo.createLayer(name: 'P', colorArgb: 0xFF00FF00, type: 'poi');
+    Future<Layer> row(String id) =>
+        (db.select(db.layers)..where((l) => l.id.equals(id))).getSingle();
+    expect((await row(region)).opacity, kDefaultRegionLayerOpacity);
+    expect((await row(poi)).opacity, 1.0);
+
+    await repo.updateLayer(region, opacity: 1.0);
+    final updated = await row(region);
+    expect(updated.opacity, 1.0);
     // Opacity edits must not disturb the other attributes.
     expect(updated.colorArgb, 0xFF0000FF);
     expect(updated.isVisible, isTrue);

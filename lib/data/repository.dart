@@ -38,6 +38,10 @@ class Repository {
             colorArgb: colorArgb,
             sortOrder: maxOrder + 1,
             type: Value(type),
+            // Region layers default to a translucent fill (map shows through);
+            // POI layers are crisp markers, so fully opaque.
+            opacity: Value(
+                type == 'poi' ? 1.0 : kDefaultRegionLayerOpacity),
           ),
         );
     return id;

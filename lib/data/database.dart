@@ -3,6 +3,14 @@ import 'package:drift_flutter/drift_flutter.dart';
 
 part 'database.g.dart';
 
+/// Default opacity of a freshly created region layer's **solid fill**. The
+/// design intent is a translucent fill so the map shows through — this is that
+/// translucency expressed as an opacity (`Layers.opacity` *is* the fill
+/// opacity: 1.0 = fully opaque / map hidden, this value = the default look).
+/// POI layers instead default to 1.0 (crisp markers). Shared so the painter,
+/// the repository (create default + v17 rescale) and the drawer agree.
+const double kDefaultRegionLayerOpacity = 0.45;
+
 /// A map overlay layer. Layers stack on the map ordered by [sortOrder]
 /// (higher = drawn on top) and can be toggled on/off via [isVisible].
 ///
@@ -402,7 +410,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 17;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -476,6 +484,18 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(layers, layers.opacity);
             await m.addColumn(appSettings, appSettings.basemapVisible);
             await m.addColumn(appSettings, appSettings.basemapOpacity);
+          }
+          if (from < 17) {
+            // v16 stored `opacity` as a *multiplier* of the built-in fill
+            // translucency (1.0 = the default look). v17 makes `opacity` the
+            // fill opacity itself (1.0 = fully opaque, hiding the map).
+            // Rescale existing region layers so they look unchanged; POI
+            // layers use opacity as marker opacity (same in both), so skip them.
+            await customStatement(
+              'UPDATE layers SET opacity = opacity * '
+              '$kDefaultRegionLayerOpacity '
+              "WHERE type != 'poi'",
+            );
           }
         },
         beforeOpen: (details) async {

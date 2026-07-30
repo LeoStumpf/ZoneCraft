@@ -302,7 +302,11 @@ class _LayerTile extends ConsumerWidget {
     final subtitle =
         StringBuffer('$objectCount $noun${objectCount == 1 ? '' : 's'}');
     if (layer.isInverted) subtitle.write(' · inverted');
-    if (layer.opacity < 0.999) {
+    // Show the opacity only when it isn't this type's default (region layers
+    // default to a translucent fill, so the default value isn't 100%).
+    final defaultOpacity =
+        layer.type == 'poi' ? 1.0 : kDefaultRegionLayerOpacity;
+    if ((layer.opacity - defaultOpacity).abs() > 0.005) {
       subtitle.write(' · ${(layer.opacity * 100).round()}% opacity');
     }
 

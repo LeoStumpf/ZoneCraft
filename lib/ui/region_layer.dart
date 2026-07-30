@@ -39,6 +39,7 @@ class RegionLayer extends StatelessWidget {
     this.heightPolygons = const <HeightPolygon>[],
     this.heightPolygonPoints = const <HeightPolygonPoint>[],
     required this.uncertaintyMeters,
+    this.opacity = 1.0,
   });
 
   final Layer layer;
@@ -67,6 +68,9 @@ class RegionLayer extends StatelessWidget {
   /// Ring points of [heightPolygons] (ordered); grouped per-polygon at paint.
   final List<HeightPolygonPoint> heightPolygonPoints;
   final double uncertaintyMeters;
+
+  /// The layer's fill opacity in [0, 1] (see [Layers.opacity]).
+  final double opacity;
 
   @override
   Widget build(BuildContext context) {
@@ -103,6 +107,7 @@ class RegionLayer extends StatelessWidget {
           heightPolygons: heightPolygons,
           heightPolygonPoints: heightPolygonPoints,
           uncertaintyMeters: uncertaintyMeters,
+          opacity: layer.opacity,
         ),
       ),
     );
@@ -127,6 +132,7 @@ class _RegionPainter extends CustomPainter {
     required this.heightPolygons,
     required this.heightPolygonPoints,
     required this.uncertaintyMeters,
+    required this.opacity,
   });
 
   final MapCamera camera;
@@ -148,6 +154,18 @@ class _RegionPainter extends CustomPainter {
   final List<HeightPolygon> heightPolygons;
   final List<HeightPolygonPoint> heightPolygonPoints;
   final double uncertaintyMeters;
+
+  /// The layer's fill opacity in [0, 1]. It scales all three paint elements by
+  /// the same factor `k = opacity / kDefaultRegionLayerOpacity` (so at the
+  /// default it reproduces the original look exactly: solid 0.45, band 0.20,
+  /// crisp outline), clamped to [0, 1]. At opacity 1.0 the solid fill is fully
+  /// opaque (the map is hidden); at 0 the layer disappears.
+  final double opacity;
+
+  double get _solidAlpha => (0.45 * _k).clamp(0.0, 1.0);
+  double get _bandAlpha => (0.20 * _k).clamp(0.0, 1.0);
+  double get _strokeAlpha => (1.0 * _k).clamp(0.0, 1.0);
+  double get _k => opacity / kDefaultRegionLayerOpacity;
 
   static const int _ringPoints = 90;
   static const Distance _distance = Distance(calculator: Haversine());
@@ -303,14 +321,14 @@ class _RegionPainter extends CustomPainter {
 
     final solidPaint = Paint()
       ..style = PaintingStyle.fill
-      ..color = color.withValues(alpha: 0.45);
+      ..color = color.withValues(alpha: _solidAlpha);
     final bandPaint = Paint()
       ..style = PaintingStyle.fill
-      ..color = color.withValues(alpha: 0.20);
+      ..color = color.withValues(alpha: _bandAlpha);
     final strokePaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5
-      ..color = color;
+      ..color = color.withValues(alpha: _strokeAlpha);
 
     // The outline traces the *nominal* boundary, which every type keeps fixed
     // regardless of invert: normally that's `core` (the band grows outward from
@@ -365,14 +383,14 @@ class _RegionPainter extends CustomPainter {
 
     final solidPaint = Paint()
       ..style = PaintingStyle.fill
-      ..color = color.withValues(alpha: 0.45);
+      ..color = color.withValues(alpha: _solidAlpha);
     final bandPaint = Paint()
       ..style = PaintingStyle.fill
-      ..color = color.withValues(alpha: 0.20);
+      ..color = color.withValues(alpha: _bandAlpha);
     final strokePaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5
-      ..color = color;
+      ..color = color.withValues(alpha: _strokeAlpha);
 
     // Rings were pre-clipped to `_clip` at projection time ([_contoursToPath]),
     // so every path here is viewport-sized: the path-ops below are cheap and
@@ -510,16 +528,16 @@ class _RegionPainter extends CustomPainter {
 
     final solidPaint = Paint()
       ..style = PaintingStyle.fill
-      ..color = color.withValues(alpha: 0.45);
+      ..color = color.withValues(alpha: _solidAlpha);
     final bandPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeJoin = StrokeJoin.round
       ..strokeCap = StrokeCap.round
-      ..color = color.withValues(alpha: 0.20);
+      ..color = color.withValues(alpha: _bandAlpha);
     final strokePaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5
-      ..color = color;
+      ..color = color.withValues(alpha: _strokeAlpha);
 
     final clip = Path()..addRect(_clip);
     Path bounded(Path p) => Path.combine(PathOperation.intersect, p, clip);
@@ -621,16 +639,16 @@ class _RegionPainter extends CustomPainter {
   void _paintHeight(Canvas canvas, Size size) {
     final solidPaint = Paint()
       ..style = PaintingStyle.fill
-      ..color = color.withValues(alpha: 0.45);
+      ..color = color.withValues(alpha: _solidAlpha);
     final bandPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeJoin = StrokeJoin.round
       ..strokeCap = StrokeCap.round
-      ..color = color.withValues(alpha: 0.20);
+      ..color = color.withValues(alpha: _bandAlpha);
     final strokePaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5
-      ..color = color;
+      ..color = color.withValues(alpha: _strokeAlpha);
 
     for (final r in heightRegions) {
       final polys =
@@ -757,6 +775,7 @@ class _RegionPainter extends CustomPainter {
     // identity/value comparison is enough to avoid redundant repaints.
     return old.color != color ||
         old.inverted != inverted ||
+        old.opacity != opacity ||
         old.uncertaintyMeters != uncertaintyMeters ||
         !identical(old.circles, circles) ||
         !identical(old.planes, planes) ||

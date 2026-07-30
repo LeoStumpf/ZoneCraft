@@ -2248,11 +2248,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       ),
                     ],
                     // One composited region per visible layer, bottom-to-top.
-                    // POI layers hold markers, not a region — they render via
-                    // their own clustering marker layer. Each layer is wrapped
-                    // in Opacity so its per-layer transparency multiplies the
-                    // whole layer's paint uniformly (a no-op at 1.0, so default
-                    // layers are unchanged and pay nothing).
+                    // Region layers apply their opacity inside the painter (so
+                    // it can push the fill all the way to fully opaque). POI
+                    // layers hold markers, not a fill, so they wrap in Opacity
+                    // to fade the markers uniformly (a no-op at 1.0).
                     for (final layer in layers)
                       if (layer.isVisible && layer.type == 'poi')
                         Opacity(
@@ -2272,11 +2271,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           ),
                         )
                       else if (layer.isVisible)
-                        Opacity(
-                          opacity: layer.opacity.clamp(0.0, 1.0),
-                          child: RegionLayer(
-                            key: ValueKey(layer.id),
-                            layer: layer,
+                        RegionLayer(
+                          key: ValueKey(layer.id),
+                          layer: layer,
+                          opacity: layer.opacity,
                           circles: layer.type == 'circles'
                               ? circles
                                     .where((c) => c.layerId == layer.id)
@@ -2322,8 +2320,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           heightPolygonPoints: layer.type == 'height'
                               ? heightPolygonPoints
                               : const <HeightPolygonPoint>[],
-                            uncertaintyMeters: uncertainty,
-                          ),
+                          uncertaintyMeters: uncertainty,
                         ),
                     // Outline of the selected line's inclusion circle, so the
                     // half-disk it splits is visible while editing.
