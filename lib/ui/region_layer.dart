@@ -9,6 +9,7 @@ import '../geo/plane.dart';
 import '../geo/subspace.dart';
 import 'area_geometry.dart';
 import 'region_geometry.dart';
+import 'screen_clip.dart';
 
 /// Renders one layer's objects as a single composited region.
 ///
@@ -151,11 +152,19 @@ class _RegionPainter extends CustomPainter {
   static const int _ringPoints = 90;
   static const Distance _distance = Distance(calculator: Haversine());
 
+  /// The viewport inflated a few px, set at the start of [paint]. Every
+  /// projected ring is pre-clipped to this box (see [clipRingToRect]) so Skia
+  /// never sees far-off-screen coordinates — path-ops on such geometry fail or
+  /// mis-rasterise, and are slow. The inflation puts the clip's cut edges
+  /// outside the canvas clip, so strokes never trace the viewport border.
+  Rect _clip = Rect.zero;
+
   @override
   void paint(Canvas canvas, Size size) {
-    // Clip so plane polygons (which extend a few px past the viewport to hide
-    // their viewport-edge stroke) don't paint outside this layer's bounds.
+    // Clip so region fills/strokes (which extend a few px past the viewport to
+    // hide their clip-cut edges) don't paint outside this layer's bounds.
     canvas.clipRect(Offset.zero & size);
+    _clip = (Offset.zero & size).inflate(4);
 
     // Height layers render their stored fill polygons with their own bounded
     // band (along the elevation contour only), so handle them separately.
@@ -278,13 +287,15 @@ class _RegionPainter extends CustomPainter {
     if (outer == null) return; // nothing valid to draw
     final core = coreUnion ?? Path();
 
-    // Band is always the ring between core and outline.
-    final bandPath = Path.combine(PathOperation.difference, outer, core);
+    // Band is always the ring between core and outline. Its two operands are
+    // near-parallel outlines — Skia path-ops' worst case — so degrade to "no
+    // band this frame" rather than let a throw abort the whole paint.
+    final bandPath = _tryCombine(PathOperation.difference, outer, core);
 
     // Solid fill: the core normally, or the complement when inverted.
     final Path solid;
     if (inverted) {
-      final viewport = Path()..addRect(Offset.zero & size);
+      final viewport = Path()..addRect(_clip);
       solid = Path.combine(PathOperation.difference, viewport, outer);
     } else {
       solid = core;
@@ -306,22 +317,24 @@ class _RegionPainter extends CustomPainter {
     // it); when inverted the band shrinks inward so the nominal edge is `outer`.
     final outline = inverted ? outer : core;
 
-    // Clip every path to the viewport via path-ops (double precision) before
-    // rasterising. A large object (e.g. an imported city border) projects its
-    // far vertices to screen coordinates well outside the view; Skia's scan
-    // converter mis-rasterises such paths and drops part of the fill — a clean
-    // straight cut across the shape. `canvas.clipRect` only masks the bad
-    // output, so it can't fix this; intersecting the geometry bounds the
-    // coordinates the rasteriser sees. Inflate past the canvas clip so any clip
-    // edges this introduces fall outside the visible area (they're masked by the
-    // `clipRect` above), keeping the stroked outline from tracing the viewport.
-    final clip = Path()..addRect((Offset.zero & size).inflate(4));
-    Path bounded(Path p) => Path.combine(PathOperation.intersect, p, clip);
-
+    // All geometry was pre-clipped to `_clip` at projection time (see
+    // [_ringToPath]), so it can be drawn directly — no per-frame path-op
+    // against a clip rect, and no far-off-screen coordinates for Skia.
     // Regions are disjoint, so paint order is irrelevant.
-    canvas.drawPath(bounded(solid), solidPaint);
-    canvas.drawPath(bounded(bandPath), bandPaint);
-    canvas.drawPath(bounded(outline), strokePaint);
+    canvas.drawPath(solid, solidPaint);
+    if (bandPath != null) canvas.drawPath(bandPath, bandPaint);
+    canvas.drawPath(outline, strokePaint);
+  }
+
+  /// [Path.combine] that returns null instead of throwing — Skia path-ops can
+  /// still fail on pathological (near-coincident) inputs, and one bad frame
+  /// must not take the rest of the layer's paint down with it.
+  static Path? _tryCombine(PathOperation op, Path a, Path b) {
+    try {
+      return Path.combine(op, a, b);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Paints a freehand-area layer from its **pre-resolved** geometry
@@ -361,29 +374,30 @@ class _RegionPainter extends CustomPainter {
       ..strokeWidth = 1.5
       ..color = color;
 
-    // Clip fills to the viewport via path-ops so the rasteriser never sees the
-    // huge off-screen coordinates a city-sized ring projects to (see the note in
-    // [paint]). Inflate past the canvas clip so introduced edges stay hidden.
-    final viewport = Path()..addRect((Offset.zero & size).inflate(4));
-    Path bounded(Path p) => Path.combine(PathOperation.intersect, p, viewport);
+    // Rings were pre-clipped to `_clip` at projection time ([_contoursToPath]),
+    // so every path here is viewport-sized: the path-ops below are cheap and
+    // stay well inside Skia's numeric comfort zone, and the fills draw
+    // directly.
+    final viewport = Path()..addRect(_clip);
 
     // Solid: interior normally, the viewport complement when inverted.
     final solid = inverted
         ? Path.combine(PathOperation.difference, viewport, core)
         : core;
-    canvas.drawPath(bounded(solid), solidPaint);
+    canvas.drawPath(solid, solidPaint);
 
     // Band: the annulus between the boundary and its band edge (outside the
-    // boundary normally, inside it when inverted).
+    // boundary normally, inside it when inverted). Its operands hug each other
+    // — path-ops' worst case — so drop the band for a frame rather than throw.
     if (bandEdgeUnion != null) {
       final band = inverted
-          ? Path.combine(PathOperation.difference, core, bandEdgeUnion)
-          : Path.combine(PathOperation.difference, bandEdgeUnion, core);
-      canvas.drawPath(bounded(band), bandPaint);
+          ? _tryCombine(PathOperation.difference, core, bandEdgeUnion)
+          : _tryCombine(PathOperation.difference, bandEdgeUnion, core);
+      if (band != null) canvas.drawPath(band, bandPaint);
     }
 
     // Outline traces the nominal boundary.
-    canvas.drawPath(bounded(core), strokePaint);
+    canvas.drawPath(core, strokePaint);
   }
 
   /// Paints a freehand-line layer. Each line **cuts** its inclusion circle: the
@@ -507,7 +521,7 @@ class _RegionPainter extends CustomPainter {
       ..strokeWidth = 1.5
       ..color = color;
 
-    final clip = Path()..addRect((Offset.zero & size).inflate(4));
+    final clip = Path()..addRect(_clip);
     Path bounded(Path p) => Path.combine(PathOperation.intersect, p, clip);
 
     canvas.drawPath(bounded(coloured), solidPaint);
@@ -576,16 +590,20 @@ class _RegionPainter extends CustomPainter {
   }
 
   /// A screen-space even-odd path through [contours] (so holes/islands read
-  /// correctly), projecting each lat/lng vertex with the current camera.
+  /// correctly), projecting each lat/lng vertex with the current camera. Each
+  /// contour is pre-clipped to [_clip]; clipping rings independently preserves
+  /// even-odd parity inside the clip box, since a point keeps its in/out state
+  /// per ring under intersection with the same convex region.
   Path _contoursToPath(List<List<LatLng>> contours) {
     final path = Path()..fillType = PathFillType.evenOdd;
     for (final ring in contours) {
       if (ring.length < 3) continue;
-      final o0 = camera.latLngToScreenOffset(ring[0]);
-      path.moveTo(o0.dx, o0.dy);
-      for (var i = 1; i < ring.length; i++) {
-        final o = camera.latLngToScreenOffset(ring[i]);
-        path.lineTo(o.dx, o.dy);
+      final pts = clipRingToRect(
+          [for (final p in ring) camera.latLngToScreenOffset(p)], _clip);
+      if (pts.length < 3) continue;
+      path.moveTo(pts[0].dx, pts[0].dy);
+      for (var i = 1; i < pts.length; i++) {
+        path.lineTo(pts[i].dx, pts[i].dy);
       }
       path.close();
     }
@@ -699,25 +717,39 @@ class _RegionPainter extends CustomPainter {
     return out;
   }
 
+  /// Projects [ring] and pre-clips it to [_clip] (see [clipRingToRect]) before
+  /// building the closed path, so Skia never sees far-off-screen vertices.
+  /// Returns an empty path when nothing of the ring is in view.
   Path _ringToPath(List<LatLng> ring) {
+    final pts = clipRingToRect(
+        [for (final p in ring) camera.latLngToScreenOffset(p)], _clip);
     final path = Path();
-    for (var i = 0; i < ring.length; i++) {
-      final o = camera.latLngToScreenOffset(ring[i]);
-      if (i == 0) {
-        path.moveTo(o.dx, o.dy);
-      } else {
-        path.lineTo(o.dx, o.dy);
-      }
+    if (pts.length < 3) return path;
+    path.moveTo(pts[0].dx, pts[0].dy);
+    for (var i = 1; i < pts.length; i++) {
+      path.lineTo(pts[i].dx, pts[i].dy);
     }
     path.close();
     return path;
   }
 
-  /// Like [_ringToPath] but with the **even-odd** fill rule, so a self-crossing
-  /// cut ring (a looping freehand line) resolves to the correct alternating
-  /// "this side / the other side" regions instead of a winding-filled blob.
-  Path _ringToPathEvenOdd(List<LatLng> ring) =>
-      _ringToPath(ring)..fillType = PathFillType.evenOdd;
+  /// A projected ring with the **even-odd** fill rule, so a self-crossing cut
+  /// ring (a looping freehand line) resolves to the correct alternating "this
+  /// side / the other side" regions instead of a winding-filled blob. NOT
+  /// pre-clipped: Sutherland–Hodgman assumes a simple polygon, and these rings
+  /// may self-cross.
+  Path _ringToPathEvenOdd(List<LatLng> ring) {
+    final path = Path()..fillType = PathFillType.evenOdd;
+    if (ring.length < 3) return path;
+    final o0 = camera.latLngToScreenOffset(ring[0]);
+    path.moveTo(o0.dx, o0.dy);
+    for (var i = 1; i < ring.length; i++) {
+      final o = camera.latLngToScreenOffset(ring[i]);
+      path.lineTo(o.dx, o.dy);
+    }
+    path.close();
+    return path;
+  }
 
   @override
   bool shouldRepaint(covariant _RegionPainter old) {

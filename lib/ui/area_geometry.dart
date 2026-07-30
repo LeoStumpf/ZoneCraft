@@ -150,8 +150,13 @@ List<List<LatLng>> _readContours(
   for (final metric in path.computeMetrics()) {
     final len = metric.length;
     if (len <= 0) continue;
+    // Cap each contour to ~4k samples: on a city-sized outline (tens of km)
+    // the metre-scale step would otherwise emit tens of thousands of vertices
+    // that every frame then has to project. At that size the coarser step
+    // deviates from the true offset curve by well under the band width.
+    final s = math.max(step, len / 4096);
     final ring = <LatLng>[];
-    for (var d = 0.0; d < len; d += step) {
+    for (var d = 0.0; d < len; d += s) {
       final t = metric.getTangentForOffset(d);
       if (t != null) ring.add(fromPlane(t.position));
     }
