@@ -5,6 +5,8 @@ import 'package:uuid/uuid.dart';
 import '../geo/simplify.dart';
 import 'database.dart';
 import 'serialization.dart';
+import 'transit.dart'
+    show decodeLatLngs, encodeLatLngs, transitModeByKey;
 
 /// Thin CRUD/stream API over [AppDatabase] used by the Riverpod providers.
 class Repository {
@@ -39,9 +41,8 @@ class Repository {
             sortOrder: maxOrder + 1,
             type: Value(type),
             // Region layers default to a translucent fill (map shows through);
-            // POI layers are crisp markers, so fully opaque.
-            opacity: Value(
-                type == 'poi' ? 1.0 : kDefaultRegionLayerOpacity),
+            // marker/line layers are crisp, so fully opaque.
+            opacity: Value(defaultLayerOpacity(type)),
           ),
         );
     return id;
@@ -120,7 +121,15 @@ class Repository {
           await (_db.update(_db.poiSets)
                 ..where((t) => t.layerId.equals(sourceId)))
               .write(PoiSetsCompanion(layerId: Value(targetId)));
+        case 'transit':
+          await (_db.update(_db.transitSets)
+                ..where((t) => t.layerId.equals(sourceId)))
+              .write(TransitSetsCompanion(layerId: Value(targetId)));
+        case 'circles':
         default:
+          // WARNING: a new layer type that forgets its `case` above lands here,
+          // re-points nothing, and then loses all its rows to the cascade when
+          // the source layer is deleted below. Add the case when adding a type.
           await (_db.update(_db.circles)
                 ..where((t) => t.layerId.equals(sourceId)))
               .write(CirclesCompanion(layerId: Value(targetId)));
@@ -912,6 +921,230 @@ class Repository {
     return (_db.delete(_db.poiSets)..where((s) => s.id.equals(id))).go();
   }
 
+  // --- Transit sets ---------------------------------------------------------
+
+  Stream<List<TransitSet>> watchAllTransitSets() {
+    return _db.select(_db.transitSets).watch();
+  }
+
+  Stream<List<TransitRoute>> watchAllTransitRoutes() {
+    return (_db.select(_db.transitRoutes)
+          ..orderBy([(r) => OrderingTerm(expression: r.sortOrder)]))
+        .watch();
+  }
+
+  Stream<List<TransitRoutePart>> watchAllTransitRouteParts() {
+    return (_db.select(_db.transitRouteParts)
+          ..orderBy([(p) => OrderingTerm(expression: p.partIndex)]))
+        .watch();
+  }
+
+  Stream<List<TransitStop>> watchAllTransitStops() {
+    return _db.select(_db.transitStops).watch();
+  }
+
+  Stream<List<TransitRouteStop>> watchAllTransitRouteStops() {
+    return (_db.select(_db.transitRouteStops)
+          ..orderBy([(s) => OrderingTerm(expression: s.sortOrder)]))
+        .watch();
+  }
+
+  /// Writes one whole public-transport import in a **single transaction**.
+  ///
+  /// Routes, parts, stops and the join go in as four batches rather than a loop
+  /// of awaited inserts: a city import is thousands of rows, and one transaction
+  /// means one stream emission per table and an all-or-nothing result.
+  ///
+  /// [stopIdsByRouteIndex] indexes into [stops] — the caller has already deduped
+  /// the stops, so this is the join, in ride order.
+  Future<String> importTransitSet({
+    required String layerId,
+    required double south,
+    required double west,
+    required double north,
+    required double east,
+    required int modeMask,
+    String? label,
+    required List<
+            ({
+              int osmId,
+              String modeKey,
+              String? ref,
+              String? name,
+              String? operatorName,
+              String? colourHex,
+              int? colorArgb,
+              List<List<LatLng>> parts,
+              List<int> stopIndices,
+            })>
+        routes,
+    required List<({int osmId, double lat, double lng, String? name})> stops,
+  }) async {
+    final setId = _uuid.v4();
+    // Pre-compute the ids so the batches can reference each other.
+    final stopIds = [for (var i = 0; i < stops.length; i++) _uuid.v4()];
+    final routeIds = [for (var i = 0; i < routes.length; i++) _uuid.v4()];
+    // A stop's icon comes from the modes that serve it.
+    final stopModeMask = List<int>.filled(stops.length, 0);
+    for (final r in routes) {
+      final bit = transitModeByKey(r.modeKey)?.bit ?? 0;
+      for (final i in r.stopIndices) {
+        if (i >= 0 && i < stopModeMask.length) stopModeMask[i] |= bit;
+      }
+    }
+
+    await _db.transaction(() async {
+      await _db.into(_db.transitSets).insert(
+            TransitSetsCompanion.insert(
+              id: setId,
+              layerId: layerId,
+              south: south,
+              west: west,
+              north: north,
+              east: east,
+              modeMask: modeMask,
+              label: Value(label),
+            ),
+          );
+
+      await _db.batch((b) {
+        for (var i = 0; i < routes.length; i++) {
+          final r = routes[i];
+          b.insert(
+            _db.transitRoutes,
+            TransitRoutesCompanion.insert(
+              id: routeIds[i],
+              setId: setId,
+              osmId: r.osmId,
+              modeKey: r.modeKey,
+              ref: Value(r.ref),
+              name: Value(r.name),
+              operatorName: Value(r.operatorName),
+              colourHex: Value(r.colourHex),
+              colorArgb: Value(r.colorArgb),
+              stopCount: Value(r.stopIndices.length),
+              pointCount:
+                  Value(r.parts.fold(0, (a, p) => a + p.length)),
+              sortOrder: Value(i),
+            ),
+          );
+        }
+      });
+
+      await _db.batch((b) {
+        for (var i = 0; i < routes.length; i++) {
+          final parts = routes[i].parts;
+          for (var j = 0; j < parts.length; j++) {
+            final pts = parts[j];
+            if (pts.length < 2) continue;
+            final bounds = _boundsOf(pts);
+            b.insert(
+              _db.transitRouteParts,
+              TransitRoutePartsCompanion.insert(
+                id: _uuid.v4(),
+                routeId: routeIds[i],
+                partIndex: j,
+                pointCount: pts.length,
+                points: encodeLatLngs(pts),
+                south: bounds.$1,
+                west: bounds.$2,
+                north: bounds.$3,
+                east: bounds.$4,
+              ),
+            );
+          }
+        }
+      });
+
+      await _db.batch((b) {
+        for (var i = 0; i < stops.length; i++) {
+          final s = stops[i];
+          b.insert(
+            _db.transitStops,
+            TransitStopsCompanion.insert(
+              id: stopIds[i],
+              setId: setId,
+              osmId: s.osmId,
+              lat: s.lat,
+              lng: s.lng,
+              name: Value(s.name),
+              modeMask: Value(stopModeMask[i]),
+            ),
+          );
+        }
+      });
+
+      await _db.batch((b) {
+        for (var i = 0; i < routes.length; i++) {
+          final indices = routes[i].stopIndices;
+          for (var j = 0; j < indices.length; j++) {
+            final si = indices[j];
+            if (si < 0 || si >= stopIds.length) continue;
+            b.insert(
+              _db.transitRouteStops,
+              TransitRouteStopsCompanion.insert(
+                routeId: routeIds[i],
+                stopId: stopIds[si],
+                sortOrder: j,
+              ),
+              mode: InsertMode.insertOrReplace,
+            );
+          }
+        }
+      });
+    });
+    return setId;
+  }
+
+  static (double, double, double, double) _boundsOf(List<LatLng> pts) {
+    var s = 90.0, w = 180.0, n = -90.0, e = -180.0;
+    for (final p in pts) {
+      if (p.latitude < s) s = p.latitude;
+      if (p.latitude > n) n = p.latitude;
+      if (p.longitude < w) w = p.longitude;
+      if (p.longitude > e) e = p.longitude;
+    }
+    return (s, w, n, e);
+  }
+
+  /// Renames a transit import (or moves it to another `transit` layer). The
+  /// imported data itself is immutable — a different area means a new import.
+  Future<void> updateTransitSet(
+    String id, {
+    String? layerId,
+    Value<String?> label = const Value.absent(),
+  }) async {
+    await (_db.update(_db.transitSets)..where((s) => s.id.equals(id))).write(
+      TransitSetsCompanion(
+        layerId: layerId == null ? const Value.absent() : Value(layerId),
+        label: label,
+      ),
+    );
+  }
+
+  Future<void> deleteTransitSet(String id) {
+    return (_db.delete(_db.transitSets)..where((s) => s.id.equals(id))).go();
+  }
+
+  /// Shows or hides [routeIds] — what the Lines menu writes.
+  ///
+  /// One batch, so toggling a 200-route mode group is a single write and a
+  /// single stream emission rather than 200 awaited updates.
+  Future<void> setTransitRouteVisibility(
+    Iterable<String> routeIds,
+    bool visible,
+  ) async {
+    final ids = routeIds.toList();
+    if (ids.isEmpty) return;
+    await _db.batch((b) {
+      b.update(
+        _db.transitRoutes,
+        TransitRoutesCompanion(isVisible: Value(visible)),
+        where: (r) => r.id.isIn(ids),
+      );
+    });
+  }
+
   // --- Settings -------------------------------------------------------------
 
   /// Watches the single settings row, emitting defaults when it doesn't exist
@@ -1164,6 +1397,10 @@ class Repository {
           ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
         .get();
     final heightRegions = await _db.select(_db.heightRegions).get();
+    final transitSets = await _db.select(_db.transitSets).get();
+    final transitRoutes = await _db.select(_db.transitRoutes).get();
+    final transitParts = await _db.select(_db.transitRouteParts).get();
+    final transitStops = await _db.select(_db.transitStops).get();
     final poiSets = await _db.select(_db.poiSets).get();
     final poiPoints = await (_db.select(_db.poiPoints)
           ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
@@ -1254,6 +1491,41 @@ class Repository {
               categoryKey: s.categoryKey,
               pointLabels: [for (final p in pts) p.name],
               label: s.label,
+            ));
+          }
+        case 'transit':
+          // Transit exports but does **not** re-import: a set is a nested
+          // structure (set -> routes -> parts -> points, plus stops and a join)
+          // that the flat ExportObject can't carry, and it is derived,
+          // re-fetchable data keyed to an OSM snapshot — round-tripping it would
+          // create a second source of truth with no refresh path. So this emits
+          // plain lines and points for other tools; _insertObject rejects them.
+          final setIds = {
+            for (final t in transitSets)
+              if (t.layerId == layer.id) t.id,
+          };
+          for (final r in transitRoutes) {
+            if (!setIds.contains(r.setId) || !r.isVisible) continue;
+            for (final part in transitParts) {
+              if (part.routeId != r.id) continue;
+              final pts = decodeLatLngs(part.points);
+              if (pts.length < 2) continue;
+              objects.add(ExportObject(
+                kind: 'transitline',
+                coords: pts,
+                categoryKey: r.modeKey,
+                label: [r.ref, r.name].whereType<String>().join(' ').trim(),
+              ));
+            }
+          }
+          for (final setId in setIds) {
+            final stops =
+                transitStops.where((x) => x.setId == setId).toList();
+            if (stops.isEmpty) continue;
+            objects.add(ExportObject(
+              kind: 'transitstop',
+              coords: [for (final x in stops) LatLng(x.lat, x.lng)],
+              pointLabels: [for (final x in stops) x.name],
             ));
           }
       }
@@ -1413,6 +1685,11 @@ class Repository {
               name: i - 1 < labels.length ? labels[i - 1] : null,
             ),
         ]);
+      case 'transitline':
+      case 'transitstop':
+        // Derived, re-fetchable OSM data — see the 'transit' case in
+        // exportData. Re-import an area by fetching it again, not from a file.
+        return false;
       default:
         return false;
     }

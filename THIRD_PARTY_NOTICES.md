@@ -36,6 +36,6 @@ Attribution for these is also shown in-app (the attribution control on the map):
   heavy traffic).
 - **ÖPNVKarte** ([memomaps.de](https://memomaps.de/)) — optional public-transport tile overlay.
 - **OpenRailwayMap** — optional rail tile overlay, licensed CC-BY-SA 2.0.
-- **Overpass API** ([overpass-api.de](https://overpass-api.de/)) — queried for POIs and
+- **Overpass API** ([overpass-api.de](https://overpass-api.de/)) — queried for POIs, public-transport routes and
   administrative borders; returns OpenStreetMap data (ODbL), used under its fair-use policy
   (requests are debounced and zoom-gated in the app).

@@ -15,6 +15,7 @@ import '../data/cached_tile_provider.dart';
 import '../data/database.dart';
 import '../data/height_generator.dart';
 import '../data/overpass.dart';
+import '../data/transit.dart';
 import '../geo/coords.dart';
 import '../geo/geodesic.dart';
 import '../geo/tiles.dart';
@@ -35,6 +36,8 @@ import 'area_geometry.dart';
 import 'region_geometry.dart';
 import 'region_layer.dart';
 import 'subspace_editor.dart';
+import 'transit_import_dialog.dart';
+import 'transit_layer.dart';
 
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key});
@@ -70,6 +73,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
   /// Buffered first tap of a two-tap type (a plane's point A).
   LatLng? _pendingPlaneA;
+
+  /// Buffered first corner of a transit import box. While set, the live second
+  /// corner is the map centre (a phone has no hover), so the rubber band
+  /// follows as you pan.
+  LatLng? _pendingBoxA;
 
   /// Everything placed in the current Add session, newest last: the object each
   /// tap belongs to (for "Edit last") and how to undo that one tap.
@@ -1322,6 +1330,104 @@ class _MapScreenState extends ConsumerState<MapScreen>
         '(tap ● to mark the nearest).');
   }
 
+  /// The Add button's label for a layer type. A nested ternary got unreadable
+  /// at seven types; this is the same mapping as a switch.
+  static String _addFabLabel(String? type) => switch (type) {
+        'poi' => 'Import POIs',
+        'transit' => 'Import transit',
+        'subspace' => 'Add subspace',
+        'freeline' => 'Add line',
+        'freearea' => 'Add area',
+        'height' => 'Add height area',
+        'planes' => 'Add plane',
+        _ => 'Add circle',
+      };
+
+  /// The four lat/lng-axis-aligned corners spanned by two opposite points.
+  /// `Polygon` closes itself, so the first vertex is not repeated.
+  static List<LatLng> _bboxRing(LatLng a, LatLng b) {
+    final s = math.min(a.latitude, b.latitude);
+    final n = math.max(a.latitude, b.latitude);
+    final w = math.min(a.longitude, b.longitude);
+    final e = math.max(a.longitude, b.longitude);
+    return [LatLng(s, w), LatLng(s, e), LatLng(n, e), LatLng(n, w)];
+  }
+
+  /// Imports every public-transport route in [box] into [layer], once, offline.
+  ///
+  /// Two Overpass round trips: the dialog runs the cheap pre-flight (so counts
+  /// and any connection problem surface before anything big is requested), then
+  /// this fetches the geometry for exactly the routes it promised.
+  Future<void> _importTransit(Layer layer, {required LatLngBounds box}) async {
+    final config = await showTransitImportDialog(
+      context,
+      initial: box,
+      client: _tileClient,
+    );
+    if (config == null || !mounted) return;
+
+    showTransitProgress(context);
+    final outcome = await fetchTransitRoutes(
+      south: config.south,
+      west: config.west,
+      north: config.north,
+      east: config.east,
+      osmIds: [for (final h in config.heads) h.osmId],
+      client: _tileClient,
+    );
+    if (!mounted) return;
+    Navigator.of(context).pop(); // the progress dialog
+
+    if (!outcome.ok) {
+      _hint(outcome.message!); // says whether it's the network or a busy server
+      return; // prior state untouched — nothing was written
+    }
+    final result = outcome.value!;
+    if (result.isEmpty) {
+      // Don't litter the Elements list with an import that found nothing.
+      _hint('No transit routes found in that area.');
+      return;
+    }
+
+    // The parser deduped the stops; index them so the join can reference them.
+    final stopIndex = <int, int>{};
+    for (var i = 0; i < result.stops.length; i++) {
+      stopIndex[result.stops[i].osmId] = i;
+    }
+    await ref.read(repositoryProvider).importTransitSet(
+          layerId: layer.id,
+          south: config.south,
+          west: config.west,
+          north: config.north,
+          east: config.east,
+          modeMask: transitMaskOf(config.modes),
+          routes: [
+            for (final r in result.routes)
+              (
+                osmId: r.head.osmId,
+                modeKey: r.head.modeKey,
+                ref: r.head.ref,
+                name: r.head.name,
+                operatorName: r.head.operatorName,
+                colourHex: r.head.colourHex,
+                colorArgb: r.head.colorArgb,
+                parts: r.parts,
+                stopIndices: [
+                  for (final id in r.stopOsmIds)
+                    if (stopIndex[id] != null) stopIndex[id]!,
+                ],
+              ),
+          ],
+          stops: [
+            for (final s in result.stops)
+              (osmId: s.osmId, lat: s.lat, lng: s.lng, name: s.name),
+          ],
+        );
+    if (!mounted) return;
+    _hint('Imported ${result.routes.length} routes · ${result.stops.length} '
+        'stops. Delete it from Elements to undo.');
+  }
+
   Future<void> _addPlaneAt(LatLng center, Layer layer) async {
     // Seed A and B offset west/east of the map centre, so the new plane is
     // immediately visible with its dividing line through the centre.
@@ -1357,6 +1463,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     switch (layer.type) {
       case 'poi':
         _importPois(layer);
+      case 'transit':
+        // The no-aim analogue of two corner taps: import what you can see.
+        _importTransit(layer, box: _mapController.camera.visibleBounds);
       case 'subspace':
         _addSubspaceAt(c, layer, subspaces);
       case 'freeline':
@@ -1381,6 +1490,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       _placeLayerId = layer.id;
       _placeType = layer.type;
       _pendingPlaneA = null;
+      _pendingBoxA = null;
       _addSteps.clear();
     });
     _hint(_addBannerText(layer.type, 0));
@@ -1396,6 +1506,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       _placeLayerId = null;
       _placeType = null;
       _pendingPlaneA = null;
+      _pendingBoxA = null;
       _addSteps.clear();
     });
     ref.read(mapModeProvider.notifier).set(MapMode.view);
@@ -1428,8 +1539,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// Undoes the most recent placement of this Add session (a pending plane
   /// point A first, since it isn't committed yet).
   Future<void> _undoLastAdd() async {
-    if (_pendingPlaneA != null) {
-      setState(() => _pendingPlaneA = null);
+    if (_pendingPlaneA != null || _pendingBoxA != null) {
+      setState(() {
+        _pendingPlaneA = null;
+        _pendingBoxA = null;
+      });
       return;
     }
     if (_addSteps.isEmpty) return;
@@ -1445,6 +1559,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       _placeLayerId = null;
       _placeType = null;
       _pendingPlaneA = null;
+      _pendingBoxA = null;
       _addSteps.clear();
     });
     ref.read(mapModeProvider.notifier).set(MapMode.view);
@@ -1457,6 +1572,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// and the prose ellipsises — the count is the part that changes.
   String _addBannerText(String? layerType, int placed) {
     if (layerType == 'poi') return 'Tap the search centre';
+    if (layerType == 'transit') {
+      return _pendingBoxA == null
+          ? 'Tap one corner of the area'
+          : 'Tap the opposite corner';
+    }
     if (layerType == 'planes' && _pendingPlaneA != null) {
       return 'Tap point B';
     }
@@ -1597,6 +1717,18 @@ class _MapScreenState extends ConsumerState<MapScreen>
         // centre, the dialog does the rest, then Add mode is done.
         _exitAddMode();
         await _importPois(layer, at: latlng);
+      case 'transit':
+        // Two taps mark opposite corners of the import box (the plane pattern),
+        // then the dialog takes over and Add mode is done — an import is a
+        // heavyweight action, not something to stay armed for.
+        final a = _pendingBoxA;
+        if (a == null) {
+          setState(() => _pendingBoxA = latlng);
+          return;
+        }
+        setState(() => _pendingBoxA = null);
+        _exitAddMode();
+        await _importTransit(layer, box: LatLngBounds(a, latlng));
     }
   }
 
@@ -1961,7 +2093,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
       items.add(_pointMenuItem('deselect', Icons.close, 'Deselect'));
     }
     if (items.isEmpty) {
-      _hint('Nothing here in "${activeLayer.name}".');
+      // Transit routes aren't tap-selectable (they have no editor); point at
+      // the tool that does manage them instead of a dead "nothing here".
+      _hint(activeLayer.type == 'transit'
+          ? 'Use Lines… in the layer menu to manage this layer.'
+          : 'Nothing here in "${activeLayer.name}".');
       return;
     }
 
@@ -2033,6 +2169,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
       heightRegions: ref.read(heightRegionsProvider).asData?.value ?? const [],
       poiSets: ref.read(poiSetsProvider).asData?.value ?? const [],
       poiPoints: ref.read(poiPointsProvider).asData?.value ?? const [],
+      transitSets: ref.read(transitSetsProvider).asData?.value ?? const [],
+      transitRoutes: ref.read(transitRoutesProvider).asData?.value ?? const [],
+      transitStops: ref.read(transitStopsProvider).asData?.value ?? const [],
     );
     return {for (final r in rows) r.ref: r};
   }
@@ -2137,6 +2276,23 @@ class _MapScreenState extends ConsumerState<MapScreen>
         ref.watch(poiSetsProvider).asData?.value ?? const <PoiSet>[];
     final poiPoints =
         ref.watch(poiPointsProvider).asData?.value ?? const <PoiPoint>[];
+    final transitSets =
+        ref.watch(transitSetsProvider).asData?.value ?? const <TransitSet>[];
+    final transitRoutes =
+        ref.watch(transitRoutesProvider).asData?.value ?? const <TransitRoute>[];
+    final transitParts = ref.watch(transitRoutePartsProvider).asData?.value ??
+        const <TransitRoutePart>[];
+    final transitStops =
+        ref.watch(transitStopsProvider).asData?.value ?? const <TransitStop>[];
+    final transitRouteStops =
+        ref.watch(transitRouteStopsProvider).asData?.value ??
+            const <TransitRouteStop>[];
+    // Routes and stops hang off a *set*, not the layer, so resolve the
+    // layer→sets index once rather than per row.
+    final transitSetIds = <String, Set<String>>{};
+    for (final s in transitSets) {
+      transitSetIds.putIfAbsent(s.layerId, () => {}).add(s.id);
+    }
     final mode = ref.watch(mapModeProvider);
     final settings = ref.watch(settingsProvider).asData?.value;
     final uncertainty = settings?.uncertaintyMeters ?? 0;
@@ -2227,13 +2383,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
       ref.watch(activeLayerProvider),
     );
     final activeLayer = layers.where((l) => l.id == activeId).firstOrNull;
-    final isPlaneLayer = activeLayer?.type == 'planes';
+    // Only the types that still gate a *widget* need a flag; the Add button's
+    // per-type wording now lives in _addFabLabel.
     final isSubspaceLayer = activeLayer?.type == 'subspace';
     final isCircleLayer = activeLayer?.type == 'circles';
-    final isFreeLineLayer = activeLayer?.type == 'freeline';
-    final isFreeAreaLayer = activeLayer?.type == 'freearea';
-    final isHeightLayer = activeLayer?.type == 'height';
-    final isPoiLayer = activeLayer?.type == 'poi';
 
     // Restore the last camera; fall back to Munich on first launch. Resolved
     // once, when settings first load — FlutterMap ignores these after creation.
@@ -2293,6 +2446,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       if (camera.rotation != _rotation) {
                         setState(() => _rotation = camera.rotation);
                       }
+                      // The transit import box's live corner *is* the map
+                      // centre, so it has to follow the camera. Only runs
+                      // while a corner is buffered.
+                      if (_pendingBoxA != null) setState(() {});
                       // Refresh overlays + prefetch tiles once the map settles.
                       _scheduleBordersRefresh();
                       _schedulePrefetch();
@@ -2360,6 +2517,46 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             ),
                           ),
                         )
+                      // Transit needs *two* children (lines below markers), and
+                      // flutter_map takes z-order from this list — hence the
+                      // spread rather than one wrapping widget.
+                      else if (layer.isVisible && layer.type == 'transit')
+                        ...() {
+                          final setIds = transitSetIds[layer.id] ?? const {};
+                          final routes = transitRoutes
+                              .where((r) => setIds.contains(r.setId))
+                              .toList();
+                          final stops = transitStops
+                              .where((s) => setIds.contains(s.setId))
+                              .toList();
+                          final o = layer.opacity.clamp(0.0, 1.0);
+                          return [
+                            Opacity(
+                              opacity: o,
+                              child: TransitLinesLayer(
+                                key: ValueKey('${layer.id}-lines'),
+                                layer: layer,
+                                routes: routes,
+                                parts: transitParts,
+                              ),
+                            ),
+                            Opacity(
+                              opacity: o,
+                              child: TransitStopsLayer(
+                                key: ValueKey('${layer.id}-stops'),
+                                layer: layer,
+                                stops: stops,
+                                visibleStopIds: visibleTransitStopIds(
+                                    routes, transitRouteStops),
+                                onClusterTap: (center) => _mapController.move(
+                                  center,
+                                  (_mapController.camera.zoom + 1.5)
+                                      .clamp(2.0, 19.0),
+                                ),
+                              ),
+                            ),
+                          ];
+                        }()
                       else if (layer.isVisible)
                         RegionLayer(
                           key: ValueKey(layer.id),
@@ -2474,6 +2671,50 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           ),
                         ],
                       ),
+                    // Transit import: the rubber-band box between the two corner
+                    // taps. The live corner is the map centre, so panning
+                    // reshapes it (there is no hover on a phone).
+                    if (_pendingBoxA != null) ...[
+                      PolygonLayer(
+                        polygons: [
+                          Polygon(
+                            points: _bboxRing(
+                                _pendingBoxA!, _mapController.camera.center),
+                            color: Theme.of(context)
+                                .colorScheme
+                                .primary
+                                .withValues(alpha: 0.12),
+                            borderColor: Theme.of(context).colorScheme.primary,
+                            borderStrokeWidth: 2,
+                          ),
+                        ],
+                      ),
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: _pendingBoxA!,
+                            width: 32,
+                            height: 40,
+                            alignment: Alignment.topCenter,
+                            child: Icon(
+                              Icons.place,
+                              size: 32,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                          Marker(
+                            point: _mapController.camera.center,
+                            width: 24,
+                            height: 24,
+                            child: Icon(
+                              Icons.add,
+                              size: 24,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     // Administrative borders (Overpass), above the zones so the
                     // lines stay crisp. Present only when enabled at this zoom.
                     if (_borders.isNotEmpty)
@@ -3123,23 +3364,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         icon: Icon(mode == MapMode.add
                             ? Icons.check
                             : typeIcon(activeLayer?.type ?? 'circles')),
-                        label: Text(
-                          mode == MapMode.add
-                              ? 'Done'
-                              : isPoiLayer
-                                  ? 'Import POIs'
-                                  : isSubspaceLayer
-                                      ? 'Add subspace'
-                                      : isFreeLineLayer
-                                          ? 'Add line'
-                                          : isFreeAreaLayer
-                                              ? 'Add area'
-                                              : isHeightLayer
-                                                  ? 'Add height area'
-                                                  : isPlaneLayer
-                                                      ? 'Add plane'
-                                                      : 'Add circle',
-                        ),
+                        label: Text(mode == MapMode.add
+                            ? 'Done'
+                            : _addFabLabel(activeLayer?.type)),
                       ),
                     ),
                   ],

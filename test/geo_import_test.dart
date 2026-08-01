@@ -186,4 +186,36 @@ void main() {
       expect(line.every((p) => p.longitude == 11.0), isTrue);
     });
   });
+
+  group('stitchComponents', () {
+    test('keeps every disconnected run, longest first', () {
+      // What stitchPolylines throws away — and what a transit route's branches
+      // (or the pieces a bbox clip severed) need back.
+      final main = [for (var i = 0; i <= 10; i++) LatLng(48.0 + i * 0.001, 11.0)];
+      final side = [const LatLng(48.0, 11.05), const LatLng(48.003, 11.05)];
+      final runs = stitchComponents([side, main]);
+      expect(runs, hasLength(2));
+      expect(runs.first, hasLength(main.length)); // longest first
+      expect(runs.last, hasLength(side.length));
+    });
+
+    test('still chains contiguous parts into one run', () {
+      final runs = stitchComponents([
+        [const LatLng(0, 0), const LatLng(0, 1)],
+        [const LatLng(0, 1), const LatLng(0, 2)],
+      ]);
+      expect(runs, hasLength(1));
+      expect(runs.single, hasLength(4));
+    });
+
+    test('empty input yields no runs', () {
+      expect(stitchComponents(const []), isEmpty);
+      expect(
+        stitchComponents([
+          [const LatLng(1, 1)]
+        ]),
+        isEmpty,
+      );
+    });
+  });
 }

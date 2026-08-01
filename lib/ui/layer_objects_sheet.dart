@@ -14,13 +14,22 @@ enum ElementAction {
 
   /// Frame the object without changing the selection.
   zoom,
+
+  /// Open the transit layer's line filter instead (a different axis).
+  lines,
 }
 
 class ElementResult {
   const ElementResult(this.action, this.target);
+  const ElementResult.lines()
+      : action = ElementAction.lines,
+        target = null;
 
   final ElementAction action;
-  final ObjectSummary target;
+
+  /// Null only for [ElementAction.lines], which is about the layer, not an
+  /// object.
+  final ObjectSummary? target;
 }
 
 /// Lists every object in [layer] with per-object edit / zoom / rename / delete.
@@ -69,9 +78,13 @@ class _LayerObjectsList extends ConsumerWidget {
       heightRegions: ref.watch(heightRegionsProvider).asData?.value ?? const [],
       poiSets: ref.watch(poiSetsProvider).asData?.value ?? const [],
       poiPoints: ref.watch(poiPointsProvider).asData?.value ?? const [],
+      transitSets: ref.watch(transitSetsProvider).asData?.value ?? const [],
+      transitRoutes: ref.watch(transitRoutesProvider).asData?.value ?? const [],
+      transitStops: ref.watch(transitStopsProvider).asData?.value ?? const [],
     );
-    // POI sets have no editor sheet, so their row taps frame instead of select.
-    final canEdit = layer.type != 'poi';
+    // POI sets and transit imports have no editor sheet, so their row taps
+    // frame the object instead of selecting it.
+    final canEdit = !const {'poi', 'transit'}.contains(layer.type);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -93,6 +106,15 @@ class _LayerObjectsList extends ConsumerWidget {
                 '${summaries.length} element${summaries.length == 1 ? '' : 's'}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
+              // Elements lists the *imports*; which lines are shown is a
+              // different axis, so offer it here too rather than stranding
+              // whoever reached for Elements first.
+              if (layer.type == 'transit')
+                TextButton(
+                  onPressed: () =>
+                      Navigator.pop(context, const ElementResult.lines()),
+                  child: const Text('Lines…'),
+                ),
             ],
           ),
         ),
@@ -200,6 +222,8 @@ class _LayerObjectsList extends ConsumerWidget {
         await repo.updateHeightRegion(s.ref.id, label: label);
       case ObjectKind.poiSet:
         await repo.updatePoiSet(s.ref.id, label: label);
+      case ObjectKind.transitSet:
+        await repo.updateTransitSet(s.ref.id, label: label);
     }
   }
 
@@ -239,6 +263,8 @@ class _LayerObjectsList extends ConsumerWidget {
         await repo.deleteHeightRegion(s.ref.id);
       case ObjectKind.poiSet:
         await repo.deletePoiSet(s.ref.id);
+      case ObjectKind.transitSet:
+        await repo.deleteTransitSet(s.ref.id);
     }
     // The editor sheet resolves its row from the global list, so a deleted
     // selection would just vanish — clear it explicitly to keep the state tidy.
@@ -254,9 +280,12 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hint = layer.type == 'poi'
-        ? 'No POI sets yet — use Import POIs to fetch some for an area.'
-        : 'No elements yet — tap Add, then tap the map to place one.';
+    final hint = switch (layer.type) {
+      'poi' => 'No POI sets yet — use Import POIs to fetch some for an area.',
+      'transit' =>
+        'No imports yet — tap Import transit, then tap two corners of an area.',
+      _ => 'No elements yet — tap Add, then tap the map to place one.',
+    };
     return ListView(
       controller: scrollController,
       children: [

@@ -9,6 +9,7 @@ import 'import_actions.dart';
 import 'layer_objects_sheet.dart';
 import 'object_summary.dart';
 import 'settings_screen.dart';
+import 'transit_lines_sheet.dart';
 
 /// Left-hand drawer for managing layers: list, choose active, visibility,
 /// reorder, colour, rename, inverse, delete, and add. Replaces the old bottom
@@ -43,6 +44,10 @@ class LayersDrawer extends ConsumerWidget {
     final heightRegions =
         ref.watch(heightRegionsProvider).asData?.value ??
         const <HeightRegion>[];
+    final transitSets =
+        ref.watch(transitSetsProvider).asData?.value ?? const <TransitSet>[];
+    final transitRoutes =
+        ref.watch(transitRoutesProvider).asData?.value ?? const <TransitRoute>[];
     final selected = ref.watch(activeLayerProvider);
     final repo = ref.read(repositoryProvider);
 
@@ -153,6 +158,15 @@ class LayersDrawer extends ConsumerWidget {
                               title: Text('POI layer'),
                             ),
                           ),
+                          const PopupMenuItem(
+                            value: 'transit',
+                            child: ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(Icons.directions_transit),
+                              title: Text('Transit layer'),
+                            ),
+                          ),
                         ],
                         child: const Padding(
                           padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -212,6 +226,16 @@ class LayersDrawer extends ConsumerWidget {
                       } else if (layer.type == 'height') {
                         count = heightRegions
                             .where((r) => r.layerId == layer.id)
+                            .length;
+                      } else if (layer.type == 'transit') {
+                        // Routes are the unit the user filters, so count those
+                        // rather than imports (the drawer would read "1").
+                        final ids = transitSets
+                            .where((t) => t.layerId == layer.id)
+                            .map((t) => t.id)
+                            .toSet();
+                        count = transitRoutes
+                            .where((r) => ids.contains(r.setId))
                             .length;
                       } else if (layer.type == 'poi') {
                         final ids = poiSets
@@ -289,6 +313,7 @@ class _LayerTile extends ConsumerWidget {
       'freearea' => 'point',
       'height' => 'area',
       'poi' => 'POI',
+      'transit' => 'route',
       _ => 'circle',
     };
     final subtitle =
@@ -296,8 +321,7 @@ class _LayerTile extends ConsumerWidget {
     if (layer.isInverted) subtitle.write(' · inverted');
     // Show the opacity only when it isn't this type's default (region layers
     // default to a translucent fill, so the default value isn't 100%).
-    final defaultOpacity =
-        layer.type == 'poi' ? 1.0 : kDefaultRegionLayerOpacity;
+    final defaultOpacity = defaultLayerOpacity(layer.type);
     if ((layer.opacity - defaultOpacity).abs() > 0.005) {
       subtitle.write(' · ${(layer.opacity * 100).round()}% opacity');
     }
@@ -381,6 +405,8 @@ class _LayerTile extends ConsumerWidget {
                 case 'inverse':
                   await repo.updateLayer(layer.id,
                       isInverted: !layer.isInverted);
+                case 'lines':
+                  await _openLines(context, ref);
                 case 'importTrack':
                   await importTrackIntoLayer(context, repo, layer);
                 case 'export':
@@ -409,11 +435,15 @@ class _LayerTile extends ConsumerWidget {
                   value: 'opacity', child: Text('Transparency…')),
               // 'height' layers use an above/below toggle, not viewport
               // invert; 'poi' layers are markers with nothing to invert.
-              if (layer.type != 'height' && layer.type != 'poi')
+              if (layer.type != 'height' &&
+                  layer.type != 'poi' &&
+                  layer.type != 'transit')
                 PopupMenuItem(
                   value: 'inverse',
                   child: Text(layer.isInverted ? 'Un-invert' : 'Invert'),
                 ),
+              if (layer.type == 'transit')
+                const PopupMenuItem(value: 'lines', child: Text('Lines…')),
               if (layer.type == 'freeline' || layer.type == 'freearea')
                 const PopupMenuItem(
                   value: 'importTrack',
@@ -443,14 +473,31 @@ class _LayerTile extends ConsumerWidget {
   Future<void> _openElements(BuildContext context, WidgetRef ref) async {
     final result = await showLayerObjects(context, layer);
     if (result == null || !context.mounted) return;
+    // The list can hand off to the Lines filter, which is about the layer
+    // rather than any one element.
+    if (result.action == ElementAction.lines) {
+      await _openLines(context, ref);
+      return;
+    }
+    final target = result.target!;
     if (result.action == ElementAction.edit) {
       // Selecting also makes the layer active, so the drag handles, the Add
       // button and the long-press context all follow the object being edited.
       ref.read(activeLayerProvider.notifier).select(layer.id);
-      selectObject(ref, result.target.ref.kind, result.target.ref.id);
+      selectObject(ref, target.ref.kind, target.ref.id);
     }
-    ref.read(pendingFocusProvider.notifier).request(result.target.fitPoints);
+    ref.read(pendingFocusProvider.notifier).request(target.fitPoints);
     Navigator.pop(context); // close the drawer so the map is visible
+  }
+
+  /// Opens the transit layer's line filter. Visibility is written inside the
+  /// sheet; only a "zoom to" comes back, and — as with [_openElements] — this is
+  /// the one place that pops the drawer.
+  Future<void> _openLines(BuildContext context, WidgetRef ref) async {
+    final result = await showTransitLines(context, layer);
+    if (result == null || !context.mounted) return;
+    ref.read(pendingFocusProvider.notifier).request(result.fitPoints);
+    Navigator.pop(context);
   }
 
   Future<void> _rename(BuildContext context, Repository repo) async {

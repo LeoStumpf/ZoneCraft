@@ -7224,6 +7224,2740 @@ class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
   }
 }
 
+class $TransitSetsTable extends TransitSets
+    with TableInfo<$TransitSetsTable, TransitSet> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $TransitSetsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _layerIdMeta = const VerificationMeta(
+    'layerId',
+  );
+  @override
+  late final GeneratedColumn<String> layerId = GeneratedColumn<String>(
+    'layer_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES layers (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _southMeta = const VerificationMeta('south');
+  @override
+  late final GeneratedColumn<double> south = GeneratedColumn<double>(
+    'south',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _westMeta = const VerificationMeta('west');
+  @override
+  late final GeneratedColumn<double> west = GeneratedColumn<double>(
+    'west',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _northMeta = const VerificationMeta('north');
+  @override
+  late final GeneratedColumn<double> north = GeneratedColumn<double>(
+    'north',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _eastMeta = const VerificationMeta('east');
+  @override
+  late final GeneratedColumn<double> east = GeneratedColumn<double>(
+    'east',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _modeMaskMeta = const VerificationMeta(
+    'modeMask',
+  );
+  @override
+  late final GeneratedColumn<int> modeMask = GeneratedColumn<int>(
+    'mode_mask',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _labelMeta = const VerificationMeta('label');
+  @override
+  late final GeneratedColumn<String> label = GeneratedColumn<String>(
+    'label',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _fetchedAtMeta = const VerificationMeta(
+    'fetchedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> fetchedAt = GeneratedColumn<DateTime>(
+    'fetched_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    layerId,
+    south,
+    west,
+    north,
+    east,
+    modeMask,
+    label,
+    fetchedAt,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'transit_sets';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<TransitSet> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('layer_id')) {
+      context.handle(
+        _layerIdMeta,
+        layerId.isAcceptableOrUnknown(data['layer_id']!, _layerIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_layerIdMeta);
+    }
+    if (data.containsKey('south')) {
+      context.handle(
+        _southMeta,
+        south.isAcceptableOrUnknown(data['south']!, _southMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_southMeta);
+    }
+    if (data.containsKey('west')) {
+      context.handle(
+        _westMeta,
+        west.isAcceptableOrUnknown(data['west']!, _westMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_westMeta);
+    }
+    if (data.containsKey('north')) {
+      context.handle(
+        _northMeta,
+        north.isAcceptableOrUnknown(data['north']!, _northMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_northMeta);
+    }
+    if (data.containsKey('east')) {
+      context.handle(
+        _eastMeta,
+        east.isAcceptableOrUnknown(data['east']!, _eastMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_eastMeta);
+    }
+    if (data.containsKey('mode_mask')) {
+      context.handle(
+        _modeMaskMeta,
+        modeMask.isAcceptableOrUnknown(data['mode_mask']!, _modeMaskMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_modeMaskMeta);
+    }
+    if (data.containsKey('label')) {
+      context.handle(
+        _labelMeta,
+        label.isAcceptableOrUnknown(data['label']!, _labelMeta),
+      );
+    }
+    if (data.containsKey('fetched_at')) {
+      context.handle(
+        _fetchedAtMeta,
+        fetchedAt.isAcceptableOrUnknown(data['fetched_at']!, _fetchedAtMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  TransitSet map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return TransitSet(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      layerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}layer_id'],
+      )!,
+      south: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}south'],
+      )!,
+      west: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}west'],
+      )!,
+      north: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}north'],
+      )!,
+      east: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}east'],
+      )!,
+      modeMask: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}mode_mask'],
+      )!,
+      label: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}label'],
+      ),
+      fetchedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}fetched_at'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $TransitSetsTable createAlias(String alias) {
+    return $TransitSetsTable(attachedDatabase, alias);
+  }
+}
+
+class TransitSet extends DataClass implements Insertable<TransitSet> {
+  final String id;
+  final String layerId;
+
+  /// The imported bounding box.
+  final double south;
+  final double west;
+  final double north;
+  final double east;
+
+  /// Which modes were requested (packed `TransitMode.bit`s).
+  final int modeMask;
+  final String? label;
+
+  /// When the data was pulled from OSM — imports are snapshots with no refresh.
+  final DateTime fetchedAt;
+  final DateTime createdAt;
+  const TransitSet({
+    required this.id,
+    required this.layerId,
+    required this.south,
+    required this.west,
+    required this.north,
+    required this.east,
+    required this.modeMask,
+    this.label,
+    required this.fetchedAt,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['layer_id'] = Variable<String>(layerId);
+    map['south'] = Variable<double>(south);
+    map['west'] = Variable<double>(west);
+    map['north'] = Variable<double>(north);
+    map['east'] = Variable<double>(east);
+    map['mode_mask'] = Variable<int>(modeMask);
+    if (!nullToAbsent || label != null) {
+      map['label'] = Variable<String>(label);
+    }
+    map['fetched_at'] = Variable<DateTime>(fetchedAt);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  TransitSetsCompanion toCompanion(bool nullToAbsent) {
+    return TransitSetsCompanion(
+      id: Value(id),
+      layerId: Value(layerId),
+      south: Value(south),
+      west: Value(west),
+      north: Value(north),
+      east: Value(east),
+      modeMask: Value(modeMask),
+      label: label == null && nullToAbsent
+          ? const Value.absent()
+          : Value(label),
+      fetchedAt: Value(fetchedAt),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory TransitSet.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return TransitSet(
+      id: serializer.fromJson<String>(json['id']),
+      layerId: serializer.fromJson<String>(json['layerId']),
+      south: serializer.fromJson<double>(json['south']),
+      west: serializer.fromJson<double>(json['west']),
+      north: serializer.fromJson<double>(json['north']),
+      east: serializer.fromJson<double>(json['east']),
+      modeMask: serializer.fromJson<int>(json['modeMask']),
+      label: serializer.fromJson<String?>(json['label']),
+      fetchedAt: serializer.fromJson<DateTime>(json['fetchedAt']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'layerId': serializer.toJson<String>(layerId),
+      'south': serializer.toJson<double>(south),
+      'west': serializer.toJson<double>(west),
+      'north': serializer.toJson<double>(north),
+      'east': serializer.toJson<double>(east),
+      'modeMask': serializer.toJson<int>(modeMask),
+      'label': serializer.toJson<String?>(label),
+      'fetchedAt': serializer.toJson<DateTime>(fetchedAt),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  TransitSet copyWith({
+    String? id,
+    String? layerId,
+    double? south,
+    double? west,
+    double? north,
+    double? east,
+    int? modeMask,
+    Value<String?> label = const Value.absent(),
+    DateTime? fetchedAt,
+    DateTime? createdAt,
+  }) => TransitSet(
+    id: id ?? this.id,
+    layerId: layerId ?? this.layerId,
+    south: south ?? this.south,
+    west: west ?? this.west,
+    north: north ?? this.north,
+    east: east ?? this.east,
+    modeMask: modeMask ?? this.modeMask,
+    label: label.present ? label.value : this.label,
+    fetchedAt: fetchedAt ?? this.fetchedAt,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  TransitSet copyWithCompanion(TransitSetsCompanion data) {
+    return TransitSet(
+      id: data.id.present ? data.id.value : this.id,
+      layerId: data.layerId.present ? data.layerId.value : this.layerId,
+      south: data.south.present ? data.south.value : this.south,
+      west: data.west.present ? data.west.value : this.west,
+      north: data.north.present ? data.north.value : this.north,
+      east: data.east.present ? data.east.value : this.east,
+      modeMask: data.modeMask.present ? data.modeMask.value : this.modeMask,
+      label: data.label.present ? data.label.value : this.label,
+      fetchedAt: data.fetchedAt.present ? data.fetchedAt.value : this.fetchedAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TransitSet(')
+          ..write('id: $id, ')
+          ..write('layerId: $layerId, ')
+          ..write('south: $south, ')
+          ..write('west: $west, ')
+          ..write('north: $north, ')
+          ..write('east: $east, ')
+          ..write('modeMask: $modeMask, ')
+          ..write('label: $label, ')
+          ..write('fetchedAt: $fetchedAt, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    layerId,
+    south,
+    west,
+    north,
+    east,
+    modeMask,
+    label,
+    fetchedAt,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is TransitSet &&
+          other.id == this.id &&
+          other.layerId == this.layerId &&
+          other.south == this.south &&
+          other.west == this.west &&
+          other.north == this.north &&
+          other.east == this.east &&
+          other.modeMask == this.modeMask &&
+          other.label == this.label &&
+          other.fetchedAt == this.fetchedAt &&
+          other.createdAt == this.createdAt);
+}
+
+class TransitSetsCompanion extends UpdateCompanion<TransitSet> {
+  final Value<String> id;
+  final Value<String> layerId;
+  final Value<double> south;
+  final Value<double> west;
+  final Value<double> north;
+  final Value<double> east;
+  final Value<int> modeMask;
+  final Value<String?> label;
+  final Value<DateTime> fetchedAt;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const TransitSetsCompanion({
+    this.id = const Value.absent(),
+    this.layerId = const Value.absent(),
+    this.south = const Value.absent(),
+    this.west = const Value.absent(),
+    this.north = const Value.absent(),
+    this.east = const Value.absent(),
+    this.modeMask = const Value.absent(),
+    this.label = const Value.absent(),
+    this.fetchedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  TransitSetsCompanion.insert({
+    required String id,
+    required String layerId,
+    required double south,
+    required double west,
+    required double north,
+    required double east,
+    required int modeMask,
+    this.label = const Value.absent(),
+    this.fetchedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       layerId = Value(layerId),
+       south = Value(south),
+       west = Value(west),
+       north = Value(north),
+       east = Value(east),
+       modeMask = Value(modeMask);
+  static Insertable<TransitSet> custom({
+    Expression<String>? id,
+    Expression<String>? layerId,
+    Expression<double>? south,
+    Expression<double>? west,
+    Expression<double>? north,
+    Expression<double>? east,
+    Expression<int>? modeMask,
+    Expression<String>? label,
+    Expression<DateTime>? fetchedAt,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (layerId != null) 'layer_id': layerId,
+      if (south != null) 'south': south,
+      if (west != null) 'west': west,
+      if (north != null) 'north': north,
+      if (east != null) 'east': east,
+      if (modeMask != null) 'mode_mask': modeMask,
+      if (label != null) 'label': label,
+      if (fetchedAt != null) 'fetched_at': fetchedAt,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  TransitSetsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? layerId,
+    Value<double>? south,
+    Value<double>? west,
+    Value<double>? north,
+    Value<double>? east,
+    Value<int>? modeMask,
+    Value<String?>? label,
+    Value<DateTime>? fetchedAt,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return TransitSetsCompanion(
+      id: id ?? this.id,
+      layerId: layerId ?? this.layerId,
+      south: south ?? this.south,
+      west: west ?? this.west,
+      north: north ?? this.north,
+      east: east ?? this.east,
+      modeMask: modeMask ?? this.modeMask,
+      label: label ?? this.label,
+      fetchedAt: fetchedAt ?? this.fetchedAt,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (layerId.present) {
+      map['layer_id'] = Variable<String>(layerId.value);
+    }
+    if (south.present) {
+      map['south'] = Variable<double>(south.value);
+    }
+    if (west.present) {
+      map['west'] = Variable<double>(west.value);
+    }
+    if (north.present) {
+      map['north'] = Variable<double>(north.value);
+    }
+    if (east.present) {
+      map['east'] = Variable<double>(east.value);
+    }
+    if (modeMask.present) {
+      map['mode_mask'] = Variable<int>(modeMask.value);
+    }
+    if (label.present) {
+      map['label'] = Variable<String>(label.value);
+    }
+    if (fetchedAt.present) {
+      map['fetched_at'] = Variable<DateTime>(fetchedAt.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TransitSetsCompanion(')
+          ..write('id: $id, ')
+          ..write('layerId: $layerId, ')
+          ..write('south: $south, ')
+          ..write('west: $west, ')
+          ..write('north: $north, ')
+          ..write('east: $east, ')
+          ..write('modeMask: $modeMask, ')
+          ..write('label: $label, ')
+          ..write('fetchedAt: $fetchedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $TransitRoutesTable extends TransitRoutes
+    with TableInfo<$TransitRoutesTable, TransitRoute> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $TransitRoutesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _setIdMeta = const VerificationMeta('setId');
+  @override
+  late final GeneratedColumn<String> setId = GeneratedColumn<String>(
+    'set_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES transit_sets (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _osmIdMeta = const VerificationMeta('osmId');
+  @override
+  late final GeneratedColumn<int> osmId = GeneratedColumn<int>(
+    'osm_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _modeKeyMeta = const VerificationMeta(
+    'modeKey',
+  );
+  @override
+  late final GeneratedColumn<String> modeKey = GeneratedColumn<String>(
+    'mode_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _refMeta = const VerificationMeta('ref');
+  @override
+  late final GeneratedColumn<String> ref = GeneratedColumn<String>(
+    'ref',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _operatorNameMeta = const VerificationMeta(
+    'operatorName',
+  );
+  @override
+  late final GeneratedColumn<String> operatorName = GeneratedColumn<String>(
+    'operator_name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _colourHexMeta = const VerificationMeta(
+    'colourHex',
+  );
+  @override
+  late final GeneratedColumn<String> colourHex = GeneratedColumn<String>(
+    'colour_hex',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _colorArgbMeta = const VerificationMeta(
+    'colorArgb',
+  );
+  @override
+  late final GeneratedColumn<int> colorArgb = GeneratedColumn<int>(
+    'color_argb',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _isVisibleMeta = const VerificationMeta(
+    'isVisible',
+  );
+  @override
+  late final GeneratedColumn<bool> isVisible = GeneratedColumn<bool>(
+    'is_visible',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_visible" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _stopCountMeta = const VerificationMeta(
+    'stopCount',
+  );
+  @override
+  late final GeneratedColumn<int> stopCount = GeneratedColumn<int>(
+    'stop_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _pointCountMeta = const VerificationMeta(
+    'pointCount',
+  );
+  @override
+  late final GeneratedColumn<int> pointCount = GeneratedColumn<int>(
+    'point_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    setId,
+    osmId,
+    modeKey,
+    ref,
+    name,
+    operatorName,
+    colourHex,
+    colorArgb,
+    isVisible,
+    stopCount,
+    pointCount,
+    sortOrder,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'transit_routes';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<TransitRoute> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('set_id')) {
+      context.handle(
+        _setIdMeta,
+        setId.isAcceptableOrUnknown(data['set_id']!, _setIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_setIdMeta);
+    }
+    if (data.containsKey('osm_id')) {
+      context.handle(
+        _osmIdMeta,
+        osmId.isAcceptableOrUnknown(data['osm_id']!, _osmIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_osmIdMeta);
+    }
+    if (data.containsKey('mode_key')) {
+      context.handle(
+        _modeKeyMeta,
+        modeKey.isAcceptableOrUnknown(data['mode_key']!, _modeKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_modeKeyMeta);
+    }
+    if (data.containsKey('ref')) {
+      context.handle(
+        _refMeta,
+        ref.isAcceptableOrUnknown(data['ref']!, _refMeta),
+      );
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    }
+    if (data.containsKey('operator_name')) {
+      context.handle(
+        _operatorNameMeta,
+        operatorName.isAcceptableOrUnknown(
+          data['operator_name']!,
+          _operatorNameMeta,
+        ),
+      );
+    }
+    if (data.containsKey('colour_hex')) {
+      context.handle(
+        _colourHexMeta,
+        colourHex.isAcceptableOrUnknown(data['colour_hex']!, _colourHexMeta),
+      );
+    }
+    if (data.containsKey('color_argb')) {
+      context.handle(
+        _colorArgbMeta,
+        colorArgb.isAcceptableOrUnknown(data['color_argb']!, _colorArgbMeta),
+      );
+    }
+    if (data.containsKey('is_visible')) {
+      context.handle(
+        _isVisibleMeta,
+        isVisible.isAcceptableOrUnknown(data['is_visible']!, _isVisibleMeta),
+      );
+    }
+    if (data.containsKey('stop_count')) {
+      context.handle(
+        _stopCountMeta,
+        stopCount.isAcceptableOrUnknown(data['stop_count']!, _stopCountMeta),
+      );
+    }
+    if (data.containsKey('point_count')) {
+      context.handle(
+        _pointCountMeta,
+        pointCount.isAcceptableOrUnknown(data['point_count']!, _pointCountMeta),
+      );
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  TransitRoute map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return TransitRoute(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      setId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}set_id'],
+      )!,
+      osmId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}osm_id'],
+      )!,
+      modeKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}mode_key'],
+      )!,
+      ref: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}ref'],
+      ),
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      ),
+      operatorName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}operator_name'],
+      ),
+      colourHex: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}colour_hex'],
+      ),
+      colorArgb: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_argb'],
+      ),
+      isVisible: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_visible'],
+      )!,
+      stopCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}stop_count'],
+      )!,
+      pointCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}point_count'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $TransitRoutesTable createAlias(String alias) {
+    return $TransitRoutesTable(attachedDatabase, alias);
+  }
+}
+
+class TransitRoute extends DataClass implements Insertable<TransitRoute> {
+  final String id;
+  final String setId;
+
+  /// The OSM relation id.
+  final int osmId;
+
+  /// `TransitMode.key` — picks the icon, stroke width and fallback colour.
+  final String modeKey;
+  final String? ref;
+  final String? name;
+  final String? operatorName;
+
+  /// The raw OSM `colour` tag, kept for debugging/export.
+  final String? colourHex;
+
+  /// [colourHex] parsed to ARGB, or null to fall back to the mode palette.
+  final int? colorArgb;
+
+  /// Whether this route is drawn. **This is what the Lines menu writes.**
+  final bool isVisible;
+  final int stopCount;
+  final int pointCount;
+  final int sortOrder;
+  final DateTime createdAt;
+  const TransitRoute({
+    required this.id,
+    required this.setId,
+    required this.osmId,
+    required this.modeKey,
+    this.ref,
+    this.name,
+    this.operatorName,
+    this.colourHex,
+    this.colorArgb,
+    required this.isVisible,
+    required this.stopCount,
+    required this.pointCount,
+    required this.sortOrder,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['set_id'] = Variable<String>(setId);
+    map['osm_id'] = Variable<int>(osmId);
+    map['mode_key'] = Variable<String>(modeKey);
+    if (!nullToAbsent || ref != null) {
+      map['ref'] = Variable<String>(ref);
+    }
+    if (!nullToAbsent || name != null) {
+      map['name'] = Variable<String>(name);
+    }
+    if (!nullToAbsent || operatorName != null) {
+      map['operator_name'] = Variable<String>(operatorName);
+    }
+    if (!nullToAbsent || colourHex != null) {
+      map['colour_hex'] = Variable<String>(colourHex);
+    }
+    if (!nullToAbsent || colorArgb != null) {
+      map['color_argb'] = Variable<int>(colorArgb);
+    }
+    map['is_visible'] = Variable<bool>(isVisible);
+    map['stop_count'] = Variable<int>(stopCount);
+    map['point_count'] = Variable<int>(pointCount);
+    map['sort_order'] = Variable<int>(sortOrder);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  TransitRoutesCompanion toCompanion(bool nullToAbsent) {
+    return TransitRoutesCompanion(
+      id: Value(id),
+      setId: Value(setId),
+      osmId: Value(osmId),
+      modeKey: Value(modeKey),
+      ref: ref == null && nullToAbsent ? const Value.absent() : Value(ref),
+      name: name == null && nullToAbsent ? const Value.absent() : Value(name),
+      operatorName: operatorName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(operatorName),
+      colourHex: colourHex == null && nullToAbsent
+          ? const Value.absent()
+          : Value(colourHex),
+      colorArgb: colorArgb == null && nullToAbsent
+          ? const Value.absent()
+          : Value(colorArgb),
+      isVisible: Value(isVisible),
+      stopCount: Value(stopCount),
+      pointCount: Value(pointCount),
+      sortOrder: Value(sortOrder),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory TransitRoute.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return TransitRoute(
+      id: serializer.fromJson<String>(json['id']),
+      setId: serializer.fromJson<String>(json['setId']),
+      osmId: serializer.fromJson<int>(json['osmId']),
+      modeKey: serializer.fromJson<String>(json['modeKey']),
+      ref: serializer.fromJson<String?>(json['ref']),
+      name: serializer.fromJson<String?>(json['name']),
+      operatorName: serializer.fromJson<String?>(json['operatorName']),
+      colourHex: serializer.fromJson<String?>(json['colourHex']),
+      colorArgb: serializer.fromJson<int?>(json['colorArgb']),
+      isVisible: serializer.fromJson<bool>(json['isVisible']),
+      stopCount: serializer.fromJson<int>(json['stopCount']),
+      pointCount: serializer.fromJson<int>(json['pointCount']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'setId': serializer.toJson<String>(setId),
+      'osmId': serializer.toJson<int>(osmId),
+      'modeKey': serializer.toJson<String>(modeKey),
+      'ref': serializer.toJson<String?>(ref),
+      'name': serializer.toJson<String?>(name),
+      'operatorName': serializer.toJson<String?>(operatorName),
+      'colourHex': serializer.toJson<String?>(colourHex),
+      'colorArgb': serializer.toJson<int?>(colorArgb),
+      'isVisible': serializer.toJson<bool>(isVisible),
+      'stopCount': serializer.toJson<int>(stopCount),
+      'pointCount': serializer.toJson<int>(pointCount),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  TransitRoute copyWith({
+    String? id,
+    String? setId,
+    int? osmId,
+    String? modeKey,
+    Value<String?> ref = const Value.absent(),
+    Value<String?> name = const Value.absent(),
+    Value<String?> operatorName = const Value.absent(),
+    Value<String?> colourHex = const Value.absent(),
+    Value<int?> colorArgb = const Value.absent(),
+    bool? isVisible,
+    int? stopCount,
+    int? pointCount,
+    int? sortOrder,
+    DateTime? createdAt,
+  }) => TransitRoute(
+    id: id ?? this.id,
+    setId: setId ?? this.setId,
+    osmId: osmId ?? this.osmId,
+    modeKey: modeKey ?? this.modeKey,
+    ref: ref.present ? ref.value : this.ref,
+    name: name.present ? name.value : this.name,
+    operatorName: operatorName.present ? operatorName.value : this.operatorName,
+    colourHex: colourHex.present ? colourHex.value : this.colourHex,
+    colorArgb: colorArgb.present ? colorArgb.value : this.colorArgb,
+    isVisible: isVisible ?? this.isVisible,
+    stopCount: stopCount ?? this.stopCount,
+    pointCount: pointCount ?? this.pointCount,
+    sortOrder: sortOrder ?? this.sortOrder,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  TransitRoute copyWithCompanion(TransitRoutesCompanion data) {
+    return TransitRoute(
+      id: data.id.present ? data.id.value : this.id,
+      setId: data.setId.present ? data.setId.value : this.setId,
+      osmId: data.osmId.present ? data.osmId.value : this.osmId,
+      modeKey: data.modeKey.present ? data.modeKey.value : this.modeKey,
+      ref: data.ref.present ? data.ref.value : this.ref,
+      name: data.name.present ? data.name.value : this.name,
+      operatorName: data.operatorName.present
+          ? data.operatorName.value
+          : this.operatorName,
+      colourHex: data.colourHex.present ? data.colourHex.value : this.colourHex,
+      colorArgb: data.colorArgb.present ? data.colorArgb.value : this.colorArgb,
+      isVisible: data.isVisible.present ? data.isVisible.value : this.isVisible,
+      stopCount: data.stopCount.present ? data.stopCount.value : this.stopCount,
+      pointCount: data.pointCount.present
+          ? data.pointCount.value
+          : this.pointCount,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TransitRoute(')
+          ..write('id: $id, ')
+          ..write('setId: $setId, ')
+          ..write('osmId: $osmId, ')
+          ..write('modeKey: $modeKey, ')
+          ..write('ref: $ref, ')
+          ..write('name: $name, ')
+          ..write('operatorName: $operatorName, ')
+          ..write('colourHex: $colourHex, ')
+          ..write('colorArgb: $colorArgb, ')
+          ..write('isVisible: $isVisible, ')
+          ..write('stopCount: $stopCount, ')
+          ..write('pointCount: $pointCount, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    setId,
+    osmId,
+    modeKey,
+    ref,
+    name,
+    operatorName,
+    colourHex,
+    colorArgb,
+    isVisible,
+    stopCount,
+    pointCount,
+    sortOrder,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is TransitRoute &&
+          other.id == this.id &&
+          other.setId == this.setId &&
+          other.osmId == this.osmId &&
+          other.modeKey == this.modeKey &&
+          other.ref == this.ref &&
+          other.name == this.name &&
+          other.operatorName == this.operatorName &&
+          other.colourHex == this.colourHex &&
+          other.colorArgb == this.colorArgb &&
+          other.isVisible == this.isVisible &&
+          other.stopCount == this.stopCount &&
+          other.pointCount == this.pointCount &&
+          other.sortOrder == this.sortOrder &&
+          other.createdAt == this.createdAt);
+}
+
+class TransitRoutesCompanion extends UpdateCompanion<TransitRoute> {
+  final Value<String> id;
+  final Value<String> setId;
+  final Value<int> osmId;
+  final Value<String> modeKey;
+  final Value<String?> ref;
+  final Value<String?> name;
+  final Value<String?> operatorName;
+  final Value<String?> colourHex;
+  final Value<int?> colorArgb;
+  final Value<bool> isVisible;
+  final Value<int> stopCount;
+  final Value<int> pointCount;
+  final Value<int> sortOrder;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const TransitRoutesCompanion({
+    this.id = const Value.absent(),
+    this.setId = const Value.absent(),
+    this.osmId = const Value.absent(),
+    this.modeKey = const Value.absent(),
+    this.ref = const Value.absent(),
+    this.name = const Value.absent(),
+    this.operatorName = const Value.absent(),
+    this.colourHex = const Value.absent(),
+    this.colorArgb = const Value.absent(),
+    this.isVisible = const Value.absent(),
+    this.stopCount = const Value.absent(),
+    this.pointCount = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  TransitRoutesCompanion.insert({
+    required String id,
+    required String setId,
+    required int osmId,
+    required String modeKey,
+    this.ref = const Value.absent(),
+    this.name = const Value.absent(),
+    this.operatorName = const Value.absent(),
+    this.colourHex = const Value.absent(),
+    this.colorArgb = const Value.absent(),
+    this.isVisible = const Value.absent(),
+    this.stopCount = const Value.absent(),
+    this.pointCount = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       setId = Value(setId),
+       osmId = Value(osmId),
+       modeKey = Value(modeKey);
+  static Insertable<TransitRoute> custom({
+    Expression<String>? id,
+    Expression<String>? setId,
+    Expression<int>? osmId,
+    Expression<String>? modeKey,
+    Expression<String>? ref,
+    Expression<String>? name,
+    Expression<String>? operatorName,
+    Expression<String>? colourHex,
+    Expression<int>? colorArgb,
+    Expression<bool>? isVisible,
+    Expression<int>? stopCount,
+    Expression<int>? pointCount,
+    Expression<int>? sortOrder,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (setId != null) 'set_id': setId,
+      if (osmId != null) 'osm_id': osmId,
+      if (modeKey != null) 'mode_key': modeKey,
+      if (ref != null) 'ref': ref,
+      if (name != null) 'name': name,
+      if (operatorName != null) 'operator_name': operatorName,
+      if (colourHex != null) 'colour_hex': colourHex,
+      if (colorArgb != null) 'color_argb': colorArgb,
+      if (isVisible != null) 'is_visible': isVisible,
+      if (stopCount != null) 'stop_count': stopCount,
+      if (pointCount != null) 'point_count': pointCount,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  TransitRoutesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? setId,
+    Value<int>? osmId,
+    Value<String>? modeKey,
+    Value<String?>? ref,
+    Value<String?>? name,
+    Value<String?>? operatorName,
+    Value<String?>? colourHex,
+    Value<int?>? colorArgb,
+    Value<bool>? isVisible,
+    Value<int>? stopCount,
+    Value<int>? pointCount,
+    Value<int>? sortOrder,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return TransitRoutesCompanion(
+      id: id ?? this.id,
+      setId: setId ?? this.setId,
+      osmId: osmId ?? this.osmId,
+      modeKey: modeKey ?? this.modeKey,
+      ref: ref ?? this.ref,
+      name: name ?? this.name,
+      operatorName: operatorName ?? this.operatorName,
+      colourHex: colourHex ?? this.colourHex,
+      colorArgb: colorArgb ?? this.colorArgb,
+      isVisible: isVisible ?? this.isVisible,
+      stopCount: stopCount ?? this.stopCount,
+      pointCount: pointCount ?? this.pointCount,
+      sortOrder: sortOrder ?? this.sortOrder,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (setId.present) {
+      map['set_id'] = Variable<String>(setId.value);
+    }
+    if (osmId.present) {
+      map['osm_id'] = Variable<int>(osmId.value);
+    }
+    if (modeKey.present) {
+      map['mode_key'] = Variable<String>(modeKey.value);
+    }
+    if (ref.present) {
+      map['ref'] = Variable<String>(ref.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (operatorName.present) {
+      map['operator_name'] = Variable<String>(operatorName.value);
+    }
+    if (colourHex.present) {
+      map['colour_hex'] = Variable<String>(colourHex.value);
+    }
+    if (colorArgb.present) {
+      map['color_argb'] = Variable<int>(colorArgb.value);
+    }
+    if (isVisible.present) {
+      map['is_visible'] = Variable<bool>(isVisible.value);
+    }
+    if (stopCount.present) {
+      map['stop_count'] = Variable<int>(stopCount.value);
+    }
+    if (pointCount.present) {
+      map['point_count'] = Variable<int>(pointCount.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TransitRoutesCompanion(')
+          ..write('id: $id, ')
+          ..write('setId: $setId, ')
+          ..write('osmId: $osmId, ')
+          ..write('modeKey: $modeKey, ')
+          ..write('ref: $ref, ')
+          ..write('name: $name, ')
+          ..write('operatorName: $operatorName, ')
+          ..write('colourHex: $colourHex, ')
+          ..write('colorArgb: $colorArgb, ')
+          ..write('isVisible: $isVisible, ')
+          ..write('stopCount: $stopCount, ')
+          ..write('pointCount: $pointCount, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $TransitRoutePartsTable extends TransitRouteParts
+    with TableInfo<$TransitRoutePartsTable, TransitRoutePart> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $TransitRoutePartsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _routeIdMeta = const VerificationMeta(
+    'routeId',
+  );
+  @override
+  late final GeneratedColumn<String> routeId = GeneratedColumn<String>(
+    'route_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES transit_routes (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _partIndexMeta = const VerificationMeta(
+    'partIndex',
+  );
+  @override
+  late final GeneratedColumn<int> partIndex = GeneratedColumn<int>(
+    'part_index',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _pointCountMeta = const VerificationMeta(
+    'pointCount',
+  );
+  @override
+  late final GeneratedColumn<int> pointCount = GeneratedColumn<int>(
+    'point_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _pointsMeta = const VerificationMeta('points');
+  @override
+  late final GeneratedColumn<String> points = GeneratedColumn<String>(
+    'points',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _southMeta = const VerificationMeta('south');
+  @override
+  late final GeneratedColumn<double> south = GeneratedColumn<double>(
+    'south',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _westMeta = const VerificationMeta('west');
+  @override
+  late final GeneratedColumn<double> west = GeneratedColumn<double>(
+    'west',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _northMeta = const VerificationMeta('north');
+  @override
+  late final GeneratedColumn<double> north = GeneratedColumn<double>(
+    'north',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _eastMeta = const VerificationMeta('east');
+  @override
+  late final GeneratedColumn<double> east = GeneratedColumn<double>(
+    'east',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    routeId,
+    partIndex,
+    pointCount,
+    points,
+    south,
+    west,
+    north,
+    east,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'transit_route_parts';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<TransitRoutePart> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('route_id')) {
+      context.handle(
+        _routeIdMeta,
+        routeId.isAcceptableOrUnknown(data['route_id']!, _routeIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_routeIdMeta);
+    }
+    if (data.containsKey('part_index')) {
+      context.handle(
+        _partIndexMeta,
+        partIndex.isAcceptableOrUnknown(data['part_index']!, _partIndexMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_partIndexMeta);
+    }
+    if (data.containsKey('point_count')) {
+      context.handle(
+        _pointCountMeta,
+        pointCount.isAcceptableOrUnknown(data['point_count']!, _pointCountMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_pointCountMeta);
+    }
+    if (data.containsKey('points')) {
+      context.handle(
+        _pointsMeta,
+        points.isAcceptableOrUnknown(data['points']!, _pointsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_pointsMeta);
+    }
+    if (data.containsKey('south')) {
+      context.handle(
+        _southMeta,
+        south.isAcceptableOrUnknown(data['south']!, _southMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_southMeta);
+    }
+    if (data.containsKey('west')) {
+      context.handle(
+        _westMeta,
+        west.isAcceptableOrUnknown(data['west']!, _westMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_westMeta);
+    }
+    if (data.containsKey('north')) {
+      context.handle(
+        _northMeta,
+        north.isAcceptableOrUnknown(data['north']!, _northMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_northMeta);
+    }
+    if (data.containsKey('east')) {
+      context.handle(
+        _eastMeta,
+        east.isAcceptableOrUnknown(data['east']!, _eastMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_eastMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  TransitRoutePart map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return TransitRoutePart(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      routeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}route_id'],
+      )!,
+      partIndex: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}part_index'],
+      )!,
+      pointCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}point_count'],
+      )!,
+      points: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}points'],
+      )!,
+      south: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}south'],
+      )!,
+      west: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}west'],
+      )!,
+      north: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}north'],
+      )!,
+      east: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}east'],
+      )!,
+    );
+  }
+
+  @override
+  $TransitRoutePartsTable createAlias(String alias) {
+    return $TransitRoutePartsTable(attachedDatabase, alias);
+  }
+}
+
+class TransitRoutePart extends DataClass
+    implements Insertable<TransitRoutePart> {
+  final String id;
+  final String routeId;
+  final int partIndex;
+  final int pointCount;
+  final String points;
+  final double south;
+  final double west;
+  final double north;
+  final double east;
+  const TransitRoutePart({
+    required this.id,
+    required this.routeId,
+    required this.partIndex,
+    required this.pointCount,
+    required this.points,
+    required this.south,
+    required this.west,
+    required this.north,
+    required this.east,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['route_id'] = Variable<String>(routeId);
+    map['part_index'] = Variable<int>(partIndex);
+    map['point_count'] = Variable<int>(pointCount);
+    map['points'] = Variable<String>(points);
+    map['south'] = Variable<double>(south);
+    map['west'] = Variable<double>(west);
+    map['north'] = Variable<double>(north);
+    map['east'] = Variable<double>(east);
+    return map;
+  }
+
+  TransitRoutePartsCompanion toCompanion(bool nullToAbsent) {
+    return TransitRoutePartsCompanion(
+      id: Value(id),
+      routeId: Value(routeId),
+      partIndex: Value(partIndex),
+      pointCount: Value(pointCount),
+      points: Value(points),
+      south: Value(south),
+      west: Value(west),
+      north: Value(north),
+      east: Value(east),
+    );
+  }
+
+  factory TransitRoutePart.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return TransitRoutePart(
+      id: serializer.fromJson<String>(json['id']),
+      routeId: serializer.fromJson<String>(json['routeId']),
+      partIndex: serializer.fromJson<int>(json['partIndex']),
+      pointCount: serializer.fromJson<int>(json['pointCount']),
+      points: serializer.fromJson<String>(json['points']),
+      south: serializer.fromJson<double>(json['south']),
+      west: serializer.fromJson<double>(json['west']),
+      north: serializer.fromJson<double>(json['north']),
+      east: serializer.fromJson<double>(json['east']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'routeId': serializer.toJson<String>(routeId),
+      'partIndex': serializer.toJson<int>(partIndex),
+      'pointCount': serializer.toJson<int>(pointCount),
+      'points': serializer.toJson<String>(points),
+      'south': serializer.toJson<double>(south),
+      'west': serializer.toJson<double>(west),
+      'north': serializer.toJson<double>(north),
+      'east': serializer.toJson<double>(east),
+    };
+  }
+
+  TransitRoutePart copyWith({
+    String? id,
+    String? routeId,
+    int? partIndex,
+    int? pointCount,
+    String? points,
+    double? south,
+    double? west,
+    double? north,
+    double? east,
+  }) => TransitRoutePart(
+    id: id ?? this.id,
+    routeId: routeId ?? this.routeId,
+    partIndex: partIndex ?? this.partIndex,
+    pointCount: pointCount ?? this.pointCount,
+    points: points ?? this.points,
+    south: south ?? this.south,
+    west: west ?? this.west,
+    north: north ?? this.north,
+    east: east ?? this.east,
+  );
+  TransitRoutePart copyWithCompanion(TransitRoutePartsCompanion data) {
+    return TransitRoutePart(
+      id: data.id.present ? data.id.value : this.id,
+      routeId: data.routeId.present ? data.routeId.value : this.routeId,
+      partIndex: data.partIndex.present ? data.partIndex.value : this.partIndex,
+      pointCount: data.pointCount.present
+          ? data.pointCount.value
+          : this.pointCount,
+      points: data.points.present ? data.points.value : this.points,
+      south: data.south.present ? data.south.value : this.south,
+      west: data.west.present ? data.west.value : this.west,
+      north: data.north.present ? data.north.value : this.north,
+      east: data.east.present ? data.east.value : this.east,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TransitRoutePart(')
+          ..write('id: $id, ')
+          ..write('routeId: $routeId, ')
+          ..write('partIndex: $partIndex, ')
+          ..write('pointCount: $pointCount, ')
+          ..write('points: $points, ')
+          ..write('south: $south, ')
+          ..write('west: $west, ')
+          ..write('north: $north, ')
+          ..write('east: $east')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    routeId,
+    partIndex,
+    pointCount,
+    points,
+    south,
+    west,
+    north,
+    east,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is TransitRoutePart &&
+          other.id == this.id &&
+          other.routeId == this.routeId &&
+          other.partIndex == this.partIndex &&
+          other.pointCount == this.pointCount &&
+          other.points == this.points &&
+          other.south == this.south &&
+          other.west == this.west &&
+          other.north == this.north &&
+          other.east == this.east);
+}
+
+class TransitRoutePartsCompanion extends UpdateCompanion<TransitRoutePart> {
+  final Value<String> id;
+  final Value<String> routeId;
+  final Value<int> partIndex;
+  final Value<int> pointCount;
+  final Value<String> points;
+  final Value<double> south;
+  final Value<double> west;
+  final Value<double> north;
+  final Value<double> east;
+  final Value<int> rowid;
+  const TransitRoutePartsCompanion({
+    this.id = const Value.absent(),
+    this.routeId = const Value.absent(),
+    this.partIndex = const Value.absent(),
+    this.pointCount = const Value.absent(),
+    this.points = const Value.absent(),
+    this.south = const Value.absent(),
+    this.west = const Value.absent(),
+    this.north = const Value.absent(),
+    this.east = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  TransitRoutePartsCompanion.insert({
+    required String id,
+    required String routeId,
+    required int partIndex,
+    required int pointCount,
+    required String points,
+    required double south,
+    required double west,
+    required double north,
+    required double east,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       routeId = Value(routeId),
+       partIndex = Value(partIndex),
+       pointCount = Value(pointCount),
+       points = Value(points),
+       south = Value(south),
+       west = Value(west),
+       north = Value(north),
+       east = Value(east);
+  static Insertable<TransitRoutePart> custom({
+    Expression<String>? id,
+    Expression<String>? routeId,
+    Expression<int>? partIndex,
+    Expression<int>? pointCount,
+    Expression<String>? points,
+    Expression<double>? south,
+    Expression<double>? west,
+    Expression<double>? north,
+    Expression<double>? east,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (routeId != null) 'route_id': routeId,
+      if (partIndex != null) 'part_index': partIndex,
+      if (pointCount != null) 'point_count': pointCount,
+      if (points != null) 'points': points,
+      if (south != null) 'south': south,
+      if (west != null) 'west': west,
+      if (north != null) 'north': north,
+      if (east != null) 'east': east,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  TransitRoutePartsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? routeId,
+    Value<int>? partIndex,
+    Value<int>? pointCount,
+    Value<String>? points,
+    Value<double>? south,
+    Value<double>? west,
+    Value<double>? north,
+    Value<double>? east,
+    Value<int>? rowid,
+  }) {
+    return TransitRoutePartsCompanion(
+      id: id ?? this.id,
+      routeId: routeId ?? this.routeId,
+      partIndex: partIndex ?? this.partIndex,
+      pointCount: pointCount ?? this.pointCount,
+      points: points ?? this.points,
+      south: south ?? this.south,
+      west: west ?? this.west,
+      north: north ?? this.north,
+      east: east ?? this.east,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (routeId.present) {
+      map['route_id'] = Variable<String>(routeId.value);
+    }
+    if (partIndex.present) {
+      map['part_index'] = Variable<int>(partIndex.value);
+    }
+    if (pointCount.present) {
+      map['point_count'] = Variable<int>(pointCount.value);
+    }
+    if (points.present) {
+      map['points'] = Variable<String>(points.value);
+    }
+    if (south.present) {
+      map['south'] = Variable<double>(south.value);
+    }
+    if (west.present) {
+      map['west'] = Variable<double>(west.value);
+    }
+    if (north.present) {
+      map['north'] = Variable<double>(north.value);
+    }
+    if (east.present) {
+      map['east'] = Variable<double>(east.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TransitRoutePartsCompanion(')
+          ..write('id: $id, ')
+          ..write('routeId: $routeId, ')
+          ..write('partIndex: $partIndex, ')
+          ..write('pointCount: $pointCount, ')
+          ..write('points: $points, ')
+          ..write('south: $south, ')
+          ..write('west: $west, ')
+          ..write('north: $north, ')
+          ..write('east: $east, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $TransitStopsTable extends TransitStops
+    with TableInfo<$TransitStopsTable, TransitStop> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $TransitStopsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _setIdMeta = const VerificationMeta('setId');
+  @override
+  late final GeneratedColumn<String> setId = GeneratedColumn<String>(
+    'set_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES transit_sets (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _osmIdMeta = const VerificationMeta('osmId');
+  @override
+  late final GeneratedColumn<int> osmId = GeneratedColumn<int>(
+    'osm_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _latMeta = const VerificationMeta('lat');
+  @override
+  late final GeneratedColumn<double> lat = GeneratedColumn<double>(
+    'lat',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _lngMeta = const VerificationMeta('lng');
+  @override
+  late final GeneratedColumn<double> lng = GeneratedColumn<double>(
+    'lng',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _modeMaskMeta = const VerificationMeta(
+    'modeMask',
+  );
+  @override
+  late final GeneratedColumn<int> modeMask = GeneratedColumn<int>(
+    'mode_mask',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    setId,
+    osmId,
+    lat,
+    lng,
+    name,
+    modeMask,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'transit_stops';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<TransitStop> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('set_id')) {
+      context.handle(
+        _setIdMeta,
+        setId.isAcceptableOrUnknown(data['set_id']!, _setIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_setIdMeta);
+    }
+    if (data.containsKey('osm_id')) {
+      context.handle(
+        _osmIdMeta,
+        osmId.isAcceptableOrUnknown(data['osm_id']!, _osmIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_osmIdMeta);
+    }
+    if (data.containsKey('lat')) {
+      context.handle(
+        _latMeta,
+        lat.isAcceptableOrUnknown(data['lat']!, _latMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_latMeta);
+    }
+    if (data.containsKey('lng')) {
+      context.handle(
+        _lngMeta,
+        lng.isAcceptableOrUnknown(data['lng']!, _lngMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_lngMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    }
+    if (data.containsKey('mode_mask')) {
+      context.handle(
+        _modeMaskMeta,
+        modeMask.isAcceptableOrUnknown(data['mode_mask']!, _modeMaskMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  TransitStop map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return TransitStop(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      setId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}set_id'],
+      )!,
+      osmId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}osm_id'],
+      )!,
+      lat: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}lat'],
+      )!,
+      lng: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}lng'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      ),
+      modeMask: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}mode_mask'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $TransitStopsTable createAlias(String alias) {
+    return $TransitStopsTable(attachedDatabase, alias);
+  }
+}
+
+class TransitStop extends DataClass implements Insertable<TransitStop> {
+  final String id;
+  final String setId;
+  final int osmId;
+  final double lat;
+  final double lng;
+  final String? name;
+
+  /// The modes serving this stop (packed bits) — picks the marker icon.
+  final int modeMask;
+  final DateTime createdAt;
+  const TransitStop({
+    required this.id,
+    required this.setId,
+    required this.osmId,
+    required this.lat,
+    required this.lng,
+    this.name,
+    required this.modeMask,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['set_id'] = Variable<String>(setId);
+    map['osm_id'] = Variable<int>(osmId);
+    map['lat'] = Variable<double>(lat);
+    map['lng'] = Variable<double>(lng);
+    if (!nullToAbsent || name != null) {
+      map['name'] = Variable<String>(name);
+    }
+    map['mode_mask'] = Variable<int>(modeMask);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  TransitStopsCompanion toCompanion(bool nullToAbsent) {
+    return TransitStopsCompanion(
+      id: Value(id),
+      setId: Value(setId),
+      osmId: Value(osmId),
+      lat: Value(lat),
+      lng: Value(lng),
+      name: name == null && nullToAbsent ? const Value.absent() : Value(name),
+      modeMask: Value(modeMask),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory TransitStop.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return TransitStop(
+      id: serializer.fromJson<String>(json['id']),
+      setId: serializer.fromJson<String>(json['setId']),
+      osmId: serializer.fromJson<int>(json['osmId']),
+      lat: serializer.fromJson<double>(json['lat']),
+      lng: serializer.fromJson<double>(json['lng']),
+      name: serializer.fromJson<String?>(json['name']),
+      modeMask: serializer.fromJson<int>(json['modeMask']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'setId': serializer.toJson<String>(setId),
+      'osmId': serializer.toJson<int>(osmId),
+      'lat': serializer.toJson<double>(lat),
+      'lng': serializer.toJson<double>(lng),
+      'name': serializer.toJson<String?>(name),
+      'modeMask': serializer.toJson<int>(modeMask),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  TransitStop copyWith({
+    String? id,
+    String? setId,
+    int? osmId,
+    double? lat,
+    double? lng,
+    Value<String?> name = const Value.absent(),
+    int? modeMask,
+    DateTime? createdAt,
+  }) => TransitStop(
+    id: id ?? this.id,
+    setId: setId ?? this.setId,
+    osmId: osmId ?? this.osmId,
+    lat: lat ?? this.lat,
+    lng: lng ?? this.lng,
+    name: name.present ? name.value : this.name,
+    modeMask: modeMask ?? this.modeMask,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  TransitStop copyWithCompanion(TransitStopsCompanion data) {
+    return TransitStop(
+      id: data.id.present ? data.id.value : this.id,
+      setId: data.setId.present ? data.setId.value : this.setId,
+      osmId: data.osmId.present ? data.osmId.value : this.osmId,
+      lat: data.lat.present ? data.lat.value : this.lat,
+      lng: data.lng.present ? data.lng.value : this.lng,
+      name: data.name.present ? data.name.value : this.name,
+      modeMask: data.modeMask.present ? data.modeMask.value : this.modeMask,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TransitStop(')
+          ..write('id: $id, ')
+          ..write('setId: $setId, ')
+          ..write('osmId: $osmId, ')
+          ..write('lat: $lat, ')
+          ..write('lng: $lng, ')
+          ..write('name: $name, ')
+          ..write('modeMask: $modeMask, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, setId, osmId, lat, lng, name, modeMask, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is TransitStop &&
+          other.id == this.id &&
+          other.setId == this.setId &&
+          other.osmId == this.osmId &&
+          other.lat == this.lat &&
+          other.lng == this.lng &&
+          other.name == this.name &&
+          other.modeMask == this.modeMask &&
+          other.createdAt == this.createdAt);
+}
+
+class TransitStopsCompanion extends UpdateCompanion<TransitStop> {
+  final Value<String> id;
+  final Value<String> setId;
+  final Value<int> osmId;
+  final Value<double> lat;
+  final Value<double> lng;
+  final Value<String?> name;
+  final Value<int> modeMask;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const TransitStopsCompanion({
+    this.id = const Value.absent(),
+    this.setId = const Value.absent(),
+    this.osmId = const Value.absent(),
+    this.lat = const Value.absent(),
+    this.lng = const Value.absent(),
+    this.name = const Value.absent(),
+    this.modeMask = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  TransitStopsCompanion.insert({
+    required String id,
+    required String setId,
+    required int osmId,
+    required double lat,
+    required double lng,
+    this.name = const Value.absent(),
+    this.modeMask = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       setId = Value(setId),
+       osmId = Value(osmId),
+       lat = Value(lat),
+       lng = Value(lng);
+  static Insertable<TransitStop> custom({
+    Expression<String>? id,
+    Expression<String>? setId,
+    Expression<int>? osmId,
+    Expression<double>? lat,
+    Expression<double>? lng,
+    Expression<String>? name,
+    Expression<int>? modeMask,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (setId != null) 'set_id': setId,
+      if (osmId != null) 'osm_id': osmId,
+      if (lat != null) 'lat': lat,
+      if (lng != null) 'lng': lng,
+      if (name != null) 'name': name,
+      if (modeMask != null) 'mode_mask': modeMask,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  TransitStopsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? setId,
+    Value<int>? osmId,
+    Value<double>? lat,
+    Value<double>? lng,
+    Value<String?>? name,
+    Value<int>? modeMask,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return TransitStopsCompanion(
+      id: id ?? this.id,
+      setId: setId ?? this.setId,
+      osmId: osmId ?? this.osmId,
+      lat: lat ?? this.lat,
+      lng: lng ?? this.lng,
+      name: name ?? this.name,
+      modeMask: modeMask ?? this.modeMask,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (setId.present) {
+      map['set_id'] = Variable<String>(setId.value);
+    }
+    if (osmId.present) {
+      map['osm_id'] = Variable<int>(osmId.value);
+    }
+    if (lat.present) {
+      map['lat'] = Variable<double>(lat.value);
+    }
+    if (lng.present) {
+      map['lng'] = Variable<double>(lng.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (modeMask.present) {
+      map['mode_mask'] = Variable<int>(modeMask.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TransitStopsCompanion(')
+          ..write('id: $id, ')
+          ..write('setId: $setId, ')
+          ..write('osmId: $osmId, ')
+          ..write('lat: $lat, ')
+          ..write('lng: $lng, ')
+          ..write('name: $name, ')
+          ..write('modeMask: $modeMask, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $TransitRouteStopsTable extends TransitRouteStops
+    with TableInfo<$TransitRouteStopsTable, TransitRouteStop> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $TransitRouteStopsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _routeIdMeta = const VerificationMeta(
+    'routeId',
+  );
+  @override
+  late final GeneratedColumn<String> routeId = GeneratedColumn<String>(
+    'route_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES transit_routes (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _stopIdMeta = const VerificationMeta('stopId');
+  @override
+  late final GeneratedColumn<String> stopId = GeneratedColumn<String>(
+    'stop_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES transit_stops (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [routeId, stopId, sortOrder];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'transit_route_stops';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<TransitRouteStop> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('route_id')) {
+      context.handle(
+        _routeIdMeta,
+        routeId.isAcceptableOrUnknown(data['route_id']!, _routeIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_routeIdMeta);
+    }
+    if (data.containsKey('stop_id')) {
+      context.handle(
+        _stopIdMeta,
+        stopId.isAcceptableOrUnknown(data['stop_id']!, _stopIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_stopIdMeta);
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sortOrderMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {routeId, stopId};
+  @override
+  TransitRouteStop map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return TransitRouteStop(
+      routeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}route_id'],
+      )!,
+      stopId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}stop_id'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+    );
+  }
+
+  @override
+  $TransitRouteStopsTable createAlias(String alias) {
+    return $TransitRouteStopsTable(attachedDatabase, alias);
+  }
+}
+
+class TransitRouteStop extends DataClass
+    implements Insertable<TransitRouteStop> {
+  final String routeId;
+  final String stopId;
+  final int sortOrder;
+  const TransitRouteStop({
+    required this.routeId,
+    required this.stopId,
+    required this.sortOrder,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['route_id'] = Variable<String>(routeId);
+    map['stop_id'] = Variable<String>(stopId);
+    map['sort_order'] = Variable<int>(sortOrder);
+    return map;
+  }
+
+  TransitRouteStopsCompanion toCompanion(bool nullToAbsent) {
+    return TransitRouteStopsCompanion(
+      routeId: Value(routeId),
+      stopId: Value(stopId),
+      sortOrder: Value(sortOrder),
+    );
+  }
+
+  factory TransitRouteStop.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return TransitRouteStop(
+      routeId: serializer.fromJson<String>(json['routeId']),
+      stopId: serializer.fromJson<String>(json['stopId']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'routeId': serializer.toJson<String>(routeId),
+      'stopId': serializer.toJson<String>(stopId),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+    };
+  }
+
+  TransitRouteStop copyWith({
+    String? routeId,
+    String? stopId,
+    int? sortOrder,
+  }) => TransitRouteStop(
+    routeId: routeId ?? this.routeId,
+    stopId: stopId ?? this.stopId,
+    sortOrder: sortOrder ?? this.sortOrder,
+  );
+  TransitRouteStop copyWithCompanion(TransitRouteStopsCompanion data) {
+    return TransitRouteStop(
+      routeId: data.routeId.present ? data.routeId.value : this.routeId,
+      stopId: data.stopId.present ? data.stopId.value : this.stopId,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TransitRouteStop(')
+          ..write('routeId: $routeId, ')
+          ..write('stopId: $stopId, ')
+          ..write('sortOrder: $sortOrder')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(routeId, stopId, sortOrder);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is TransitRouteStop &&
+          other.routeId == this.routeId &&
+          other.stopId == this.stopId &&
+          other.sortOrder == this.sortOrder);
+}
+
+class TransitRouteStopsCompanion extends UpdateCompanion<TransitRouteStop> {
+  final Value<String> routeId;
+  final Value<String> stopId;
+  final Value<int> sortOrder;
+  final Value<int> rowid;
+  const TransitRouteStopsCompanion({
+    this.routeId = const Value.absent(),
+    this.stopId = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  TransitRouteStopsCompanion.insert({
+    required String routeId,
+    required String stopId,
+    required int sortOrder,
+    this.rowid = const Value.absent(),
+  }) : routeId = Value(routeId),
+       stopId = Value(stopId),
+       sortOrder = Value(sortOrder);
+  static Insertable<TransitRouteStop> custom({
+    Expression<String>? routeId,
+    Expression<String>? stopId,
+    Expression<int>? sortOrder,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (routeId != null) 'route_id': routeId,
+      if (stopId != null) 'stop_id': stopId,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  TransitRouteStopsCompanion copyWith({
+    Value<String>? routeId,
+    Value<String>? stopId,
+    Value<int>? sortOrder,
+    Value<int>? rowid,
+  }) {
+    return TransitRouteStopsCompanion(
+      routeId: routeId ?? this.routeId,
+      stopId: stopId ?? this.stopId,
+      sortOrder: sortOrder ?? this.sortOrder,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (routeId.present) {
+      map['route_id'] = Variable<String>(routeId.value);
+    }
+    if (stopId.present) {
+      map['stop_id'] = Variable<String>(stopId.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TransitRouteStopsCompanion(')
+          ..write('routeId: $routeId, ')
+          ..write('stopId: $stopId, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $TileCacheTable extends TileCache
     with TableInfo<$TileCacheTable, TileCacheData> {
   @override
@@ -8182,6 +10916,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $HeightPolygonPointsTable(this);
   late final $PoiSetsTable poiSets = $PoiSetsTable(this);
   late final $PoiPointsTable poiPoints = $PoiPointsTable(this);
+  late final $TransitSetsTable transitSets = $TransitSetsTable(this);
+  late final $TransitRoutesTable transitRoutes = $TransitRoutesTable(this);
+  late final $TransitRoutePartsTable transitRouteParts =
+      $TransitRoutePartsTable(this);
+  late final $TransitStopsTable transitStops = $TransitStopsTable(this);
+  late final $TransitRouteStopsTable transitRouteStops =
+      $TransitRouteStopsTable(this);
   late final $TileCacheTable tileCache = $TileCacheTable(this);
   late final $OverpassCacheTable overpassCache = $OverpassCacheTable(this);
   @override
@@ -8204,6 +10945,11 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     heightPolygonPoints,
     poiSets,
     poiPoints,
+    transitSets,
+    transitRoutes,
+    transitRouteParts,
+    transitStops,
+    transitRouteStops,
     tileCache,
     overpassCache,
   ];
@@ -8299,6 +11045,48 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('poi_points', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'layers',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('transit_sets', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'transit_sets',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('transit_routes', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'transit_routes',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('transit_route_parts', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'transit_sets',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('transit_stops', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'transit_routes',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('transit_route_stops', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'transit_stops',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('transit_route_stops', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -8458,6 +11246,24 @@ final class $$LayersTableReferences
     ).filter((f) => f.layerId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_poiSetsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$TransitSetsTable, List<TransitSet>>
+  _transitSetsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.transitSets,
+    aliasName: $_aliasNameGenerator(db.layers.id, db.transitSets.layerId),
+  );
+
+  $$TransitSetsTableProcessedTableManager get transitSetsRefs {
+    final manager = $$TransitSetsTableTableManager(
+      $_db,
+      $_db.transitSets,
+    ).filter((f) => f.layerId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_transitSetsRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -8684,6 +11490,31 @@ class $$LayersTableFilterComposer
           }) => $$PoiSetsTableFilterComposer(
             $db: $db,
             $table: $db.poiSets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> transitSetsRefs(
+    Expression<bool> Function($$TransitSetsTableFilterComposer f) f,
+  ) {
+    final $$TransitSetsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.transitSets,
+      getReferencedColumn: (t) => t.layerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TransitSetsTableFilterComposer(
+            $db: $db,
+            $table: $db.transitSets,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -8961,6 +11792,31 @@ class $$LayersTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> transitSetsRefs<T extends Object>(
+    Expression<T> Function($$TransitSetsTableAnnotationComposer a) f,
+  ) {
+    final $$TransitSetsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.transitSets,
+      getReferencedColumn: (t) => t.layerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TransitSetsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.transitSets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LayersTableTableManager
@@ -8984,6 +11840,7 @@ class $$LayersTableTableManager
             bool freeAreasRefs,
             bool heightRegionsRefs,
             bool poiSetsRefs,
+            bool transitSetsRefs,
           })
         > {
   $$LayersTableTableManager(_$AppDatabase db, $LayersTable table)
@@ -9060,6 +11917,7 @@ class $$LayersTableTableManager
                 freeAreasRefs = false,
                 heightRegionsRefs = false,
                 poiSetsRefs = false,
+                transitSetsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -9071,6 +11929,7 @@ class $$LayersTableTableManager
                     if (freeAreasRefs) db.freeAreas,
                     if (heightRegionsRefs) db.heightRegions,
                     if (poiSetsRefs) db.poiSets,
+                    if (transitSetsRefs) db.transitSets,
                   ],
                   addJoins: null,
                   getPrefetchedDataCallback: (items) async {
@@ -9206,6 +12065,27 @@ class $$LayersTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (transitSetsRefs)
+                        await $_getPrefetchedData<
+                          Layer,
+                          $LayersTable,
+                          TransitSet
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LayersTableReferences
+                              ._transitSetsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LayersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).transitSetsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.layerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -9234,6 +12114,7 @@ typedef $$LayersTableProcessedTableManager =
         bool freeAreasRefs,
         bool heightRegionsRefs,
         bool poiSetsRefs,
+        bool transitSetsRefs,
       })
     >;
 typedef $$CirclesTableCreateCompanionBuilder =
@@ -14809,6 +17690,2603 @@ typedef $$PoiPointsTableProcessedTableManager =
       PoiPoint,
       PrefetchHooks Function({bool poiSetId})
     >;
+typedef $$TransitSetsTableCreateCompanionBuilder =
+    TransitSetsCompanion Function({
+      required String id,
+      required String layerId,
+      required double south,
+      required double west,
+      required double north,
+      required double east,
+      required int modeMask,
+      Value<String?> label,
+      Value<DateTime> fetchedAt,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$TransitSetsTableUpdateCompanionBuilder =
+    TransitSetsCompanion Function({
+      Value<String> id,
+      Value<String> layerId,
+      Value<double> south,
+      Value<double> west,
+      Value<double> north,
+      Value<double> east,
+      Value<int> modeMask,
+      Value<String?> label,
+      Value<DateTime> fetchedAt,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$TransitSetsTableReferences
+    extends BaseReferences<_$AppDatabase, $TransitSetsTable, TransitSet> {
+  $$TransitSetsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $LayersTable _layerIdTable(_$AppDatabase db) => db.layers.createAlias(
+    $_aliasNameGenerator(db.transitSets.layerId, db.layers.id),
+  );
+
+  $$LayersTableProcessedTableManager get layerId {
+    final $_column = $_itemColumn<String>('layer_id')!;
+
+    final manager = $$LayersTableTableManager(
+      $_db,
+      $_db.layers,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_layerIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$TransitRoutesTable, List<TransitRoute>>
+  _transitRoutesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.transitRoutes,
+    aliasName: $_aliasNameGenerator(db.transitSets.id, db.transitRoutes.setId),
+  );
+
+  $$TransitRoutesTableProcessedTableManager get transitRoutesRefs {
+    final manager = $$TransitRoutesTableTableManager(
+      $_db,
+      $_db.transitRoutes,
+    ).filter((f) => f.setId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_transitRoutesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$TransitStopsTable, List<TransitStop>>
+  _transitStopsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.transitStops,
+    aliasName: $_aliasNameGenerator(db.transitSets.id, db.transitStops.setId),
+  );
+
+  $$TransitStopsTableProcessedTableManager get transitStopsRefs {
+    final manager = $$TransitStopsTableTableManager(
+      $_db,
+      $_db.transitStops,
+    ).filter((f) => f.setId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_transitStopsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$TransitSetsTableFilterComposer
+    extends Composer<_$AppDatabase, $TransitSetsTable> {
+  $$TransitSetsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get south => $composableBuilder(
+    column: $table.south,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get west => $composableBuilder(
+    column: $table.west,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get north => $composableBuilder(
+    column: $table.north,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get east => $composableBuilder(
+    column: $table.east,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get modeMask => $composableBuilder(
+    column: $table.modeMask,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get fetchedAt => $composableBuilder(
+    column: $table.fetchedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$LayersTableFilterComposer get layerId {
+    final $$LayersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.layerId,
+      referencedTable: $db.layers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LayersTableFilterComposer(
+            $db: $db,
+            $table: $db.layers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> transitRoutesRefs(
+    Expression<bool> Function($$TransitRoutesTableFilterComposer f) f,
+  ) {
+    final $$TransitRoutesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.transitRoutes,
+      getReferencedColumn: (t) => t.setId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TransitRoutesTableFilterComposer(
+            $db: $db,
+            $table: $db.transitRoutes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> transitStopsRefs(
+    Expression<bool> Function($$TransitStopsTableFilterComposer f) f,
+  ) {
+    final $$TransitStopsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.transitStops,
+      getReferencedColumn: (t) => t.setId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TransitStopsTableFilterComposer(
+            $db: $db,
+            $table: $db.transitStops,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$TransitSetsTableOrderingComposer
+    extends Composer<_$AppDatabase, $TransitSetsTable> {
+  $$TransitSetsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get south => $composableBuilder(
+    column: $table.south,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get west => $composableBuilder(
+    column: $table.west,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get north => $composableBuilder(
+    column: $table.north,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get east => $composableBuilder(
+    column: $table.east,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get modeMask => $composableBuilder(
+    column: $table.modeMask,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get fetchedAt => $composableBuilder(
+    column: $table.fetchedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$LayersTableOrderingComposer get layerId {
+    final $$LayersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.layerId,
+      referencedTable: $db.layers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LayersTableOrderingComposer(
+            $db: $db,
+            $table: $db.layers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$TransitSetsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $TransitSetsTable> {
+  $$TransitSetsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<double> get south =>
+      $composableBuilder(column: $table.south, builder: (column) => column);
+
+  GeneratedColumn<double> get west =>
+      $composableBuilder(column: $table.west, builder: (column) => column);
+
+  GeneratedColumn<double> get north =>
+      $composableBuilder(column: $table.north, builder: (column) => column);
+
+  GeneratedColumn<double> get east =>
+      $composableBuilder(column: $table.east, builder: (column) => column);
+
+  GeneratedColumn<int> get modeMask =>
+      $composableBuilder(column: $table.modeMask, builder: (column) => column);
+
+  GeneratedColumn<String> get label =>
+      $composableBuilder(column: $table.label, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get fetchedAt =>
+      $composableBuilder(column: $table.fetchedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$LayersTableAnnotationComposer get layerId {
+    final $$LayersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.layerId,
+      referencedTable: $db.layers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LayersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.layers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> transitRoutesRefs<T extends Object>(
+    Expression<T> Function($$TransitRoutesTableAnnotationComposer a) f,
+  ) {
+    final $$TransitRoutesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.transitRoutes,
+      getReferencedColumn: (t) => t.setId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TransitRoutesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.transitRoutes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> transitStopsRefs<T extends Object>(
+    Expression<T> Function($$TransitStopsTableAnnotationComposer a) f,
+  ) {
+    final $$TransitStopsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.transitStops,
+      getReferencedColumn: (t) => t.setId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TransitStopsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.transitStops,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$TransitSetsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $TransitSetsTable,
+          TransitSet,
+          $$TransitSetsTableFilterComposer,
+          $$TransitSetsTableOrderingComposer,
+          $$TransitSetsTableAnnotationComposer,
+          $$TransitSetsTableCreateCompanionBuilder,
+          $$TransitSetsTableUpdateCompanionBuilder,
+          (TransitSet, $$TransitSetsTableReferences),
+          TransitSet,
+          PrefetchHooks Function({
+            bool layerId,
+            bool transitRoutesRefs,
+            bool transitStopsRefs,
+          })
+        > {
+  $$TransitSetsTableTableManager(_$AppDatabase db, $TransitSetsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$TransitSetsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$TransitSetsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$TransitSetsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> layerId = const Value.absent(),
+                Value<double> south = const Value.absent(),
+                Value<double> west = const Value.absent(),
+                Value<double> north = const Value.absent(),
+                Value<double> east = const Value.absent(),
+                Value<int> modeMask = const Value.absent(),
+                Value<String?> label = const Value.absent(),
+                Value<DateTime> fetchedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => TransitSetsCompanion(
+                id: id,
+                layerId: layerId,
+                south: south,
+                west: west,
+                north: north,
+                east: east,
+                modeMask: modeMask,
+                label: label,
+                fetchedAt: fetchedAt,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String layerId,
+                required double south,
+                required double west,
+                required double north,
+                required double east,
+                required int modeMask,
+                Value<String?> label = const Value.absent(),
+                Value<DateTime> fetchedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => TransitSetsCompanion.insert(
+                id: id,
+                layerId: layerId,
+                south: south,
+                west: west,
+                north: north,
+                east: east,
+                modeMask: modeMask,
+                label: label,
+                fetchedAt: fetchedAt,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$TransitSetsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                layerId = false,
+                transitRoutesRefs = false,
+                transitStopsRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (transitRoutesRefs) db.transitRoutes,
+                    if (transitStopsRefs) db.transitStops,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (layerId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.layerId,
+                                    referencedTable:
+                                        $$TransitSetsTableReferences
+                                            ._layerIdTable(db),
+                                    referencedColumn:
+                                        $$TransitSetsTableReferences
+                                            ._layerIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (transitRoutesRefs)
+                        await $_getPrefetchedData<
+                          TransitSet,
+                          $TransitSetsTable,
+                          TransitRoute
+                        >(
+                          currentTable: table,
+                          referencedTable: $$TransitSetsTableReferences
+                              ._transitRoutesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$TransitSetsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).transitRoutesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.setId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (transitStopsRefs)
+                        await $_getPrefetchedData<
+                          TransitSet,
+                          $TransitSetsTable,
+                          TransitStop
+                        >(
+                          currentTable: table,
+                          referencedTable: $$TransitSetsTableReferences
+                              ._transitStopsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$TransitSetsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).transitStopsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.setId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$TransitSetsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $TransitSetsTable,
+      TransitSet,
+      $$TransitSetsTableFilterComposer,
+      $$TransitSetsTableOrderingComposer,
+      $$TransitSetsTableAnnotationComposer,
+      $$TransitSetsTableCreateCompanionBuilder,
+      $$TransitSetsTableUpdateCompanionBuilder,
+      (TransitSet, $$TransitSetsTableReferences),
+      TransitSet,
+      PrefetchHooks Function({
+        bool layerId,
+        bool transitRoutesRefs,
+        bool transitStopsRefs,
+      })
+    >;
+typedef $$TransitRoutesTableCreateCompanionBuilder =
+    TransitRoutesCompanion Function({
+      required String id,
+      required String setId,
+      required int osmId,
+      required String modeKey,
+      Value<String?> ref,
+      Value<String?> name,
+      Value<String?> operatorName,
+      Value<String?> colourHex,
+      Value<int?> colorArgb,
+      Value<bool> isVisible,
+      Value<int> stopCount,
+      Value<int> pointCount,
+      Value<int> sortOrder,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$TransitRoutesTableUpdateCompanionBuilder =
+    TransitRoutesCompanion Function({
+      Value<String> id,
+      Value<String> setId,
+      Value<int> osmId,
+      Value<String> modeKey,
+      Value<String?> ref,
+      Value<String?> name,
+      Value<String?> operatorName,
+      Value<String?> colourHex,
+      Value<int?> colorArgb,
+      Value<bool> isVisible,
+      Value<int> stopCount,
+      Value<int> pointCount,
+      Value<int> sortOrder,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$TransitRoutesTableReferences
+    extends BaseReferences<_$AppDatabase, $TransitRoutesTable, TransitRoute> {
+  $$TransitRoutesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $TransitSetsTable _setIdTable(_$AppDatabase db) =>
+      db.transitSets.createAlias(
+        $_aliasNameGenerator(db.transitRoutes.setId, db.transitSets.id),
+      );
+
+  $$TransitSetsTableProcessedTableManager get setId {
+    final $_column = $_itemColumn<String>('set_id')!;
+
+    final manager = $$TransitSetsTableTableManager(
+      $_db,
+      $_db.transitSets,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_setIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$TransitRoutePartsTable, List<TransitRoutePart>>
+  _transitRoutePartsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.transitRouteParts,
+        aliasName: $_aliasNameGenerator(
+          db.transitRoutes.id,
+          db.transitRouteParts.routeId,
+        ),
+      );
+
+  $$TransitRoutePartsTableProcessedTableManager get transitRoutePartsRefs {
+    final manager = $$TransitRoutePartsTableTableManager(
+      $_db,
+      $_db.transitRouteParts,
+    ).filter((f) => f.routeId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _transitRoutePartsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$TransitRouteStopsTable, List<TransitRouteStop>>
+  _transitRouteStopsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.transitRouteStops,
+        aliasName: $_aliasNameGenerator(
+          db.transitRoutes.id,
+          db.transitRouteStops.routeId,
+        ),
+      );
+
+  $$TransitRouteStopsTableProcessedTableManager get transitRouteStopsRefs {
+    final manager = $$TransitRouteStopsTableTableManager(
+      $_db,
+      $_db.transitRouteStops,
+    ).filter((f) => f.routeId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _transitRouteStopsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$TransitRoutesTableFilterComposer
+    extends Composer<_$AppDatabase, $TransitRoutesTable> {
+  $$TransitRoutesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get osmId => $composableBuilder(
+    column: $table.osmId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get modeKey => $composableBuilder(
+    column: $table.modeKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get ref => $composableBuilder(
+    column: $table.ref,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get operatorName => $composableBuilder(
+    column: $table.operatorName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get colourHex => $composableBuilder(
+    column: $table.colourHex,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorArgb => $composableBuilder(
+    column: $table.colorArgb,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isVisible => $composableBuilder(
+    column: $table.isVisible,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get stopCount => $composableBuilder(
+    column: $table.stopCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get pointCount => $composableBuilder(
+    column: $table.pointCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$TransitSetsTableFilterComposer get setId {
+    final $$TransitSetsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.setId,
+      referencedTable: $db.transitSets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TransitSetsTableFilterComposer(
+            $db: $db,
+            $table: $db.transitSets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> transitRoutePartsRefs(
+    Expression<bool> Function($$TransitRoutePartsTableFilterComposer f) f,
+  ) {
+    final $$TransitRoutePartsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.transitRouteParts,
+      getReferencedColumn: (t) => t.routeId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TransitRoutePartsTableFilterComposer(
+            $db: $db,
+            $table: $db.transitRouteParts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> transitRouteStopsRefs(
+    Expression<bool> Function($$TransitRouteStopsTableFilterComposer f) f,
+  ) {
+    final $$TransitRouteStopsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.transitRouteStops,
+      getReferencedColumn: (t) => t.routeId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TransitRouteStopsTableFilterComposer(
+            $db: $db,
+            $table: $db.transitRouteStops,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$TransitRoutesTableOrderingComposer
+    extends Composer<_$AppDatabase, $TransitRoutesTable> {
+  $$TransitRoutesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get osmId => $composableBuilder(
+    column: $table.osmId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get modeKey => $composableBuilder(
+    column: $table.modeKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get ref => $composableBuilder(
+    column: $table.ref,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get operatorName => $composableBuilder(
+    column: $table.operatorName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get colourHex => $composableBuilder(
+    column: $table.colourHex,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get colorArgb => $composableBuilder(
+    column: $table.colorArgb,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isVisible => $composableBuilder(
+    column: $table.isVisible,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get stopCount => $composableBuilder(
+    column: $table.stopCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get pointCount => $composableBuilder(
+    column: $table.pointCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$TransitSetsTableOrderingComposer get setId {
+    final $$TransitSetsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.setId,
+      referencedTable: $db.transitSets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TransitSetsTableOrderingComposer(
+            $db: $db,
+            $table: $db.transitSets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$TransitRoutesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $TransitRoutesTable> {
+  $$TransitRoutesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get osmId =>
+      $composableBuilder(column: $table.osmId, builder: (column) => column);
+
+  GeneratedColumn<String> get modeKey =>
+      $composableBuilder(column: $table.modeKey, builder: (column) => column);
+
+  GeneratedColumn<String> get ref =>
+      $composableBuilder(column: $table.ref, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get operatorName => $composableBuilder(
+    column: $table.operatorName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get colourHex =>
+      $composableBuilder(column: $table.colourHex, builder: (column) => column);
+
+  GeneratedColumn<int> get colorArgb =>
+      $composableBuilder(column: $table.colorArgb, builder: (column) => column);
+
+  GeneratedColumn<bool> get isVisible =>
+      $composableBuilder(column: $table.isVisible, builder: (column) => column);
+
+  GeneratedColumn<int> get stopCount =>
+      $composableBuilder(column: $table.stopCount, builder: (column) => column);
+
+  GeneratedColumn<int> get pointCount => $composableBuilder(
+    column: $table.pointCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$TransitSetsTableAnnotationComposer get setId {
+    final $$TransitSetsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.setId,
+      referencedTable: $db.transitSets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TransitSetsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.transitSets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> transitRoutePartsRefs<T extends Object>(
+    Expression<T> Function($$TransitRoutePartsTableAnnotationComposer a) f,
+  ) {
+    final $$TransitRoutePartsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.transitRouteParts,
+          getReferencedColumn: (t) => t.routeId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$TransitRoutePartsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.transitRouteParts,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> transitRouteStopsRefs<T extends Object>(
+    Expression<T> Function($$TransitRouteStopsTableAnnotationComposer a) f,
+  ) {
+    final $$TransitRouteStopsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.transitRouteStops,
+          getReferencedColumn: (t) => t.routeId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$TransitRouteStopsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.transitRouteStops,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$TransitRoutesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $TransitRoutesTable,
+          TransitRoute,
+          $$TransitRoutesTableFilterComposer,
+          $$TransitRoutesTableOrderingComposer,
+          $$TransitRoutesTableAnnotationComposer,
+          $$TransitRoutesTableCreateCompanionBuilder,
+          $$TransitRoutesTableUpdateCompanionBuilder,
+          (TransitRoute, $$TransitRoutesTableReferences),
+          TransitRoute,
+          PrefetchHooks Function({
+            bool setId,
+            bool transitRoutePartsRefs,
+            bool transitRouteStopsRefs,
+          })
+        > {
+  $$TransitRoutesTableTableManager(_$AppDatabase db, $TransitRoutesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$TransitRoutesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$TransitRoutesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$TransitRoutesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> setId = const Value.absent(),
+                Value<int> osmId = const Value.absent(),
+                Value<String> modeKey = const Value.absent(),
+                Value<String?> ref = const Value.absent(),
+                Value<String?> name = const Value.absent(),
+                Value<String?> operatorName = const Value.absent(),
+                Value<String?> colourHex = const Value.absent(),
+                Value<int?> colorArgb = const Value.absent(),
+                Value<bool> isVisible = const Value.absent(),
+                Value<int> stopCount = const Value.absent(),
+                Value<int> pointCount = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => TransitRoutesCompanion(
+                id: id,
+                setId: setId,
+                osmId: osmId,
+                modeKey: modeKey,
+                ref: ref,
+                name: name,
+                operatorName: operatorName,
+                colourHex: colourHex,
+                colorArgb: colorArgb,
+                isVisible: isVisible,
+                stopCount: stopCount,
+                pointCount: pointCount,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String setId,
+                required int osmId,
+                required String modeKey,
+                Value<String?> ref = const Value.absent(),
+                Value<String?> name = const Value.absent(),
+                Value<String?> operatorName = const Value.absent(),
+                Value<String?> colourHex = const Value.absent(),
+                Value<int?> colorArgb = const Value.absent(),
+                Value<bool> isVisible = const Value.absent(),
+                Value<int> stopCount = const Value.absent(),
+                Value<int> pointCount = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => TransitRoutesCompanion.insert(
+                id: id,
+                setId: setId,
+                osmId: osmId,
+                modeKey: modeKey,
+                ref: ref,
+                name: name,
+                operatorName: operatorName,
+                colourHex: colourHex,
+                colorArgb: colorArgb,
+                isVisible: isVisible,
+                stopCount: stopCount,
+                pointCount: pointCount,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$TransitRoutesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                setId = false,
+                transitRoutePartsRefs = false,
+                transitRouteStopsRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (transitRoutePartsRefs) db.transitRouteParts,
+                    if (transitRouteStopsRefs) db.transitRouteStops,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (setId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.setId,
+                                    referencedTable:
+                                        $$TransitRoutesTableReferences
+                                            ._setIdTable(db),
+                                    referencedColumn:
+                                        $$TransitRoutesTableReferences
+                                            ._setIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (transitRoutePartsRefs)
+                        await $_getPrefetchedData<
+                          TransitRoute,
+                          $TransitRoutesTable,
+                          TransitRoutePart
+                        >(
+                          currentTable: table,
+                          referencedTable: $$TransitRoutesTableReferences
+                              ._transitRoutePartsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$TransitRoutesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).transitRoutePartsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.routeId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (transitRouteStopsRefs)
+                        await $_getPrefetchedData<
+                          TransitRoute,
+                          $TransitRoutesTable,
+                          TransitRouteStop
+                        >(
+                          currentTable: table,
+                          referencedTable: $$TransitRoutesTableReferences
+                              ._transitRouteStopsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$TransitRoutesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).transitRouteStopsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.routeId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$TransitRoutesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $TransitRoutesTable,
+      TransitRoute,
+      $$TransitRoutesTableFilterComposer,
+      $$TransitRoutesTableOrderingComposer,
+      $$TransitRoutesTableAnnotationComposer,
+      $$TransitRoutesTableCreateCompanionBuilder,
+      $$TransitRoutesTableUpdateCompanionBuilder,
+      (TransitRoute, $$TransitRoutesTableReferences),
+      TransitRoute,
+      PrefetchHooks Function({
+        bool setId,
+        bool transitRoutePartsRefs,
+        bool transitRouteStopsRefs,
+      })
+    >;
+typedef $$TransitRoutePartsTableCreateCompanionBuilder =
+    TransitRoutePartsCompanion Function({
+      required String id,
+      required String routeId,
+      required int partIndex,
+      required int pointCount,
+      required String points,
+      required double south,
+      required double west,
+      required double north,
+      required double east,
+      Value<int> rowid,
+    });
+typedef $$TransitRoutePartsTableUpdateCompanionBuilder =
+    TransitRoutePartsCompanion Function({
+      Value<String> id,
+      Value<String> routeId,
+      Value<int> partIndex,
+      Value<int> pointCount,
+      Value<String> points,
+      Value<double> south,
+      Value<double> west,
+      Value<double> north,
+      Value<double> east,
+      Value<int> rowid,
+    });
+
+final class $$TransitRoutePartsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $TransitRoutePartsTable,
+          TransitRoutePart
+        > {
+  $$TransitRoutePartsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $TransitRoutesTable _routeIdTable(_$AppDatabase db) =>
+      db.transitRoutes.createAlias(
+        $_aliasNameGenerator(db.transitRouteParts.routeId, db.transitRoutes.id),
+      );
+
+  $$TransitRoutesTableProcessedTableManager get routeId {
+    final $_column = $_itemColumn<String>('route_id')!;
+
+    final manager = $$TransitRoutesTableTableManager(
+      $_db,
+      $_db.transitRoutes,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_routeIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$TransitRoutePartsTableFilterComposer
+    extends Composer<_$AppDatabase, $TransitRoutePartsTable> {
+  $$TransitRoutePartsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get partIndex => $composableBuilder(
+    column: $table.partIndex,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get pointCount => $composableBuilder(
+    column: $table.pointCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get points => $composableBuilder(
+    column: $table.points,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get south => $composableBuilder(
+    column: $table.south,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get west => $composableBuilder(
+    column: $table.west,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get north => $composableBuilder(
+    column: $table.north,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get east => $composableBuilder(
+    column: $table.east,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$TransitRoutesTableFilterComposer get routeId {
+    final $$TransitRoutesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.routeId,
+      referencedTable: $db.transitRoutes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TransitRoutesTableFilterComposer(
+            $db: $db,
+            $table: $db.transitRoutes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$TransitRoutePartsTableOrderingComposer
+    extends Composer<_$AppDatabase, $TransitRoutePartsTable> {
+  $$TransitRoutePartsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get partIndex => $composableBuilder(
+    column: $table.partIndex,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get pointCount => $composableBuilder(
+    column: $table.pointCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get points => $composableBuilder(
+    column: $table.points,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get south => $composableBuilder(
+    column: $table.south,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get west => $composableBuilder(
+    column: $table.west,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get north => $composableBuilder(
+    column: $table.north,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get east => $composableBuilder(
+    column: $table.east,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$TransitRoutesTableOrderingComposer get routeId {
+    final $$TransitRoutesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.routeId,
+      referencedTable: $db.transitRoutes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TransitRoutesTableOrderingComposer(
+            $db: $db,
+            $table: $db.transitRoutes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$TransitRoutePartsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $TransitRoutePartsTable> {
+  $$TransitRoutePartsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get partIndex =>
+      $composableBuilder(column: $table.partIndex, builder: (column) => column);
+
+  GeneratedColumn<int> get pointCount => $composableBuilder(
+    column: $table.pointCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get points =>
+      $composableBuilder(column: $table.points, builder: (column) => column);
+
+  GeneratedColumn<double> get south =>
+      $composableBuilder(column: $table.south, builder: (column) => column);
+
+  GeneratedColumn<double> get west =>
+      $composableBuilder(column: $table.west, builder: (column) => column);
+
+  GeneratedColumn<double> get north =>
+      $composableBuilder(column: $table.north, builder: (column) => column);
+
+  GeneratedColumn<double> get east =>
+      $composableBuilder(column: $table.east, builder: (column) => column);
+
+  $$TransitRoutesTableAnnotationComposer get routeId {
+    final $$TransitRoutesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.routeId,
+      referencedTable: $db.transitRoutes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TransitRoutesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.transitRoutes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$TransitRoutePartsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $TransitRoutePartsTable,
+          TransitRoutePart,
+          $$TransitRoutePartsTableFilterComposer,
+          $$TransitRoutePartsTableOrderingComposer,
+          $$TransitRoutePartsTableAnnotationComposer,
+          $$TransitRoutePartsTableCreateCompanionBuilder,
+          $$TransitRoutePartsTableUpdateCompanionBuilder,
+          (TransitRoutePart, $$TransitRoutePartsTableReferences),
+          TransitRoutePart,
+          PrefetchHooks Function({bool routeId})
+        > {
+  $$TransitRoutePartsTableTableManager(
+    _$AppDatabase db,
+    $TransitRoutePartsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$TransitRoutePartsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$TransitRoutePartsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$TransitRoutePartsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> routeId = const Value.absent(),
+                Value<int> partIndex = const Value.absent(),
+                Value<int> pointCount = const Value.absent(),
+                Value<String> points = const Value.absent(),
+                Value<double> south = const Value.absent(),
+                Value<double> west = const Value.absent(),
+                Value<double> north = const Value.absent(),
+                Value<double> east = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => TransitRoutePartsCompanion(
+                id: id,
+                routeId: routeId,
+                partIndex: partIndex,
+                pointCount: pointCount,
+                points: points,
+                south: south,
+                west: west,
+                north: north,
+                east: east,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String routeId,
+                required int partIndex,
+                required int pointCount,
+                required String points,
+                required double south,
+                required double west,
+                required double north,
+                required double east,
+                Value<int> rowid = const Value.absent(),
+              }) => TransitRoutePartsCompanion.insert(
+                id: id,
+                routeId: routeId,
+                partIndex: partIndex,
+                pointCount: pointCount,
+                points: points,
+                south: south,
+                west: west,
+                north: north,
+                east: east,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$TransitRoutePartsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({routeId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (routeId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.routeId,
+                                referencedTable:
+                                    $$TransitRoutePartsTableReferences
+                                        ._routeIdTable(db),
+                                referencedColumn:
+                                    $$TransitRoutePartsTableReferences
+                                        ._routeIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$TransitRoutePartsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $TransitRoutePartsTable,
+      TransitRoutePart,
+      $$TransitRoutePartsTableFilterComposer,
+      $$TransitRoutePartsTableOrderingComposer,
+      $$TransitRoutePartsTableAnnotationComposer,
+      $$TransitRoutePartsTableCreateCompanionBuilder,
+      $$TransitRoutePartsTableUpdateCompanionBuilder,
+      (TransitRoutePart, $$TransitRoutePartsTableReferences),
+      TransitRoutePart,
+      PrefetchHooks Function({bool routeId})
+    >;
+typedef $$TransitStopsTableCreateCompanionBuilder =
+    TransitStopsCompanion Function({
+      required String id,
+      required String setId,
+      required int osmId,
+      required double lat,
+      required double lng,
+      Value<String?> name,
+      Value<int> modeMask,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$TransitStopsTableUpdateCompanionBuilder =
+    TransitStopsCompanion Function({
+      Value<String> id,
+      Value<String> setId,
+      Value<int> osmId,
+      Value<double> lat,
+      Value<double> lng,
+      Value<String?> name,
+      Value<int> modeMask,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$TransitStopsTableReferences
+    extends BaseReferences<_$AppDatabase, $TransitStopsTable, TransitStop> {
+  $$TransitStopsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $TransitSetsTable _setIdTable(_$AppDatabase db) =>
+      db.transitSets.createAlias(
+        $_aliasNameGenerator(db.transitStops.setId, db.transitSets.id),
+      );
+
+  $$TransitSetsTableProcessedTableManager get setId {
+    final $_column = $_itemColumn<String>('set_id')!;
+
+    final manager = $$TransitSetsTableTableManager(
+      $_db,
+      $_db.transitSets,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_setIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$TransitRouteStopsTable, List<TransitRouteStop>>
+  _transitRouteStopsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.transitRouteStops,
+        aliasName: $_aliasNameGenerator(
+          db.transitStops.id,
+          db.transitRouteStops.stopId,
+        ),
+      );
+
+  $$TransitRouteStopsTableProcessedTableManager get transitRouteStopsRefs {
+    final manager = $$TransitRouteStopsTableTableManager(
+      $_db,
+      $_db.transitRouteStops,
+    ).filter((f) => f.stopId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _transitRouteStopsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$TransitStopsTableFilterComposer
+    extends Composer<_$AppDatabase, $TransitStopsTable> {
+  $$TransitStopsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get osmId => $composableBuilder(
+    column: $table.osmId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get lat => $composableBuilder(
+    column: $table.lat,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get lng => $composableBuilder(
+    column: $table.lng,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get modeMask => $composableBuilder(
+    column: $table.modeMask,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$TransitSetsTableFilterComposer get setId {
+    final $$TransitSetsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.setId,
+      referencedTable: $db.transitSets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TransitSetsTableFilterComposer(
+            $db: $db,
+            $table: $db.transitSets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> transitRouteStopsRefs(
+    Expression<bool> Function($$TransitRouteStopsTableFilterComposer f) f,
+  ) {
+    final $$TransitRouteStopsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.transitRouteStops,
+      getReferencedColumn: (t) => t.stopId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TransitRouteStopsTableFilterComposer(
+            $db: $db,
+            $table: $db.transitRouteStops,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$TransitStopsTableOrderingComposer
+    extends Composer<_$AppDatabase, $TransitStopsTable> {
+  $$TransitStopsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get osmId => $composableBuilder(
+    column: $table.osmId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get lat => $composableBuilder(
+    column: $table.lat,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get lng => $composableBuilder(
+    column: $table.lng,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get modeMask => $composableBuilder(
+    column: $table.modeMask,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$TransitSetsTableOrderingComposer get setId {
+    final $$TransitSetsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.setId,
+      referencedTable: $db.transitSets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TransitSetsTableOrderingComposer(
+            $db: $db,
+            $table: $db.transitSets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$TransitStopsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $TransitStopsTable> {
+  $$TransitStopsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get osmId =>
+      $composableBuilder(column: $table.osmId, builder: (column) => column);
+
+  GeneratedColumn<double> get lat =>
+      $composableBuilder(column: $table.lat, builder: (column) => column);
+
+  GeneratedColumn<double> get lng =>
+      $composableBuilder(column: $table.lng, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<int> get modeMask =>
+      $composableBuilder(column: $table.modeMask, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$TransitSetsTableAnnotationComposer get setId {
+    final $$TransitSetsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.setId,
+      referencedTable: $db.transitSets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TransitSetsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.transitSets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> transitRouteStopsRefs<T extends Object>(
+    Expression<T> Function($$TransitRouteStopsTableAnnotationComposer a) f,
+  ) {
+    final $$TransitRouteStopsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.transitRouteStops,
+          getReferencedColumn: (t) => t.stopId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$TransitRouteStopsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.transitRouteStops,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$TransitStopsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $TransitStopsTable,
+          TransitStop,
+          $$TransitStopsTableFilterComposer,
+          $$TransitStopsTableOrderingComposer,
+          $$TransitStopsTableAnnotationComposer,
+          $$TransitStopsTableCreateCompanionBuilder,
+          $$TransitStopsTableUpdateCompanionBuilder,
+          (TransitStop, $$TransitStopsTableReferences),
+          TransitStop,
+          PrefetchHooks Function({bool setId, bool transitRouteStopsRefs})
+        > {
+  $$TransitStopsTableTableManager(_$AppDatabase db, $TransitStopsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$TransitStopsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$TransitStopsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$TransitStopsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> setId = const Value.absent(),
+                Value<int> osmId = const Value.absent(),
+                Value<double> lat = const Value.absent(),
+                Value<double> lng = const Value.absent(),
+                Value<String?> name = const Value.absent(),
+                Value<int> modeMask = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => TransitStopsCompanion(
+                id: id,
+                setId: setId,
+                osmId: osmId,
+                lat: lat,
+                lng: lng,
+                name: name,
+                modeMask: modeMask,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String setId,
+                required int osmId,
+                required double lat,
+                required double lng,
+                Value<String?> name = const Value.absent(),
+                Value<int> modeMask = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => TransitStopsCompanion.insert(
+                id: id,
+                setId: setId,
+                osmId: osmId,
+                lat: lat,
+                lng: lng,
+                name: name,
+                modeMask: modeMask,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$TransitStopsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({setId = false, transitRouteStopsRefs = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (transitRouteStopsRefs) db.transitRouteStops,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (setId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.setId,
+                                    referencedTable:
+                                        $$TransitStopsTableReferences
+                                            ._setIdTable(db),
+                                    referencedColumn:
+                                        $$TransitStopsTableReferences
+                                            ._setIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (transitRouteStopsRefs)
+                        await $_getPrefetchedData<
+                          TransitStop,
+                          $TransitStopsTable,
+                          TransitRouteStop
+                        >(
+                          currentTable: table,
+                          referencedTable: $$TransitStopsTableReferences
+                              ._transitRouteStopsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$TransitStopsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).transitRouteStopsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.stopId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$TransitStopsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $TransitStopsTable,
+      TransitStop,
+      $$TransitStopsTableFilterComposer,
+      $$TransitStopsTableOrderingComposer,
+      $$TransitStopsTableAnnotationComposer,
+      $$TransitStopsTableCreateCompanionBuilder,
+      $$TransitStopsTableUpdateCompanionBuilder,
+      (TransitStop, $$TransitStopsTableReferences),
+      TransitStop,
+      PrefetchHooks Function({bool setId, bool transitRouteStopsRefs})
+    >;
+typedef $$TransitRouteStopsTableCreateCompanionBuilder =
+    TransitRouteStopsCompanion Function({
+      required String routeId,
+      required String stopId,
+      required int sortOrder,
+      Value<int> rowid,
+    });
+typedef $$TransitRouteStopsTableUpdateCompanionBuilder =
+    TransitRouteStopsCompanion Function({
+      Value<String> routeId,
+      Value<String> stopId,
+      Value<int> sortOrder,
+      Value<int> rowid,
+    });
+
+final class $$TransitRouteStopsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $TransitRouteStopsTable,
+          TransitRouteStop
+        > {
+  $$TransitRouteStopsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $TransitRoutesTable _routeIdTable(_$AppDatabase db) =>
+      db.transitRoutes.createAlias(
+        $_aliasNameGenerator(db.transitRouteStops.routeId, db.transitRoutes.id),
+      );
+
+  $$TransitRoutesTableProcessedTableManager get routeId {
+    final $_column = $_itemColumn<String>('route_id')!;
+
+    final manager = $$TransitRoutesTableTableManager(
+      $_db,
+      $_db.transitRoutes,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_routeIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $TransitStopsTable _stopIdTable(_$AppDatabase db) =>
+      db.transitStops.createAlias(
+        $_aliasNameGenerator(db.transitRouteStops.stopId, db.transitStops.id),
+      );
+
+  $$TransitStopsTableProcessedTableManager get stopId {
+    final $_column = $_itemColumn<String>('stop_id')!;
+
+    final manager = $$TransitStopsTableTableManager(
+      $_db,
+      $_db.transitStops,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_stopIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$TransitRouteStopsTableFilterComposer
+    extends Composer<_$AppDatabase, $TransitRouteStopsTable> {
+  $$TransitRouteStopsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$TransitRoutesTableFilterComposer get routeId {
+    final $$TransitRoutesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.routeId,
+      referencedTable: $db.transitRoutes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TransitRoutesTableFilterComposer(
+            $db: $db,
+            $table: $db.transitRoutes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$TransitStopsTableFilterComposer get stopId {
+    final $$TransitStopsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.stopId,
+      referencedTable: $db.transitStops,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TransitStopsTableFilterComposer(
+            $db: $db,
+            $table: $db.transitStops,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$TransitRouteStopsTableOrderingComposer
+    extends Composer<_$AppDatabase, $TransitRouteStopsTable> {
+  $$TransitRouteStopsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$TransitRoutesTableOrderingComposer get routeId {
+    final $$TransitRoutesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.routeId,
+      referencedTable: $db.transitRoutes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TransitRoutesTableOrderingComposer(
+            $db: $db,
+            $table: $db.transitRoutes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$TransitStopsTableOrderingComposer get stopId {
+    final $$TransitStopsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.stopId,
+      referencedTable: $db.transitStops,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TransitStopsTableOrderingComposer(
+            $db: $db,
+            $table: $db.transitStops,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$TransitRouteStopsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $TransitRouteStopsTable> {
+  $$TransitRouteStopsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  $$TransitRoutesTableAnnotationComposer get routeId {
+    final $$TransitRoutesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.routeId,
+      referencedTable: $db.transitRoutes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TransitRoutesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.transitRoutes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$TransitStopsTableAnnotationComposer get stopId {
+    final $$TransitStopsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.stopId,
+      referencedTable: $db.transitStops,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TransitStopsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.transitStops,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$TransitRouteStopsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $TransitRouteStopsTable,
+          TransitRouteStop,
+          $$TransitRouteStopsTableFilterComposer,
+          $$TransitRouteStopsTableOrderingComposer,
+          $$TransitRouteStopsTableAnnotationComposer,
+          $$TransitRouteStopsTableCreateCompanionBuilder,
+          $$TransitRouteStopsTableUpdateCompanionBuilder,
+          (TransitRouteStop, $$TransitRouteStopsTableReferences),
+          TransitRouteStop,
+          PrefetchHooks Function({bool routeId, bool stopId})
+        > {
+  $$TransitRouteStopsTableTableManager(
+    _$AppDatabase db,
+    $TransitRouteStopsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$TransitRouteStopsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$TransitRouteStopsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$TransitRouteStopsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> routeId = const Value.absent(),
+                Value<String> stopId = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => TransitRouteStopsCompanion(
+                routeId: routeId,
+                stopId: stopId,
+                sortOrder: sortOrder,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String routeId,
+                required String stopId,
+                required int sortOrder,
+                Value<int> rowid = const Value.absent(),
+              }) => TransitRouteStopsCompanion.insert(
+                routeId: routeId,
+                stopId: stopId,
+                sortOrder: sortOrder,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$TransitRouteStopsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({routeId = false, stopId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (routeId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.routeId,
+                                referencedTable:
+                                    $$TransitRouteStopsTableReferences
+                                        ._routeIdTable(db),
+                                referencedColumn:
+                                    $$TransitRouteStopsTableReferences
+                                        ._routeIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+                    if (stopId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.stopId,
+                                referencedTable:
+                                    $$TransitRouteStopsTableReferences
+                                        ._stopIdTable(db),
+                                referencedColumn:
+                                    $$TransitRouteStopsTableReferences
+                                        ._stopIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$TransitRouteStopsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $TransitRouteStopsTable,
+      TransitRouteStop,
+      $$TransitRouteStopsTableFilterComposer,
+      $$TransitRouteStopsTableOrderingComposer,
+      $$TransitRouteStopsTableAnnotationComposer,
+      $$TransitRouteStopsTableCreateCompanionBuilder,
+      $$TransitRouteStopsTableUpdateCompanionBuilder,
+      (TransitRouteStop, $$TransitRouteStopsTableReferences),
+      TransitRouteStop,
+      PrefetchHooks Function({bool routeId, bool stopId})
+    >;
 typedef $$TileCacheTableCreateCompanionBuilder =
     TileCacheCompanion Function({
       required String url,
@@ -15325,6 +20803,16 @@ class $AppDatabaseManager {
       $$PoiSetsTableTableManager(_db, _db.poiSets);
   $$PoiPointsTableTableManager get poiPoints =>
       $$PoiPointsTableTableManager(_db, _db.poiPoints);
+  $$TransitSetsTableTableManager get transitSets =>
+      $$TransitSetsTableTableManager(_db, _db.transitSets);
+  $$TransitRoutesTableTableManager get transitRoutes =>
+      $$TransitRoutesTableTableManager(_db, _db.transitRoutes);
+  $$TransitRoutePartsTableTableManager get transitRouteParts =>
+      $$TransitRoutePartsTableTableManager(_db, _db.transitRouteParts);
+  $$TransitStopsTableTableManager get transitStops =>
+      $$TransitStopsTableTableManager(_db, _db.transitStops);
+  $$TransitRouteStopsTableTableManager get transitRouteStops =>
+      $$TransitRouteStopsTableTableManager(_db, _db.transitRouteStops);
   $$TileCacheTableTableManager get tileCache =>
       $$TileCacheTableTableManager(_db, _db.tileCache);
   $$OverpassCacheTableTableManager get overpassCache =>

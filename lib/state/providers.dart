@@ -88,6 +88,33 @@ final poiPointsProvider = StreamProvider<List<PoiPoint>>((ref) {
   return ref.watch(repositoryProvider).watchAllPoiPoints();
 });
 
+/// Reactive list of every public-transport import across all layers.
+final transitSetsProvider = StreamProvider<List<TransitSet>>((ref) {
+  return ref.watch(repositoryProvider).watchAllTransitSets();
+});
+
+/// Reactive list of every imported route (across all sets), ordered.
+final transitRoutesProvider = StreamProvider<List<TransitRoute>>((ref) {
+  return ref.watch(repositoryProvider).watchAllTransitRoutes();
+});
+
+/// Reactive list of every route geometry part (across all routes), ordered.
+final transitRoutePartsProvider =
+    StreamProvider<List<TransitRoutePart>>((ref) {
+  return ref.watch(repositoryProvider).watchAllTransitRouteParts();
+});
+
+/// Reactive list of every imported transit stop (across all sets).
+final transitStopsProvider = StreamProvider<List<TransitStop>>((ref) {
+  return ref.watch(repositoryProvider).watchAllTransitStops();
+});
+
+/// Reactive route↔stop join (across all sets), in ride order.
+final transitRouteStopsProvider =
+    StreamProvider<List<TransitRouteStop>>((ref) {
+  return ref.watch(repositoryProvider).watchAllTransitRouteStops();
+});
+
 /// App-wide settings (currently the global uncertainty radius).
 final settingsProvider = StreamProvider<AppSetting>((ref) {
   return ref.watch(repositoryProvider).watchSettings();
@@ -107,7 +134,8 @@ enum ObjectKind {
   freeLine,
   freeArea,
   heightRegion,
-  poiSet;
+  poiSet,
+  transitSet;
 
   /// The `Layers.type` string that holds this kind of object.
   String get layerType => switch (this) {
@@ -118,6 +146,7 @@ enum ObjectKind {
         ObjectKind.freeArea => 'freearea',
         ObjectKind.heightRegion => 'height',
         ObjectKind.poiSet => 'poi',
+        ObjectKind.transitSet => 'transit',
       };
 
   /// The kind a layer of [layerType] holds, or null for an unknown type.
@@ -129,6 +158,7 @@ enum ObjectKind {
         'freearea' => ObjectKind.freeArea,
         'height' => ObjectKind.heightRegion,
         'poi' => ObjectKind.poiSet,
+        'transit' => ObjectKind.transitSet,
         _ => null,
       };
 }
@@ -380,6 +410,7 @@ void selectObject(WidgetRef ref, ObjectKind kind, String id) {
     case ObjectKind.heightRegion:
       ref.read(selectedHeightRegionProvider.notifier).select(id);
     case ObjectKind.poiSet:
+    case ObjectKind.transitSet:
       break; // no editor sheet — nothing to select
   }
 }

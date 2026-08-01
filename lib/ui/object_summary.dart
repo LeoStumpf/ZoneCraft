@@ -69,6 +69,7 @@ IconData typeIcon(String layerType) => switch (layerType) {
       'freearea' => Icons.hexagon_outlined,
       'height' => Icons.terrain,
       'poi' => Icons.travel_explore,
+      'transit' => Icons.directions_transit,
       _ => Icons.circle_outlined,
     };
 
@@ -161,6 +162,9 @@ List<ObjectSummary> summariseLayer(
   List<HeightRegion> heightRegions = const [],
   List<PoiSet> poiSets = const [],
   List<PoiPoint> poiPoints = const [],
+  List<TransitSet> transitSets = const [],
+  List<TransitRoute> transitRoutes = const [],
+  List<TransitStop> transitStops = const [],
 }) {
   switch (layer.type) {
     case 'circles':
@@ -211,6 +215,13 @@ List<ObjectSummary> summariseLayer(
       return [
         for (var i = 0; i < rows.length; i++)
           _poiSetSummary(rows[i], layer.id, i, poiPoints),
+      ];
+    case 'transit':
+      final rows = _ordered(transitSets.where((s) => s.layerId == layer.id),
+          (s) => s.createdAt, (s) => s.id);
+      return [
+        for (var i = 0; i < rows.length; i++)
+          _transitSetSummary(rows[i], layer.id, i, transitRoutes, transitStops),
       ];
     default:
       return const [];
@@ -352,6 +363,44 @@ ObjectSummary _heightSummary(HeightRegion r, String layerId, int index) {
     fitPoints: _ringAround(center, r.radiusMeters),
   );
 }
+
+/// One public-transport import. The Elements row frames the **imported box**,
+/// which is the thing that was chosen; individual lines are reached through the
+/// Lines menu instead.
+ObjectSummary _transitSetSummary(
+  TransitSet s,
+  String layerId,
+  int index,
+  List<TransitRoute> allRoutes,
+  List<TransitStop> allStops,
+) {
+  final routes = allRoutes.where((r) => r.setId == s.id).length;
+  final stops = allStops.where((x) => x.setId == s.id).length;
+  final center =
+      LatLng((s.south + s.north) / 2, (s.west + s.east) / 2);
+  final width = geoDistance.as(
+      LengthUnit.Meter, LatLng(s.south, s.west), LatLng(s.south, s.east));
+  final height = geoDistance.as(
+      LengthUnit.Meter, LatLng(s.south, s.west), LatLng(s.north, s.west));
+  return ObjectSummary(
+    ref: ObjectRef(kind: ObjectKind.transitSet, id: s.id, layerId: layerId),
+    title: _titleOr(s.label, 'Transit import', index),
+    subtitle: '${_plural(routes, 'route')} · ${_plural(stops, 'stop')} · '
+        '${formatMeters(width)} × ${formatMeters(height)} · '
+        'imported ${_shortDate(s.fetchedAt)}',
+    center: center,
+    // An import is a snapshot with no refresh path, so framing it means framing
+    // exactly what was fetched.
+    fitPoints: [LatLng(s.south, s.west), LatLng(s.north, s.east)],
+  );
+}
+
+const List<String> _months = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+String _shortDate(DateTime d) => '${d.day} ${_months[d.month - 1]}';
 
 ObjectSummary _poiSetSummary(
   PoiSet s,

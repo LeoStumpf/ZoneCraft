@@ -151,12 +151,14 @@ Map<String, dynamic> _objectToFeature(ExportObject o, int layerIndex) {
       geometry = {'type': 'Point', 'coordinates': _pt(o.coords.first)};
     case 'plane':
     case 'freeline':
+    case 'transitline':
       geometry = {
         'type': 'LineString',
         'coordinates': [for (final c in o.coords) _pt(c)],
       };
     case 'subspace':
     case 'poi':
+    case 'transitstop':
       geometry = {
         'type': 'MultiPoint',
         'coordinates': [for (final c in o.coords) _pt(c)],
@@ -319,21 +321,15 @@ String exportToKml(ExportData data) {
       ..writeln('  <Folder>')
       ..writeln('    <name>${_xml(layer.name)}</name>');
     for (final o in layer.objects) {
+      // POI sets and transit stops are *collections* of named points, so they
+      // become one Placemark each rather than one Placemark of many points.
+      // For a POI set coords[0] is the search centre, not a POI — skip it.
       if (o.kind == 'poi') {
-        // One Placemark per stored POI (named markers in Google Earth);
-        // coords[0] is the search centre, not a POI — skip it.
-        for (var i = 1; i < o.coords.length; i++) {
-          final name = o.pointLabels != null && i - 1 < o.pointLabels!.length
-              ? o.pointLabels![i - 1]
-              : null;
-          b.writeln('    <Placemark>');
-          if (name != null && name.isNotEmpty) {
-            b.writeln('      <name>${_xml(name)}</name>');
-          }
-          b.writeln('      <Point><coordinates>'
-              '${_coord(o.coords[i])}</coordinates></Point>');
-          b.writeln('    </Placemark>');
-        }
+        _kmlPoints(b, o, from: 1);
+        continue;
+      }
+      if (o.kind == 'transitstop') {
+        _kmlPoints(b, o, from: 0);
         continue;
       }
       _kmlPlacemark(b, o);
@@ -360,6 +356,9 @@ void _kmlPlacemark(StringBuffer b, ExportObject o) {
       b.writeln(_kmlPolygon(o.coords));
     case 'plane':
     case 'freeline':
+    // Without this a route would fall into the default and export as a single
+    // dot at its first vertex.
+    case 'transitline':
       b.writeln(_kmlLine(o.coords));
     case 'subspace':
       b.writeln('      <MultiGeometry>');
@@ -373,6 +372,23 @@ void _kmlPlacemark(StringBuffer b, ExportObject o) {
           '${_coord(o.coords.first)}</coordinates></Point>');
   }
   b.writeln('    </Placemark>');
+}
+
+/// One `<Placemark>` per coordinate from [from] onward, named from
+/// [ExportObject.pointLabels] (which is aligned to `coords[from..]`).
+void _kmlPoints(StringBuffer b, ExportObject o, {required int from}) {
+  final labels = o.pointLabels ?? const <String?>[];
+  for (var i = from; i < o.coords.length; i++) {
+    final li = i - from;
+    final name = li < labels.length ? labels[li] : null;
+    b.writeln('    <Placemark>');
+    if (name != null && name.isNotEmpty) {
+      b.writeln('      <name>${_xml(name)}</name>');
+    }
+    b.writeln('      <Point><coordinates>'
+        '${_coord(o.coords[i])}</coordinates></Point>');
+    b.writeln('    </Placemark>');
+  }
 }
 
 String _kmlLine(List<LatLng> pts) =>

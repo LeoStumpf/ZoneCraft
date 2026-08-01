@@ -11,6 +11,15 @@ part 'database.g.dart';
 /// the repository (create default + v17 rescale) and the drawer agree.
 const double kDefaultRegionLayerOpacity = 0.45;
 
+/// The opacity a freshly created layer of [type] gets.
+///
+/// Marker/line layers ('poi', 'transit') are crisp at 1.0 — there is no fill to
+/// see the map through. One source of truth, because the repository (on create)
+/// and the drawer (deciding whether to show an opacity chip) must agree; they
+/// used to duplicate the rule inline, which is how a third type silently drifts.
+double defaultLayerOpacity(String type) =>
+    (type == 'poi' || type == 'transit') ? 1.0 : kDefaultRegionLayerOpacity;
+
 /// A map overlay layer. Layers stack on the map ordered by [sortOrder]
 /// (higher = drawn on top) and can be toggled on/off via [isVisible].
 ///
@@ -280,6 +289,130 @@ class PoiPoints extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// One public-transport import on a `transit` layer: every route in a chosen
+/// bounding box, fetched once (Overpass) and stored offline — the layer never
+/// refetches. A `transit` layer may hold several sets. The routes live in
+/// [TransitRoutes], their geometry in [TransitRouteParts], their stops in
+/// [TransitStops] joined through [TransitRouteStops].
+class TransitSets extends Table {
+  TextColumn get id => text()();
+  TextColumn get layerId =>
+      text().references(Layers, #id, onDelete: KeyAction.cascade)();
+
+  /// The imported bounding box.
+  RealColumn get south => real()();
+  RealColumn get west => real()();
+  RealColumn get north => real()();
+  RealColumn get east => real()();
+
+  /// Which modes were requested (packed `TransitMode.bit`s).
+  IntColumn get modeMask => integer()();
+  TextColumn get label => text().nullable()();
+
+  /// When the data was pulled from OSM — imports are snapshots with no refresh.
+  DateTimeColumn get fetchedAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// One route relation of a [TransitSets] import. OSM stores a relation per
+/// *direction*, so a line the user knows as "U6" is usually two of these; the
+/// Lines menu folds them by [ref].
+class TransitRoutes extends Table {
+  TextColumn get id => text()();
+  TextColumn get setId =>
+      text().references(TransitSets, #id, onDelete: KeyAction.cascade)();
+
+  /// The OSM relation id.
+  IntColumn get osmId => integer()();
+
+  /// `TransitMode.key` — picks the icon, stroke width and fallback colour.
+  TextColumn get modeKey => text()();
+  TextColumn get ref => text().nullable()();
+  TextColumn get name => text().nullable()();
+  TextColumn get operatorName => text().nullable()();
+
+  /// The raw OSM `colour` tag, kept for debugging/export.
+  TextColumn get colourHex => text().nullable()();
+
+  /// [colourHex] parsed to ARGB, or null to fall back to the mode palette.
+  IntColumn get colorArgb => integer().nullable()();
+
+  /// Whether this route is drawn. **This is what the Lines menu writes.**
+  BoolColumn get isVisible => boolean().withDefault(const Constant(true))();
+
+  IntColumn get stopCount => integer().withDefault(const Constant(0))();
+  IntColumn get pointCount => integer().withDefault(const Constant(0))();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// One connected run of a route's geometry, as an encoded `[[lat,lng],…]` blob.
+///
+/// A row per vertex — the convention every other object type follows — would put
+/// ~75 000 rows through the global streams for a single city import, so the
+/// points are packed (`encodeLatLngs`) and the run's bbox is denormalised so the
+/// renderer can cull off-screen parts **without decoding them**.
+///
+/// Several parts mean the route has genuine gaps (branches, loops, or pieces the
+/// bbox clip severed); they are never bridged.
+class TransitRouteParts extends Table {
+  TextColumn get id => text()();
+  TextColumn get routeId =>
+      text().references(TransitRoutes, #id, onDelete: KeyAction.cascade)();
+  IntColumn get partIndex => integer()();
+  IntColumn get pointCount => integer()();
+  TextColumn get points => text()();
+  RealColumn get south => real()();
+  RealColumn get west => real()();
+  RealColumn get north => real()();
+  RealColumn get east => real()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// A stop of a [TransitSets] import, deduped by OSM node id across the routes
+/// that serve it.
+class TransitStops extends Table {
+  TextColumn get id => text()();
+  TextColumn get setId =>
+      text().references(TransitSets, #id, onDelete: KeyAction.cascade)();
+  IntColumn get osmId => integer()();
+  RealColumn get lat => real()();
+  RealColumn get lng => real()();
+  TextColumn get name => text().nullable()();
+
+  /// The modes serving this stop (packed bits) — picks the marker icon.
+  IntColumn get modeMask => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Which routes serve which stops, in ride order.
+///
+/// **Invariant:** a stop is drawn iff *at least one visible route* serves it. So
+/// hiding U6 leaves Marienplatz on the map (the S-Bahn still stops there), and
+/// hiding every route that serves a stop hides it. That is exactly why this is a
+/// join and not a per-route copy or a per-set mode mask.
+class TransitRouteStops extends Table {
+  TextColumn get routeId =>
+      text().references(TransitRoutes, #id, onDelete: KeyAction.cascade)();
+  TextColumn get stopId =>
+      text().references(TransitStops, #id, onDelete: KeyAction.cascade)();
+  IntColumn get sortOrder => integer()();
+
+  @override
+  Set<Column> get primaryKey => {routeId, stopId};
+}
+
 /// On-disk cache of map tile images, keyed by their full fetch [url] (so the base
 /// OSM layer and the transport overlays — which have distinct URLs — share one
 /// table). Filled as tiles are browsed/prefetched; evicted least-recently-used
@@ -399,6 +532,11 @@ class AppSettings extends Table {
     HeightPolygonPoints,
     PoiSets,
     PoiPoints,
+    TransitSets,
+    TransitRoutes,
+    TransitRouteParts,
+    TransitStops,
+    TransitRouteStops,
     TileCache,
     OverpassCache,
   ],
@@ -410,7 +548,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 18;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -496,6 +634,15 @@ class AppDatabase extends _$AppDatabase {
               '$kDefaultRegionLayerOpacity '
               "WHERE type != 'poi'",
             );
+          }
+          if (from < 18) {
+            // The `transit` layer type. Purely additive — no existing table or
+            // row is touched, so this cannot disturb a v17 install.
+            await m.createTable(transitSets);
+            await m.createTable(transitRoutes);
+            await m.createTable(transitRouteParts);
+            await m.createTable(transitStops);
+            await m.createTable(transitRouteStops);
           }
         },
         beforeOpen: (details) async {

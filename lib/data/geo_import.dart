@@ -316,7 +316,19 @@ const double _maxStitchGapMeters = 50.0;
 /// Instead the parts form separate connected runs and the **longest** run (by
 /// geodesic length — the main channel) is returned. Returns empty if no part has
 /// ≥2 points.
-List<LatLng> stitchPolylines(List<List<LatLng>> parts) {
+///
+/// Callers that need *every* run — a transit route's branches and loops, or the
+/// pieces a bbox clip severed — want [stitchComponents] instead; throwing away
+/// all but the longest would silently delete half such a route.
+List<LatLng> stitchPolylines(List<List<LatLng>> parts) =>
+    stitchComponents(parts).firstOrNull ?? const [];
+
+/// Every connected run the [parts] form, longest (by geodesic length) first.
+///
+/// Parts are chained only across (near-)shared endpoints (≤
+/// [_maxStitchGapMeters]), reversing as needed; a larger gap ends the run and
+/// starts a new component. See [stitchPolylines] for why a gap is never bridged.
+List<List<LatLng>> stitchComponents(List<List<LatLng>> parts) {
   final remaining = <List<LatLng>>[
     for (final p in parts) if (p.length >= 2) List<LatLng>.of(p),
   ];
@@ -379,7 +391,7 @@ List<LatLng> stitchPolylines(List<List<LatLng>> parts) {
   }
 
   components.sort((a, b) => lengthMeters(b).compareTo(lengthMeters(a)));
-  return components.first;
+  return components;
 }
 
 /// Drops a ring's repeated closing vertex (first == last) if present.

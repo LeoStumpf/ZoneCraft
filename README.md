@@ -49,6 +49,10 @@ fill past the drawn boundary.
 **Optional map overlays** (toggled in Settings)
 - **Public transport** — transparent ÖPNVKarte (buses/trams/stops) + OpenRailwayMap (rail)
   tile overlays.
+- **Public transport** — pick an area (tap two corners) and import every OSM route in it —
+  bus, tram, subway, train, ferry — with its stops. Stored offline and drawn in each line's
+  own OSM colour; a per-layer **Lines** menu switches whole modes or individual lines on and
+  off. (Separate from the ÖPNVKarte/OpenRailwayMap *tile* overlay in Settings.)
 - **Points of interest** — OSMAnd-style OSM POI categories (benches, post boxes, drinking
   water, toilets, cafés, …) fetched from Overpass and shown as markers, only at high zoom.
 - **Administrative borders** — OSM `admin_level` boundaries (countries → … → suburbs), each a
@@ -87,7 +91,7 @@ possible follow-up.
 | Geo math | [`latlong2`](https://pub.dev/packages/latlong2) |
 | Local DB | [`drift`](https://pub.dev/packages/drift) + `drift_flutter` / `sqlite3_flutter_libs` |
 | State | [`flutter_riverpod`](https://pub.dev/packages/flutter_riverpod) |
-| Overlays | [`http`](https://pub.dev/packages/http) (Overpass API: POIs + borders) |
+| Overlays | [`http`](https://pub.dev/packages/http) (Overpass API: POIs, transit, borders) |
 | Location | [`geolocator`](https://pub.dev/packages/geolocator) (opt-in) |
 | Colour picker | [`flutter_colorpicker`](https://pub.dev/packages/flutter_colorpicker) |
 | Icon / splash | `flutter_launcher_icons`, `flutter_native_splash` (dev) |
@@ -98,7 +102,8 @@ possible follow-up.
 lib/
   data/   Drift schema + repository (Layers, Circles, Planes, Subspaces+points,
           FreeLines+points, FreeAreas+points, TileCache, OverpassCache, AppSettings);
-          Overpass clients for POIs (overpass.dart) and admin borders (borders.dart);
+          Overpass clients for POIs (overpass.dart), public transport
+          (transit.dart) and admin borders (borders.dart);
           offline tile cache (cached_tile_provider.dart)
   geo/    region geometry — geodesic.dart, plane.dart, subspace.dart,
           freeline.dart, freearea.dart — slippy-tile maths (tiles.dart),
@@ -138,7 +143,7 @@ flutter run                      # on a connected Android device
 flutter build apk --debug        # build an installable APK
 ```
 
-The local database is **schema v10**; installing with `-r` (as the build script does) preserves
+The local database is **schema v18**; installing with `-r` (as the build script does) preserves
 existing data and exercises the migrations.
 
 ## Roadmap

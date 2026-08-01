@@ -2,6 +2,8 @@ import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:latlong2/latlong.dart';
+
 import 'package:zonecraft/data/database.dart';
 import 'package:zonecraft/data/repository.dart';
 import 'package:zonecraft/state/providers.dart';
@@ -253,5 +255,56 @@ void main() {
 
     expect(rows.single.subtitle, '0 points');
     expect(rows.single.fitPoints, hasLength(1));
+  });
+
+  test('transit rows summarise the import, not the individual lines', () async {
+    final layerId = await repo.createLayer(
+        name: 'T', colorArgb: 0xFF123456, type: 'transit');
+    await repo.importTransitSet(
+      layerId: layerId,
+      south: 48.10,
+      west: 11.50,
+      north: 48.15,
+      east: 11.60,
+      modeMask: 0x4,
+      label: 'Centre',
+      routes: [
+        (
+          osmId: 1,
+          modeKey: 'subway',
+          ref: 'U6',
+          name: null,
+          operatorName: null,
+          colourHex: null,
+          colorArgb: null,
+          parts: [
+            [const LatLng(48.11, 11.51), const LatLng(48.12, 11.52)]
+          ],
+          stopIndices: [0],
+        ),
+      ],
+      stops: [(osmId: 9, lat: 48.11, lng: 11.51, name: 'A')],
+    );
+
+    final rows = summariseLayer(
+      await layerById(layerId),
+      transitSets: await db.select(db.transitSets).get(),
+      transitRoutes: await db.select(db.transitRoutes).get(),
+      transitStops: await db.select(db.transitStops).get(),
+    );
+
+    expect(rows, hasLength(1));
+    expect(rows.single.title, 'Centre');
+    expect(rows.single.ref.kind, ObjectKind.transitSet);
+    expect(rows.single.subtitle, startsWith('1 route · 1 stop · '));
+    expect(rows.single.subtitle, contains('imported '));
+    // "Zoom to" frames the box that was imported — exactly what was fetched.
+    expect(rows.single.fitPoints, hasLength(2));
+    expect(rows.single.fitPoints.first.latitude, closeTo(48.10, 1e-9));
+    expect(rows.single.fitPoints.last.longitude, closeTo(11.60, 1e-9));
+  });
+
+  test('typeIcon knows the transit type', () {
+    expect(typeIcon('transit'), isNot(typeIcon('unknown-type')));
   });
 }
