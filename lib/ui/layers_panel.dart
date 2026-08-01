@@ -9,7 +9,7 @@ import 'import_actions.dart';
 import 'layer_objects_sheet.dart';
 import 'object_summary.dart';
 import 'settings_screen.dart';
-import 'transit_lines_sheet.dart';
+import 'transit_modes_sheet.dart';
 
 /// Left-hand drawer for managing layers: list, choose active, visibility,
 /// reorder, colour, rename, inverse, delete, and add. Replaces the old bottom
@@ -46,8 +46,8 @@ class LayersDrawer extends ConsumerWidget {
         const <HeightRegion>[];
     final transitSets =
         ref.watch(transitSetsProvider).asData?.value ?? const <TransitSet>[];
-    final transitRoutes =
-        ref.watch(transitRoutesProvider).asData?.value ?? const <TransitRoute>[];
+    final transitStations =
+        ref.watch(transitStopsProvider).asData?.value ?? const <TransitStop>[];
     final selected = ref.watch(activeLayerProvider);
     final repo = ref.read(repositoryProvider);
 
@@ -228,14 +228,14 @@ class LayersDrawer extends ConsumerWidget {
                             .where((r) => r.layerId == layer.id)
                             .length;
                       } else if (layer.type == 'transit') {
-                        // Routes are the unit the user filters, so count those
-                        // rather than imports (the drawer would read "1").
+                        // Stations are the unit the user sees and filters, so
+                        // count those rather than imports (which would read 1).
                         final ids = transitSets
                             .where((t) => t.layerId == layer.id)
                             .map((t) => t.id)
                             .toSet();
-                        count = transitRoutes
-                            .where((r) => ids.contains(r.setId))
+                        count = transitStations
+                            .where((s) => ids.contains(s.setId))
                             .length;
                       } else if (layer.type == 'poi') {
                         final ids = poiSets
@@ -313,7 +313,7 @@ class _LayerTile extends ConsumerWidget {
       'freearea' => 'point',
       'height' => 'area',
       'poi' => 'POI',
-      'transit' => 'route',
+      'transit' => 'station',
       _ => 'circle',
     };
     final subtitle =
@@ -405,8 +405,8 @@ class _LayerTile extends ConsumerWidget {
                 case 'inverse':
                   await repo.updateLayer(layer.id,
                       isInverted: !layer.isInverted);
-                case 'lines':
-                  await _openLines(context, ref);
+                case 'stations':
+                  await _openStations(context, ref);
                 case 'importTrack':
                   await importTrackIntoLayer(context, repo, layer);
                 case 'export':
@@ -443,7 +443,8 @@ class _LayerTile extends ConsumerWidget {
                   child: Text(layer.isInverted ? 'Un-invert' : 'Invert'),
                 ),
               if (layer.type == 'transit')
-                const PopupMenuItem(value: 'lines', child: Text('Lines…')),
+                const PopupMenuItem(
+                    value: 'stations', child: Text('Stations…')),
               if (layer.type == 'freeline' || layer.type == 'freearea')
                 const PopupMenuItem(
                   value: 'importTrack',
@@ -473,13 +474,19 @@ class _LayerTile extends ConsumerWidget {
   Future<void> _openElements(BuildContext context, WidgetRef ref) async {
     final result = await showLayerObjects(context, layer);
     if (result == null || !context.mounted) return;
-    // The list can hand off to the Lines filter, which is about the layer
-    // rather than any one element.
-    if (result.action == ElementAction.lines) {
-      await _openLines(context, ref);
+    final target = result.target;
+    if (result.action == ElementAction.retry) {
+      // The map screen owns the import machinery, so ask it to re-run this one.
+      // Close the drawer *before* asking: the map answers by pushing a progress
+      // dialog, and — because a retry already has its set row, so nothing is
+      // awaited first — it pushes it synchronously. A pop issued afterwards
+      // would take that dialog instead of the drawer, leaving the drawer up and
+      // the spinner invisible while the import ran unseen.
+      final retry = ref.read(pendingTransitRetryProvider.notifier);
+      Navigator.pop(context);
+      retry.request(target.ref.id);
       return;
     }
-    final target = result.target!;
     if (result.action == ElementAction.edit) {
       // Selecting also makes the layer active, so the drag handles, the Add
       // button and the long-press context all follow the object being edited.
@@ -490,15 +497,11 @@ class _LayerTile extends ConsumerWidget {
     Navigator.pop(context); // close the drawer so the map is visible
   }
 
-  /// Opens the transit layer's line filter. Visibility is written inside the
-  /// sheet; only a "zoom to" comes back, and — as with [_openElements] — this is
-  /// the one place that pops the drawer.
-  Future<void> _openLines(BuildContext context, WidgetRef ref) async {
-    final result = await showTransitLines(context, layer);
-    if (result == null || !context.mounted) return;
-    ref.read(pendingFocusProvider.notifier).request(result.fitPoints);
-    Navigator.pop(context);
-  }
+  /// Opens the transit layer's station filter. Visibility is written inside the
+  /// sheet, so nothing comes back and the drawer stays open — unlike
+  /// [_openElements], which hands off to the map.
+  Future<void> _openStations(BuildContext context, WidgetRef ref) =>
+      showTransitModes(context, layer);
 
   Future<void> _rename(BuildContext context, Repository repo) async {
     final controller = TextEditingController(text: layer.name);

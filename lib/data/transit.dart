@@ -1,130 +1,144 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
-import '../geo/simplify.dart';
-import 'geo_import.dart' show stitchComponents;
-
-/// Public-transport routes and stops, fetched **once** from Overpass over a
-/// chosen bounding box and then stored offline (the `transit` layer type).
+/// Public-transport **stations**, fetched once from Overpass over a chosen
+/// bounding box and stored offline (the `transit` layer type).
 ///
-/// Shape of the import, verified against the live API:
+/// ## Why stations only
 ///
-/// * **Pre-flight** — `rel[…](bbox); out tags qt <cap>;` returns ids + tags and
-///   no geometry (~200 B/route), so the dialog can show exact per-mode counts
-///   and discover offline/rate-limit *before* the multi-megabyte request.
-/// * **Geometry** — `rel(id:…)->.r; .r out geom(bbox); node(r.r); out body qt;`
-///   The bbox on `out geom` clips member ways to the box (the single biggest
-///   payload lever). The second statement resolves stop **positions and names**,
-///   which the relation's own node members do not reliably carry.
+/// This layer used to fetch route relations *with geometry*. Measured against
+/// the live API, that is not reliably obtainable: a 25 × 40 km area returned
+/// `Dispatcher_Client::request_read_and_idx::timeout` (the public instance
+/// **queueing**, not a bad query) on three separate mirrors, and chunking it to
+/// 25 routes still failed. Stops, by contrast, are the cheapest thing Overpass
+/// does — all of Munich (30 × 33 km) came back in **5.7 s / 3.1 MB**.
 ///
-/// Two traps this file exists to encode:
-///  1. `out geom(bbox)` puts **`null` placeholders** where a way leaves the box.
-///     They must *split* the way into runs — dropping them would fabricate a
-///     straight connector across the gap (the same class of bug documented on
-///     [stitchComponents]).
-///  2. `node(r.r)(bbox)` — recursing **and** bbox-filtering in one statement
-///     makes the public instance time out (504). Recurse unfiltered and clip in
-///     Dart; the node payload is small.
+/// So: one nodes-only query, no relation traversal, no geometry, no line
+/// numbers. Each station records **which modes serve it**, which is what the
+/// filter needs and what 97 % of Munich's stop nodes tag directly on the node.
+///
+/// ## The merge matters
+///
+/// A physical stop is usually several OSM nodes — a `stop_position` per
+/// platform plus a `platform` node each. Munich's 8 215 raw nodes are only
+/// **3 629 real stations** (Pasing Bahnhof alone is 11 nodes within ~110 m), so
+/// [mergeStations] groups by name + proximity and unions their modes. Without
+/// it every count and every cluster badge would be roughly double the truth.
 
 // --- Mode catalogue ---------------------------------------------------------
 
-/// One transport mode: the OSM `route=` values folded into it, plus how it is
-/// drawn when a route carries no `colour` tag of its own.
+/// One transport mode. [tagKeys] doubles as the set of **stop tag keys** that
+/// mark this mode on a node (`bus=yes`, `tram=yes`, …) — PTv2 uses the same
+/// vocabulary for stops and routes, so one catalogue serves both.
 class TransitMode {
   const TransitMode({
     required this.key,
     required this.label,
-    required this.routeValues,
+    required this.blurb,
+    required this.tagKeys,
     required this.colorArgb,
-    required this.strokeWidth,
     required this.bit,
+    this.isRail = false,
   });
 
-  /// Stable identifier, persisted in `TransitRoutes.modeKey`.
+  /// Stable identifier, persisted in the mode masks.
   final String key;
   final String label;
 
-  /// The OSM `route=` values that map to this mode.
-  final List<String> routeValues;
+  /// One line saying what this actually is. "Light rail" and "Monorail" mean
+  /// nothing to most people, and even Tram/Subway are named differently
+  /// region to region — so the filter names the vehicle *and* gives an example.
+  final String blurb;
 
-  /// Fallback line colour when the route has no usable `colour` tag.
+  /// OSM tag keys that mean this mode is served here.
+  final List<String> tagKeys;
+
+  /// Swatch colour in the filter sheet.
   final int colorArgb;
-  final double strokeWidth;
 
-  /// Positional bit for the persisted mode mask.
+  /// Positional bit for the persisted mode masks.
   final int bit;
+
+  /// Whether "Rail only" includes this mode.
+  final bool isRail;
 }
 
 /// The supported modes. **Bits are positional and persisted in
-/// `TransitSets.modeMask` — append new entries, never reorder.**
+/// `TransitSets.modeMask`/`visibleModeMask` and `TransitStops.modeMask` —
+/// append new entries, never reorder.**
 const List<TransitMode> transitModes = [
   TransitMode(
     key: 'bus',
     label: 'Bus',
-    routeValues: ['bus', 'trolleybus', 'share_taxi'],
+    blurb: 'Local buses and trolleybuses',
+    tagKeys: ['bus', 'trolleybus', 'share_taxi'],
     colorArgb: 0xFF1565C0,
-    strokeWidth: 2.0,
     bit: 1 << 0,
   ),
   TransitMode(
     key: 'tram',
     label: 'Tram',
-    routeValues: ['tram'],
+    blurb: 'Street-running trams / streetcars',
+    tagKeys: ['tram'],
     colorArgb: 0xFFD32F2F,
-    strokeWidth: 2.5,
     bit: 1 << 1,
+    isRail: true,
   ),
   TransitMode(
     key: 'subway',
     label: 'Subway',
-    routeValues: ['subway'],
+    blurb: 'Metro / underground (U-Bahn)',
+    tagKeys: ['subway'],
     colorArgb: 0xFF1B5E20,
-    strokeWidth: 3.5,
     bit: 1 << 2,
+    isRail: true,
   ),
   TransitMode(
     key: 'light_rail',
     label: 'Light rail',
-    routeValues: ['light_rail'],
+    blurb: 'Light rail and metro-like commuter rail',
+    tagKeys: ['light_rail'],
     colorArgb: 0xFF00897B,
-    strokeWidth: 3.0,
     bit: 1 << 3,
+    isRail: true,
   ),
   TransitMode(
     key: 'train',
     label: 'Train',
-    routeValues: ['train'],
+    blurb: 'Mainline and suburban trains (S-Bahn, regional, long distance)',
+    tagKeys: ['train'],
     colorArgb: 0xFF424242,
-    strokeWidth: 3.5,
     bit: 1 << 4,
+    isRail: true,
   ),
   TransitMode(
     key: 'monorail',
     label: 'Monorail',
-    routeValues: ['monorail'],
+    blurb: 'Monorail',
+    tagKeys: ['monorail'],
     colorArgb: 0xFF6A1B9A,
-    strokeWidth: 2.5,
     bit: 1 << 5,
+    isRail: true,
   ),
   TransitMode(
     key: 'ferry',
     label: 'Ferry',
-    routeValues: ['ferry'],
+    blurb: 'Passenger ferries and water buses',
+    tagKeys: ['ferry'],
     colorArgb: 0xFF0288D1,
-    strokeWidth: 2.5,
     bit: 1 << 6,
   ),
 ];
 
-/// `route=` value → mode, built once from [transitModes].
-final Map<String, TransitMode> _modeByRouteValue = {
+/// Stop tag key → mode, built once from [transitModes].
+final Map<String, TransitMode> _modeByTag = {
   for (final m in transitModes)
-    for (final v in m.routeValues) v: m,
+    for (final v in m.tagKeys) v: m,
 };
 
-/// Mode by its [TransitMode.key], or null.
 TransitMode? transitModeByKey(String key) =>
     transitModes.where((m) => m.key == key).firstOrNull;
 
@@ -137,271 +151,138 @@ int transitMaskWith(int mask, TransitMode m, bool on) =>
 int transitMaskOf(Iterable<TransitMode> modes) =>
     modes.fold(0, (acc, m) => acc | m.bit);
 
+/// Every mode's bit — what a fresh import records as "these modes were fetched".
+int get transitAllModesMask => transitMaskOf(transitModes);
+
+/// The rail modes, for the filter sheet's "Rail only" shortcut.
+int get transitRailMask => transitMaskOf(transitModes.where((m) => m.isRail));
+
+/// Above this imported diagonal, bus stations start out hidden.
+const double kTransitBusDefaultMaxMeters = 10000;
+
+/// Which modes a **freshly imported** set shows by default.
+///
+/// Everything is always *imported* (it is one cheap query), so this only picks
+/// what is shown — ticking Bus later never needs a re-import. Buses dominate:
+/// 3 147 of Munich's 3 629 stations are bus-only, which swamps a city-wide view
+/// but is exactly what you want in a neighbourhood.
+int defaultVisibleModes(double diagonalMeters) {
+  if (!diagonalMeters.isFinite ||
+      diagonalMeters <= kTransitBusDefaultMaxMeters) {
+    return transitAllModesMask;
+  }
+  final bus = transitModeByKey('bus');
+  return bus == null ? transitAllModesMask : transitAllModesMask & ~bus.bit;
+}
+
 // --- Result models (drift-free, isolate-safe) --------------------------------
 
-/// A route as the pre-flight sees it: identity and tags, no geometry.
-class TransitRouteHead {
-  const TransitRouteHead({
-    required this.osmId,
-    required this.modeKey,
-    this.ref,
-    this.name,
-    this.operatorName,
-    this.colourHex,
-  });
-
-  final int osmId;
-  final String modeKey;
-  final String? ref;
-  final String? name;
-  final String? operatorName;
-  final String? colourHex;
-
-  /// The resolved line colour, or null to fall back to the mode palette.
-  int? get colorArgb => parseOsmColour(colourHex);
-}
-
-/// A fully fetched route: its head plus geometry runs and the stops it serves.
-class TransitRouteData {
-  const TransitRouteData({
-    required this.head,
-    required this.parts,
-    required this.stopOsmIds,
-    this.truncated = false,
-  });
-
-  final TransitRouteHead head;
-
-  /// Connected runs of the route's geometry. Several parts mean the route has
-  /// genuine gaps (branches, loops, or pieces severed by the bbox clip) — they
-  /// are kept apart on purpose, never bridged.
-  final List<List<LatLng>> parts;
-
-  /// OSM node ids of the stops, in ride order.
-  final List<int> stopOsmIds;
-
-  /// Whether the point cap trimmed this route's geometry.
-  final bool truncated;
-
-  int get pointCount =>
-      parts.fold(0, (acc, p) => acc + p.length);
-}
-
-/// A stop: an OSM node with a position and (usually) a name.
-class TransitStopData {
-  const TransitStopData({
+/// One station: a position, a name, and which modes serve it.
+class TransitStationData {
+  const TransitStationData({
     required this.osmId,
     required this.lat,
     required this.lng,
     this.name,
+    this.modeMask = 0,
+    this.nodeCount = 1,
+    this.routeRef,
   });
 
+  /// The OSM node id this station was keyed on (the `station` node when there
+  /// was one, else the first merged node) — enough to look it up on osm.org.
   final int osmId;
   final double lat;
   final double lng;
   final String? name;
+
+  /// Bits of the modes serving this station; 0 = the data doesn't say.
+  final int modeMask;
+
+  /// How many OSM nodes merged into this station.
+  final int nodeCount;
+
+  /// The `route_ref` tag when present (~18 % of stops). Free text, shown as a
+  /// hint — never parsed, never relied on, never fetched for.
+  final String? routeRef;
 }
 
-/// The outcome of an Overpass request: the parsed value, or a **user-facing**
-/// reason it failed.
+/// The outcome of an Overpass request: the value, or a **user-facing** reason it
+/// failed.
 ///
-/// A bare `null` (the contract the POI/border clients use) can't distinguish
-/// "you're offline" from "the public instance is shedding load", and the public
-/// instance answers a perfectly good query with **504** often enough that
-/// telling the user to check their connection would usually be a lie.
+/// A bare `null` can't distinguish "you're offline" from "the instance is
+/// shedding load", and the public instances answer perfectly good queries with
+/// 504 often enough that blaming the connection would usually be a lie.
 class TransitOutcome<T> {
-  const TransitOutcome.ok(T this.value) : message = null;
-  const TransitOutcome.failed(String this.message) : value = null;
+  const TransitOutcome.ok(T this.value, {this.endpoint}) : message = null;
+  const TransitOutcome.failed(String this.message)
+      : value = null,
+        endpoint = null;
 
   final T? value;
   final String? message;
 
+  /// Which endpoint served the request, so the caller can prefer it next time.
+  final String? endpoint;
+
   bool get ok => message == null;
-}
-
-/// Everything one import produced.
-class TransitFetchResult {
-  const TransitFetchResult({required this.routes, required this.stops});
-
-  final List<TransitRouteData> routes;
-
-  /// Deduped by OSM node id, already clipped to the requested box.
-  final List<TransitStopData> stops;
-
-  bool get isEmpty => routes.isEmpty;
 }
 
 // --- Caps -------------------------------------------------------------------
 
-/// Routes returned by the pre-flight before the list is truncated.
-const int transitPreflightCap = 500;
-
-/// Routes actually imported. A city centre with every mode on lands well under
-/// this; the cap is what stops a careless 40 km box from a 50 MB response.
-const int transitRouteCap = 250;
-
-/// Points kept per route after simplification.
-const int transitPointCap = 4000;
-
-/// Bodies above this are refused outright rather than decoded.
+/// Bodies above this are refused rather than decoded. Munich is ~3 MB, so this
+/// leaves roughly 8× headroom.
 const int transitMaxResponseBytes = 24 * 1024 * 1024;
 
 /// Warn above this bbox diagonal; block above [transitMaxDiagonalMeters].
-const double transitWarnDiagonalMeters = 15000;
-const double transitMaxDiagonalMeters = 50000;
+/// Munich end-to-end is ~45 km and imports in seconds, so the old 50 km block
+/// was far too tight.
+const double transitWarnDiagonalMeters = 60000;
+const double transitMaxDiagonalMeters = 120000;
 
-const String _overpassUrl = 'https://overpass-api.de/api/interpreter';
-const String _userAgent = 'ZoneCraft/1.0 (https://github.com/LeoStumpf/zonecraft)';
+/// Nodes sharing a name within this distance become one station. Pasing
+/// Bahnhof's 11 nodes span ~110 m, so this has to be generous.
+const double transitMergeMeters = 200;
 
-// --- Colour -----------------------------------------------------------------
+const Distance _distance = Distance(calculator: Haversine());
 
-/// The ~20 CSS colour names that actually turn up in OSM `colour` tags.
-const Map<String, int> _namedColours = {
-  'red': 0xFFFF0000,
-  'blue': 0xFF0000FF,
-  'green': 0xFF008000,
-  'yellow': 0xFFFFFF00,
-  'orange': 0xFFFFA500,
-  'purple': 0xFF800080,
-  'brown': 0xFFA52A2A,
-  'black': 0xFF000000,
-  'white': 0xFFFFFFFF,
-  'grey': 0xFF808080,
-  'gray': 0xFF808080,
-  'cyan': 0xFF00FFFF,
-  'magenta': 0xFFFF00FF,
-  'lime': 0xFF00FF00,
-  'navy': 0xFF000080,
-  'teal': 0xFF008080,
-  'olive': 0xFF808000,
-  'maroon': 0xFF800000,
-  'silver': 0xFFC0C0C0,
-  'pink': 0xFFFFC0CB,
-};
+/// Overpass instances, tried in order. Whichever one is busy is the variable —
+/// in testing the main instance refused in 8 s an area that kumi served, and
+/// later the roles reversed — so failing over is worth more than retrying.
+const List<String> transitEndpoints = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
+];
 
-/// Parses an OSM `colour` tag into an opaque ARGB value, or null when it isn't
-/// something we can draw with (`rgb(…)`, a localised word, junk).
+const String _userAgent =
+    'ZoneCraft/1.0 (https://github.com/LeoStumpf/zonecraft)';
+
+// --- Query ------------------------------------------------------------------
+
+/// Every public-transport stop node in the bbox.
 ///
-/// Accepts `#RRGGBB`, `#RGB`, the same without the `#`, and the colour names
-/// above. Near-white results are darkened so a line stays visible on the map.
-int? parseOsmColour(String? raw) {
-  if (raw == null) return null;
-  final s = raw.trim().toLowerCase();
-  if (s.isEmpty) return null;
-  final named = _namedColours[s];
-  if (named != null) return _ensureVisible(named);
-  final hex = s.startsWith('#') ? s.substring(1) : s;
-  if (!RegExp(r'^[0-9a-f]+$').hasMatch(hex)) return null;
-  final String full;
-  if (hex.length == 6) {
-    full = hex;
-  } else if (hex.length == 3) {
-    // #f00 -> ff0000
-    full = '${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}';
-  } else {
-    return null;
-  }
-  final v = int.tryParse(full, radix: 16);
-  if (v == null) return null;
-  return _ensureVisible(0xFF000000 | v);
-}
-
-/// Darkens near-white colours 25 % so a `colour=white` line doesn't vanish into
-/// the basemap.
-int _ensureVisible(int argb) {
-  final r = (argb >> 16) & 0xFF, g = (argb >> 8) & 0xFF, b = argb & 0xFF;
-  // Rec. 601 luma is plenty for a legibility check.
-  final luma = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  if (luma <= 0.9) return argb;
-  int dim(int c) => (c * 0.75).round().clamp(0, 255);
-  return 0xFF000000 | (dim(r) << 16) | (dim(g) << 8) | dim(b);
-}
-
-// --- Geometry encoding ------------------------------------------------------
-
-/// Encodes a polyline to the compact `[[lat,lng],…]` JSON stored in
-/// `TransitRouteParts.points` (the same shape [encodeBorderLines] uses).
-///
-/// A row per vertex — the convention every other object type follows — would put
-/// ~75 000 rows through the global streams for one city import.
-String encodeLatLngs(List<LatLng> points) =>
-    jsonEncode([for (final p in points) [p.latitude, p.longitude]]);
-
-/// Decodes [encodeLatLngs]. Returns empty on any structural surprise rather
-/// than throwing.
-List<LatLng> decodeLatLngs(String json) {
-  final out = <LatLng>[];
-  final dynamic decoded;
-  try {
-    decoded = jsonDecode(json);
-  } catch (_) {
-    return out;
-  }
-  if (decoded is! List) return out;
-  for (final pair in decoded) {
-    if (pair is! List || pair.length < 2) continue;
-    final la = _num(pair[0]);
-    final lo = _num(pair[1]);
-    if (la == null || lo == null || !la.isFinite || !lo.isFinite) continue;
-    out.add(LatLng(la, lo));
-  }
-  return out;
-}
-
-// --- Queries ----------------------------------------------------------------
-
-String _routeRegex(Iterable<TransitMode> modes) =>
-    '^(${[for (final m in modes) ...m.routeValues].join('|')})\$';
-
-/// The pre-flight: route ids + tags within the bbox, no geometry.
-///
-/// `out tags` is the whole verbosity level — **not** `out ids tags`; Overpass's
-/// levels (`ids|skel|body|tags|meta`) are mutually exclusive and `tags` already
-/// includes the id.
-String buildTransitCountQuery({
+/// Nodes only, tags only, no relation traversal — deliberately the cheapest
+/// shape Overpass offers, which is what makes a whole city importable.
+String buildTransitStopsQuery({
   required double south,
   required double west,
   required double north,
   required double east,
-  required Iterable<TransitMode> modes,
 }) {
-  final list = modes.toList();
-  return '[out:json][timeout:25];'
-      'rel["type"="route"]["route"~"${_routeRegex(list)}"]'
-      '($south,$west,$north,$east);'
-      'out tags qt $transitPreflightCap;';
-}
-
-/// The geometry fetch for the routes the pre-flight found.
-///
-/// `out geom(bbox)` clips member ways to the box; `node(r.r)` is deliberately
-/// **not** bbox-filtered (that combination 504s on the public instance) — the
-/// stops are clipped in Dart instead.
-String buildTransitGeomQuery({
-  required double south,
-  required double west,
-  required double north,
-  required double east,
-  required Iterable<int> osmIds,
-}) {
-  final ids = osmIds.join(',');
-  return '[out:json][timeout:180];'
-      'rel(id:$ids)->.r;'
-      '.r out geom($south,$west,$north,$east);'
-      'node(r.r);'
+  final bbox = '($south,$west,$north,$east)';
+  return '[out:json][timeout:90];'
+      '('
+      'node["public_transport"="stop_position"]$bbox;'
+      'node["public_transport"="station"]$bbox;'
+      'node["public_transport"="platform"]$bbox;'
+      'node["highway"="bus_stop"]$bbox;'
+      'node["railway"~"^(station|halt|tram_stop)\$"]$bbox;'
+      ');'
       'out body qt;';
 }
 
 // --- Parsing ----------------------------------------------------------------
-
-/// A JSON number, or null when the field is missing or the wrong type.
-/// `as num?` would *throw* on a String, which would break the never-throws
-/// contract every parser here promises.
-double? _num(dynamic v) {
-  if (v is! num) return null;
-  final d = v.toDouble();
-  return d.isFinite ? d : null;
-}
 
 String? _tag(Map tags, String key) {
   final v = tags[key];
@@ -410,336 +291,340 @@ String? _tag(Map tags, String key) {
   return t.isEmpty ? null : t;
 }
 
-TransitRouteHead? _headOf(Map e) {
-  final id = _num(e['id'])?.toInt();
-  final tags = e['tags'];
-  if (id == null || tags is! Map) return null;
-  final routeValue = _tag(tags, 'route');
-  final mode = routeValue == null ? null : _modeByRouteValue[routeValue];
-  if (mode == null) return null; // unknown route= — not a mode we draw
-  return TransitRouteHead(
-    osmId: id,
-    modeKey: mode.key,
-    ref: _tag(tags, 'ref'),
-    name: _tag(tags, 'name'),
-    operatorName: _tag(tags, 'operator'),
-    // `color` is a common misspelling in the wild; accept both.
-    colourHex: _tag(tags, 'colour') ?? _tag(tags, 'color'),
-  );
+/// A JSON number, or null when missing or the wrong type. `as num?` would
+/// *throw* on a String, breaking the never-throws contract.
+double? _num(dynamic v) {
+  if (v is! num) return null;
+  final d = v.toDouble();
+  return d.isFinite ? d : null;
 }
 
-/// Parses the pre-flight response into route heads. Never throws.
-List<TransitRouteHead> parseTransitCounts(String body) {
-  final out = <TransitRouteHead>[];
+/// The modes a stop node declares.
+///
+/// 97 % of Munich's stops tag this directly (`bus=yes`, `train=yes`, …). For the
+/// rest, fall back to what kind of stop it is — a `railway=tram_stop` is a tram
+/// stop whether or not anyone wrote `tram=yes`.
+int stopModeMask(Map tags) {
+  var mask = 0;
+  for (final entry in _modeByTag.entries) {
+    if (tags[entry.key] == 'yes') mask |= entry.value.bit;
+  }
+  if (mask != 0) return mask;
+
+  int bitOf(String key) => transitModeByKey(key)?.bit ?? 0;
+  switch (_tag(tags, 'railway')) {
+    case 'tram_stop':
+      return bitOf('tram');
+    case 'station':
+    case 'halt':
+      return bitOf('train');
+  }
+  if (_tag(tags, 'highway') == 'bus_stop') return bitOf('bus');
+  // Genuinely unspecified — kept as a station rather than dropped, so nothing
+  // disappears silently; the filter groups these under "No type given".
+  return 0;
+}
+
+/// One stop node before merging. Public only so [mergeStations] is testable.
+class TransitStopNode {
+  const TransitStopNode({
+    required this.osmId,
+    required this.lat,
+    required this.lng,
+    this.name,
+    this.modeMask = 0,
+    this.isStation = false,
+    this.routeRef,
+  });
+
+  final int osmId;
+  final double lat;
+  final double lng;
+  final String? name;
+  final int modeMask;
+
+  /// `public_transport=station` — the mapped centre of a group, which beats an
+  /// average of platform positions.
+  final bool isStation;
+  final String? routeRef;
+}
+
+/// Parses an Overpass stops response into merged stations.
+///
+/// Never throws. Returns **null** when the body could not be understood at all,
+/// so a malformed response stays distinguishable from a genuinely empty area
+/// (the old code conflated the two and reported "nothing found here").
+List<TransitStationData>? parseTransitStations(String body) {
   final dynamic decoded;
   try {
     decoded = jsonDecode(body);
   } catch (_) {
-    return out;
+    return null;
   }
-  if (decoded is! Map) return out;
+  if (decoded is! Map) return null;
   final elements = decoded['elements'];
-  if (elements is! List) return out;
-  for (final e in elements) {
-    if (e is! Map || e['type'] != 'relation') continue;
-    final head = _headOf(e);
-    if (head != null) out.add(head);
-  }
-  return out;
-}
+  if (elements is! List) return null;
 
-/// Splits one member way's `geometry` into contiguous runs.
-///
-/// `out geom(bbox)` emits **`null`** where the way leaves the box, so a clipped
-/// way arrives as `[null, null, {…}, {…}, null]`. Each null ends the current
-/// run: joining across one would invent a straight line the route never takes.
-///
-/// Only the `out geom` array shape (`{"lat":…,"lon":…}`) is accepted. The
-/// GeoJSON `{"coordinates":[[lon,lat]]}` shape that `convert ::geom=geom()`
-/// produces is deliberately **rejected**, not silently swapped — transit never
-/// uses `convert`, and a lat/lng swap is invisible until the map is wrong.
-List<List<LatLng>> wayRuns(dynamic geometry) {
-  final runs = <List<LatLng>>[];
-  if (geometry is! List) return runs;
-  var current = <LatLng>[];
-  void flush() {
-    if (current.length >= 2) runs.add(current);
-    current = <LatLng>[];
-  }
-
-  for (final g in geometry) {
-    if (g is! Map) {
-      flush(); // a null placeholder (or junk): the way leaves the box here
-      continue;
-    }
-    final la = _num(g['lat']);
-    final lo = _num(g['lon']);
-    if (la == null || lo == null || !la.isFinite || !lo.isFinite) {
-      flush();
-      continue;
-    }
-    current.add(LatLng(la, lo));
-  }
-  flush();
-  return runs;
-}
-
-const Set<String> _geometryRoles = {'', 'forward', 'backward'};
-const Set<String> _stopRoles = {'stop', 'stop_entry_only', 'stop_exit_only'};
-const Set<String> _platformRoles = {
-  'platform',
-  'platform_entry_only',
-  'platform_exit_only',
-};
-
-/// The stop node ids of one relation, in member (= ride) order.
-///
-/// PTv2 data uses `stop*` roles; older PTv1 data only has `platform*`, and some
-/// routes have bare node members — fall back through all three so a route is
-/// never left stopless when the data is merely old.
-List<int> _stopIds(List members) {
-  List<int> pick(bool Function(String role) accept) {
-    final seen = <int>{};
-    final ids = <int>[];
-    for (final m in members) {
-      if (m is! Map || m['type'] != 'node') continue;
-      final role = m['role'] is String ? m['role'] as String : '';
-      if (!accept(role)) continue;
-      final ref = _num(m['ref'])?.toInt();
-      if (ref == null || !seen.add(ref)) continue;
-      ids.add(ref);
-    }
-    return ids;
-  }
-
-  var ids = pick(_stopRoles.contains);
-  if (ids.isEmpty) ids = pick(_platformRoles.contains);
-  if (ids.isEmpty) ids = pick((r) => r.isEmpty);
-  return ids;
-}
-
-/// Parses the geometry response into routes + stops.
-///
-/// Pure and drift-free so it can run in a `compute()` isolate — a 2–20 MB
-/// `jsonDecode` on the UI thread is guaranteed jank. Never throws; returns an
-/// empty result on any structural surprise.
-TransitFetchResult parseTransitResponse(
-  String body, {
-  required double south,
-  required double west,
-  required double north,
-  required double east,
-}) {
-  const empty = TransitFetchResult(routes: [], stops: []);
-  final dynamic decoded;
-  try {
-    decoded = jsonDecode(body);
-  } catch (_) {
-    return empty;
-  }
-  if (decoded is! Map) return empty;
-  final elements = decoded['elements'];
-  if (elements is! List) return empty;
-
-  // Pass 1: the standalone nodes carry the stop positions and names.
-  final nodes = <int, TransitStopData>{};
+  final raw = <TransitStopNode>[];
   for (final e in elements) {
     if (e is! Map || e['type'] != 'node') continue;
     final id = _num(e['id'])?.toInt();
-    final la = _num(e['lat']);
-    final lo = _num(e['lon']);
-    if (id == null || la == null || lo == null) continue;
-    if (!la.isFinite || !lo.isFinite) continue;
-    // The recursion is unfiltered (see buildTransitGeomQuery); clip here.
-    if (la < south || la > north || lo < west || lo > east) continue;
+    final lat = _num(e['lat']);
+    final lng = _num(e['lon']);
+    if (id == null || lat == null || lng == null) continue;
     final tags = e['tags'];
-    nodes[id] = TransitStopData(
+    final t = tags is Map ? tags : const {};
+    raw.add(TransitStopNode(
       osmId: id,
-      lat: la,
-      lng: lo,
-      name: tags is Map ? _tag(tags, 'name') : null,
-    );
-  }
-
-  // Pass 2: the relations.
-  final routes = <TransitRouteData>[];
-  final usedStops = <int>{};
-  for (final e in elements) {
-    if (e is! Map || e['type'] != 'relation') continue;
-    final head = _headOf(e);
-    final members = e['members'];
-    if (head == null || members is! List) continue;
-
-    final runs = <List<LatLng>>[];
-    for (final m in members) {
-      if (m is! Map || m['type'] != 'way') continue;
-      final role = m['role'] is String ? m['role'] as String : '';
-      if (!_geometryRoles.contains(role)) continue; // platforms aren't the line
-      runs.addAll(wayRuns(m['geometry']));
-    }
-    // Rejoin the runs into as few connected components as the data allows —
-    // genuine gaps stay separate parts rather than being bridged.
-    var parts = stitchComponents(runs)
-        .map((p) => simplifyLine(p, kImportSimplifyMeters))
-        .where((p) => p.length >= 2)
-        .toList();
-
-    var truncated = false;
-    var total = parts.fold<int>(0, (a, p) => a + p.length);
-    if (total > transitPointCap) {
-      // Keep whole parts, longest first, until the cap is reached.
-      final kept = <List<LatLng>>[];
-      var used = 0;
-      for (final p in parts) {
-        if (used + p.length > transitPointCap) continue;
-        kept.add(p);
-        used += p.length;
-      }
-      parts = kept;
-      total = used;
-      truncated = true;
-    }
-
-    final stopIds = [
-      for (final id in _stopIds(members))
-        if (nodes.containsKey(id)) id,
-    ];
-    if (parts.isEmpty && stopIds.isEmpty) continue; // nothing of it is in view
-    usedStops.addAll(stopIds);
-    routes.add(TransitRouteData(
-      head: head,
-      parts: parts,
-      stopOsmIds: stopIds,
-      truncated: truncated,
+      lat: lat,
+      lng: lng,
+      name: _tag(t, 'name'),
+      modeMask: stopModeMask(t),
+      isStation: _tag(t, 'public_transport') == 'station',
+      routeRef: _tag(t, 'route_ref'),
     ));
   }
+  return mergeStations(raw);
+}
 
-  return TransitFetchResult(
-    routes: routes,
-    stops: [for (final id in usedStops) nodes[id]!],
-  );
+/// Merges raw stop nodes into stations: same **name**, within
+/// [transitMergeMeters] of the station's extent, become one station whose modes
+/// are the union.
+///
+/// Distance is measured to the station's **bounding box**, not its centre. A
+/// big terminus legitimately spans hundreds of metres (München Hbf's platforms
+/// run ~500 m), and measuring from a drifting mean would split its far end off
+/// into a phantom second station.
+///
+/// Unnamed nodes never merge — there is nothing to match on, and they are rare
+/// (28 of Munich's 8 215).
+///
+/// A uniform grid indexes candidates and the 3×3 neighbourhood is scanned, so a
+/// pair straddling a cell boundary still merges (the trick
+/// `screen_cluster.dart` uses in screen space). A station is re-indexed into
+/// every cell it grows into, so a long one stays findable from either end.
+List<TransitStationData> mergeStations(List<TransitStopNode> raw) {
+  const dLat = transitMergeMeters / 111320;
+  final out = <_Station>[];
+  final grid = <int, List<int>>{};
+
+  int cellKey(int x, int y) => x * 1000003 ^ y;
+  (int, int) cellOf(double lat, double lng) {
+    final cosLat = math.cos(lat * math.pi / 180).abs();
+    final dLng = cosLat < 1e-6 ? dLat : dLat / cosLat;
+    return ((lng / dLng).floor(), (lat / dLat).floor());
+  }
+
+  void index(int stationIndex, double lat, double lng) {
+    final (cx, cy) = cellOf(lat, lng);
+    final bucket = grid.putIfAbsent(cellKey(cx, cy), () => []);
+    if (!bucket.contains(stationIndex)) bucket.add(stationIndex);
+  }
+
+  for (final s in raw) {
+    final (cx, cy) = cellOf(s.lat, s.lng);
+
+    _Station? target;
+    if (s.name != null) {
+      outer:
+      for (var ox = -1; ox <= 1; ox++) {
+        for (var oy = -1; oy <= 1; oy++) {
+          for (final i in grid[cellKey(cx + ox, cy + oy)] ?? const <int>[]) {
+            final cand = out[i];
+            if (cand.name != s.name) continue;
+            if (cand.distanceTo(s.lat, s.lng) <= transitMergeMeters) {
+              target = cand;
+              break outer;
+            }
+          }
+        }
+      }
+    }
+
+    if (target != null) {
+      target.add(s);
+      index(out.indexOf(target), s.lat, s.lng);
+      continue;
+    }
+    out.add(_Station(s));
+    index(out.length - 1, s.lat, s.lng);
+  }
+
+  return [for (final s in out) s.toData()];
+}
+
+/// A station under construction.
+class _Station {
+  _Station(TransitStopNode first)
+      : name = first.name,
+        osmId = first.osmId,
+        lat = first.lat,
+        lng = first.lng,
+        mask = first.modeMask,
+        routeRef = first.routeRef,
+        _sumLat = first.lat,
+        _sumLng = first.lng,
+        _south = first.lat,
+        _north = first.lat,
+        _west = first.lng,
+        _east = first.lng,
+        _anchored = first.isStation,
+        nodeCount = 1;
+
+  final String? name;
+  int osmId;
+  double lat;
+  double lng;
+  int mask;
+  String? routeRef;
+  int nodeCount;
+
+  double _sumLat;
+  double _sumLng;
+
+  /// The extent of the merged nodes — candidates are measured against this, not
+  /// against the centre, so a long platform doesn't split.
+  double _south, _north, _west, _east;
+
+  /// Whether the position came from a `public_transport=station` node.
+  bool _anchored;
+
+  /// Ground distance from this station's extent to a point (0 when inside).
+  double distanceTo(double pLat, double pLng) {
+    final clampedLat = pLat.clamp(_south, _north);
+    final clampedLng = pLng.clamp(_west, _east);
+    final d = _distance.as(LengthUnit.Meter, LatLng(clampedLat, clampedLng),
+        LatLng(pLat, pLng));
+    return d.isFinite ? d : double.infinity;
+  }
+
+  void add(TransitStopNode s) {
+    mask |= s.modeMask;
+    routeRef ??= s.routeRef;
+    nodeCount++;
+    _sumLat += s.lat;
+    _sumLng += s.lng;
+    if (s.lat < _south) _south = s.lat;
+    if (s.lat > _north) _north = s.lat;
+    if (s.lng < _west) _west = s.lng;
+    if (s.lng > _east) _east = s.lng;
+    if (s.isStation && !_anchored) {
+      _anchored = true;
+      osmId = s.osmId;
+      lat = s.lat;
+      lng = s.lng;
+    } else if (!_anchored) {
+      lat = _sumLat / nodeCount;
+      lng = _sumLng / nodeCount;
+    }
+  }
+
+  TransitStationData toData() => TransitStationData(
+        osmId: osmId,
+        lat: lat,
+        lng: lng,
+        name: name,
+        modeMask: mask,
+        nodeCount: nodeCount,
+        routeRef: routeRef,
+      );
 }
 
 // --- Network ----------------------------------------------------------------
 
-/// Runs the pre-flight. Returns the route heads (empty = none in this box), or
-/// a failure with a message to show. Never throws.
-Future<TransitOutcome<List<TransitRouteHead>>> countTransitRoutes({
-  required double south,
-  required double west,
-  required double north,
-  required double east,
-  required Iterable<TransitMode> modes,
-  http.Client? client,
-}) async {
-  final list = modes.toList();
-  if (list.isEmpty) return const TransitOutcome.ok([]);
-  return _post(
-    buildTransitCountQuery(
-      south: south,
-      west: west,
-      north: north,
-      east: east,
-      modes: list,
-    ),
-    client: client,
-    timeout: const Duration(seconds: 30),
-    parse: parseTransitCounts,
-  );
-}
-
-/// Fetches geometry + stops for [osmIds] (already capped by the caller).
+/// Fetches every public-transport station in the bbox.
 ///
-/// The 120 s timeout is a **deliberate** departure from the 30 s the POI and
-/// border clients use: a city-wide `out geom` legitimately takes a minute. Don't
-/// "fix" it back down.
-Future<TransitOutcome<TransitFetchResult>> fetchTransitRoutes({
+/// Returns the merged stations (empty = none there), or a failure carrying a
+/// message to show. Never throws.
+Future<TransitOutcome<List<TransitStationData>>> fetchTransitStations({
   required double south,
   required double west,
   required double north,
   required double east,
-  required Iterable<int> osmIds,
   http.Client? client,
-}) async {
-  final ids = osmIds.toList();
-  if (ids.isEmpty) {
-    return const TransitOutcome.ok(TransitFetchResult(routes: [], stops: []));
-  }
+  String? preferEndpoint,
+}) {
   return _post(
-    buildTransitGeomQuery(
+    buildTransitStopsQuery(
       south: south,
       west: west,
       north: north,
       east: east,
-      osmIds: ids,
     ),
     client: client,
     timeout: const Duration(seconds: 120),
     maxBytes: transitMaxResponseBytes,
-    parse: (body) => parseTransitResponse(
-      body,
-      south: south,
-      west: west,
-      north: north,
-      east: east,
-    ),
+    preferEndpoint: preferEndpoint,
+    parse: parseTransitStations,
   );
 }
 
-/// The shared Overpass POST.
+/// Statuses the public instances use for "I am overloaded", not "your query is
+/// wrong". These — and timeouts, and socket errors — fail **over** to the next
+/// endpoint; anything else is a query error and is reported as-is.
+const Set<int> _transientStatus = {429, 500, 502, 503, 504};
+
+/// POSTs [query] to each endpoint in turn until one answers.
 ///
-/// Same endpoint and User-Agent as `fetchBorders`/`fetchPois`, and it still
-/// never throws — but it reports *why* it failed, and retries once when the
-/// public instance is merely busy (a 504/429/503 answer to a valid query is
-/// routine there, and this is an explicit, user-initiated action).
+/// [parse] returns null when the body is unintelligible, which is reported
+/// distinctly from "parsed fine, found nothing".
 Future<TransitOutcome<T>> _post<T>(
   String query, {
   required http.Client? client,
   required Duration timeout,
-  required T Function(String body) parse,
+  required T? Function(String body) parse,
   int? maxBytes,
+  String? preferEndpoint,
 }) async {
   final owned = client == null;
   final c = client ?? http.Client();
+  // Try the last endpoint that worked first, then the rest in order.
+  final endpoints = <String>[
+    if (preferEndpoint != null && transitEndpoints.contains(preferEndpoint))
+      preferEndpoint,
+    for (final e in transitEndpoints)
+      if (e != preferEndpoint) e,
+  ];
+  var lastTransient = 'Overpass is busy — try again in a moment.';
   try {
-    for (var attempt = 0;; attempt++) {
+    for (final endpoint in endpoints) {
       final http.Response resp;
       try {
         resp = await c
             .post(
-              Uri.parse(_overpassUrl),
+              Uri.parse(endpoint),
               headers: const {'User-Agent': _userAgent},
               body: {'data': query},
             )
             .timeout(timeout);
       } catch (_) {
-        return const TransitOutcome.failed(
-            'Could not reach Overpass — check your connection.');
+        // A timeout or socket error says nothing about the *query*, so try the
+        // next instance rather than blaming the user's connection.
+        lastTransient = 'Could not reach Overpass — check your connection, '
+            'or try again in a moment.';
+        continue;
       }
       if (resp.statusCode == 200) {
         if (maxBytes != null && resp.bodyBytes.length > maxBytes) {
           return const TransitOutcome.failed(
               'That area returns too much data — pick a smaller box.');
         }
-        return TransitOutcome.ok(parse(resp.body));
-      }
-      if (_transientStatus.contains(resp.statusCode) && attempt == 0) {
-        await Future<void>.delayed(_retryDelay);
-        continue; // one polite retry, then give up
+        final parsed = parse(resp.body);
+        if (parsed == null) {
+          return const TransitOutcome.failed(
+              'Overpass sent a response we could not read. Try again.');
+        }
+        return TransitOutcome.ok(parsed, endpoint: endpoint);
       }
       if (_transientStatus.contains(resp.statusCode)) {
-        return const TransitOutcome.failed(
-            'Overpass is busy — try again in a moment.');
+        lastTransient = 'Overpass is busy — try again in a moment.';
+        continue;
       }
       return TransitOutcome.failed(
           'Overpass refused the request (HTTP ${resp.statusCode}).');
     }
+    return TransitOutcome.failed(lastTransient);
   } finally {
     if (owned) c.close();
   }
 }
-
-/// Statuses the public instance uses for "I am overloaded", not "your query is
-/// wrong" — worth exactly one retry.
-const Set<int> _transientStatus = {429, 502, 503, 504};
-const Duration _retryDelay = Duration(seconds: 3);

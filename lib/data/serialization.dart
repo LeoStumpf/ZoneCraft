@@ -151,7 +151,6 @@ Map<String, dynamic> _objectToFeature(ExportObject o, int layerIndex) {
       geometry = {'type': 'Point', 'coordinates': _pt(o.coords.first)};
     case 'plane':
     case 'freeline':
-    case 'transitline':
       geometry = {
         'type': 'LineString',
         'coordinates': [for (final c in o.coords) _pt(c)],
@@ -356,9 +355,6 @@ void _kmlPlacemark(StringBuffer b, ExportObject o) {
       b.writeln(_kmlPolygon(o.coords));
     case 'plane':
     case 'freeline':
-    // Without this a route would fall into the default and export as a single
-    // dot at its first vertex.
-    case 'transitline':
       b.writeln(_kmlLine(o.coords));
     case 'subspace':
       b.writeln('      <MultiGeometry>');

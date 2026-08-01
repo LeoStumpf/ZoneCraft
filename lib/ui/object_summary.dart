@@ -42,6 +42,7 @@ class ObjectSummary {
     required this.subtitle,
     required this.center,
     required this.fitPoints,
+    this.isPending = false,
   });
 
   final ObjectRef ref;
@@ -58,6 +59,10 @@ class ObjectSummary {
   /// Points to frame the camera on. May be a single point for a degenerate
   /// object; callers fall back to a plain `move` in that case.
   final List<LatLng> fitPoints;
+
+  /// The object exists but its data never arrived — the row offers a retry
+  /// rather than a zoom. Only transit imports can be pending today.
+  final bool isPending;
 }
 
 /// The canonical icon for a `Layers.type` — shared by the drawer, the Elements
@@ -163,7 +168,6 @@ List<ObjectSummary> summariseLayer(
   List<PoiSet> poiSets = const [],
   List<PoiPoint> poiPoints = const [],
   List<TransitSet> transitSets = const [],
-  List<TransitRoute> transitRoutes = const [],
   List<TransitStop> transitStops = const [],
 }) {
   switch (layer.type) {
@@ -221,7 +225,7 @@ List<ObjectSummary> summariseLayer(
           (s) => s.createdAt, (s) => s.id);
       return [
         for (var i = 0; i < rows.length; i++)
-          _transitSetSummary(rows[i], layer.id, i, transitRoutes, transitStops),
+          _transitSetSummary(rows[i], layer.id, i, transitStops),
       ];
     default:
       return const [];
@@ -365,33 +369,51 @@ ObjectSummary _heightSummary(HeightRegion r, String layerId, int index) {
 }
 
 /// One public-transport import. The Elements row frames the **imported box**,
-/// which is the thing that was chosen; individual lines are reached through the
-/// Lines menu instead.
+/// which is the thing that was chosen.
+///
+/// A set whose `fetchedAt` is null never finished — it shows as a retry row
+/// carrying the reason, so a failed import is something you can come back to
+/// rather than a snackbar you missed.
 ObjectSummary _transitSetSummary(
   TransitSet s,
   String layerId,
   int index,
-  List<TransitRoute> allRoutes,
   List<TransitStop> allStops,
 ) {
-  final routes = allRoutes.where((r) => r.setId == s.id).length;
-  final stops = allStops.where((x) => x.setId == s.id).length;
-  final center =
-      LatLng((s.south + s.north) / 2, (s.west + s.east) / 2);
+  final center = LatLng((s.south + s.north) / 2, (s.west + s.east) / 2);
   final width = geoDistance.as(
       LengthUnit.Meter, LatLng(s.south, s.west), LatLng(s.south, s.east));
   final height = geoDistance.as(
       LengthUnit.Meter, LatLng(s.south, s.west), LatLng(s.north, s.west));
+  final size = '${formatMeters(width)} × ${formatMeters(height)}';
+
+  final pending = s.fetchedAt == null;
+  final String title;
+  final String subtitle;
+  if (pending) {
+    title = 'Import didn\'t finish';
+    subtitle = [
+      if (s.lastError != null) s.lastError!,
+      size,
+      'tap to try again',
+    ].join(' · ');
+  } else {
+    final stations =
+        s.stationCount > 0 ? s.stationCount : allStops.where((x) => x.setId == s.id).length;
+    title = _titleOr(s.label, 'Transit import', index);
+    subtitle = '${_plural(stations, 'station')} · $size · '
+        'imported ${_shortDate(s.fetchedAt!)}';
+  }
+
   return ObjectSummary(
     ref: ObjectRef(kind: ObjectKind.transitSet, id: s.id, layerId: layerId),
-    title: _titleOr(s.label, 'Transit import', index),
-    subtitle: '${_plural(routes, 'route')} · ${_plural(stops, 'stop')} · '
-        '${formatMeters(width)} × ${formatMeters(height)} · '
-        'imported ${_shortDate(s.fetchedAt)}',
+    title: title,
+    subtitle: subtitle,
     center: center,
     // An import is a snapshot with no refresh path, so framing it means framing
     // exactly what was fetched.
     fitPoints: [LatLng(s.south, s.west), LatLng(s.north, s.east)],
+    isPending: pending,
   );
 }
 

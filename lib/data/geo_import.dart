@@ -317,9 +317,9 @@ const double _maxStitchGapMeters = 50.0;
 /// geodesic length — the main channel) is returned. Returns empty if no part has
 /// ≥2 points.
 ///
-/// Callers that need *every* run — a transit route's branches and loops, or the
-/// pieces a bbox clip severed — want [stitchComponents] instead; throwing away
-/// all but the longest would silently delete half such a route.
+/// Callers that need *every* run — a branching route, or the pieces a bbox clip
+/// severed — want [stitchComponents] instead; throwing away all but the longest
+/// would silently delete half of such a track.
 List<LatLng> stitchPolylines(List<List<LatLng>> parts) =>
     stitchComponents(parts).firstOrNull ?? const [];
 

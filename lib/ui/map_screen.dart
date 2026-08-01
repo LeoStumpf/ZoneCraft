@@ -1353,79 +1353,126 @@ class _MapScreenState extends ConsumerState<MapScreen>
     return [LatLng(s, w), LatLng(s, e), LatLng(n, e), LatLng(n, w)];
   }
 
-  /// Imports every public-transport route in [box] into [layer], once, offline.
+  /// Imports every public-transport **station** in [box] into [layer], once,
+  /// offline. One cheap Overpass query — see `data/transit.dart` for why line
+  /// geometry is not fetched.
   ///
-  /// Two Overpass round trips: the dialog runs the cheap pre-flight (so counts
-  /// and any connection problem surface before anything big is requested), then
-  /// this fetches the geometry for exactly the routes it promised.
+  /// The set row is written **before** the fetch, so a failure leaves a retry
+  /// row on the layer instead of a snackbar the user might miss.
   Future<void> _importTransit(Layer layer, {required LatLngBounds box}) async {
-    final config = await showTransitImportDialog(
-      context,
-      initial: box,
-      client: _tileClient,
-    );
+    final config = await showTransitImportDialog(context, initial: box);
     if (config == null || !mounted) return;
-
-    showTransitProgress(context);
-    final outcome = await fetchTransitRoutes(
+    await _runTransitImport(
+      layerId: layer.id,
       south: config.south,
       west: config.west,
       north: config.north,
       east: config.east,
-      osmIds: [for (final h in config.heads) h.osmId],
-      client: _tileClient,
+      diagonalMeters: config.diagonalMeters,
     );
-    if (!mounted) return;
-    Navigator.of(context).pop(); // the progress dialog
+  }
 
-    if (!outcome.ok) {
-      _hint(outcome.message!); // says whether it's the network or a busy server
-      return; // prior state untouched — nothing was written
-    }
-    final result = outcome.value!;
-    if (result.isEmpty) {
-      // Don't litter the Elements list with an import that found nothing.
-      _hint('No transit routes found in that area.');
-      return;
-    }
+  /// Retries an import that didn't finish, using the box it remembered.
+  Future<void> retryTransitImport(TransitSet set) {
+    return _runTransitImport(
+      layerId: set.layerId,
+      south: set.south,
+      west: set.west,
+      north: set.north,
+      east: set.east,
+      diagonalMeters:
+          bboxDiagonalMeters(set.south, set.west, set.north, set.east),
+      existingSetId: set.id,
+    );
+  }
 
-    // The parser deduped the stops; index them so the join can reference them.
-    final stopIndex = <int, int>{};
-    for (var i = 0; i < result.stops.length; i++) {
-      stopIndex[result.stops[i].osmId] = i;
-    }
-    await ref.read(repositoryProvider).importTransitSet(
-          layerId: layer.id,
-          south: config.south,
-          west: config.west,
-          north: config.north,
-          east: config.east,
-          modeMask: transitMaskOf(config.modes),
-          routes: [
-            for (final r in result.routes)
-              (
-                osmId: r.head.osmId,
-                modeKey: r.head.modeKey,
-                ref: r.head.ref,
-                name: r.head.name,
-                operatorName: r.head.operatorName,
-                colourHex: r.head.colourHex,
-                colorArgb: r.head.colorArgb,
-                parts: r.parts,
-                stopIndices: [
-                  for (final id in r.stopOsmIds)
-                    if (stopIndex[id] != null) stopIndex[id]!,
-                ],
-              ),
-          ],
-          stops: [
-            for (final s in result.stops)
-              (osmId: s.osmId, lat: s.lat, lng: s.lng, name: s.name),
-          ],
+  Future<void> _runTransitImport({
+    required String layerId,
+    required double south,
+    required double west,
+    required double north,
+    required double east,
+    required double diagonalMeters,
+    String? existingSetId,
+  }) async {
+    final repo = ref.read(repositoryProvider);
+    final setId = existingSetId ??
+        await repo.createPendingTransitSet(
+          layerId: layerId,
+          south: south,
+          west: west,
+          north: north,
+          east: east,
+          modeMask: transitAllModesMask,
+          visibleModeMask: defaultVisibleModes(diagonalMeters),
         );
     if (!mounted) return;
-    _hint('Imported ${result.routes.length} routes · ${result.stops.length} '
-        'stops. Delete it from Elements to undo.');
+
+    // The closer is captured, so the spinner is dismissed by identity rather
+    // than by popping whatever happens to be on top of the ambient navigator.
+    final closeProgress =
+        showTransitProgress(context, 'Importing transit stations…');
+    try {
+      final settings = ref.read(settingsProvider).asData?.value;
+      final outcome = await fetchTransitStations(
+        south: south,
+        west: west,
+        north: north,
+        east: east,
+        client: _tileClient,
+        preferEndpoint: settings?.transitEndpoint,
+      );
+
+      if (!outcome.ok) {
+        await repo.markTransitImportFailed(setId, outcome.message!);
+        closeProgress();
+        if (!mounted) return;
+        _hint('${outcome.message!} It\'s saved — retry it from Elements.');
+        return;
+      }
+      // Remember the instance that actually answered, so the next import
+      // starts there rather than at whichever one is currently swamped.
+      if (outcome.endpoint != null &&
+          outcome.endpoint != settings?.transitEndpoint) {
+        unawaited(repo.updateTransitEndpoint(outcome.endpoint!));
+      }
+
+      final stations = outcome.value!;
+      await repo.fillTransitSet(setId, [
+        for (final s in stations)
+          (
+            osmId: s.osmId,
+            lat: s.lat,
+            lng: s.lng,
+            name: s.name,
+            modeMask: s.modeMask,
+            nodeCount: s.nodeCount,
+            routeRef: s.routeRef,
+          ),
+      ]);
+      closeProgress();
+      if (!mounted) return;
+      if (stations.isEmpty) {
+        _hint('No transit stations found in that area.');
+        return;
+      }
+      final hidden = transitAllModesMask &
+          ~(await repo.watchAllTransitSets().first)
+              .firstWhere((t) => t.id == setId)
+              .visibleModeMask;
+      _hint(hidden == 0
+          ? 'Imported ${stations.length} stations.'
+          : 'Imported ${stations.length} stations · bus hidden for now '
+              '(Stations… to show).');
+    } catch (e) {
+      // A write failure used to become an unhandled async error with no
+      // message at all. Say so, and leave the retry row behind.
+      await repo.markTransitImportFailed(setId, 'Could not save the import.');
+      closeProgress();
+      if (mounted) _hint('Could not save the import — retry from Elements.');
+    } finally {
+      closeProgress(); // idempotent; guarantees the spinner never sticks
+    }
   }
 
   Future<void> _addPlaneAt(LatLng center, Layer layer) async {
@@ -2170,7 +2217,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
       poiSets: ref.read(poiSetsProvider).asData?.value ?? const [],
       poiPoints: ref.read(poiPointsProvider).asData?.value ?? const [],
       transitSets: ref.read(transitSetsProvider).asData?.value ?? const [],
-      transitRoutes: ref.read(transitRoutesProvider).asData?.value ?? const [],
       transitStops: ref.read(transitStopsProvider).asData?.value ?? const [],
     );
     return {for (final r in rows) r.ref: r};
@@ -2235,6 +2281,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
     // "Zoom to"/"Edit" from the layers drawer: it has no MapController, so it
     // posts a focus request here. Applied post-frame (never move the camera
     // during a build) and only once the map is ready (fitCamera throws before).
+    // A retry asked for from the drawer's Elements list.
+    ref.listen(pendingTransitRetryProvider, (_, req) {
+      if (req == null) return;
+      ref.read(pendingTransitRetryProvider.notifier).clear();
+      final set = (ref.read(transitSetsProvider).asData?.value ?? const [])
+          .where((t) => t.id == req.setId)
+          .firstOrNull;
+      if (set != null) unawaited(retryTransitImport(set));
+    });
+
     ref.listen(pendingFocusProvider, (_, req) {
       if (req == null) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -2278,20 +2334,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
         ref.watch(poiPointsProvider).asData?.value ?? const <PoiPoint>[];
     final transitSets =
         ref.watch(transitSetsProvider).asData?.value ?? const <TransitSet>[];
-    final transitRoutes =
-        ref.watch(transitRoutesProvider).asData?.value ?? const <TransitRoute>[];
-    final transitParts = ref.watch(transitRoutePartsProvider).asData?.value ??
-        const <TransitRoutePart>[];
-    final transitStops =
+    final transitStations =
         ref.watch(transitStopsProvider).asData?.value ?? const <TransitStop>[];
-    final transitRouteStops =
-        ref.watch(transitRouteStopsProvider).asData?.value ??
-            const <TransitRouteStop>[];
-    // Routes and stops hang off a *set*, not the layer, so resolve the
-    // layer→sets index once rather than per row.
+    // Stations hang off a *set*, not the layer, so resolve the layer→sets
+    // index (and each set's mode filter) once rather than per station.
     final transitSetIds = <String, Set<String>>{};
+    final transitVisibleMask = <String, int>{};
     for (final s in transitSets) {
       transitSetIds.putIfAbsent(s.layerId, () => {}).add(s.id);
+      transitVisibleMask[s.id] = s.visibleModeMask;
     }
     final mode = ref.watch(mapModeProvider);
     final settings = ref.watch(settingsProvider).asData?.value;
@@ -2517,46 +2568,25 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             ),
                           ),
                         )
-                      // Transit needs *two* children (lines below markers), and
-                      // flutter_map takes z-order from this list — hence the
-                      // spread rather than one wrapping widget.
                       else if (layer.isVisible && layer.type == 'transit')
-                        ...() {
-                          final setIds = transitSetIds[layer.id] ?? const {};
-                          final routes = transitRoutes
-                              .where((r) => setIds.contains(r.setId))
-                              .toList();
-                          final stops = transitStops
-                              .where((s) => setIds.contains(s.setId))
-                              .toList();
-                          final o = layer.opacity.clamp(0.0, 1.0);
-                          return [
-                            Opacity(
-                              opacity: o,
-                              child: TransitLinesLayer(
-                                key: ValueKey('${layer.id}-lines'),
-                                layer: layer,
-                                routes: routes,
-                                parts: transitParts,
-                              ),
+                        Opacity(
+                          opacity: layer.opacity.clamp(0.0, 1.0),
+                          child: TransitStationsLayer(
+                            key: ValueKey(layer.id),
+                            layer: layer,
+                            stations: visibleTransitStations(
+                              transitStations.where((s) =>
+                                  (transitSetIds[layer.id] ?? const {})
+                                      .contains(s.setId)),
+                              transitVisibleMask,
                             ),
-                            Opacity(
-                              opacity: o,
-                              child: TransitStopsLayer(
-                                key: ValueKey('${layer.id}-stops'),
-                                layer: layer,
-                                stops: stops,
-                                visibleStopIds: visibleTransitStopIds(
-                                    routes, transitRouteStops),
-                                onClusterTap: (center) => _mapController.move(
-                                  center,
-                                  (_mapController.camera.zoom + 1.5)
-                                      .clamp(2.0, 19.0),
-                                ),
-                              ),
+                            onClusterTap: (center) => _mapController.move(
+                              center,
+                              (_mapController.camera.zoom + 1.5)
+                                  .clamp(2.0, 19.0),
                             ),
-                          ];
-                        }()
+                          ),
+                        )
                       else if (layer.isVisible)
                         RegionLayer(
                           key: ValueKey(layer.id),

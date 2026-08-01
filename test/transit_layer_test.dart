@@ -1,12 +1,11 @@
 import 'package:drift/native.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:latlong2/latlong.dart';
 
 import 'package:zonecraft/data/database.dart';
 import 'package:zonecraft/data/repository.dart';
 import 'package:zonecraft/data/transit.dart';
 import 'package:zonecraft/ui/transit_layer.dart';
+import 'package:zonecraft/ui/transit_modes_sheet.dart';
 
 void main() {
   late AppDatabase db;
@@ -19,128 +18,185 @@ void main() {
 
   tearDown(() async => db.close());
 
-  /// Imports one subway route (own colour) and one tram route (no colour),
-  /// sharing a stop, and returns the stored rows.
-  Future<
-      ({
-        List<TransitRoute> routes,
-        List<TransitRoutePart> parts,
-        List<TransitStop> stops,
-        List<TransitRouteStop> join,
-      })> seed() async {
+  int bit(String key) => transitModeByKey(key)!.bit;
+
+  /// One import: a rail+bus interchange, a subway-only stop, a bus-only stop,
+  /// and one with no type at all.
+  Future<({String layerId, String setId, List<TransitStop> stops})>
+      seed() async {
     final layerId = await repo.createLayer(
         name: 'T', colorArgb: 0xFF123456, type: 'transit');
-    await repo.importTransitSet(
+    final setId = await repo.createPendingTransitSet(
       layerId: layerId,
       south: 48.0,
-      west: 11.0,
+      west: 11.3,
       north: 48.3,
-      east: 11.4,
-      modeMask: 0xFF,
-      routes: [
-        (
-          osmId: 1,
-          modeKey: 'subway',
-          ref: 'U6',
-          name: null,
-          operatorName: null,
-          colourHex: '#0065AE',
-          colorArgb: 0xFF0065AE,
-          parts: [
-            [const LatLng(48.10, 11.10), const LatLng(48.11, 11.11)],
-            [const LatLng(48.28, 11.38), const LatLng(48.29, 11.39)],
-          ],
-          stopIndices: [0, 1],
-        ),
-        (
-          osmId: 2,
-          modeKey: 'tram',
-          ref: '19',
-          name: null,
-          operatorName: null,
-          colourHex: null,
-          colorArgb: null,
-          parts: [
-            [const LatLng(48.12, 11.12), const LatLng(48.13, 11.13)],
-          ],
-          stopIndices: [0],
-        ),
-      ],
-      stops: [
-        (osmId: 100, lat: 48.10, lng: 11.10, name: 'Shared'),
-        (osmId: 101, lat: 48.28, lng: 11.38, name: 'U6 only'),
-      ],
+      east: 11.8,
+      modeMask: transitAllModesMask,
+      visibleModeMask: transitAllModesMask,
     );
+    await repo.fillTransitSet(setId, [
+      (
+        osmId: 1,
+        lat: 48.14,
+        lng: 11.46,
+        name: 'Pasing Bahnhof',
+        modeMask: bit('bus') | bit('train') | bit('tram'),
+        nodeCount: 31,
+        routeRef: null,
+      ),
+      (
+        osmId: 2,
+        lat: 48.13,
+        lng: 11.57,
+        name: 'Marienplatz',
+        modeMask: bit('subway'),
+        nodeCount: 4,
+        routeRef: null,
+      ),
+      (
+        osmId: 3,
+        lat: 48.11,
+        lng: 11.52,
+        name: 'Bushaltestelle',
+        modeMask: bit('bus'),
+        nodeCount: 2,
+        routeRef: null,
+      ),
+      (
+        osmId: 4,
+        lat: 48.12,
+        lng: 11.53,
+        name: 'Unklar',
+        modeMask: 0,
+        nodeCount: 1,
+        routeRef: null,
+      ),
+    ]);
     return (
-      routes: await repo.watchAllTransitRoutes().first,
-      parts: await repo.watchAllTransitRouteParts().first,
+      layerId: layerId,
+      setId: setId,
       stops: await repo.watchAllTransitStops().first,
-      join: await repo.watchAllTransitRouteStops().first,
     );
   }
 
-  test('a route draws in its OSM colour, falling back to its mode', () async {
+  Future<TransitTally> tallyOf(String layerId) async => transitTally(
+        layerId: layerId,
+        sets: await repo.watchAllTransitSets().first,
+        allStations: await repo.watchAllTransitStops().first,
+      );
+
+  test('a station shows while ANY of its types is enabled', () async {
     final s = await seed();
-    final u6 = s.routes.firstWhere((r) => r.ref == 'U6');
-    final tram = s.routes.firstWhere((r) => r.ref == '19');
-    expect(routeColorArgb(u6), 0xFF0065AE);
-    expect(routeColorArgb(tram), transitModeByKey('tram')!.colorArgb);
-    expect(routeStrokeWidth(u6), transitModeByKey('subway')!.strokeWidth);
+    Map<String, int> mask(int m) => {s.setId: m};
+
+    expect(visibleTransitStations(s.stops, mask(transitAllModesMask)),
+        hasLength(4));
+
+    // Rail only: the interchange survives (a train stops there), the bus-only
+    // stop goes. This is the whole point of the union rule.
+    final rail = visibleTransitStations(s.stops, mask(transitRailMask));
+    expect(rail.map((x) => x.name),
+        containsAll(['Pasing Bahnhof', 'Marienplatz']));
+    expect(rail.map((x) => x.name), isNot(contains('Bushaltestelle')));
+
+    // Bus off, everything else on.
+    final noBus = visibleTransitStations(
+        s.stops, mask(transitAllModesMask & ~bit('bus')));
+    expect(noBus.map((x) => x.name), contains('Pasing Bahnhof'));
+    expect(noBus.map((x) => x.name), isNot(contains('Bushaltestelle')));
   });
 
-  test('parts are culled by their stored bbox, without decoding', () async {
+  test('a typeless station is never orphaned, but hides with everything',
+      () async {
     final s = await seed();
-    final u6 = s.routes.firstWhere((r) => r.ref == 'U6');
-    final parts = s.parts.where((p) => p.routeId == u6.id).toList();
-    expect(parts, hasLength(2));
-    // A view over the first part only.
-    final view = LatLngBounds(const LatLng(48.05, 11.05), const LatLng(48.15, 11.15));
-    final visible = parts.where((p) => partVisible(p, view)).toList();
-    expect(visible, hasLength(1));
-    expect(decodeLatLngs(visible.single.points).first.latitude,
-        closeTo(48.10, 1e-9));
-    // A view containing neither.
-    final far = LatLngBounds(const LatLng(10.0, 10.0), const LatLng(11.0, 11.0));
-    expect(parts.where((p) => partVisible(p, far)), isEmpty);
+    // It has no modes, so no single mode "owns" it — it rides along.
+    expect(
+      visibleTransitStations(s.stops, {s.setId: bit('subway')})
+          .map((x) => x.name),
+      containsAll(['Marienplatz', 'Unklar']),
+    );
+    // Hide all really hides all.
+    expect(visibleTransitStations(s.stops, {s.setId: 0}), isEmpty);
   });
 
-  test('a stop shows while ANY route serving it is visible', () async {
+  test('stations of another layer are not drawn', () async {
     final s = await seed();
-    final u6 = s.routes.firstWhere((r) => r.ref == 'U6');
-    final tram = s.routes.firstWhere((r) => r.ref == '19');
-    final shared = s.stops.firstWhere((x) => x.osmId == 100).id;
-    final u6Only = s.stops.firstWhere((x) => x.osmId == 101).id;
-
-    expect(visibleTransitStopIds(s.routes, s.join), {shared, u6Only});
-
-    // Hide U6: its exclusive stop goes, the shared one stays (the tram calls).
-    await repo.setTransitRouteVisibility([u6.id], false);
-    var routes = await repo.watchAllTransitRoutes().first;
-    expect(visibleTransitStopIds(routes, s.join), {shared});
-
-    // Hide the tram too: nothing serves the shared stop any more.
-    await repo.setTransitRouteVisibility([tram.id], false);
-    routes = await repo.watchAllTransitRoutes().first;
-    expect(visibleTransitStopIds(routes, s.join), isEmpty);
+    expect(visibleTransitStations(s.stops, const {}), isEmpty);
   });
 
-  test('the geometry cache decodes a part once', () async {
+  test('the sheet count agrees with what the map draws', () async {
     final s = await seed();
-    final part = s.parts.first;
-    final a = transitGeometryCache.points(part);
-    final b = transitGeometryCache.points(part);
-    expect(identical(a, b), isTrue);
-    expect(a, hasLength(2));
-    transitGeometryCache.forget([part.id]);
-    expect(identical(transitGeometryCache.points(part), a), isFalse);
+    for (final m in [
+      transitAllModesMask,
+      transitRailMask,
+      bit('bus'),
+      0,
+    ]) {
+      expect(
+        visibleTransitStationCount(s.stops, m),
+        visibleTransitStations(s.stops, {s.setId: m}).length,
+        reason: 'mask $m',
+      );
+    }
   });
 
-  test('the stop icon follows the most specific mode serving it', () {
-    final subway = transitModeByKey('subway')!.bit;
-    final bus = transitModeByKey('bus')!.bit;
+  test('the tally offers a tick box only for types that are actually here',
+      () async {
+    final s = await seed();
+    final t = await tallyOf(s.layerId);
+
+    // Bus, tram, subway and train occur; ferry and monorail do not, so no tick
+    // box for them — an empty category is a puzzle, not a filter.
+    expect(t.present.map((m) => m.key), ['bus', 'tram', 'subway', 'train']);
+    expect(t.counts, {'bus': 2, 'tram': 1, 'subway': 1, 'train': 1});
+    expect(t.untyped, 1);
+    expect(t.total, 4);
+    expect(t.shown, 4);
+    expect(t.setIds, {s.setId});
+
+    // Every type carries a plain-language line, so "Light rail" is not left to
+    // be guessed at.
+    for (final m in transitModes) {
+      expect(m.blurb, isNotEmpty, reason: m.key);
+    }
+  });
+
+  test('the tally follows what the tick boxes wrote', () async {
+    final s = await seed();
+    await repo.setTransitVisibleModes({s.setId}, transitRailMask);
+    final t = await tallyOf(s.layerId);
+
+    expect(t.visible, transitRailMask);
+    // Pasing (train), Marienplatz (subway) and the typeless one; the bus-only
+    // stop drops out.
+    expect(t.shown, 3);
+    expect(t.total, 4);
+  });
+
+  test('the tally unions imports that disagree', () async {
+    final s = await seed();
+    final other = await repo.createPendingTransitSet(
+      layerId: s.layerId,
+      south: 48.0,
+      west: 11.3,
+      north: 48.1,
+      east: 11.4,
+      modeMask: transitAllModesMask,
+      visibleModeMask: bit('bus'),
+    );
+    await repo.setTransitVisibleModes({s.setId}, bit('subway'));
+
+    final t = await tallyOf(s.layerId);
+    expect(t.visible, bit('bus') | bit('subway'));
+    expect(t.setIds, {s.setId, other});
+  });
+
+  test('the station icon follows the most specific type serving it', () {
     // A stop served by both reads as a station, not a bus stop.
-    expect(transitIconFor(subway | bus), transitIconFor(subway));
-    expect(transitIconFor(bus), isNot(transitIconFor(subway)));
+    expect(transitIconFor(bit('subway') | bit('bus')),
+        transitIconFor(bit('subway')));
+    expect(transitIconFor(bit('bus')), isNot(transitIconFor(bit('subway'))));
     expect(transitIconFor(0), isNotNull); // never blows up on an unset mask
   });
 }

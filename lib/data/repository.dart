@@ -5,8 +5,6 @@ import 'package:uuid/uuid.dart';
 import '../geo/simplify.dart';
 import 'database.dart';
 import 'serialization.dart';
-import 'transit.dart'
-    show decodeLatLngs, encodeLatLngs, transitModeByKey;
 
 /// Thin CRUD/stream API over [AppDatabase] used by the Riverpod providers.
 class Repository {
@@ -927,188 +925,98 @@ class Repository {
     return _db.select(_db.transitSets).watch();
   }
 
-  Stream<List<TransitRoute>> watchAllTransitRoutes() {
-    return (_db.select(_db.transitRoutes)
-          ..orderBy([(r) => OrderingTerm(expression: r.sortOrder)]))
-        .watch();
-  }
-
-  Stream<List<TransitRoutePart>> watchAllTransitRouteParts() {
-    return (_db.select(_db.transitRouteParts)
-          ..orderBy([(p) => OrderingTerm(expression: p.partIndex)]))
-        .watch();
-  }
-
   Stream<List<TransitStop>> watchAllTransitStops() {
     return _db.select(_db.transitStops).watch();
   }
 
-  Stream<List<TransitRouteStop>> watchAllTransitRouteStops() {
-    return (_db.select(_db.transitRouteStops)
-          ..orderBy([(s) => OrderingTerm(expression: s.sortOrder)]))
-        .watch();
-  }
-
-  /// Writes one whole public-transport import in a **single transaction**.
-  ///
-  /// Routes, parts, stops and the join go in as four batches rather than a loop
-  /// of awaited inserts: a city import is thousands of rows, and one transaction
-  /// means one stream emission per table and an all-or-nothing result.
-  ///
-  /// [stopIdsByRouteIndex] indexes into [stops] — the caller has already deduped
-  /// the stops, so this is the join, in ride order.
-  Future<String> importTransitSet({
+  /// Records an import **before** fetching, so a failure leaves something the
+  /// user can come back to rather than a snackbar they missed. `fetchedAt` stays
+  /// null until [fillTransitSet] succeeds.
+  Future<String> createPendingTransitSet({
     required String layerId,
     required double south,
     required double west,
     required double north,
     required double east,
     required int modeMask,
+    required int visibleModeMask,
     String? label,
-    required List<
-            ({
-              int osmId,
-              String modeKey,
-              String? ref,
-              String? name,
-              String? operatorName,
-              String? colourHex,
-              int? colorArgb,
-              List<List<LatLng>> parts,
-              List<int> stopIndices,
-            })>
-        routes,
-    required List<({int osmId, double lat, double lng, String? name})> stops,
   }) async {
-    final setId = _uuid.v4();
-    // Pre-compute the ids so the batches can reference each other.
-    final stopIds = [for (var i = 0; i < stops.length; i++) _uuid.v4()];
-    final routeIds = [for (var i = 0; i < routes.length; i++) _uuid.v4()];
-    // A stop's icon comes from the modes that serve it.
-    final stopModeMask = List<int>.filled(stops.length, 0);
-    for (final r in routes) {
-      final bit = transitModeByKey(r.modeKey)?.bit ?? 0;
-      for (final i in r.stopIndices) {
-        if (i >= 0 && i < stopModeMask.length) stopModeMask[i] |= bit;
-      }
-    }
+    final id = _uuid.v4();
+    await _db.into(_db.transitSets).insert(
+          TransitSetsCompanion.insert(
+            id: id,
+            layerId: layerId,
+            south: south,
+            west: west,
+            north: north,
+            east: east,
+            modeMask: modeMask,
+            visibleModeMask: Value(visibleModeMask),
+            label: Value(label),
+          ),
+        );
+    return id;
+  }
 
+  /// Writes the fetched stations into [setId] and marks it done.
+  ///
+  /// Replaces whatever was there, so a retry after a partial failure is
+  /// idempotent. One transaction, one batch — a city import is thousands of
+  /// rows and must not be a loop of awaited inserts.
+  Future<void> fillTransitSet(
+    String setId,
+    List<({
+      int osmId,
+      double lat,
+      double lng,
+      String? name,
+      int modeMask,
+      int nodeCount,
+      String? routeRef,
+    })> stations,
+  ) async {
     await _db.transaction(() async {
-      await _db.into(_db.transitSets).insert(
-            TransitSetsCompanion.insert(
-              id: setId,
-              layerId: layerId,
-              south: south,
-              west: west,
-              north: north,
-              east: east,
-              modeMask: modeMask,
-              label: Value(label),
-            ),
-          );
-
+      await (_db.delete(_db.transitStops)
+            ..where((s) => s.setId.equals(setId)))
+          .go();
       await _db.batch((b) {
-        for (var i = 0; i < routes.length; i++) {
-          final r = routes[i];
-          b.insert(
-            _db.transitRoutes,
-            TransitRoutesCompanion.insert(
-              id: routeIds[i],
-              setId: setId,
-              osmId: r.osmId,
-              modeKey: r.modeKey,
-              ref: Value(r.ref),
-              name: Value(r.name),
-              operatorName: Value(r.operatorName),
-              colourHex: Value(r.colourHex),
-              colorArgb: Value(r.colorArgb),
-              stopCount: Value(r.stopIndices.length),
-              pointCount:
-                  Value(r.parts.fold(0, (a, p) => a + p.length)),
-              sortOrder: Value(i),
-            ),
-          );
-        }
-      });
-
-      await _db.batch((b) {
-        for (var i = 0; i < routes.length; i++) {
-          final parts = routes[i].parts;
-          for (var j = 0; j < parts.length; j++) {
-            final pts = parts[j];
-            if (pts.length < 2) continue;
-            final bounds = _boundsOf(pts);
-            b.insert(
-              _db.transitRouteParts,
-              TransitRoutePartsCompanion.insert(
-                id: _uuid.v4(),
-                routeId: routeIds[i],
-                partIndex: j,
-                pointCount: pts.length,
-                points: encodeLatLngs(pts),
-                south: bounds.$1,
-                west: bounds.$2,
-                north: bounds.$3,
-                east: bounds.$4,
-              ),
-            );
-          }
-        }
-      });
-
-      await _db.batch((b) {
-        for (var i = 0; i < stops.length; i++) {
-          final s = stops[i];
+        for (final s in stations) {
           b.insert(
             _db.transitStops,
             TransitStopsCompanion.insert(
-              id: stopIds[i],
+              id: _uuid.v4(),
               setId: setId,
               osmId: s.osmId,
               lat: s.lat,
               lng: s.lng,
               name: Value(s.name),
-              modeMask: Value(stopModeMask[i]),
+              modeMask: Value(s.modeMask),
+              nodeCount: Value(s.nodeCount),
+              routeRef: Value(s.routeRef),
             ),
           );
         }
       });
-
-      await _db.batch((b) {
-        for (var i = 0; i < routes.length; i++) {
-          final indices = routes[i].stopIndices;
-          for (var j = 0; j < indices.length; j++) {
-            final si = indices[j];
-            if (si < 0 || si >= stopIds.length) continue;
-            b.insert(
-              _db.transitRouteStops,
-              TransitRouteStopsCompanion.insert(
-                routeId: routeIds[i],
-                stopId: stopIds[si],
-                sortOrder: j,
-              ),
-              mode: InsertMode.insertOrReplace,
-            );
-          }
-        }
-      });
+      await (_db.update(_db.transitSets)..where((t) => t.id.equals(setId)))
+          .write(TransitSetsCompanion(
+        fetchedAt: Value(DateTime.now()),
+        lastError: const Value(null),
+        stationCount: Value(stations.length),
+        nodeCount: Value(stations.fold(0, (a, s) => a + s.nodeCount)),
+      ));
     });
-    return setId;
   }
 
-  static (double, double, double, double) _boundsOf(List<LatLng> pts) {
-    var s = 90.0, w = 180.0, n = -90.0, e = -180.0;
-    for (final p in pts) {
-      if (p.latitude < s) s = p.latitude;
-      if (p.latitude > n) n = p.latitude;
-      if (p.longitude < w) w = p.longitude;
-      if (p.longitude > e) e = p.longitude;
-    }
-    return (s, w, n, e);
+  /// Records why an import didn't finish. The set stays, so the layer can offer
+  /// a retry for exactly that box.
+  Future<void> markTransitImportFailed(String setId, String message) {
+    return (_db.update(_db.transitSets)..where((t) => t.id.equals(setId)))
+        .write(TransitSetsCompanion(lastError: Value(message)));
   }
 
-  /// Renames a transit import (or moves it to another `transit` layer). The
-  /// imported data itself is immutable — a different area means a new import.
+  /// Renames an import (or moves it to another `transit` layer). The imported
+  /// area is immutable — a different area means a new import.
   Future<void> updateTransitSet(
     String id, {
     String? layerId,
@@ -1122,27 +1030,25 @@ class Repository {
     );
   }
 
-  Future<void> deleteTransitSet(String id) {
-    return (_db.delete(_db.transitSets)..where((s) => s.id.equals(id))).go();
-  }
-
-  /// Shows or hides [routeIds] — what the Lines menu writes.
-  ///
-  /// One batch, so toggling a 200-route mode group is a single write and a
-  /// single stream emission rather than 200 awaited updates.
-  Future<void> setTransitRouteVisibility(
-    Iterable<String> routeIds,
-    bool visible,
+  /// Which transit modes are shown — what the filter sheet writes. One batch,
+  /// so toggling a mode is a single write and a single stream emission.
+  Future<void> setTransitVisibleModes(
+    Iterable<String> setIds,
+    int visibleModeMask,
   ) async {
-    final ids = routeIds.toList();
+    final ids = setIds.toList();
     if (ids.isEmpty) return;
     await _db.batch((b) {
       b.update(
-        _db.transitRoutes,
-        TransitRoutesCompanion(isVisible: Value(visible)),
-        where: (r) => r.id.isIn(ids),
+        _db.transitSets,
+        TransitSetsCompanion(visibleModeMask: Value(visibleModeMask)),
+        where: (t) => t.id.isIn(ids),
       );
     });
+  }
+
+  Future<void> deleteTransitSet(String id) {
+    return (_db.delete(_db.transitSets)..where((s) => s.id.equals(id))).go();
   }
 
   // --- Settings -------------------------------------------------------------
@@ -1184,6 +1090,18 @@ class Repository {
           AppSettingsCompanion.insert(
             id: const Value(1),
             transportOverlay: Value(enabled),
+          ),
+        );
+  }
+
+  /// Remembers which Overpass instance last served a transit import, so the
+  /// next one starts with the one that was actually up rather than at whichever
+  /// is currently swamped.
+  Future<void> updateTransitEndpoint(String endpoint) {
+    return _db.into(_db.appSettings).insertOnConflictUpdate(
+          AppSettingsCompanion.insert(
+            id: const Value(1),
+            transitEndpoint: Value(endpoint),
           ),
         );
   }
@@ -1398,8 +1316,6 @@ class Repository {
         .get();
     final heightRegions = await _db.select(_db.heightRegions).get();
     final transitSets = await _db.select(_db.transitSets).get();
-    final transitRoutes = await _db.select(_db.transitRoutes).get();
-    final transitParts = await _db.select(_db.transitRouteParts).get();
     final transitStops = await _db.select(_db.transitStops).get();
     final poiSets = await _db.select(_db.poiSets).get();
     final poiPoints = await (_db.select(_db.poiPoints)
@@ -1494,38 +1410,18 @@ class Repository {
             ));
           }
         case 'transit':
-          // Transit exports but does **not** re-import: a set is a nested
-          // structure (set -> routes -> parts -> points, plus stops and a join)
-          // that the flat ExportObject can't carry, and it is derived,
-          // re-fetchable data keyed to an OSM snapshot — round-tripping it would
-          // create a second source of truth with no refresh path. So this emits
-          // plain lines and points for other tools; _insertObject rejects them.
-          final setIds = {
-            for (final t in transitSets)
-              if (t.layerId == layer.id) t.id,
-          };
-          for (final r in transitRoutes) {
-            if (!setIds.contains(r.setId) || !r.isVisible) continue;
-            for (final part in transitParts) {
-              if (part.routeId != r.id) continue;
-              final pts = decodeLatLngs(part.points);
-              if (pts.length < 2) continue;
-              objects.add(ExportObject(
-                kind: 'transitline',
-                coords: pts,
-                categoryKey: r.modeKey,
-                label: [r.ref, r.name].whereType<String>().join(' ').trim(),
-              ));
-            }
-          }
-          for (final setId in setIds) {
+          // Stations export as named points for other tools, but do **not**
+          // re-import: this is derived, re-fetchable OSM data keyed to a
+          // snapshot, and re-importing an area is one dialog away.
+          for (final t in transitSets.where((t) => t.layerId == layer.id)) {
             final stops =
-                transitStops.where((x) => x.setId == setId).toList();
+                transitStops.where((x) => x.setId == t.id).toList();
             if (stops.isEmpty) continue;
             objects.add(ExportObject(
               kind: 'transitstop',
               coords: [for (final x in stops) LatLng(x.lat, x.lng)],
               pointLabels: [for (final x in stops) x.name],
+              label: t.label,
             ));
           }
       }
@@ -1685,7 +1581,6 @@ class Repository {
               name: i - 1 < labels.length ? labels[i - 1] : null,
             ),
         ]);
-      case 'transitline':
       case 'transitstop':
         // Derived, re-fetchable OSM data — see the 'transit' case in
         // exportData. Re-import an area by fetching it again, not from a file.

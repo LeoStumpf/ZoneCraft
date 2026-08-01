@@ -4,61 +4,28 @@ import 'dart:io' show SocketException;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:latlong2/latlong.dart';
 
 import 'package:zonecraft/data/transit.dart';
 
-/// A relation element as `out geom` returns it.
-Map<String, dynamic> relation({
-  int id = 1,
-  String route = 'tram',
-  String? ref = '19',
-  String? name = 'Tram 19',
-  String? colour,
-  List<Map<String, dynamic>> members = const [],
+Map<String, dynamic> node(
+  int id,
+  double lat,
+  double lon, {
+  String? name,
+  Map<String, String> tags = const {},
 }) =>
-    {
-      'type': 'relation',
-      'id': id,
-      'tags': {
-        'type': 'route',
-        'route': route,
-        'ref': ?ref,
-        'name': ?name,
-        'colour': ?colour,
-      },
-      'members': members,
-    };
-
-Map<String, dynamic> wayMember(List<dynamic> geometry, {String role = ''}) =>
-    {'type': 'way', 'ref': 99, 'role': role, 'geometry': geometry};
-
-Map<String, dynamic> nodeMember(int ref, {String role = 'stop'}) =>
-    {'type': 'node', 'ref': ref, 'role': role};
-
-Map<String, dynamic> pt(double lat, double lon) => {'lat': lat, 'lon': lon};
-
-Map<String, dynamic> nodeElement(int id, double lat, double lon,
-        {String? name}) =>
     {
       'type': 'node',
       'id': id,
       'lat': lat,
       'lon': lon,
-      'tags': ?(name == null ? null : {'name': name}),
+      'tags': {...tags, 'name': ?name},
     };
 
 String bodyOf(List<Map<String, dynamic>> elements) =>
     jsonEncode({'elements': elements});
 
-// A small box around the fixture coordinates.
-TransitFetchResult parse(String body) => parseTransitResponse(
-      body,
-      south: 48.0,
-      west: 11.0,
-      north: 49.0,
-      east: 12.0,
-    );
+int bit(String key) => transitModeByKey(key)!.bit;
 
 void main() {
   group('mode catalogue', () {
@@ -70,10 +37,10 @@ void main() {
       }
     });
 
-    test('no route= value belongs to two modes', () {
+    test('no tag key belongs to two modes', () {
       final seen = <String>{};
       for (final m in transitModes) {
-        for (final v in m.routeValues) {
+        for (final v in m.tagKeys) {
           expect(seen.add(v), isTrue, reason: '$v is claimed twice');
         }
       }
@@ -88,442 +55,346 @@ void main() {
       expect(transitModesFromMask(mask), {bus, tram});
       mask = transitMaskWith(mask, bus, false);
       expect(transitModesFromMask(mask), {tram});
-      expect(transitMaskOf([bus, tram]), bus.bit | tram.bit);
       expect(transitModesFromMask(0), isEmpty);
     });
-  });
 
-  group('parseOsmColour', () {
-    test('accepts the hex forms', () {
-      expect(parseOsmColour('#FF0000'), 0xFFFF0000);
-      expect(parseOsmColour('ff0000'), 0xFFFF0000);
-      expect(parseOsmColour('#f00'), 0xFFFF0000);
-      expect(parseOsmColour('  #DC281E '), 0xFFDC281E);
-    });
-
-    test('accepts the colour names OSM actually uses', () {
-      expect(parseOsmColour('red'), 0xFFFF0000);
-      expect(parseOsmColour('Blue'), 0xFF0000FF);
-      expect(parseOsmColour('gray'), parseOsmColour('grey'));
-    });
-
-    test('rejects anything it cannot draw', () {
-      expect(parseOsmColour(null), isNull);
-      expect(parseOsmColour(''), isNull);
-      expect(parseOsmColour('rgb(1,2,3)'), isNull);
-      expect(parseOsmColour('blau'), isNull);
-      expect(parseOsmColour('#ff00'), isNull);
-      expect(parseOsmColour('#gggggg'), isNull);
-    });
-
-    test('darkens near-white so the line stays visible', () {
-      final white = parseOsmColour('#FFFFFF')!;
-      expect(white, isNot(0xFFFFFFFF));
-      expect((white >> 16) & 0xFF, lessThan(0xFF));
-      // A mid colour is untouched.
-      expect(parseOsmColour('#DC281E'), 0xFFDC281E);
+    test('the rail mask covers the rail modes only', () {
+      final rail = transitModesFromMask(transitRailMask).map((m) => m.key);
+      expect(rail, containsAll(['tram', 'subway', 'light_rail', 'train']));
+      expect(rail, isNot(contains('bus')));
+      expect(rail, isNot(contains('ferry')));
     });
   });
 
-  group('encodeLatLngs / decodeLatLngs', () {
-    test('round-trips', () {
-      final pts = [const LatLng(48.1, 11.5), const LatLng(48.2, 11.6)];
-      final back = decodeLatLngs(encodeLatLngs(pts));
-      expect(back.length, 2);
-      expect(back.first.latitude, closeTo(48.1, 1e-9));
-      expect(back.last.longitude, closeTo(11.6, 1e-9));
+  group('defaultVisibleModes', () {
+    test('a neighbourhood shows everything, including bus', () {
+      expect(defaultVisibleModes(2000), transitAllModesMask);
+      expect(
+          defaultVisibleModes(kTransitBusDefaultMaxMeters), transitAllModesMask);
     });
 
-    test('never throws on garbage', () {
-      expect(decodeLatLngs('not json'), isEmpty);
-      expect(decodeLatLngs('{"a":1}'), isEmpty);
-      expect(decodeLatLngs('[[1],["x","y"],[48.1,11.5]]'), hasLength(1));
+    test('a city-sized import starts with bus hidden', () {
+      // 3 147 of Munich's 3 629 stations are bus-only — they'd swamp the view.
+      final m = defaultVisibleModes(45000);
+      expect(m & bit('bus'), 0);
+      expect(m & bit('subway'), isNot(0));
+      expect(m & bit('train'), isNot(0));
+    });
+
+    test('a non-finite diagonal falls back to showing everything', () {
+      expect(defaultVisibleModes(double.nan), transitAllModesMask);
     });
   });
 
-  group('query builders', () {
-    test('the pre-flight asks for tags only, with the bbox and a cap', () {
-      final q = buildTransitCountQuery(
-        south: 48.1,
-        west: 11.5,
-        north: 48.2,
-        east: 11.6,
-        modes: [transitModes[1], transitModes[2]], // tram, subway
+  group('stopModeMask', () {
+    test('reads the mode tags on the node', () {
+      expect(stopModeMask({'bus': 'yes'}), bit('bus'));
+      expect(stopModeMask({'bus': 'yes', 'train': 'yes'}),
+          bit('bus') | bit('train'));
+    });
+
+    test('folds trolleybus and share_taxi into bus', () {
+      expect(stopModeMask({'trolleybus': 'yes'}), bit('bus'));
+      expect(stopModeMask({'share_taxi': 'yes'}), bit('bus'));
+    });
+
+    test('ignores a mode tag that is not "yes"', () {
+      expect(stopModeMask({'bus': 'no'}), 0);
+    });
+
+    test('falls back to the stop kind when no mode is tagged', () {
+      expect(stopModeMask({'railway': 'tram_stop'}), bit('tram'));
+      expect(stopModeMask({'railway': 'station'}), bit('train'));
+      expect(stopModeMask({'railway': 'halt'}), bit('train'));
+      expect(stopModeMask({'highway': 'bus_stop'}), bit('bus'));
+    });
+
+    test('an explicit tag beats the stop-kind fallback', () {
+      // A tram stop that also serves buses must keep both.
+      expect(
+        stopModeMask({'railway': 'tram_stop', 'tram': 'yes', 'bus': 'yes'}),
+        bit('tram') | bit('bus'),
       );
-      expect(q, contains('["route"~"^(tram|subway)\$"]'));
+    });
+
+    test('an unspecified stop is 0, not dropped', () {
+      expect(stopModeMask({'public_transport': 'platform'}), 0);
+    });
+  });
+
+  group('mergeStations', () {
+    TransitStopNode stop(int id, double lat, double lng,
+            {String? name, int mask = 0, bool station = false}) =>
+        TransitStopNode(
+          osmId: id,
+          lat: lat,
+          lng: lng,
+          name: name,
+          modeMask: mask,
+          isStation: station,
+        );
+
+    test('same name, close together, becomes one station with union of modes',
+        () {
+      // Real shape: Pasing Bahnhof is 11 nodes within ~110 m.
+      final merged = mergeStations([
+        stop(1, 48.14888, 11.46041, name: 'Pasing Bahnhof', mask: bit('bus')),
+        stop(2, 48.14895, 11.45968, name: 'Pasing Bahnhof', mask: bit('bus')),
+        stop(3, 48.14904, 11.45993, name: 'Pasing Bahnhof', mask: bit('train')),
+        stop(4, 48.14919, 11.45964, name: 'Pasing Bahnhof', mask: bit('tram')),
+      ]);
+      expect(merged, hasLength(1));
+      expect(merged.single.name, 'Pasing Bahnhof');
+      expect(merged.single.modeMask, bit('bus') | bit('train') | bit('tram'));
+      expect(merged.single.nodeCount, 4);
+    });
+
+    test('same name far apart stays two stations', () {
+      final merged = mergeStations([
+        stop(1, 48.10, 11.50, name: 'Rathaus', mask: bit('bus')),
+        stop(2, 48.20, 11.60, name: 'Rathaus', mask: bit('bus')),
+      ]);
+      expect(merged, hasLength(2));
+    });
+
+    test('different names at the same spot stay separate', () {
+      final merged = mergeStations([
+        stop(1, 48.10, 11.50, name: 'A', mask: bit('bus')),
+        stop(2, 48.10, 11.50, name: 'B', mask: bit('tram')),
+      ]);
+      expect(merged, hasLength(2));
+    });
+
+    test('unnamed nodes never merge', () {
+      final merged = mergeStations([
+        stop(1, 48.10, 11.50, mask: bit('bus')),
+        stop(2, 48.10001, 11.50001, mask: bit('bus')),
+      ]);
+      expect(merged, hasLength(2));
+    });
+
+    test('a station node anchors the position', () {
+      final merged = mergeStations([
+        stop(1, 48.1000, 11.5000, name: 'Hbf', mask: bit('bus')),
+        stop(2, 48.1005, 11.5005,
+            name: 'Hbf', mask: bit('train'), station: true),
+        stop(3, 48.1010, 11.5010, name: 'Hbf', mask: bit('subway')),
+      ]);
+      expect(merged, hasLength(1));
+      expect(merged.single.lat, closeTo(48.1005, 1e-9));
+      expect(merged.single.lng, closeTo(11.5005, 1e-9));
+      expect(merged.single.osmId, 2);
+    });
+
+    test('without a station node the position is the mean', () {
+      final merged = mergeStations([
+        stop(1, 48.1000, 11.5000, name: 'X', mask: bit('bus')),
+        stop(2, 48.1002, 11.5000, name: 'X', mask: bit('bus')),
+      ]);
+      expect(merged.single.lat, closeTo(48.1001, 1e-6));
+    });
+
+    test('merges across grid-cell boundaries', () {
+      // A chain of nodes ~33 m apart spanning many cells; the 3x3 neighbourhood
+      // scan is what stops a pair straddling a boundary from splitting.
+      final merged = mergeStations([
+        for (var i = 0; i < 40; i++)
+          stop(i, 48.0 + i * 0.0003, 11.5, name: 'Chain', mask: bit('bus')),
+      ]);
+      expect(merged, hasLength(1));
+      expect(merged.single.nodeCount, 40);
+    });
+
+    test('empty input yields no stations', () {
+      expect(mergeStations(const []), isEmpty);
+    });
+  });
+
+  group('buildTransitStopsQuery', () {
+    test('asks for stop nodes only, with the bbox', () {
+      final q = buildTransitStopsQuery(
+          south: 48.1, west: 11.5, north: 48.2, east: 11.6);
       expect(q, contains('(48.1,11.5,48.2,11.6)'));
-      expect(q, contains('out tags qt $transitPreflightCap;'));
-      // Overpass verbosity levels are mutually exclusive.
-      expect(q, isNot(contains('out ids tags')));
+      expect(q, contains('node["public_transport"="stop_position"]'));
+      expect(q, contains('node["highway"="bus_stop"]'));
+      expect(q, contains('out body qt;'));
+      // No relations and no geometry — that is the whole point.
+      expect(q, isNot(contains('rel')));
       expect(q, isNot(contains('geom')));
     });
-
-    test('the geometry query clips ways but not the node recursion', () {
-      final q = buildTransitGeomQuery(
-        south: 48.1,
-        west: 11.5,
-        north: 48.2,
-        east: 11.6,
-        osmIds: [11, 22],
-      );
-      expect(q, contains('rel(id:11,22)->.r;'));
-      expect(q, contains('.r out geom(48.1,11.5,48.2,11.6);'));
-      // Bbox-filtering the recursed node set 504s on the public instance.
-      expect(q, contains('node(r.r);'));
-      expect(q, isNot(contains('node(r.r)(')));
-      expect(q, contains('out body qt;'));
-    });
   });
 
-  group('parseTransitCounts', () {
-    test('reads identity and tags, dropping unknown route values', () {
-      final body = bodyOf([
-        relation(id: 7, route: 'tram', ref: '19', colour: '#DC281E'),
-        relation(id: 8, route: 'hiking', ref: 'E5'),
-      ]);
-      final heads = parseTransitCounts(body);
-      expect(heads, hasLength(1));
-      expect(heads.single.osmId, 7);
-      expect(heads.single.modeKey, 'tram');
-      expect(heads.single.ref, '19');
-      expect(heads.single.colorArgb, 0xFFDC281E);
+  group('parseTransitStations', () {
+    test('parses nodes and merges them', () {
+      final stations = parseTransitStations(bodyOf([
+        node(1, 48.1000, 11.5000,
+            name: 'Hbf', tags: {'bus': 'yes', 'public_transport': 'platform'}),
+        node(2, 48.1002, 11.5001,
+            name: 'Hbf', tags: {'train': 'yes', 'public_transport': 'station'}),
+        node(3, 48.2000, 11.6000, name: 'Ostbahnhof', tags: {'subway': 'yes'}),
+      ]))!;
+      expect(stations, hasLength(2));
+      final hbf = stations.firstWhere((s) => s.name == 'Hbf');
+      expect(hbf.modeMask, bit('bus') | bit('train'));
+      expect(hbf.nodeCount, 2);
+      expect(hbf.osmId, 2); // the station node anchors it
     });
 
-    test('accepts the "color" misspelling', () {
+    test('keeps route_ref when present, without depending on it', () {
+      final s = parseTransitStations(bodyOf([
+        node(1, 48.1, 11.5,
+            name: 'A', tags: {'bus': 'yes', 'route_ref': '52;X30'}),
+      ]))!;
+      expect(s.single.routeRef, '52;X30');
+    });
+
+    test('a node with no mode tags is kept with mask 0', () {
+      final s = parseTransitStations(bodyOf([
+        node(1, 48.1, 11.5,
+            name: 'Mystery', tags: {'public_transport': 'platform'}),
+      ]))!;
+      expect(s, hasLength(1));
+      expect(s.single.modeMask, 0);
+    });
+
+    test('an empty area parses to an empty list, NOT to null', () {
+      expect(parseTransitStations(bodyOf(const [])), isEmpty);
+    });
+
+    test('an unreadable body is null, so it can be reported honestly', () {
+      // The old code returned "empty" here and told users nothing was found.
+      expect(parseTransitStations('not json'), isNull);
+      expect(parseTransitStations('[]'), isNull);
+      expect(parseTransitStations('{"elements":"nope"}'), isNull);
+    });
+
+    test('never throws on hostile field types', () {
       final body = jsonEncode({
         'elements': [
-          {
-            'type': 'relation',
-            'id': 1,
-            'tags': {'route': 'bus', 'color': '#00FF00'},
-          }
+          {'type': 'node', 'id': 'x', 'lat': 'y', 'lon': null, 'tags': 5},
+          {'type': 'way', 'id': 1},
+          node(2, 48.1, 11.5, name: 'Fine', tags: {'bus': 'yes'}),
         ]
       });
-      expect(parseTransitCounts(body).single.colorArgb, 0xFF00FF00);
-    });
-
-    test('never throws', () {
-      expect(parseTransitCounts('nonsense'), isEmpty);
-      expect(parseTransitCounts('[]'), isEmpty);
-      expect(parseTransitCounts('{"elements":"no"}'), isEmpty);
-    });
-  });
-
-  group('wayRuns', () {
-    test('a whole way is one run', () {
-      final runs = wayRuns([pt(48.1, 11.5), pt(48.2, 11.5), pt(48.3, 11.5)]);
-      expect(runs, hasLength(1));
-      expect(runs.single, hasLength(3));
-    });
-
-    test('nulls from out geom(bbox) SPLIT the way, never join across', () {
-      // [in, in, out, out, in, in] — two separate runs, not one straight jump.
-      final runs = wayRuns([
-        pt(48.1, 11.5),
-        pt(48.2, 11.5),
-        null,
-        null,
-        pt(48.8, 11.5),
-        pt(48.9, 11.5),
-      ]);
-      expect(runs, hasLength(2));
-      expect(runs[0].last.latitude, closeTo(48.2, 1e-9));
-      expect(runs[1].first.latitude, closeTo(48.8, 1e-9));
-    });
-
-    test('single-point runs are dropped', () {
-      expect(wayRuns([pt(48.1, 11.5), null, pt(48.9, 11.5)]), isEmpty);
-    });
-
-    test('the GeoJSON [lon,lat] shape is rejected, not silently swapped', () {
-      // `convert ::geom=geom()` produces this; transit never uses convert, and
-      // a swap would be invisible until the map is wrong.
-      final runs = wayRuns({
-        'coordinates': [
-          [11.5, 48.1],
-          [11.6, 48.2],
-        ]
-      });
-      expect(runs, isEmpty);
-    });
-
-    test('never throws on junk', () {
-      expect(wayRuns(null), isEmpty);
-      expect(wayRuns('x'), isEmpty);
-      expect(wayRuns([1, 2, 3]), isEmpty);
-    });
-  });
-
-  group('parseTransitResponse', () {
-    test('contiguous member ways stitch into one part', () {
-      final body = bodyOf([
-        relation(members: [
-          wayMember([pt(48.10, 11.50), pt(48.11, 11.50)]),
-          wayMember([pt(48.11, 11.50), pt(48.12, 11.50)]),
-        ]),
-      ]);
-      final r = parse(body).routes.single;
-      expect(r.parts, hasLength(1));
-      expect(r.head.modeKey, 'tram');
-    });
-
-    test('a reversed member still stitches into one part', () {
-      final body = bodyOf([
-        relation(members: [
-          wayMember([pt(48.10, 11.50), pt(48.11, 11.50)]),
-          // Same shared node, drawn the other way round.
-          wayMember([pt(48.12, 11.50), pt(48.11, 11.50)]),
-        ]),
-      ]);
-      expect(parse(body).routes.single.parts, hasLength(1));
-    });
-
-    test('a disconnected member is KEPT as a second part', () {
-      // stitchPolylines would have discarded this branch entirely.
-      final body = bodyOf([
-        relation(members: [
-          wayMember([pt(48.10, 11.50), pt(48.11, 11.50)]),
-          wayMember([pt(48.80, 11.90), pt(48.81, 11.90)]),
-        ]),
-      ]);
-      expect(parse(body).routes.single.parts, hasLength(2));
-    });
-
-    test('a member with no geometry is skipped', () {
-      final body = bodyOf([
-        relation(members: [
-          {'type': 'way', 'ref': 1, 'role': ''}, // entirely outside the box
-          wayMember([pt(48.10, 11.50), pt(48.11, 11.50)]),
-        ]),
-      ]);
-      expect(parse(body).routes.single.parts, hasLength(1));
-    });
-
-    test('platform ways are not part of the line', () {
-      final body = bodyOf([
-        relation(members: [
-          wayMember([pt(48.10, 11.50), pt(48.11, 11.50)]),
-          wayMember([pt(48.50, 11.50), pt(48.51, 11.50)], role: 'platform'),
-        ]),
-      ]);
-      expect(parse(body).routes.single.parts, hasLength(1));
-    });
-
-    test('stops come from the node pass, in member order', () {
-      final body = bodyOf([
-        relation(members: [
-          nodeMember(101),
-          nodeMember(102),
-          wayMember([pt(48.10, 11.50), pt(48.11, 11.50)]),
-        ]),
-        nodeElement(101, 48.10, 11.50, name: 'Alpha'),
-        nodeElement(102, 48.11, 11.50, name: 'Beta'),
-      ]);
-      final res = parse(body);
-      expect(res.routes.single.stopOsmIds, [101, 102]);
-      expect(res.stops.map((s) => s.name), containsAll(['Alpha', 'Beta']));
-    });
-
-    test('falls back to platform roles for PTv1 data', () {
-      final body = bodyOf([
-        relation(members: [
-          nodeMember(101, role: 'platform'),
-          wayMember([pt(48.10, 11.50), pt(48.11, 11.50)]),
-        ]),
-        nodeElement(101, 48.10, 11.50, name: 'Alpha'),
-      ]);
-      expect(parse(body).routes.single.stopOsmIds, [101]);
-    });
-
-    test('stops outside the box are clipped (the recursion is unfiltered)', () {
-      final body = bodyOf([
-        relation(members: [
-          nodeMember(101),
-          nodeMember(102),
-          wayMember([pt(48.10, 11.50), pt(48.11, 11.50)]),
-        ]),
-        nodeElement(101, 48.10, 11.50, name: 'Inside'),
-        nodeElement(102, 51.00, 11.50, name: 'Far away'),
-      ]);
-      final res = parse(body);
-      expect(res.routes.single.stopOsmIds, [101]);
-      expect(res.stops.map((s) => s.name), ['Inside']);
-    });
-
-    test('stops are deduped across routes that share them', () {
-      final body = bodyOf([
-        relation(id: 1, members: [
-          nodeMember(101),
-          wayMember([pt(48.10, 11.50), pt(48.11, 11.50)]),
-        ]),
-        relation(id: 2, ref: '20', members: [
-          nodeMember(101),
-          wayMember([pt(48.20, 11.50), pt(48.21, 11.50)]),
-        ]),
-        nodeElement(101, 48.10, 11.50, name: 'Shared'),
-      ]);
-      final res = parse(body);
-      expect(res.routes, hasLength(2));
-      expect(res.stops, hasLength(1));
-    });
-
-    test('a relation with an unknown route= is dropped', () {
-      final body = bodyOf([
-        relation(route: 'hiking', members: [
-          wayMember([pt(48.10, 11.50), pt(48.11, 11.50)]),
-        ]),
-      ]);
-      expect(parse(body).routes, isEmpty);
-    });
-
-    test('a route with nothing in the box is dropped', () {
-      expect(parse(bodyOf([relation(members: const [])])).routes, isEmpty);
-    });
-
-    test('the point cap truncates and flags the route', () {
-      final many = [
-        for (var i = 0; i < transitPointCap + 500; i++)
-          pt(48.0 + i * 0.001, 11.5),
-      ];
-      final body = bodyOf([
-        relation(members: [wayMember(many)]),
-      ]);
-      final r = parse(body).routes.single;
-      expect(r.pointCount, lessThanOrEqualTo(transitPointCap));
-    });
-
-    test('never throws', () {
-      expect(parse('nonsense').routes, isEmpty);
-      expect(parse('{"elements":{}}').routes, isEmpty);
+      final s = parseTransitStations(body)!;
+      expect(s, hasLength(1));
+      expect(s.single.name, 'Fine');
     });
   });
 
   group('network contract', () {
-    test('200 parses', () async {
-      final client = MockClient((_) async => http.Response(
-            bodyOf([relation(id: 3)]),
-            200,
-          ));
-      final outcome = await countTransitRoutes(
-        south: 48.1,
-        west: 11.5,
-        north: 48.2,
-        east: 11.6,
-        modes: transitModes,
-        client: client,
-      );
-      expect(outcome.ok, isTrue);
-      expect(outcome.value!.single.osmId, 3);
+    Future<TransitOutcome<List<TransitStationData>>> fetch(http.Client c,
+            {String? prefer}) =>
+        fetchTransitStations(
+          south: 48.1,
+          west: 11.5,
+          north: 48.2,
+          east: 11.6,
+          client: c,
+          preferEndpoint: prefer,
+        );
+
+    test('200 parses and reports which endpoint served it', () async {
+      final client = MockClient((_) async =>
+          http.Response(bodyOf([node(1, 48.1, 11.5, name: 'A')]), 200));
+      final out = await fetch(client);
+      expect(out.ok, isTrue);
+      expect(out.value!.single.name, 'A');
+      expect(out.endpoint, transitEndpoints.first);
     });
 
-    test('a busy server is reported as busy, and retried once', () async {
+    test('a busy instance fails OVER to the next one', () async {
+      final tried = <String>[];
+      final client = MockClient((req) async {
+        tried.add(req.url.toString());
+        if (tried.length == 1) return http.Response('busy', 504);
+        return http.Response(bodyOf([node(1, 48.1, 11.5, name: 'A')]), 200);
+      });
+      final out = await fetch(client);
+      expect(out.ok, isTrue);
+      expect(tried, hasLength(2));
+      expect(out.endpoint, transitEndpoints[1]);
+    });
+
+    test('a timeout or socket error also fails over', () async {
+      var calls = 0;
+      final client = MockClient((_) async {
+        calls++;
+        if (calls == 1) throw const SocketException('offline');
+        return http.Response(bodyOf([node(1, 48.1, 11.5, name: 'A')]), 200);
+      });
+      final out = await fetch(client);
+      expect(out.ok, isTrue, reason: 'a timeout says nothing about the query');
+      expect(calls, 2);
+    });
+
+    test('all endpoints busy reports busy, never blames the connection',
+        () async {
       var calls = 0;
       final client = MockClient((_) async {
         calls++;
         return http.Response('busy', 504);
       });
-      final outcome = await countTransitRoutes(
-        south: 48.1,
-        west: 11.5,
-        north: 48.2,
-        east: 11.6,
-        modes: transitModes,
-        client: client,
-      );
-      expect(outcome.ok, isFalse);
-      // A 504 answer to a valid query is routine on the public instance, so it
-      // earns exactly one polite retry — and must not blame the connection.
-      expect(calls, 2);
-      expect(outcome.message, contains('busy'));
-      expect(outcome.message, isNot(contains('connection')));
+      final out = await fetch(client);
+      expect(out.ok, isFalse);
+      expect(calls, transitEndpoints.length);
+      expect(out.message, contains('busy'));
+      expect(out.message, isNot(contains('connection')));
     });
 
-    test('a retried request that then succeeds is a success', () async {
-      var calls = 0;
-      final client = MockClient((_) async {
-        calls++;
-        return calls == 1
-            ? http.Response('busy', 503)
-            : http.Response(bodyOf([relation(id: 5)]), 200);
-      });
-      final outcome = await countTransitRoutes(
-        south: 48.1,
-        west: 11.5,
-        north: 48.2,
-        east: 11.6,
-        modes: transitModes,
-        client: client,
-      );
-      expect(outcome.ok, isTrue);
-      expect(outcome.value!.single.osmId, 5);
-    });
-
-    test('a query error is NOT retried', () async {
+    test('a query error is reported as-is and does NOT fail over', () async {
       var calls = 0;
       final client = MockClient((_) async {
         calls++;
         return http.Response('bad query', 400);
       });
-      final outcome = await countTransitRoutes(
-        south: 48.1,
-        west: 11.5,
-        north: 48.2,
-        east: 11.6,
-        modes: transitModes,
-        client: client,
-      );
-      expect(outcome.ok, isFalse);
+      final out = await fetch(client);
+      expect(out.ok, isFalse);
       expect(calls, 1);
-      expect(outcome.message, contains('400'));
+      expect(out.message, contains('400'));
     });
 
-    test('a network failure is null, and never throws out', () async {
-      final client = MockClient((_) async {
-        throw const SocketException('offline');
+    test('the preferred endpoint is tried first', () async {
+      final tried = <String>[];
+      final client = MockClient((req) async {
+        tried.add(req.url.toString());
+        return http.Response(bodyOf(const []), 200);
       });
-      final res = await fetchTransitRoutes(
-        south: 48.1,
-        west: 11.5,
-        north: 48.2,
-        east: 11.6,
-        osmIds: const [1],
-        client: client,
-      );
-      expect(res.ok, isFalse);
-      expect(res.message, contains('connection'));
+      final out = await fetch(client, prefer: transitEndpoints[2]);
+      expect(tried.first, transitEndpoints[2]);
+      expect(out.endpoint, transitEndpoints[2]);
+    });
+
+    test('an unknown preferred endpoint is ignored, not appended', () async {
+      final tried = <String>[];
+      final client = MockClient((req) async {
+        tried.add(req.url.toString());
+        return http.Response(bodyOf(const []), 200);
+      });
+      await fetch(client, prefer: 'https://evil.example/api');
+      expect(tried.single, transitEndpoints.first);
     });
 
     test('an oversized body is refused without decoding', () async {
       final huge = 'x' * (transitMaxResponseBytes + 1);
       final client = MockClient((_) async => http.Response(huge, 200));
-      final res = await fetchTransitRoutes(
-        south: 48.1,
-        west: 11.5,
-        north: 48.2,
-        east: 11.6,
-        osmIds: const [1],
-        client: client,
-      );
-      expect(res.ok, isFalse);
-      expect(res.message, contains('too much data'));
+      final out = await fetch(client);
+      expect(out.ok, isFalse);
+      expect(out.message, contains('too much data'));
     });
 
-    test('no ids means no request at all', () async {
-      var called = false;
-      final client = MockClient((_) async {
-        called = true;
-        return http.Response('{}', 200);
-      });
-      final res = await fetchTransitRoutes(
-        south: 48.1,
-        west: 11.5,
-        north: 48.2,
-        east: 11.6,
-        osmIds: const [],
-        client: client,
-      );
-      expect(called, isFalse);
-      expect(res.value!.isEmpty, isTrue);
+    test('an unreadable 200 is reported distinctly from an empty area',
+        () async {
+      final client = MockClient((_) async => http.Response('garbage', 200));
+      final out = await fetch(client);
+      expect(out.ok, isFalse);
+      expect(out.message, contains('could not read'));
+
+      final empty =
+          MockClient((_) async => http.Response(bodyOf(const []), 200));
+      final ok = await fetch(empty);
+      expect(ok.ok, isTrue);
+      expect(ok.value, isEmpty);
     });
   });
 }

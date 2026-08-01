@@ -6,14 +6,12 @@ import '../data/database.dart';
 import '../data/transit.dart';
 import 'screen_cluster.dart';
 
-/// Renders a `transit` layer: its visible route geometry as coloured polylines,
-/// and the stops those routes serve as clustered markers.
+/// Renders a `transit` layer: its imported **stations**, clustered in screen
+/// space, filtered by which transit types serve them.
 ///
-/// Two sibling widgets rather than one, because flutter_map takes its z-order
-/// from the `FlutterMap.children` list — lines must sit *below* markers, which a
-/// single widget returning one layer cannot express.
+/// There is no line geometry — see `data/transit.dart` for why.
 
-/// Icon for a stop, chosen from the modes that serve it.
+/// Icon for a station, chosen from the modes that serve it.
 IconData transitIconFor(int modeMask) {
   // Most specific first: a stop served by both a subway and a bus reads better
   // as a subway station.
@@ -34,119 +32,43 @@ IconData transitIconFor(int modeMask) {
   return Icons.directions_transit;
 }
 
-/// The colour a route draws in: its own OSM `colour` tag, else its mode's
-/// fallback. The hex parse already happened at import, so this is one null check.
-int routeColorArgb(TransitRoute route) =>
-    route.colorArgb ??
-    transitModeByKey(route.modeKey)?.colorArgb ??
-    0xFF616161;
-
-double routeStrokeWidth(TransitRoute route) =>
-    transitModeByKey(route.modeKey)?.strokeWidth ?? 2.0;
-
-/// Whether a stored part's bbox overlaps the visible map. Uses the denormalised
-/// bounds so an off-screen part is skipped **without decoding its points**.
-bool partVisible(TransitRoutePart part, LatLngBounds view) {
-  return part.south <= view.north &&
-      part.north >= view.south &&
-      part.west <= view.east &&
-      part.east >= view.west;
-}
-
-/// Memoises `decodeLatLngs` per part id.
+/// The stations that should be drawn: those whose own modes intersect the
+/// visible-mode mask of the import they came from.
 ///
-/// Without it a city import re-allocates tens of thousands of [LatLng]s on
-/// every frame. Parts are immutable once imported, so the id is a complete key.
-class TransitGeometryCache {
-  final Map<String, List<LatLng>> _entries = {};
-
-  List<LatLng> points(TransitRoutePart part) =>
-      _entries.putIfAbsent(part.id, () => decodeLatLngs(part.points));
-
-  void forget(Iterable<String> partIds) => _entries.removeAll(partIds);
-
-  int get length => _entries.length;
+/// **Invariant:** a station shows iff *at least one* of its modes is enabled —
+/// so unticking Bus leaves Pasing Bahnhof standing, because a train stops
+/// there. A station with no modes at all (`modeMask == 0`, ~0.1 % of Munich)
+/// shows whenever anything is enabled, so it can never become unreachable.
+List<TransitStop> visibleTransitStations(
+  Iterable<TransitStop> stations,
+  Map<String, int> visibleMaskBySetId,
+) {
+  return [
+    for (final s in stations)
+      if (_visible(s.modeMask, visibleMaskBySetId[s.setId])) s,
+  ];
 }
 
-extension _RemoveAll on Map<String, List<LatLng>> {
-  void removeAll(Iterable<String> keys) {
-    for (final k in keys) {
-      remove(k);
-    }
-  }
+bool _visible(int stationMask, int? visibleMask) {
+  if (visibleMask == null) return false; // not one of this layer's sets
+  if (visibleMask == 0) return false; // everything hidden
+  if (stationMask == 0) return true; // "no type given" — never orphaned
+  return stationMask & visibleMask != 0;
 }
 
-/// App-wide instance, so it survives the per-frame widget rebuilds.
-final transitGeometryCache = TransitGeometryCache();
-
-/// The route geometry of one transit layer.
-class TransitLinesLayer extends StatelessWidget {
-  const TransitLinesLayer({
+/// The stations of one transit layer.
+class TransitStationsLayer extends StatelessWidget {
+  const TransitStationsLayer({
     super.key,
     required this.layer,
-    required this.routes,
-    required this.parts,
-  });
-
-  final Layer layer;
-
-  /// This layer's routes (the caller filters).
-  final List<TransitRoute> routes;
-
-  /// All parts across every layer; filtered here by route id.
-  final List<TransitRoutePart> parts;
-
-  @override
-  Widget build(BuildContext context) {
-    final visible = {
-      for (final r in routes)
-        if (r.isVisible) r.id: r,
-    };
-    if (visible.isEmpty) return const SizedBox.shrink();
-    final view = MapCamera.of(context).visibleBounds;
-
-    final polylines = <Polyline>[];
-    for (final p in parts) {
-      final route = visible[p.routeId];
-      if (route == null) continue;
-      if (!partVisible(p, view)) continue;
-      final pts = transitGeometryCache.points(p);
-      if (pts.length < 2) continue;
-      polylines.add(Polyline(
-        points: pts,
-        color: Color(routeColorArgb(route)),
-        strokeWidth: routeStrokeWidth(route),
-        pattern: route.modeKey == 'ferry'
-            ? const StrokePattern.dotted()
-            : const StrokePattern.solid(),
-      ));
-    }
-    if (polylines.isEmpty) return const SizedBox.shrink();
-    // flutter_map's own per-frame simplification + culling defaults are left
-    // alone: they thin for the current zoom, while the import-time RDP handles
-    // the durable size.
-    return PolylineLayer(polylines: polylines);
-  }
-}
-
-/// The stops of one transit layer, clustered in screen space.
-class TransitStopsLayer extends StatelessWidget {
-  const TransitStopsLayer({
-    super.key,
-    required this.layer,
-    required this.stops,
-    required this.visibleStopIds,
+    required this.stations,
     this.onClusterTap,
   });
 
   final Layer layer;
 
-  /// This layer's stops (the caller filters).
-  final List<TransitStop> stops;
-
-  /// Ids of the stops at least one *visible* route serves — the invariant that
-  /// makes hiding U6 leave Marienplatz standing while the S-Bahn still calls.
-  final Set<String> visibleStopIds;
+  /// Already filtered by [visibleTransitStations].
+  final List<TransitStop> stations;
 
   final void Function(LatLng center)? onClusterTap;
 
@@ -157,16 +79,15 @@ class TransitStopsLayer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (stations.isEmpty) return const MarkerLayer(markers: []);
     final camera = MapCamera.of(context);
-    final bounds =
-        (Offset.zero & camera.size).inflate(2 * _clusterRadiusPx);
+    final bounds = (Offset.zero & camera.size).inflate(2 * _clusterRadiusPx);
 
     final lls = <LatLng>[];
     final names = <String?>[];
     final masks = <int>[];
     final offs = <Offset>[];
-    for (final s in stops) {
-      if (!visibleStopIds.contains(s.id)) continue;
+    for (final s in stations) {
       if (!s.lat.isFinite || !s.lng.isFinite) continue;
       final ll = LatLng(s.lat, s.lng);
       final o = camera.latLngToScreenOffset(ll);
@@ -184,7 +105,7 @@ class TransitStopsLayer extends StatelessWidget {
       if (c.indices.length == 1) {
         final i = c.indices.first;
         markers.add(
-            _stopMarker(lls[i], masks[i], showLabels ? names[i] : null));
+            _stationMarker(lls[i], masks[i], showLabels ? names[i] : null));
         continue;
       }
       var lat = 0.0, lng = 0.0, mask = 0;
@@ -202,8 +123,8 @@ class TransitStopsLayer extends StatelessWidget {
     return MarkerLayer(markers: markers);
   }
 
-  /// One stop: a white disc with its mode icon, name on a plate below.
-  Marker _stopMarker(LatLng point, int modeMask, String? name) {
+  /// One station: a white disc with its mode icon, name on a plate below.
+  Marker _stationMarker(LatLng point, int modeMask, String? name) {
     const coreSize = 22.0;
     const labelHeight = 14.0;
     const gap = 1.0;
@@ -227,8 +148,8 @@ class TransitStopsLayer extends StatelessWidget {
               shape: BoxShape.circle,
               border: Border.all(color: Colors.black26),
             ),
-            child: Icon(transitIconFor(modeMask),
-                size: 13, color: Colors.black87),
+            child:
+                Icon(transitIconFor(modeMask), size: 13, color: Colors.black87),
           ),
           if (hasLabel) ...[
             const SizedBox(height: gap),
@@ -259,8 +180,7 @@ class TransitStopsLayer extends StatelessWidget {
     );
   }
 
-  /// A cluster badge: member count ringed in the layer colour — the one place a
-  /// transit layer's own colour is used, since the lines carry OSM's.
+  /// A cluster badge: member count ringed in the layer colour.
   Marker _clusterMarker(LatLng center, int count, int modeMask) {
     const size = 38.0;
     return Marker(
@@ -298,22 +218,4 @@ class TransitStopsLayer extends StatelessWidget {
       ),
     );
   }
-}
-
-/// The stops that at least one visible route serves.
-///
-/// Computed once per build as a set union over the join rows — no geometry, so
-/// it stays trivial even at ~7500 joins.
-Set<String> visibleTransitStopIds(
-  Iterable<TransitRoute> routes,
-  Iterable<TransitRouteStop> join,
-) {
-  final visibleRoutes = {
-    for (final r in routes)
-      if (r.isVisible) r.id,
-  };
-  return {
-    for (final j in join)
-      if (visibleRoutes.contains(j.routeId)) j.stopId,
-  };
 }

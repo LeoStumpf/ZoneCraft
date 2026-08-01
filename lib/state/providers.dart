@@ -93,26 +93,9 @@ final transitSetsProvider = StreamProvider<List<TransitSet>>((ref) {
   return ref.watch(repositoryProvider).watchAllTransitSets();
 });
 
-/// Reactive list of every imported route (across all sets), ordered.
-final transitRoutesProvider = StreamProvider<List<TransitRoute>>((ref) {
-  return ref.watch(repositoryProvider).watchAllTransitRoutes();
-});
-
-/// Reactive list of every route geometry part (across all routes), ordered.
-final transitRoutePartsProvider =
-    StreamProvider<List<TransitRoutePart>>((ref) {
-  return ref.watch(repositoryProvider).watchAllTransitRouteParts();
-});
-
-/// Reactive list of every imported transit stop (across all sets).
+/// Reactive list of every imported transit station (across all sets).
 final transitStopsProvider = StreamProvider<List<TransitStop>>((ref) {
   return ref.watch(repositoryProvider).watchAllTransitStops();
-});
-
-/// Reactive route↔stop join (across all sets), in ride order.
-final transitRouteStopsProvider =
-    StreamProvider<List<TransitRouteStop>>((ref) {
-  return ref.watch(repositoryProvider).watchAllTransitRouteStops();
 });
 
 /// App-wide settings (currently the global uncertainty radius).
@@ -125,7 +108,7 @@ final seedProvider = FutureProvider<String>((ref) {
   return ref.watch(repositoryProvider).ensureDefaultLayer();
 });
 
-/// The seven object types a layer can hold, in one closed enum — the type tag
+/// The eight object types a layer can hold, in one closed enum — the type tag
 /// the six parallel `selectedXProvider`s don't carry themselves.
 enum ObjectKind {
   circle,
@@ -443,6 +426,29 @@ class PendingFocusNotifier extends Notifier<MapFocusRequest?> {
 final pendingFocusProvider =
     NotifierProvider<PendingFocusNotifier, MapFocusRequest?>(
         PendingFocusNotifier.new);
+
+/// A one-shot request to re-run a transit import that didn't finish.
+///
+/// The Elements list lives in the drawer and has no access to the map screen's
+/// import machinery, so it posts the set id here — the same shape
+/// [pendingFocusProvider] uses, and for the same reason. No `operator ==`, so
+/// asking twice for the same set re-fires.
+class TransitRetryRequest {
+  const TransitRetryRequest(this.setId);
+  final String setId;
+}
+
+class PendingTransitRetryNotifier extends Notifier<TransitRetryRequest?> {
+  @override
+  TransitRetryRequest? build() => null;
+
+  void request(String setId) => state = TransitRetryRequest(setId);
+  void clear() => state = null;
+}
+
+final pendingTransitRetryProvider =
+    NotifierProvider<PendingTransitRetryNotifier, TransitRetryRequest?>(
+        PendingTransitRetryNotifier.new);
 
 /// Resolves the effective active layer id given the current layer list:
 /// [noActiveLayer] ⇒ none; a still-present selection ⇒ itself; otherwise (nothing

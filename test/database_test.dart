@@ -357,137 +357,161 @@ void main() {
     expect(pts.map((p) => p.name).toSet(), {'Park bench', null});
   });
 
-  // --- transit (schema v18) --------------------------------------------------
+  // --- transit (schema v19: stations only) ------------------------------------
 
-  Future<String> seedTransit(String layerId) => repo.importTransitSet(
-        layerId: layerId,
-        south: 48.0,
-        west: 11.0,
-        north: 48.2,
-        east: 11.3,
-        modeMask: 0x3,
-        label: 'Munich centre',
-        routes: [
-          (
-            osmId: 111,
-            modeKey: 'subway',
-            ref: 'U6',
-            name: 'U6: North',
-            operatorName: 'MVG',
-            colourHex: '#0065AE',
-            colorArgb: 0xFF0065AE,
-            parts: [
-              [const LatLng(48.10, 11.10), const LatLng(48.11, 11.11)],
-              // A second, disconnected part (a branch, or a bbox-severed piece).
-              [const LatLng(48.18, 11.28), const LatLng(48.19, 11.29)],
-            ],
-            stopIndices: [0, 1],
-          ),
-          (
-            osmId: 222,
-            modeKey: 'tram',
-            ref: '19',
-            name: null,
-            operatorName: null,
-            colourHex: null,
-            colorArgb: null,
-            parts: [
-              [const LatLng(48.12, 11.12), const LatLng(48.13, 11.13)],
-            ],
-            // Shares stop 0 with U6 — the join is what makes that expressible.
-            stopIndices: [0],
-          ),
-        ],
-        stops: [
-          (osmId: 1001, lat: 48.10, lng: 11.10, name: 'Marienplatz'),
-          (osmId: 1002, lat: 48.11, lng: 11.11, name: null),
-        ],
-      );
+  Future<String> seedTransit(String layerId, {bool pendingOnly = false}) async {
+    final setId = await repo.createPendingTransitSet(
+      layerId: layerId,
+      south: 48.00,
+      west: 11.30,
+      north: 48.30,
+      east: 11.80,
+      modeMask: transitAllModesMask,
+      visibleModeMask: defaultVisibleModes(45000),
+      label: 'München',
+    );
+    if (pendingOnly) return setId;
+    await repo.fillTransitSet(setId, [
+      (
+        osmId: 1,
+        lat: 48.14,
+        lng: 11.46,
+        name: 'Pasing Bahnhof',
+        modeMask: transitModeByKey('bus')!.bit |
+            transitModeByKey('train')!.bit |
+            transitModeByKey('tram')!.bit,
+        nodeCount: 31,
+        routeRef: null,
+      ),
+      (
+        osmId: 2,
+        lat: 48.13,
+        lng: 11.57,
+        name: 'Marienplatz',
+        modeMask: transitModeByKey('subway')!.bit,
+        nodeCount: 4,
+        routeRef: 'U3;U6',
+      ),
+      (
+        osmId: 3,
+        lat: 48.11,
+        lng: 11.52,
+        name: 'Irgendwo',
+        modeMask: transitModeByKey('bus')!.bit,
+        nodeCount: 2,
+        routeRef: null,
+      ),
+    ]);
+    return setId;
+  }
 
-  test('importTransitSet writes routes, parts, stops and the join', () async {
+  test('an import stores stations with their modes and counts', () async {
     final layerId = await repo.createLayer(
         name: 'T', colorArgb: 0xFF123456, type: 'transit');
     final setId = await seedTransit(layerId);
 
-    final sets = await repo.watchAllTransitSets().first;
-    expect(sets.single.id, setId);
-    expect(sets.single.label, 'Munich centre');
-    expect(sets.single.modeMask, 0x3);
-
-    final routes = await repo.watchAllTransitRoutes().first;
-    expect(routes.length, 2);
-    final u6 = routes.firstWhere((r) => r.ref == 'U6');
-    expect(u6.modeKey, 'subway');
-    expect(u6.colorArgb, 0xFF0065AE);
-    expect(u6.isVisible, isTrue); // routes start shown
-    expect(u6.pointCount, 4);
-    expect(u6.stopCount, 2);
-
-    // Two parts, kept apart rather than bridged, with decodable geometry.
-    final parts = (await repo.watchAllTransitRouteParts().first)
-        .where((p) => p.routeId == u6.id)
-        .toList();
-    expect(parts.length, 2);
-    final decoded = decodeLatLngs(parts.first.points);
-    expect(decoded.length, 2);
-    expect(decoded.first.latitude, closeTo(48.10, 1e-9));
-    // The denormalised bbox is what lets the renderer cull without decoding.
-    expect(parts.first.south, closeTo(48.10, 1e-9));
-    expect(parts.first.north, closeTo(48.11, 1e-9));
+    final set = (await repo.watchAllTransitSets().first).single;
+    expect(set.id, setId);
+    expect(set.label, 'München');
+    expect(set.fetchedAt, isNotNull, reason: 'a filled import is not pending');
+    expect(set.lastError, isNull);
+    expect(set.stationCount, 3);
+    expect(set.nodeCount, 37); // 31 + 4 + 2 raw OSM nodes merged
+    // A city-sized box starts with bus hidden.
+    expect(set.visibleModeMask & transitModeByKey('bus')!.bit, 0);
 
     final stops = await repo.watchAllTransitStops().first;
-    expect(stops.length, 2);
-    final shared = stops.firstWhere((s) => s.osmId == 1001);
-    expect(shared.name, 'Marienplatz');
-    // Served by a subway and a tram, so it carries both mode bits.
-    final subwayBit = transitModeByKey('subway')!.bit;
-    final tramBit = transitModeByKey('tram')!.bit;
-    expect(shared.modeMask, subwayBit | tramBit);
-
-    final join = await repo.watchAllTransitRouteStops().first;
-    expect(join.length, 3); // U6 -> 2 stops, tram 19 -> 1 (shared)
-    expect(join.where((j) => j.stopId == shared.id).length, 2);
+    expect(stops, hasLength(3));
+    final pasing = stops.firstWhere((s) => s.name == 'Pasing Bahnhof');
+    expect(pasing.nodeCount, 31);
+    expect(
+      pasing.modeMask,
+      transitModeByKey('bus')!.bit |
+          transitModeByKey('train')!.bit |
+          transitModeByKey('tram')!.bit,
+    );
+    expect(stops.firstWhere((s) => s.name == 'Marienplatz').routeRef, 'U3;U6');
   });
 
-  test('deleting the layer cascades through all five transit tables', () async {
+  test('a failed import stays as a pending set you can retry', () async {
+    final layerId = await repo.createLayer(
+        name: 'T', colorArgb: 0xFF123456, type: 'transit');
+    final setId = await seedTransit(layerId, pendingOnly: true);
+    await repo.markTransitImportFailed(setId, 'Overpass is busy');
+
+    var set = (await repo.watchAllTransitSets().first).single;
+    expect(set.fetchedAt, isNull, reason: 'null fetchedAt == not imported yet');
+    expect(set.lastError, 'Overpass is busy');
+    expect(set.stationCount, 0);
+    // The box is remembered, so the retry knows exactly what to ask for.
+    expect(set.south, 48.00);
+    expect(set.east, 11.80);
+
+    // Retrying fills it in and clears the error.
+    await repo.fillTransitSet(setId, [
+      (
+        osmId: 9,
+        lat: 48.1,
+        lng: 11.5,
+        name: 'Later',
+        modeMask: transitModeByKey('tram')!.bit,
+        nodeCount: 1,
+        routeRef: null,
+      ),
+    ]);
+    set = (await repo.watchAllTransitSets().first).single;
+    expect(set.fetchedAt, isNotNull);
+    expect(set.lastError, isNull);
+    expect(set.stationCount, 1);
+  });
+
+  test('refilling replaces the stations rather than duplicating them',
+      () async {
+    final layerId = await repo.createLayer(
+        name: 'T', colorArgb: 0xFF123456, type: 'transit');
+    final setId = await seedTransit(layerId);
+    await repo.fillTransitSet(setId, [
+      (
+        osmId: 1,
+        lat: 48.1,
+        lng: 11.5,
+        name: 'Only one now',
+        modeMask: 0,
+        nodeCount: 1,
+        routeRef: null,
+      ),
+    ]);
+    expect(await repo.watchAllTransitStops().first, hasLength(1));
+  });
+
+  test('deleting the layer cascades to sets and stations', () async {
     final layerId = await repo.createLayer(
         name: 'T', colorArgb: 0xFF123456, type: 'transit');
     await seedTransit(layerId);
     await repo.deleteLayer(layerId);
-
     expect(await repo.watchAllTransitSets().first, isEmpty);
-    expect(await repo.watchAllTransitRoutes().first, isEmpty);
-    expect(await repo.watchAllTransitRouteParts().first, isEmpty);
     expect(await repo.watchAllTransitStops().first, isEmpty);
-    // The join hangs off two cascading parents — prove it goes too.
-    expect(await repo.watchAllTransitRouteStops().first, isEmpty);
   });
 
-  test('setTransitRouteVisibility flips exactly the given routes', () async {
+  test('setTransitVisibleModes writes the filter', () async {
     final layerId = await repo.createLayer(
         name: 'T', colorArgb: 0xFF123456, type: 'transit');
-    await seedTransit(layerId);
-    final routes = await repo.watchAllTransitRoutes().first;
-    final u6 = routes.firstWhere((r) => r.ref == 'U6');
+    final setId = await seedTransit(layerId);
 
-    await repo.setTransitRouteVisibility([u6.id], false);
-    final after = await repo.watchAllTransitRoutes().first;
-    expect(after.firstWhere((r) => r.id == u6.id).isVisible, isFalse);
-    expect(after.firstWhere((r) => r.ref == '19').isVisible, isTrue);
+    await repo.setTransitVisibleModes([setId], transitRailMask);
+    final set = (await repo.watchAllTransitSets().first).single;
+    expect(set.visibleModeMask, transitRailMask);
+    expect(set.visibleModeMask & transitModeByKey('bus')!.bit, 0);
 
-    // An empty id list is a no-op, not a "hide everything".
-    await repo.setTransitRouteVisibility(const [], false);
-    expect(
-      (await repo.watchAllTransitRoutes().first)
-          .firstWhere((r) => r.ref == '19')
-          .isVisible,
-      isTrue,
-    );
+    // An empty id list is a no-op, not "hide everything everywhere".
+    await repo.setTransitVisibleModes(const [], 0);
+    expect((await repo.watchAllTransitSets().first).single.visibleModeMask,
+        transitRailMask);
   });
 
   test('combining transit layers keeps both imports', () async {
-    // combineLayers' `default` branch re-points *circles*, then deletes the
-    // source layer — a type without its own case silently loses everything.
+    // combineLayers' `default` re-points *circles*, then deletes the source —
+    // a type without its own case loses everything to the cascade.
     final a = await repo.createLayer(
         name: 'A', colorArgb: 0xFF111111, type: 'transit');
     final b = await repo.createLayer(
@@ -498,10 +522,9 @@ void main() {
     await repo.combineLayers(sourceId: a, targetId: b);
 
     final sets = await repo.watchAllTransitSets().first;
-    expect(sets.length, 2, reason: 'the combined-away import must survive');
+    expect(sets, hasLength(2), reason: 'the combined-away import must survive');
     expect(sets.every((s) => s.layerId == b), isTrue);
-    expect((await repo.watchAllTransitRoutes().first).length, 4);
-    expect((await repo.watchAllTransitStops().first).length, 4);
+    expect(await repo.watchAllTransitStops().first, hasLength(6));
   });
 
   test('a transit layer is created fully opaque', () async {
@@ -514,59 +537,37 @@ void main() {
     expect(defaultLayerOpacity('circles'), kDefaultRegionLayerOpacity);
   });
 
-  test('transit exports as plain lines and points, and does not re-import',
-      () async {
+  test('transit exports as named points and does not re-import', () async {
     final layerId = await repo.createLayer(
         name: 'T', colorArgb: 0xFF123456, type: 'transit');
     await seedTransit(layerId);
 
     final data = await repo.exportData(onlyLayerId: layerId);
     final objects = data.layers.single.objects;
-    final lines = objects.where((o) => o.kind == 'transitline').toList();
-    final stops = objects.where((o) => o.kind == 'transitstop').toList();
-    // U6 contributes two parts (kept apart), the tram one.
-    expect(lines, hasLength(3));
-    expect(lines.every((o) => o.coords.length >= 2), isTrue);
-    expect(lines.map((o) => o.categoryKey), containsAll(['subway', 'tram']));
-    expect(stops, hasLength(1));
-    expect(stops.single.coords, hasLength(2));
-    expect(stops.single.pointLabels, contains('Marienplatz'));
+    expect(objects, hasLength(1));
+    expect(objects.single.kind, 'transitstop');
+    expect(objects.single.coords, hasLength(3));
+    expect(objects.single.pointLabels, contains('Pasing Bahnhof'));
+    // No line geometry exists any more.
+    expect(objects.where((o) => o.kind == 'transitline'), isEmpty);
 
-    // GeoJSON must carry real geometry, not an empty GeometryCollection.
     final gj = jsonDecode(exportToGeoJson(data)) as Map<String, dynamic>;
     final kinds = {
       for (final f in gj['features'] as List)
         (f as Map)['geometry']['type'] as String,
     };
-    expect(kinds, containsAll(['LineString', 'MultiPoint']));
+    expect(kinds, {'MultiPoint'});
+    expect(exportToKml(data), contains('Pasing Bahnhof'));
 
-    // KML: a route must be a LineString, never the default single <Point>.
-    final kml = exportToKml(data);
-    expect(kml, contains('<LineString>'));
-    expect(kml, contains('Marienplatz'));
-
-    // Re-importing yields an empty transit layer — derived data is re-fetched,
-    // not restored from a file.
-    final n = await repo.importData(data);
-    expect(n, 0);
-    final layers = await repo.watchLayers().first;
-    final fresh = layers.where((l) => l.type == 'transit' && l.id != layerId);
+    // Re-importing yields an empty transit layer — derived data is re-fetched.
+    expect(await repo.importData(data), 0);
+    final fresh = (await repo.watchLayers().first)
+        .where((l) => l.type == 'transit' && l.id != layerId);
     expect(fresh, hasLength(1));
-    final freshSets = (await repo.watchAllTransitSets().first)
-        .where((t) => t.layerId == fresh.single.id);
-    expect(freshSets, isEmpty);
-  });
-
-  test('a hidden route is left out of the export', () async {
-    final layerId = await repo.createLayer(
-        name: 'T', colorArgb: 0xFF123456, type: 'transit');
-    await seedTransit(layerId);
-    final u6 = (await repo.watchAllTransitRoutes().first)
-        .firstWhere((r) => r.ref == 'U6');
-    await repo.setTransitRouteVisibility([u6.id], false);
-
-    final objects =
-        (await repo.exportData(onlyLayerId: layerId)).layers.single.objects;
-    expect(objects.where((o) => o.kind == 'transitline'), hasLength(1));
+    expect(
+      (await repo.watchAllTransitSets().first)
+          .where((t) => t.layerId == fresh.single.id),
+      isEmpty,
+    );
   });
 }

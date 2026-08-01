@@ -289,11 +289,14 @@ class PoiPoints extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-/// One public-transport import on a `transit` layer: every route in a chosen
-/// bounding box, fetched once (Overpass) and stored offline — the layer never
-/// refetches. A `transit` layer may hold several sets. The routes live in
-/// [TransitRoutes], their geometry in [TransitRouteParts], their stops in
-/// [TransitStops] joined through [TransitRouteStops].
+/// One public-transport import on a `transit` layer: every **station** in a
+/// chosen bounding box, fetched once (Overpass) and stored offline — the layer
+/// never refetches. A `transit` layer may hold several sets.
+///
+/// Line geometry is deliberately **not** stored: fetching route relations with
+/// geometry proved unobtainable from the public API for anything larger than a
+/// few km² (see `data/transit.dart`), while stops for a whole city come back in
+/// seconds. Each station records only *which modes serve it*.
 class TransitSets extends Table {
   TextColumn get id => text()();
   TextColumn get layerId =>
@@ -305,112 +308,68 @@ class TransitSets extends Table {
   RealColumn get north => real()();
   RealColumn get east => real()();
 
-  /// Which modes were requested (packed `TransitMode.bit`s).
+  /// Which modes were requested (packed `TransitMode.bit`s). Everything is
+  /// imported, so this is currently always "all" — kept so a future partial
+  /// import stays expressible.
   IntColumn get modeMask => integer()();
+
+  /// Which modes are **shown**. This is what the filter sheet writes; it starts
+  /// from `defaultVisibleModes(diagonal)`, which hides buses on a city-sized
+  /// import because they outnumber everything else ~7:1.
+  IntColumn get visibleModeMask => integer().withDefault(const Constant(-1))();
+
   TextColumn get label => text().nullable()();
 
-  /// When the data was pulled from OSM — imports are snapshots with no refresh.
-  DateTimeColumn get fetchedAt => dateTime().withDefault(currentDateAndTime)();
+  /// When the data was pulled from OSM. **Null = the import hasn't succeeded
+  /// yet** — the layer shows it as a retry row until it does, so a failure is
+  /// something you can come back to rather than a lost snackbar.
+  DateTimeColumn get fetchedAt => dateTime().nullable()();
+
+  /// Why the last attempt failed, shown on that retry row.
+  TextColumn get lastError => text().nullable()();
+
+  /// Denormalised for the Elements subtitle without a join: stations stored,
+  /// and how many raw OSM nodes merged into them.
+  IntColumn get stationCount => integer().withDefault(const Constant(0))();
+  IntColumn get nodeCount => integer().withDefault(const Constant(0))();
+
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 
   @override
   Set<Column> get primaryKey => {id};
 }
 
-/// One route relation of a [TransitSets] import. OSM stores a relation per
-/// *direction*, so a line the user knows as "U6" is usually two of these; the
-/// Lines menu folds them by [ref].
-class TransitRoutes extends Table {
-  TextColumn get id => text()();
-  TextColumn get setId =>
-      text().references(TransitSets, #id, onDelete: KeyAction.cascade)();
-
-  /// The OSM relation id.
-  IntColumn get osmId => integer()();
-
-  /// `TransitMode.key` — picks the icon, stroke width and fallback colour.
-  TextColumn get modeKey => text()();
-  TextColumn get ref => text().nullable()();
-  TextColumn get name => text().nullable()();
-  TextColumn get operatorName => text().nullable()();
-
-  /// The raw OSM `colour` tag, kept for debugging/export.
-  TextColumn get colourHex => text().nullable()();
-
-  /// [colourHex] parsed to ARGB, or null to fall back to the mode palette.
-  IntColumn get colorArgb => integer().nullable()();
-
-  /// Whether this route is drawn. **This is what the Lines menu writes.**
-  BoolColumn get isVisible => boolean().withDefault(const Constant(true))();
-
-  IntColumn get stopCount => integer().withDefault(const Constant(0))();
-  IntColumn get pointCount => integer().withDefault(const Constant(0))();
-  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
-  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
-
-  @override
-  Set<Column> get primaryKey => {id};
-}
-
-/// One connected run of a route's geometry, as an encoded `[[lat,lng],…]` blob.
-///
-/// A row per vertex — the convention every other object type follows — would put
-/// ~75 000 rows through the global streams for a single city import, so the
-/// points are packed (`encodeLatLngs`) and the run's bbox is denormalised so the
-/// renderer can cull off-screen parts **without decoding them**.
-///
-/// Several parts mean the route has genuine gaps (branches, loops, or pieces the
-/// bbox clip severed); they are never bridged.
-class TransitRouteParts extends Table {
-  TextColumn get id => text()();
-  TextColumn get routeId =>
-      text().references(TransitRoutes, #id, onDelete: KeyAction.cascade)();
-  IntColumn get partIndex => integer()();
-  IntColumn get pointCount => integer()();
-  TextColumn get points => text()();
-  RealColumn get south => real()();
-  RealColumn get west => real()();
-  RealColumn get north => real()();
-  RealColumn get east => real()();
-
-  @override
-  Set<Column> get primaryKey => {id};
-}
-
-/// A stop of a [TransitSets] import, deduped by OSM node id across the routes
-/// that serve it.
+/// One station of a [TransitSets] import — several OSM nodes (a `stop_position`
+/// per platform, plus `platform` nodes) merged into the stop a person would
+/// name. Munich's 8 215 raw nodes are 2 672 stations; Pasing Bahnhof alone is
+/// 31 of them.
 class TransitStops extends Table {
   TextColumn get id => text()();
   TextColumn get setId =>
       text().references(TransitSets, #id, onDelete: KeyAction.cascade)();
+
+  /// The OSM node the station was keyed on (the `station` node when there was
+  /// one), so it can be looked up on osm.org.
   IntColumn get osmId => integer()();
   RealColumn get lat => real()();
   RealColumn get lng => real()();
   TextColumn get name => text().nullable()();
 
-  /// The modes serving this stop (packed bits) — picks the marker icon.
+  /// The modes serving this station (packed bits); 0 = the data doesn't say.
+  /// A station is drawn iff `modeMask & set.visibleModeMask != 0`.
   IntColumn get modeMask => integer().withDefault(const Constant(0))();
+
+  /// How many OSM nodes merged into this station.
+  IntColumn get nodeCount => integer().withDefault(const Constant(1))();
+
+  /// The OSM `route_ref` tag when present (~18 % of stops) — free text shown as
+  /// a hint. Never parsed, never relied on.
+  TextColumn get routeRef => text().nullable()();
+
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 
   @override
   Set<Column> get primaryKey => {id};
-}
-
-/// Which routes serve which stops, in ride order.
-///
-/// **Invariant:** a stop is drawn iff *at least one visible route* serves it. So
-/// hiding U6 leaves Marienplatz on the map (the S-Bahn still stops there), and
-/// hiding every route that serves a stop hides it. That is exactly why this is a
-/// join and not a per-route copy or a per-set mode mask.
-class TransitRouteStops extends Table {
-  TextColumn get routeId =>
-      text().references(TransitRoutes, #id, onDelete: KeyAction.cascade)();
-  TextColumn get stopId =>
-      text().references(TransitStops, #id, onDelete: KeyAction.cascade)();
-  IntColumn get sortOrder => integer()();
-
-  @override
-  Set<Column> get primaryKey => {routeId, stopId};
 }
 
 /// On-disk cache of map tile images, keyed by their full fetch [url] (so the base
@@ -489,6 +448,11 @@ class AppSettings extends Table {
   BoolColumn get transportOverlay =>
       boolean().withDefault(const Constant(false))();
 
+  /// The Overpass endpoint that last served a transit import, so the next one
+  /// starts with the instance that was actually up. Null = start at the top of
+  /// `transitEndpoints`.
+  TextColumn get transitEndpoint => text().nullable()();
+
   /// Packed bitmask of enabled map-POI categories (see `poiCategories` in
   /// `overpass.dart`). 0 = none shown.
   IntColumn get poiCategories => integer().withDefault(const Constant(0))();
@@ -533,10 +497,7 @@ class AppSettings extends Table {
     PoiSets,
     PoiPoints,
     TransitSets,
-    TransitRoutes,
-    TransitRouteParts,
     TransitStops,
-    TransitRouteStops,
     TileCache,
     OverpassCache,
   ],
@@ -548,7 +509,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 18;
+  int get schemaVersion => 19;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -636,13 +597,33 @@ class AppDatabase extends _$AppDatabase {
             );
           }
           if (from < 18) {
-            // The `transit` layer type. Purely additive — no existing table or
-            // row is touched, so this cannot disturb a v17 install.
+            // v18 introduced the `transit` layer type; v19 reshaped it, so its
+            // tables are created once in the v19 block below.
+          }
+          if (from < 19) {
+            // Transit became **stations only**: route geometry is not
+            // obtainable from the public API at any useful scale (see
+            // data/transit.dart), so the three route tables go, and the two
+            // survivors change shape — `fetched_at` becomes nullable to mean
+            // "not imported yet", which SQLite cannot relax in place.
+            //
+            // So the transit tables are dropped and recreated rather than
+            // altered. This DOES discard a v18 transit import — deliberately:
+            // the v18 model is the one being abandoned, and re-importing is now
+            // the cheap path (a whole city in seconds, where geometry never
+            // worked at all). Nothing outside `transit_*` is touched.
+            for (final t in const [
+              'transit_route_stops',
+              'transit_route_parts',
+              'transit_routes',
+              'transit_stops',
+              'transit_sets',
+            ]) {
+              await customStatement('DROP TABLE IF EXISTS $t');
+            }
             await m.createTable(transitSets);
-            await m.createTable(transitRoutes);
-            await m.createTable(transitRouteParts);
             await m.createTable(transitStops);
-            await m.createTable(transitRouteStops);
+            await m.addColumn(appSettings, appSettings.transitEndpoint);
           }
         },
         beforeOpen: (details) async {

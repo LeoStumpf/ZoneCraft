@@ -49,10 +49,13 @@ fill past the drawn boundary.
 **Optional map overlays** (toggled in Settings)
 - **Public transport** — transparent ÖPNVKarte (buses/trams/stops) + OpenRailwayMap (rail)
   tile overlays.
-- **Public transport** — pick an area (tap two corners) and import every OSM route in it —
-  bus, tram, subway, train, ferry — with its stops. Stored offline and drawn in each line's
-  own OSM colour; a per-layer **Lines** menu switches whole modes or individual lines on and
-  off. (Separate from the ÖPNVKarte/OpenRailwayMap *tile* overlay in Settings.)
+- **Public transport (layer type)** — pick an area (tap two corners) and import every OSM
+  transit **station** in it, together with which types serve each one — bus, tram, subway,
+  light rail, train, monorail, ferry. Stored offline and drawn as clustered markers; the
+  layer's **Station types** tick boxes (top of its Elements list) switch types on and off, and
+  a station stays visible while at least one ticked type stops there, so "Rail only" keeps the
+  big interchanges. Line shapes are deliberately not fetched. (Separate from the
+  ÖPNVKarte/OpenRailwayMap *tile* overlay in Settings.)
 - **Points of interest** — OSMAnd-style OSM POI categories (benches, post boxes, drinking
   water, toilets, cafés, …) fetched from Overpass and shown as markers, only at high zoom.
 - **Administrative borders** — OSM `admin_level` boundaries (countries → … → suburbs), each a

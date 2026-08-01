@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/database.dart';
 import '../state/providers.dart';
 import 'object_summary.dart';
+import 'transit_modes_sheet.dart'
+    show TransitModeFilter, transitTallyProvider;
 
 /// What the caller (the layer tile) must do after the sheet closes. Rename and
 /// delete are applied inside the sheet — they don't need the map or the drawer.
@@ -15,21 +17,15 @@ enum ElementAction {
   /// Frame the object without changing the selection.
   zoom,
 
-  /// Open the transit layer's line filter instead (a different axis).
-  lines,
+  /// Re-run an import that never finished.
+  retry,
 }
 
 class ElementResult {
   const ElementResult(this.action, this.target);
-  const ElementResult.lines()
-      : action = ElementAction.lines,
-        target = null;
 
   final ElementAction action;
-
-  /// Null only for [ElementAction.lines], which is about the layer, not an
-  /// object.
-  final ObjectSummary? target;
+  final ObjectSummary target;
 }
 
 /// Lists every object in [layer] with per-object edit / zoom / rename / delete.
@@ -79,7 +75,6 @@ class _LayerObjectsList extends ConsumerWidget {
       poiSets: ref.watch(poiSetsProvider).asData?.value ?? const [],
       poiPoints: ref.watch(poiPointsProvider).asData?.value ?? const [],
       transitSets: ref.watch(transitSetsProvider).asData?.value ?? const [],
-      transitRoutes: ref.watch(transitRoutesProvider).asData?.value ?? const [],
       transitStops: ref.watch(transitStopsProvider).asData?.value ?? const [],
     );
     // POI sets and transit imports have no editor sheet, so their row taps
@@ -102,75 +97,107 @@ class _LayerObjectsList extends ConsumerWidget {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
+              // A transit layer's headline number is how many stations the
+              // filter is currently drawing — the import count belongs to the
+              // Imports heading, where it can't be read as "stations".
               Text(
-                '${summaries.length} element${summaries.length == 1 ? '' : 's'}',
+                layer.type == 'transit'
+                    ? () {
+                        final t = ref.watch(transitTallyProvider(layer.id));
+                        return '${t.shown} / ${t.total} shown';
+                      }()
+                    : '${summaries.length} '
+                        'element${summaries.length == 1 ? '' : 's'}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
-              // Elements lists the *imports*; which lines are shown is a
-              // different axis, so offer it here too rather than stranding
-              // whoever reached for Elements first.
-              if (layer.type == 'transit')
-                TextButton(
-                  onPressed: () =>
-                      Navigator.pop(context, const ElementResult.lines()),
-                  child: const Text('Lines…'),
-                ),
             ],
           ),
         ),
         const Divider(height: 1),
         Expanded(
-          child: summaries.isEmpty
+          child: summaries.isEmpty && layer.type != 'transit'
               ? _EmptyState(scrollController: scrollController, layer: layer)
-              : ListView.separated(
+              : ListView(
                   controller: scrollController,
-                  itemCount: summaries.length,
-                  separatorBuilder: (_, _) => const Divider(height: 1),
-                  itemBuilder: (context, i) {
-                    final s = summaries[i];
-                    return ListTile(
-                      leading: Icon(typeIcon(layer.type)),
-                      title: Text(s.title, overflow: TextOverflow.ellipsis),
-                      subtitle: Text(s.subtitle),
-                      onTap: () => Navigator.pop(
-                        context,
-                        ElementResult(
-                          canEdit ? ElementAction.edit : ElementAction.zoom,
-                          s,
-                        ),
+                  children: [
+                    // A transit layer has two very different lists in it, and
+                    // reading one as the other is the obvious mistake: the
+                    // *types* are tick boxes that hide markers, the *imports*
+                    // are fetched areas that delete data. Both live here, each
+                    // under a heading that says which it is.
+                    if (layer.type == 'transit') ...[
+                      const _SectionHeader('Station types',
+                          'Tick which kinds of stop to draw'),
+                      TransitModeFilter(layer: layer),
+                      const Divider(height: 1),
+                      _SectionHeader(
+                        'Imports',
+                        'Areas you fetched — deleting one removes its stations',
+                        trailing: '${summaries.length}',
                       ),
-                      trailing: PopupMenuButton<String>(
-                        onSelected: (value) async {
-                          switch (value) {
-                            case 'edit':
-                              Navigator.pop(context,
-                                  ElementResult(ElementAction.edit, s));
-                            case 'zoom':
-                              Navigator.pop(context,
-                                  ElementResult(ElementAction.zoom, s));
-                            case 'rename':
-                              await _rename(context, ref, s);
-                            case 'delete':
-                              await _delete(context, ref, s);
-                          }
-                        },
-                        itemBuilder: (_) => [
-                          if (canEdit)
-                            const PopupMenuItem(
-                                value: 'edit', child: Text('Edit')),
-                          const PopupMenuItem(
-                              value: 'zoom', child: Text('Zoom to')),
-                          const PopupMenuItem(
-                              value: 'rename', child: Text('Rename…')),
-                          const PopupMenuItem(
-                              value: 'delete', child: Text('Delete')),
-                        ],
-                      ),
-                    );
-                  },
+                    ],
+                    if (summaries.isEmpty)
+                      _EmptyHint(layer: layer)
+                    else
+                      for (var i = 0; i < summaries.length; i++) ...[
+                        if (i > 0) const Divider(height: 1),
+                        _row(context, ref, summaries[i], canEdit: canEdit),
+                      ],
+                  ],
                 ),
         ),
       ],
+    );
+  }
+
+  Widget _row(
+    BuildContext context,
+    WidgetRef ref,
+    ObjectSummary s, {
+    required bool canEdit,
+  }) {
+    return ListTile(
+      leading: Icon(s.isPending ? Icons.refresh : typeIcon(layer.type)),
+      title: Text(s.title, overflow: TextOverflow.ellipsis),
+      subtitle: Text(s.subtitle),
+      onTap: () => Navigator.pop(
+        context,
+        ElementResult(
+          // An import that never finished offers a retry rather than a zoom to
+          // an empty box.
+          s.isPending
+              ? ElementAction.retry
+              : canEdit
+                  ? ElementAction.edit
+                  : ElementAction.zoom,
+          s,
+        ),
+      ),
+      trailing: PopupMenuButton<String>(
+        onSelected: (value) async {
+          switch (value) {
+            case 'edit':
+              Navigator.pop(context, ElementResult(ElementAction.edit, s));
+            case 'zoom':
+              Navigator.pop(context, ElementResult(ElementAction.zoom, s));
+            case 'retry':
+              Navigator.pop(context, ElementResult(ElementAction.retry, s));
+            case 'rename':
+              await _rename(context, ref, s);
+            case 'delete':
+              await _delete(context, ref, s);
+          }
+        },
+        itemBuilder: (_) => [
+          if (s.isPending)
+            const PopupMenuItem(value: 'retry', child: Text('Try again')),
+          if (canEdit && !s.isPending)
+            const PopupMenuItem(value: 'edit', child: Text('Edit')),
+          const PopupMenuItem(value: 'zoom', child: Text('Zoom to')),
+          const PopupMenuItem(value: 'rename', child: Text('Rename…')),
+          const PopupMenuItem(value: 'delete', child: Text('Delete')),
+        ],
+      ),
     );
   }
 
@@ -272,10 +299,60 @@ class _LayerObjectsList extends ConsumerWidget {
   }
 }
 
+/// Names one half of a two-part list, so neither half is read as the other.
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader(this.title, this.blurb, {this.trailing});
+
+  final String title;
+  final String blurb;
+  final String? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title.toUpperCase(),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.primary,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ),
+              if (trailing != null)
+                Text(trailing!, style: theme.textTheme.bodySmall),
+            ],
+          ),
+          Text(blurb, style: theme.textTheme.bodySmall),
+        ],
+      ),
+    );
+  }
+}
+
 class _EmptyState extends StatelessWidget {
   const _EmptyState({required this.scrollController, required this.layer});
 
   final ScrollController scrollController;
+  final Layer layer;
+
+  @override
+  Widget build(BuildContext context) => ListView(
+        controller: scrollController,
+        children: [_EmptyHint(layer: layer)],
+      );
+}
+
+class _EmptyHint extends StatelessWidget {
+  const _EmptyHint({required this.layer});
+
   final Layer layer;
 
   @override
@@ -286,18 +363,13 @@ class _EmptyState extends StatelessWidget {
         'No imports yet — tap Import transit, then tap two corners of an area.',
       _ => 'No elements yet — tap Add, then tap the map to place one.',
     };
-    return ListView(
-      controller: scrollController,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
-          child: Text(
-            hint,
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-        ),
-      ],
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+      child: Text(
+        hint,
+        textAlign: TextAlign.center,
+        style: Theme.of(context).textTheme.bodyMedium,
+      ),
     );
   }
 }
