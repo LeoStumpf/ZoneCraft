@@ -6,6 +6,8 @@ import '../data/database.dart';
 import '../data/repository.dart';
 import '../state/providers.dart';
 import 'import_actions.dart';
+import 'layer_objects_sheet.dart';
+import 'object_summary.dart';
 import 'settings_screen.dart';
 
 /// Left-hand drawer for managing layers: list, choose active, visibility,
@@ -261,16 +263,6 @@ class LayersDrawer extends ConsumerWidget {
   }
 }
 
-IconData _typeIcon(String type) => switch (type) {
-      'planes' => Icons.change_history,
-      'subspace' => Icons.scatter_plot_outlined,
-      'freeline' => Icons.polyline,
-      'freearea' => Icons.hexagon_outlined,
-      'height' => Icons.terrain,
-      'poi' => Icons.travel_explore,
-      _ => Icons.circle_outlined,
-    };
-
 class _LayerTile extends ConsumerWidget {
   const _LayerTile({
     super.key,
@@ -312,11 +304,19 @@ class _LayerTile extends ConsumerWidget {
 
     return ListTile(
       selected: isActive,
+      // Three trailing controls (elements, menu, drag) leave little room for the
+      // name, so claw back the default paddings and keep every control compact.
+      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+      horizontalTitleGap: 4,
+      minLeadingWidth: 36,
       // Tap to make active; tap the active layer again to have no active layer.
       onTap: () => ref
           .read(activeLayerProvider.notifier)
           .toggle(layer.id, isActive: isActive),
       leading: IconButton(
+        visualDensity: VisualDensity.compact,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints.tightFor(width: 36, height: 36),
         tooltip: layer.isVisible ? 'Hide' : 'Show',
         icon: Icon(layer.isVisible
             ? Icons.visibility
@@ -339,7 +339,7 @@ class _LayerTile extends ConsumerWidget {
             ),
           ),
           const SizedBox(width: 8),
-          Icon(_typeIcon(layer.type), size: 16),
+          Icon(typeIcon(layer.type), size: 16),
           const SizedBox(width: 6),
           Expanded(child: Text(layer.name, overflow: TextOverflow.ellipsis)),
         ],
@@ -348,7 +348,23 @@ class _LayerTile extends ConsumerWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Always present, for every layer type: the list of this layer's
+          // objects. Deliberately not a popup-menu entry — reaching an element
+          // must never depend on the layer's type or state.
+          IconButton(
+            tooltip: 'Elements',
+            icon: const Icon(Icons.format_list_bulleted),
+            iconSize: 20,
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 32, height: 36),
+            onPressed: () => _openElements(context, ref),
+          ),
+          // NB: PopupMenuButton.constraints sizes the *menu*, not the button —
+          // keep the button slim with iconSize/padding only.
           PopupMenuButton<String>(
+            iconSize: 20,
+            padding: EdgeInsets.zero,
             onSelected: (value) async {
               switch (value) {
                 case 'rename':
@@ -410,10 +426,31 @@ class _LayerTile extends ConsumerWidget {
               const PopupMenuItem(value: 'delete', child: Text('Delete')),
             ],
           ),
-          const Icon(Icons.drag_handle),
+          const Padding(
+            padding: EdgeInsets.only(left: 4),
+            child: Icon(Icons.drag_handle, size: 20),
+          ),
         ],
       ),
     );
+  }
+
+  /// Opens this layer's element list and applies whatever it asks for.
+  ///
+  /// The sheet handles rename/delete itself; only "edit" and "zoom to" need the
+  /// map, and both end with the drawer closed so the result is visible. This is
+  /// the single place that pops routes for the flow.
+  Future<void> _openElements(BuildContext context, WidgetRef ref) async {
+    final result = await showLayerObjects(context, layer);
+    if (result == null || !context.mounted) return;
+    if (result.action == ElementAction.edit) {
+      // Selecting also makes the layer active, so the drag handles, the Add
+      // button and the long-press context all follow the object being edited.
+      ref.read(activeLayerProvider.notifier).select(layer.id);
+      selectObject(ref, result.target.ref.kind, result.target.ref.id);
+    }
+    ref.read(pendingFocusProvider.notifier).request(result.target.fitPoints);
+    Navigator.pop(context); // close the drawer so the map is visible
   }
 
   Future<void> _rename(BuildContext context, Repository repo) async {

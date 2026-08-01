@@ -892,6 +892,22 @@ class Repository {
     });
   }
 
+  /// Renames a POI set (or moves it to another `poi` layer). The set's search
+  /// circle and its stored POIs are immutable — a different area means a new
+  /// import.
+  Future<void> updatePoiSet(
+    String id, {
+    String? layerId,
+    Value<String?> label = const Value.absent(),
+  }) async {
+    await (_db.update(_db.poiSets)..where((s) => s.id.equals(id))).write(
+      PoiSetsCompanion(
+        layerId: layerId == null ? const Value.absent() : Value(layerId),
+        label: label,
+      ),
+    );
+  }
+
   Future<void> deletePoiSet(String id) {
     return (_db.delete(_db.poiSets)..where((s) => s.id.equals(id))).go();
   }

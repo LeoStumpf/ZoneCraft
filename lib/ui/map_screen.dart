@@ -15,18 +15,23 @@ import '../data/cached_tile_provider.dart';
 import '../data/database.dart';
 import '../data/height_generator.dart';
 import '../data/overpass.dart';
+import '../geo/coords.dart';
 import '../geo/geodesic.dart';
 import '../geo/tiles.dart';
+import '../state/map_mode.dart';
 import '../state/providers.dart';
 import 'circle_editor.dart';
 import 'collapsible_sheet.dart';
 import 'freearea_editor.dart';
 import 'freeline_editor.dart';
 import 'height_editor.dart';
+import 'hit_test.dart';
 import 'layers_panel.dart';
+import 'object_summary.dart';
 import 'plane_editor.dart';
 import 'poi_import_dialog.dart';
 import 'poi_layer.dart';
+import 'area_geometry.dart';
 import 'region_geometry.dart';
 import 'region_layer.dart';
 import 'subspace_editor.dart';
@@ -53,15 +58,27 @@ class _MapScreenState extends ConsumerState<MapScreen>
   // Shows the "handles are draggable" hint once per app session, the first time
   // an object is selected.
   bool _editHintShown = false;
-  // Tap-to-place mode for seeding a new point-set object: while set, map taps
-  // drop points into this (empty) layer instead of selecting. Holds the layer
-  // id + type; a banner offers "Done".
+  // Shown once per session, the first time a view-mode tap lands on an object
+  // (i.e. the user tried the old tap-to-select and nothing happened).
+  bool _viewTapHintShown = false;
+  // --- Add mode -------------------------------------------------------------
+  // While [MapMode.add] is armed these hold the layer being added to. Sticky:
+  // each tap places one object (or one vertex, for the point-set types) and the
+  // mode stays on until Done.
   String? _placeLayerId;
   String? _placeType;
+
+  /// Buffered first tap of a two-tap type (a plane's point A).
+  LatLng? _pendingPlaneA;
+
+  /// Everything placed in the current Add session, newest last: the object each
+  /// tap belongs to (for "Edit last") and how to undo that one tap.
+  final List<({ObjectRef object, Future<void> Function() undo})> _addSteps = [];
   // Vertex ids marked (by tapping their handle) for bulk delete; all belong to
   // the currently selected object. Cleared on any selection change.
   final Set<String> _markedPoints = {};
-  static const _hitTest = Distance(calculator: Haversine());
+  // Haversine — shared with the hit-test helpers so the two never drift.
+  static const _hitTest = geoDistance;
 
   /// The user's last known position, shown as a marker. Null until the user
   /// opts in via the "Locate me" button. We never request location at launch.
@@ -73,19 +90,18 @@ class _MapScreenState extends ConsumerState<MapScreen>
   double? _myElevation;
 
   // --- Elevation probe ------------------------------------------------------
-  /// When on, a map tap measures the terrain elevation at that point instead of
-  /// selecting/deselecting objects.
-  bool _probeMode = false;
+  /// Scratch for [MapMode.elevation]: the measured point and its result.
   LatLng? _probePoint;
   double? _probeElevation;
   bool _probing = false;
 
   // --- Distance probe -------------------------------------------------------
-  /// When on, the first two map taps set the endpoints of a distance/bearing
-  /// measurement; a third tap restarts from a fresh first point.
-  bool _distanceMode = false;
+  /// Scratch for [MapMode.distance]: the two endpoints. A third tap restarts
+  /// from a fresh first point.
   LatLng? _distA;
   LatLng? _distB;
+
+  MapMode get _mode => ref.read(mapModeProvider);
 
 
   // --- Offline tile cache ---------------------------------------------------
@@ -545,38 +561,47 @@ class _MapScreenState extends ConsumerState<MapScreen>
       ));
   }
 
-  /// Toggles tap-to-measure-elevation mode. Clears any previous probe result.
-  /// Arming this disarms the distance probe — only one measure mode at a time.
+  /// Toggles tap-to-measure-elevation mode. Modes are mutually exclusive by
+  /// construction now, so this only has to clear the *scratch* of whichever
+  /// measurement is being left behind.
   void _toggleProbe() {
-    setState(() {
-      _probeMode = !_probeMode;
-      if (!_probeMode) {
-        _probePoint = null;
-        _probeElevation = null;
-      } else {
-        _distanceMode = false;
-        _distA = null;
-        _distB = null;
-      }
-    });
-    if (_probeMode) _hint('Tap the map to measure elevation');
+    final on = _mode != MapMode.elevation;
+    _enterMode(on ? MapMode.elevation : MapMode.view);
+    if (on) _hint('Tap the map to measure elevation');
   }
 
-  /// Toggles tap-two-points-to-measure-distance mode. Clears any endpoints on
-  /// disarm and disarms the elevation probe on arm (one measure mode at a time).
+  /// Toggles tap-two-points-to-measure-distance mode.
   void _toggleDistance() {
+    final on = _mode != MapMode.distance;
+    _enterMode(on ? MapMode.distance : MapMode.view);
+    if (on) _hint('Tap two points to measure distance');
+  }
+
+  /// Switches the map mode, dropping the scratch state of the mode being left.
+  /// Arming anything other than [MapMode.edit] also clears the selection, so a
+  /// docked editor never covers a mode's banner.
+  void _enterMode(MapMode mode) {
+    final previous = _mode;
+    if (previous == mode) return;
     setState(() {
-      _distanceMode = !_distanceMode;
-      if (!_distanceMode) {
-        _distA = null;
-        _distB = null;
-      } else {
-        _probeMode = false;
+      if (previous == MapMode.elevation) {
         _probePoint = null;
         _probeElevation = null;
       }
+      if (previous == MapMode.distance) {
+        _distA = null;
+        _distB = null;
+      }
+      if (previous == MapMode.add) {
+        _placeLayerId = null;
+        _placeType = null;
+      }
     });
-    if (_distanceMode) _hint('Tap two points to measure distance');
+    if (mode == MapMode.add || mode == MapMode.elevation ||
+        mode == MapMode.distance) {
+      _clearSelection();
+    }
+    ref.read(mapModeProvider.notifier).set(mode);
   }
 
   /// Records [p] as the next distance endpoint: first/restart point when none
@@ -870,8 +895,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
   Future<String?> _showPointMenu(
     String title,
     Offset globalPosition,
-    List<PopupMenuEntry<String>> items,
-  ) {
+    List<PopupMenuEntry<String>> items, [
+    String? subtitle,
+  ]) {
     final overlay =
         Overlay.of(context).context.findRenderObject() as RenderBox;
     return showMenu<String>(
@@ -885,7 +911,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
       items: [
         PopupMenuItem<String>(
           enabled: false,
-          child: Text(title, style: Theme.of(context).textTheme.labelMedium),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(title, style: Theme.of(context).textTheme.labelMedium),
+              if (subtitle != null)
+                Text(subtitle,
+                    style: Theme.of(context).textTheme.bodySmall),
+            ],
+          ),
         ),
         const PopupMenuDivider(),
         ...items,
@@ -1049,152 +1084,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
     return (widthMeters * 0.15).clamp(10.0, 2000000.0);
   }
 
-  /// The smallest circle in [layerId] that contains [latlng], or null. Hit
-  /// testing is geographic (Haversine), independent of rendering.
-  Circle? _circleInLayer(LatLng latlng, String layerId, List<Circle> circles) {
-    Circle? best;
-    for (final c in circles.where((c) => c.layerId == layerId)) {
-      if (!c.radiusMeters.isFinite || c.radiusMeters <= 0) continue;
-      final d = _hitTest.as(
-        LengthUnit.Meter,
-        LatLng(c.centerLat, c.centerLng),
-        latlng,
-      );
-      if (d <= c.radiusMeters &&
-          (best == null || c.radiusMeters < best.radiusMeters)) {
-        best = c;
-      }
-    }
-    return best;
-  }
-
-  /// A plane in [layerId] whose near side contains [latlng] (i.e. [latlng] is
-  /// closer to its near point than its far point), or null.
-  Plane? _planeInLayer(LatLng latlng, String layerId, List<Plane> planes) {
-    for (final p in planes.where((p) => p.layerId == layerId)) {
-      if (!p.aLat.isFinite ||
-          !p.aLng.isFinite ||
-          !p.bLat.isFinite ||
-          !p.bLng.isFinite) {
-        continue;
-      }
-      final near = p.nearA ? LatLng(p.aLat, p.aLng) : LatLng(p.bLat, p.bLng);
-      final far = p.nearA ? LatLng(p.bLat, p.bLng) : LatLng(p.aLat, p.aLng);
-      if (_hitTest.as(LengthUnit.Meter, near, latlng) <=
-          _hitTest.as(LengthUnit.Meter, far, latlng)) {
-        return p;
-      }
-    }
-    return null;
-  }
-
-  /// A subspace in [layerId] whose main point is the nearest of its points to
-  /// [latlng] (Haversine) — i.e. [latlng] lies inside the main cell — or null.
-  Subspace? _subspaceInLayer(
-    LatLng latlng,
-    String layerId,
-    List<Subspace> subspaces,
-    List<SubspacePoint> points,
-  ) {
-    for (final s in subspaces.where((s) => s.layerId == layerId)) {
-      final pts = points.where((p) => p.subspaceId == s.id).toList();
-      if (pts.length < 2) continue;
-      SubspacePoint? nearest;
-      double bestD = double.infinity;
-      for (final p in pts) {
-        if (!p.lat.isFinite || !p.lng.isFinite) continue;
-        final d = _hitTest.as(LengthUnit.Meter, LatLng(p.lat, p.lng), latlng);
-        if (d < bestD) {
-          bestD = d;
-          nearest = p;
-        }
-      }
-      if (nearest != null && nearest.isMain) return s;
-    }
-    return null;
-  }
-
-  /// A freehand line in [layerId] whose drawn polyline passes within a tap
-  /// tolerance of [latlng], or null. Hit testing is done in screen space so the
-  /// tolerance is a constant number of pixels at any zoom.
-  FreeLine? _freeLineInLayer(
-    LatLng latlng,
-    String layerId,
-    List<FreeLine> lines,
-    List<FreeLinePoint> points,
-  ) {
-    const tol = 24.0;
-    final cam = _mapController.camera;
-    final tap = cam.latLngToScreenOffset(latlng);
-    for (final l in lines.where((l) => l.layerId == layerId)) {
-      final pts = points.where((p) => p.freeLineId == l.id).toList();
-      for (var i = 0; i < pts.length - 1; i++) {
-        final a = cam.latLngToScreenOffset(LatLng(pts[i].lat, pts[i].lng));
-        final b =
-            cam.latLngToScreenOffset(LatLng(pts[i + 1].lat, pts[i + 1].lng));
-        if (_distToSegment(tap, a, b) <= tol) return l;
-      }
-    }
-    return null;
-  }
-
-  /// A freehand area in [layerId] whose drawn ring contains [latlng], or null.
-  /// Point-in-polygon is evaluated in screen space.
-  FreeArea? _freeAreaInLayer(
-    LatLng latlng,
-    String layerId,
-    List<FreeArea> areas,
-    List<FreeAreaPoint> points,
-  ) {
-    final cam = _mapController.camera;
-    final tap = cam.latLngToScreenOffset(latlng);
-    for (final a in areas.where((a) => a.layerId == layerId)) {
-      final pts = points.where((p) => p.freeAreaId == a.id).toList();
-      if (pts.length < 3) continue;
-      final ring = <Offset>[
-        for (final p in pts) cam.latLngToScreenOffset(LatLng(p.lat, p.lng)),
-      ];
-      if (_pointInPolygon(tap, ring)) return a;
-    }
-    return null;
-  }
-
-  static double _distToSegment(Offset p, Offset a, Offset b) {
-    final ab = b - a;
-    final lenSq = ab.dx * ab.dx + ab.dy * ab.dy;
-    if (lenSq == 0) return (p - a).distance;
-    var t = ((p.dx - a.dx) * ab.dx + (p.dy - a.dy) * ab.dy) / lenSq;
-    t = t.clamp(0.0, 1.0);
-    return (p - (a + ab * t)).distance;
-  }
-
-  static bool _pointInPolygon(Offset p, List<Offset> poly) {
-    var inside = false;
-    for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-      final pi = poly[i], pj = poly[j];
-      if (((pi.dy > p.dy) != (pj.dy > p.dy)) &&
-          (p.dx <
-              (pj.dx - pi.dx) * (p.dy - pi.dy) / (pj.dy - pi.dy) + pi.dx)) {
-        inside = !inside;
-      }
-    }
-    return inside;
-  }
-
+  /// Clears every selection + armed placement (shared with the layers drawer,
+  /// see `clearSelection`), then drops this screen's own vertex marks.
   void _clearSelection() {
-    ref.read(selectedCircleProvider.notifier).select(null);
-    ref.read(circlePlacementProvider.notifier).arm(false);
-    ref.read(selectedPlaneProvider.notifier).select(null);
-    ref.read(planePlacementProvider.notifier).arm(null);
-    ref.read(selectedSubspaceProvider.notifier).select(null);
-    ref.read(subspacePlacementProvider.notifier).arm(null);
-    ref.read(selectedFreeLineProvider.notifier).select(null);
-    ref.read(freeLinePlacementProvider.notifier).arm(null);
-    ref.read(freeLineCenterPlacementProvider.notifier).arm(false);
-    ref.read(selectedFreeAreaProvider.notifier).select(null);
-    ref.read(freeAreaPlacementProvider.notifier).arm(null);
-    ref.read(selectedHeightRegionProvider.notifier).select(null);
-    ref.read(heightPlacementProvider.notifier).arm(false);
+    clearSelection(ref);
     // Marks belong to the object being edited; drop them when it deselects.
     if (_markedPoints.isNotEmpty) _markedPoints.clear();
   }
@@ -1265,72 +1158,48 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (mounted) _hint('${marked.length} points removed.');
   }
 
-  void _selectCircle(String id) {
-    _clearSelection();
-    ref.read(selectedCircleProvider.notifier).select(id);
+  /// Selects one object of [kind], clearing every other selection and this
+  /// screen's vertex marks.
+  void _select(ObjectKind kind, String id) {
+    if (_markedPoints.isNotEmpty) _markedPoints.clear();
+    selectObject(ref, kind, id);
   }
 
-  void _selectPlane(String id) {
-    _clearSelection();
-    ref.read(selectedPlaneProvider.notifier).select(id);
-  }
+  void _selectCircle(String id) => _select(ObjectKind.circle, id);
 
-  void _selectSubspace(String id) {
-    _clearSelection();
-    ref.read(selectedSubspaceProvider.notifier).select(id);
-  }
+  void _selectPlane(String id) => _select(ObjectKind.plane, id);
 
-  void _selectFreeLine(String id) {
-    _clearSelection();
-    ref.read(selectedFreeLineProvider.notifier).select(id);
-  }
+  void _selectSubspace(String id) => _select(ObjectKind.subspace, id);
 
-  void _selectFreeArea(String id) {
-    _clearSelection();
-    ref.read(selectedFreeAreaProvider.notifier).select(id);
-  }
+  void _selectFreeLine(String id) => _select(ObjectKind.freeLine, id);
 
-  void _selectHeightRegion(String id) {
-    _clearSelection();
-    ref.read(selectedHeightRegionProvider.notifier).select(id);
-  }
+  void _selectFreeArea(String id) => _select(ObjectKind.freeArea, id);
 
-  /// A height region in [layerId] whose bounded circle contains [latlng]
-  /// (Haversine), preferring the smallest, or null.
-  HeightRegion? _heightRegionInLayer(
-    LatLng latlng,
-    String layerId,
-    List<HeightRegion> regions,
-  ) {
-    HeightRegion? best;
-    for (final r in regions.where((r) => r.layerId == layerId)) {
-      if (!r.radiusMeters.isFinite || r.radiusMeters <= 0) continue;
-      final d = _hitTest.as(
-        LengthUnit.Meter,
-        LatLng(r.centerLat, r.centerLng),
-        latlng,
-      );
-      if (d <= r.radiusMeters &&
-          (best == null || r.radiusMeters < best.radiusMeters)) {
-        best = r;
-      }
-    }
-    return best;
-  }
+  void _selectHeightRegion(String id) => _select(ObjectKind.heightRegion, id);
 
   /// Adds a height region to [layer] at [center] (un-generated — the editor's
   /// Generate fills it). A sensible default radius scales with the current zoom.
-  Future<void> _addHeightRegionAt(LatLng center, Layer layer) async {
+  /// Returns its id; [select] opens its editor (off while Add mode is sticky).
+  Future<String> _addHeightRegionAt(
+    LatLng center,
+    Layer layer, {
+    bool select = true,
+  }) async {
     final id = await ref.read(repositoryProvider).createHeightRegion(
           layerId: layer.id,
           centerLat: center.latitude,
           centerLng: center.longitude,
           radiusMeters: _defaultRadius().clamp(100.0, 25000.0),
         );
-    _selectHeightRegion(id);
+    if (select) _selectHeightRegion(id);
+    return id;
   }
 
-  Future<void> _addCircleAt(LatLng latlng, Layer layer) async {
+  Future<String> _addCircleAt(
+    LatLng latlng,
+    Layer layer, {
+    bool select = true,
+  }) async {
     final id = await ref
         .read(repositoryProvider)
         .createCircle(
@@ -1339,7 +1208,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
           centerLng: latlng.longitude,
           radiusMeters: _defaultRadius(),
         );
-    _selectCircle(id);
+    if (select) _selectCircle(id);
+    return id;
   }
 
   /// Imports nearby POIs into [layer]: prompts for a category + radius,
@@ -1347,14 +1217,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// per layer type — one named circle per POI (circles), appended named
   /// points (subspace; the nearest-to-centre promotes to main when the
   /// subspace has none yet), or a stored offline POI set with markers (poi).
-  Future<void> _importPois(Layer layer) async {
+  /// The search centre defaults to the map centre; Add mode passes the tap.
+  Future<void> _importPois(Layer layer, {LatLng? at}) async {
     final isCircleLayer = layer.type == 'circles';
     final isPoiLayer = layer.type == 'poi';
     final config = await showPoiImportDialog(context,
         needsCircleRadius: isCircleLayer, allCategories: isPoiLayer);
     if (config == null || !mounted) return;
 
-    final center = _mapController.camera.center;
+    final center = at ?? _mapController.camera.center;
     final r = config.searchRadiusMeters;
     // Bounding box from the centre + search radius (N/S/E/W offsets).
     final north = _hitTest.offset(center, r, 0).latitude;
@@ -1472,27 +1343,62 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// Adds to a subspace layer: a point to the layer's existing object, or a new
   /// object seeded with a main point at [center] plus two flanking points (so
   /// the main cell is immediately visible). Selects the object either way.
-  /// Enters tap-to-place mode for [layer] (an empty point-set layer): the next
-  /// map taps drop the object's initial points where tapped, instead of a fixed
-  /// seed at the map centre. Clears any selection so the banner is unobstructed.
-  void _enterPlacement(Layer layer) {
-    _clearSelection();
+  /// The pre-mode "add at the map centre" path, kept as the Add FAB's
+  /// long-press: creates one object from a fixed seed around the map centre and
+  /// opens its editor. Useful one-handed, and the only route that doesn't need
+  /// you to aim.
+  void _addAtMapCentre(
+    Layer layer, {
+    required List<Subspace> subspaces,
+    required List<FreeLine> freeLines,
+    required List<FreeArea> freeAreas,
+  }) {
+    final c = _mapController.camera.center;
+    switch (layer.type) {
+      case 'poi':
+        _importPois(layer);
+      case 'subspace':
+        _addSubspaceAt(c, layer, subspaces);
+      case 'freeline':
+        _addFreeLineAt(c, layer, freeLines);
+      case 'freearea':
+        _addFreeAreaAt(c, layer, freeAreas);
+      case 'height':
+        _addHeightRegionAt(c, layer);
+      case 'planes':
+        _addPlaneAt(c, layer);
+      default:
+        _addCircleAt(c, layer);
+    }
+  }
+
+  /// Arms Add mode for [layer]: from now on every map tap places something of
+  /// that layer's type, until Done. Clears any selection so the banner and the
+  /// map are unobstructed.
+  void _enterAddMode(Layer layer) {
+    _enterMode(MapMode.add);
     setState(() {
       _placeLayerId = layer.id;
       _placeType = layer.type;
+      _pendingPlaneA = null;
+      _addSteps.clear();
     });
-    _hint('Tap the map to drop points, then tap Done.');
+    _hint(_addBannerText(layer.type, 0));
   }
 
-  /// Leaves tap-to-place mode and selects the object just built (so its editor
-  /// and draggable handles appear).
-  void _exitPlacement() {
+  /// Leaves Add mode. For the point-set types the object just built is selected
+  /// (so its editor and draggable handles appear) — the long-standing "Done ⇒
+  /// now edit it" behaviour.
+  void _exitAddMode() {
     final layerId = _placeLayerId;
     final type = _placeType;
     setState(() {
       _placeLayerId = null;
       _placeType = null;
+      _pendingPlaneA = null;
+      _addSteps.clear();
     });
+    ref.read(mapModeProvider.notifier).set(MapMode.view);
     if (layerId == null) return;
     switch (type) {
       case 'subspace':
@@ -1513,12 +1419,101 @@ class _MapScreenState extends ConsumerState<MapScreen>
     }
   }
 
-  /// Drops one point at [latlng] while in tap-to-place mode, creating the object
-  /// on the first tap and appending on later ones.
-  Future<void> _placeTapAt(LatLng latlng) async {
+  /// Records one placement so the banner can Undo it and "Edit last" can open
+  /// the object it belongs to.
+  void _pushAddStep(ObjectRef object, Future<void> Function() undo) {
+    setState(() => _addSteps.add((object: object, undo: undo)));
+  }
+
+  /// Undoes the most recent placement of this Add session (a pending plane
+  /// point A first, since it isn't committed yet).
+  Future<void> _undoLastAdd() async {
+    if (_pendingPlaneA != null) {
+      setState(() => _pendingPlaneA = null);
+      return;
+    }
+    if (_addSteps.isEmpty) return;
+    final step = _addSteps.last;
+    setState(() => _addSteps.removeLast());
+    await step.undo();
+  }
+
+  /// Leaves Add mode and opens the editor for the object placed last.
+  void _editLastAdded() {
+    final object = _addSteps.lastOrNull?.object;
+    setState(() {
+      _placeLayerId = null;
+      _placeType = null;
+      _pendingPlaneA = null;
+      _addSteps.clear();
+    });
+    ref.read(mapModeProvider.notifier).set(MapMode.view);
+    if (object != null) _select(object.kind, object.id);
+  }
+
+  /// What the Add banner says for [layerType] after [placed] taps.
+  ///
+  /// The count comes **first** so it survives when the row runs out of width
+  /// and the prose ellipsises — the count is the part that changes.
+  String _addBannerText(String? layerType, int placed) {
+    if (layerType == 'poi') return 'Tap the search centre';
+    if (layerType == 'planes' && _pendingPlaneA != null) {
+      return 'Tap point B';
+    }
+    if (placed > 0) return '$placed added · tap for more';
+    return switch (layerType) {
+      'planes' => 'Tap point A, then B',
+      'subspace' || 'freeline' || 'freearea' => 'Tap to drop points',
+      'height' => 'Tap to place a height area',
+      _ => 'Tap the map to add a circle',
+    };
+  }
+
+  /// Places one thing at [latlng] while Add mode is armed. Sticky: the mode
+  /// stays on afterwards so several objects can be dropped in a row.
+  Future<void> _addTapAt(LatLng latlng) async {
+    final layerId = _placeLayerId;
+    if (layerId == null) return;
+    final layer = (ref.read(layersProvider).asData?.value ?? const <Layer>[])
+        .where((l) => l.id == layerId)
+        .firstOrNull;
+    if (layer == null) {
+      _exitAddMode(); // the layer was deleted under us
+      return;
+    }
     final repo = ref.read(repositoryProvider);
-    final layerId = _placeLayerId!;
-    switch (_placeType) {
+    switch (layer.type) {
+      case 'circles':
+        final id = await _addCircleAt(latlng, layer, select: false);
+        _pushAddStep(
+          ObjectRef(kind: ObjectKind.circle, id: id, layerId: layer.id),
+          () => repo.deleteCircle(id),
+        );
+      case 'height':
+        final id = await _addHeightRegionAt(latlng, layer, select: false);
+        _pushAddStep(
+          ObjectRef(kind: ObjectKind.heightRegion, id: id, layerId: layer.id),
+          () => repo.deleteHeightRegion(id),
+        );
+      case 'planes':
+        // Two taps per plane: the first is buffered (and shown as a pin).
+        final a = _pendingPlaneA;
+        if (a == null) {
+          setState(() => _pendingPlaneA = latlng);
+          return;
+        }
+        setState(() => _pendingPlaneA = null);
+        final id = await repo.createPlane(
+          layerId: layer.id,
+          aLat: a.latitude,
+          aLng: a.longitude,
+          bLat: latlng.latitude,
+          bLng: latlng.longitude,
+        );
+        _pushAddStep(
+          ObjectRef(kind: ObjectKind.plane, id: id, layerId: layer.id),
+          () => repo.deletePlane(id),
+        );
       case 'subspace':
         final existing = (ref.read(subspacesProvider).asData?.value ?? const [])
             .where((s) => s.layerId == layerId)
@@ -1530,11 +1525,21 @@ class _MapScreenState extends ConsumerState<MapScreen>
               lat: latlng.latitude,
               lng: latlng.longitude,
               isMain: true);
+          // The first tap made the object too, so undoing it removes both.
+          _pushAddStep(
+            ObjectRef(kind: ObjectKind.subspace, id: id, layerId: layerId),
+            () => repo.deleteSubspace(id),
+          );
         } else {
-          await repo.addSubspacePoint(
+          final pid = await repo.addSubspacePoint(
               subspaceId: existing.id,
               lat: latlng.latitude,
               lng: latlng.longitude);
+          _pushAddStep(
+            ObjectRef(
+                kind: ObjectKind.subspace, id: existing.id, layerId: layerId),
+            () => repo.deleteSubspacePoint(pid),
+          );
         }
       case 'freeline':
         final existing = (ref.read(freeLinesProvider).asData?.value ?? const [])
@@ -1549,11 +1554,20 @@ class _MapScreenState extends ConsumerState<MapScreen>
           );
           await repo.addFreeLinePoint(
               freeLineId: id, lat: latlng.latitude, lng: latlng.longitude);
+          _pushAddStep(
+            ObjectRef(kind: ObjectKind.freeLine, id: id, layerId: layerId),
+            () => repo.deleteFreeLine(id),
+          );
         } else {
-          await repo.addFreeLinePoint(
+          final pid = await repo.addFreeLinePoint(
               freeLineId: existing.id,
               lat: latlng.latitude,
               lng: latlng.longitude);
+          _pushAddStep(
+            ObjectRef(
+                kind: ObjectKind.freeLine, id: existing.id, layerId: layerId),
+            () => repo.deleteFreeLinePoint(pid),
+          );
         }
       case 'freearea':
         final existing = (ref.read(freeAreasProvider).asData?.value ?? const [])
@@ -1563,12 +1577,26 @@ class _MapScreenState extends ConsumerState<MapScreen>
           final id = await repo.createFreeArea(layerId: layerId);
           await repo.addFreeAreaPoint(
               freeAreaId: id, lat: latlng.latitude, lng: latlng.longitude);
+          _pushAddStep(
+            ObjectRef(kind: ObjectKind.freeArea, id: id, layerId: layerId),
+            () => repo.deleteFreeArea(id),
+          );
         } else {
-          await repo.addFreeAreaPoint(
+          final pid = await repo.addFreeAreaPoint(
               freeAreaId: existing.id,
               lat: latlng.latitude,
               lng: latlng.longitude);
+          _pushAddStep(
+            ObjectRef(
+                kind: ObjectKind.freeArea, id: existing.id, layerId: layerId),
+            () => repo.deleteFreeAreaPoint(pid),
+          );
         }
+      case 'poi':
+        // A POI set is an Overpass import around a centre — one tap picks the
+        // centre, the dialog does the rest, then Add mode is done.
+        _exitAddMode();
+        await _importPois(layer, at: latlng);
     }
   }
 
@@ -1671,25 +1699,98 @@ class _MapScreenState extends ConsumerState<MapScreen>
     _selectFreeArea(id);
   }
 
-  Future<void> _handleTap(
-    LatLng latlng,
-    List<Layer> layers,
-    List<Circle> circles,
-    List<Plane> planes,
-    List<Subspace> subspaces,
-    List<SubspacePoint> subspacePoints,
-    List<FreeLine> freeLines,
-    List<FreeLinePoint> freeLinePoints,
-    List<FreeArea> freeAreas,
-    List<FreeAreaPoint> freeAreaPoints,
-    List<HeightRegion> heightRegions,
-  ) async {
-    // Tap-to-place mode: drop points into the new object instead of selecting.
-    if (_placeLayerId != null) {
-      await _placeTapAt(latlng);
-      return;
+  /// A map tap. Everything it can do is decided by exactly two things: whether
+  /// an editor armed the next tap, and the current [MapMode]. In the default
+  /// [MapMode.view] it does nothing at all.
+  Future<void> _handleTap(LatLng latlng) async {
+    // The editors' "the next tap places this coordinate" flows. These exist
+    // only while an object is selected and always win over the map mode.
+    if (await _consumeArmedPlacement(latlng)) return;
+
+    switch (_mode) {
+      case MapMode.elevation:
+        await _probeAt(latlng);
+        return;
+      case MapMode.distance:
+        _distanceTap(latlng);
+        return;
+      case MapMode.add:
+        await _addTapAt(latlng);
+        return;
+      case MapMode.view:
+        // A plain tap is a complete no-op — no select, no create, no deselect.
+        // Panning and pinching must never disturb what's on screen; objects are
+        // reached by long-press, by Edit mode, or from the Elements list.
+        //
+        // Once per session, if the tap *did* land on something, say so: that's
+        // exactly the moment someone expects the old tap-to-select and needs to
+        // learn where it went. The hit-test only runs until the hint is shown.
+        if (!_viewTapHintShown && _hitsAt(latlng).isNotEmpty) {
+          _viewTapHintShown = true;
+          _hint('Long-press to select · or turn on ✎ to select by tapping');
+        }
+        return;
+      case MapMode.edit:
+        break; // fall through to the hit-test below
     }
 
+    // Edit mode: the best-ranked object under the tap wins; a miss deselects.
+    // Objects are never *created* here — that's Add mode.
+    final hits = _hitsAt(latlng);
+    if (hits.isNotEmpty) {
+      _select(hits.first.ref.kind, hits.first.ref.id);
+      return;
+    }
+    if (hasAnySelection(ref)) _clearSelection();
+  }
+
+  /// The active layer's objects under [latlng], best guess first (see
+  /// [rankCandidates]). Empty when there is no active *visible* layer —
+  /// selection stays gated to the layer chosen in the drawer, so you only ever
+  /// interact with the layer you meant to.
+  List<HitCandidate> _hitsAt(LatLng latlng) {
+    final layers = ref.read(layersProvider).asData?.value ?? const <Layer>[];
+    final activeId =
+        effectiveActiveLayerId(layers, ref.read(activeLayerProvider));
+    final layer =
+        layers.where((l) => l.id == activeId && l.isVisible).firstOrNull;
+    if (layer == null) return const [];
+    final freeAreaPoints =
+        ref.read(freeAreaPointsProvider).asData?.value ?? const <FreeAreaPoint>[];
+    final uncertainty =
+        ref.read(settingsProvider).asData?.value.uncertaintyMeters ?? 0;
+    return rankCandidates(collectCandidates(
+      camera: _mapController.camera,
+      tap: latlng,
+      layer: layer,
+      circles: ref.read(circlesProvider).asData?.value ?? const [],
+      planes: ref.read(planesProvider).asData?.value ?? const [],
+      subspaces: ref.read(subspacesProvider).asData?.value ?? const [],
+      subspacePoints:
+          ref.read(subspacePointsProvider).asData?.value ?? const [],
+      freeLines: ref.read(freeLinesProvider).asData?.value ?? const [],
+      freeLinePoints:
+          ref.read(freeLinePointsProvider).asData?.value ?? const [],
+      freeAreas: ref.read(freeAreasProvider).asData?.value ?? const [],
+      freeAreaPoints: freeAreaPoints,
+      heightRegions: ref.read(heightRegionsProvider).asData?.value ?? const [],
+      // Same arguments the painter uses, so this is a cache hit and the hit
+      // area matches the outline actually drawn (offset included).
+      areaContours: (a) => areaGeometryCache
+          .resolve(
+            a,
+            [for (final p in freeAreaPoints) if (p.freeAreaId == a.id) p],
+            bandMeters: uncertainty,
+            inverted: layer.isInverted,
+          )
+          .core,
+    ));
+  }
+
+  /// Consumes the tap if one of the editors has armed "the next map tap places
+  /// this coordinate", writing [latlng] to the armed point and disarming.
+  /// Returns whether the tap was consumed.
+  Future<bool> _consumeArmedPlacement(LatLng latlng) async {
     // Placement mode: relocate the selected circle's centre.
     if (ref.read(circlePlacementProvider)) {
       final selId = ref.read(selectedCircleProvider);
@@ -1700,7 +1801,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
               centerLng: latlng.longitude,
             );
         ref.read(circlePlacementProvider.notifier).arm(false);
-        return;
+        return true;
       }
     }
 
@@ -1714,7 +1815,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
               centerLng: latlng.longitude,
             );
         ref.read(heightPlacementProvider.notifier).arm(false);
-        return;
+        return true;
       }
     }
 
@@ -1728,7 +1829,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
               inclusionLng: latlng.longitude,
             );
         ref.read(freeLineCenterPlacementProvider.notifier).arm(false);
-        return;
+        return true;
       }
     }
 
@@ -1742,7 +1843,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
             lng: latlng.longitude,
           );
       ref.read(freeLinePlacementProvider.notifier).arm(null);
-      return;
+      return true;
     }
 
     // Placement mode: relocate the armed freehand-area point.
@@ -1755,7 +1856,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
             lng: latlng.longitude,
           );
       ref.read(freeAreaPlacementProvider.notifier).arm(null);
-      return;
+      return true;
     }
 
     // Placement mode: relocate the armed subspace point.
@@ -1768,7 +1869,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
             lng: latlng.longitude,
           );
       ref.read(subspacePlacementProvider.notifier).arm(null);
-      return;
+      return true;
     }
 
     // Placement mode: relocate the armed endpoint of the selected plane.
@@ -1790,177 +1891,150 @@ class _MapScreenState extends ConsumerState<MapScreen>
         );
       }
       ref.read(planePlacementProvider.notifier).arm(null);
-      return;
+      return true;
     }
 
-    // Elevation-probe mode: measure the tapped point instead of selecting (but
-    // after any armed point-placement above, which takes priority).
-    if (_probeMode) {
-      await _probeAt(latlng);
-      return;
-    }
-
-    // Distance-probe mode: collect two endpoints instead of selecting.
-    if (_distanceMode) {
-      _distanceTap(latlng);
-      return;
-    }
-
-    // Only the active layer's objects are selectable: tapping an object in any
-    // other layer does nothing (so you interact with exactly the layer you chose
-    // in the drawer). With no active layer, nothing is selectable.
-    final activeId =
-        effectiveActiveLayerId(layers, ref.read(activeLayerProvider));
-    for (final layer in layers.reversed) {
-      if (layer.id != activeId || !layer.isVisible) continue;
-      if (layer.type == 'circles') {
-        final hit = _circleInLayer(latlng, layer.id, circles);
-        if (hit != null) {
-          _selectCircle(hit.id);
-          return;
-        }
-      } else if (layer.type == 'planes') {
-        final hit = _planeInLayer(latlng, layer.id, planes);
-        if (hit != null) {
-          _selectPlane(hit.id);
-          return;
-        }
-      } else if (layer.type == 'subspace') {
-        final hit =
-            _subspaceInLayer(latlng, layer.id, subspaces, subspacePoints);
-        if (hit != null) {
-          _selectSubspace(hit.id);
-          return;
-        }
-      } else if (layer.type == 'freeline') {
-        final hit =
-            _freeLineInLayer(latlng, layer.id, freeLines, freeLinePoints);
-        if (hit != null) {
-          _selectFreeLine(hit.id);
-          return;
-        }
-      } else if (layer.type == 'freearea') {
-        final hit =
-            _freeAreaInLayer(latlng, layer.id, freeAreas, freeAreaPoints);
-        if (hit != null) {
-          _selectFreeArea(hit.id);
-          return;
-        }
-      } else if (layer.type == 'height') {
-        final hit = _heightRegionInLayer(latlng, layer.id, heightRegions);
-        if (hit != null) {
-          _selectHeightRegion(hit.id);
-          return;
-        }
-      }
-    }
-
-    // No object hit: just deselect anything selected. Objects are created with
-    // the Add button — tapping empty map never adds one.
-    if (ref.read(selectedCircleProvider) != null ||
-        ref.read(selectedPlaneProvider) != null ||
-        ref.read(selectedSubspaceProvider) != null ||
-        ref.read(selectedFreeLineProvider) != null ||
-        ref.read(selectedFreeAreaProvider) != null ||
-        ref.read(selectedHeightRegionProvider) != null) {
-      _clearSelection();
-    }
+    return false;
   }
 
-  /// Long-press on the map: drop a point at the pressed location. In a
-  /// **circles** layer it offers a new circle there; in a **subspace**,
-  /// **freeline**, or **freearea** layer with an object selected it adds a
-  /// vertex there — appended (subspace) or inserted on the nearest segment
-  /// (freeline/freearea), so it's a quicker route than the Add button (which
-  /// uses the map centre). The new vertex is immediately draggable.
+  /// Long-press on the map — the deliberate gesture that reaches an object
+  /// without leaving view mode.
+  ///
+  /// It opens one menu listing (a) the active layer's objects under the finger,
+  /// ranked most-likely first, and (b) the contextual "add a point exactly
+  /// here" actions the long-press used to perform directly. Everything goes
+  /// through the menu on purpose: an accidental long-press must never silently
+  /// pop an editor open.
   Future<void> _handleMapLongPress(
     Offset globalPosition,
     LatLng latlng,
     Layer? activeLayer,
   ) async {
     if (activeLayer == null) return;
-    final repo = ref.read(repositoryProvider);
+    // While placing, a long-press would fight the tap-to-place flow.
+    if (_mode == MapMode.add) return;
+
+    final hits = _hitsAt(latlng);
+    final summaries = _summariesFor(activeLayer);
+    final selectedSubspaceId = ref.read(selectedSubspaceProvider);
+    final selectedFreeLineId = ref.read(selectedFreeLineProvider);
+    final selectedFreeAreaId = ref.read(selectedFreeAreaProvider);
+
+    final items = <PopupMenuEntry<String>>[];
+    for (var i = 0; i < hits.length; i++) {
+      final s = summaries[hits[i].ref];
+      items.add(_pointMenuItem(
+        'hit:$i',
+        typeIcon(activeLayer.type),
+        s == null ? 'Element ${i + 1}' : '${s.title} · ${s.subtitle}',
+      ));
+    }
+
+    // Contextual add actions — a strict superset of what long-press used to do.
+    final actions = <PopupMenuEntry<String>>[];
     switch (activeLayer.type) {
       case 'circles':
-        if (await _longPressAddMenu(
-            globalPosition, Icons.add_circle_outline, 'New circle here')) {
-          if (mounted) await _addCircleAt(latlng, activeLayer);
-        }
+        actions.add(_pointMenuItem(
+            'newCircle', Icons.add_circle_outline, 'New circle here'));
       case 'subspace':
-        final selId = ref.read(selectedSubspaceProvider);
-        if (selId == null) return;
-        if (await _longPressAddMenu(globalPosition,
-            Icons.add_location_alt_outlined, 'Add point here')) {
-          await repo.addSubspacePoint(
-              subspaceId: selId, lat: latlng.latitude, lng: latlng.longitude);
+        if (selectedSubspaceId != null) {
+          actions.add(_pointMenuItem(
+              'addPoint', Icons.add_location_alt_outlined, 'Add point here'));
         }
       case 'freeline':
-        final selId = ref.read(selectedFreeLineProvider);
-        if (selId == null) return;
-        if (await _longPressAddMenu(globalPosition,
-            Icons.add_location_alt_outlined, 'Insert point here')) {
-          final pts = (ref.read(freeLinePointsProvider).asData?.value ??
-                  const <FreeLinePoint>[])
-              .where((p) => p.freeLineId == selId)
-              .map((p) => (ll: LatLng(p.lat, p.lng), order: p.sortOrder))
-              .toList()
-            ..sort((a, b) => a.order.compareTo(b.order));
-          await repo.insertFreeLinePointAt(
-            freeLineId: selId,
-            sortOrder: _insertOrderFor(pts, latlng, closed: false),
-            lat: latlng.latitude,
-            lng: latlng.longitude,
-          );
+        if (selectedFreeLineId != null) {
+          actions.add(_pointMenuItem('insertLine',
+              Icons.add_location_alt_outlined, 'Insert point here'));
         }
       case 'freearea':
-        final selId = ref.read(selectedFreeAreaProvider);
-        if (selId == null) return;
-        if (await _longPressAddMenu(globalPosition,
-            Icons.add_location_alt_outlined, 'Insert point here')) {
-          final pts = (ref.read(freeAreaPointsProvider).asData?.value ??
-                  const <FreeAreaPoint>[])
-              .where((p) => p.freeAreaId == selId)
-              .map((p) => (ll: LatLng(p.lat, p.lng), order: p.sortOrder))
-              .toList()
-            ..sort((a, b) => a.order.compareTo(b.order));
-          await repo.insertFreeAreaPointAt(
-            freeAreaId: selId,
-            sortOrder: _insertOrderFor(pts, latlng, closed: true),
-            lat: latlng.latitude,
-            lng: latlng.longitude,
-          );
+        if (selectedFreeAreaId != null) {
+          actions.add(_pointMenuItem('insertArea',
+              Icons.add_location_alt_outlined, 'Insert point here'));
         }
+    }
+    if (actions.isNotEmpty) {
+      if (items.isNotEmpty) items.add(const PopupMenuDivider());
+      items.addAll(actions);
+    }
+    if (hasAnySelection(ref)) {
+      if (items.isNotEmpty) items.add(const PopupMenuDivider());
+      items.add(_pointMenuItem('deselect', Icons.close, 'Deselect'));
+    }
+    if (items.isEmpty) {
+      _hint('Nothing here in "${activeLayer.name}".');
+      return;
+    }
+
+    final selected = await _showPointMenu(activeLayer.name, globalPosition,
+        items, formatLatLng(latlng.latitude, latlng.longitude));
+    if (selected == null || !mounted) return;
+    final repo = ref.read(repositoryProvider);
+    if (selected.startsWith('hit:')) {
+      final hit = hits[int.parse(selected.substring(4))];
+      _select(hit.ref.kind, hit.ref.id);
+      return;
+    }
+    switch (selected) {
+      case 'deselect':
+        _clearSelection();
+        setState(() {});
+      case 'newCircle':
+        await _addCircleAt(latlng, activeLayer);
+      case 'addPoint':
+        await repo.addSubspacePoint(
+            subspaceId: selectedSubspaceId!,
+            lat: latlng.latitude,
+            lng: latlng.longitude);
+      case 'insertLine':
+        final pts = (ref.read(freeLinePointsProvider).asData?.value ??
+                const <FreeLinePoint>[])
+            .where((p) => p.freeLineId == selectedFreeLineId)
+            .map((p) => (ll: LatLng(p.lat, p.lng), order: p.sortOrder))
+            .toList()
+          ..sort((a, b) => a.order.compareTo(b.order));
+        await repo.insertFreeLinePointAt(
+          freeLineId: selectedFreeLineId!,
+          sortOrder: _insertOrderFor(pts, latlng, closed: false),
+          lat: latlng.latitude,
+          lng: latlng.longitude,
+        );
+      case 'insertArea':
+        final pts = (ref.read(freeAreaPointsProvider).asData?.value ??
+                const <FreeAreaPoint>[])
+            .where((p) => p.freeAreaId == selectedFreeAreaId)
+            .map((p) => (ll: LatLng(p.lat, p.lng), order: p.sortOrder))
+            .toList()
+          ..sort((a, b) => a.order.compareTo(b.order));
+        await repo.insertFreeAreaPointAt(
+          freeAreaId: selectedFreeAreaId!,
+          sortOrder: _insertOrderFor(pts, latlng, closed: true),
+          lat: latlng.latitude,
+          lng: latlng.longitude,
+        );
     }
   }
 
-  /// Shows a one-item "add here" popup at [globalPosition]; returns whether it
-  /// was chosen (vs. dismissed).
-  Future<bool> _longPressAddMenu(
-      Offset globalPosition, IconData icon, String text) async {
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox;
-    final selected = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        globalPosition.dx,
-        globalPosition.dy,
-        overlay.size.width - globalPosition.dx,
-        overlay.size.height - globalPosition.dy,
-      ),
-      items: [
-        PopupMenuItem<String>(
-          value: 'ok',
-          child: Row(
-            children: [
-              Icon(icon, size: 18),
-              const SizedBox(width: 8),
-              Text(text),
-            ],
-          ),
-        ),
-      ],
+  /// This layer's element summaries, keyed by ref — used to label hit-menu rows
+  /// with the same names the Elements list shows.
+  Map<ObjectRef, ObjectSummary> _summariesFor(Layer layer) {
+    final rows = summariseLayer(
+      layer,
+      circles: ref.read(circlesProvider).asData?.value ?? const [],
+      planes: ref.read(planesProvider).asData?.value ?? const [],
+      subspaces: ref.read(subspacesProvider).asData?.value ?? const [],
+      subspacePoints:
+          ref.read(subspacePointsProvider).asData?.value ?? const [],
+      freeLines: ref.read(freeLinesProvider).asData?.value ?? const [],
+      freeLinePoints:
+          ref.read(freeLinePointsProvider).asData?.value ?? const [],
+      freeAreas: ref.read(freeAreasProvider).asData?.value ?? const [],
+      freeAreaPoints:
+          ref.read(freeAreaPointsProvider).asData?.value ?? const [],
+      heightRegions: ref.read(heightRegionsProvider).asData?.value ?? const [],
+      poiSets: ref.read(poiSetsProvider).asData?.value ?? const [],
+      poiPoints: ref.read(poiPointsProvider).asData?.value ?? const [],
     );
-    return selected == 'ok';
+    return {for (final r in rows) r.ref: r};
   }
 
   /// The sort_order to give a vertex inserted at [tap] so it lands on the
@@ -1983,7 +2057,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     for (var i = 0; i < segCount; i++) {
       final a = cam.latLngToScreenOffset(pts[i].ll);
       final b = cam.latLngToScreenOffset(pts[(i + 1) % n].ll);
-      final d = _distToSegment(t, a, b);
+      final d = distToSegment(t, a, b);
       if (d < bestDist) {
         bestDist = d;
         // Wrap edge (last→first) appends; otherwise the new point lands between
@@ -1994,10 +2068,42 @@ class _MapScreenState extends ConsumerState<MapScreen>
     return bestOrder;
   }
 
+  /// Frames [points] — a single point centres (a camera fit on a degenerate
+  /// box zooms to the maximum), several points fit with padding.
+  void _applyFocus(MapFocusRequest req) {
+    final pts = [
+      for (final p in req.points)
+        if (p.latitude.isFinite && p.longitude.isFinite) p,
+    ];
+    if (pts.isEmpty) return;
+    if (pts.length < 2) {
+      _mapController.move(
+          pts.first, math.max(_mapController.camera.zoom, 14.0).clamp(2.0, 19.0));
+      return;
+    }
+    _mapController.fitCamera(CameraFit.coordinates(
+      coordinates: pts,
+      padding: const EdgeInsets.all(64),
+      maxZoom: 16,
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     // Triggers one-time seeding of a default layer.
     ref.watch(seedProvider);
+
+    // "Zoom to"/"Edit" from the layers drawer: it has no MapController, so it
+    // posts a focus request here. Applied post-frame (never move the camera
+    // during a build) and only once the map is ready (fitCamera throws before).
+    ref.listen(pendingFocusProvider, (_, req) {
+      if (req == null) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_mapReady) return;
+        _applyFocus(req);
+        ref.read(pendingFocusProvider.notifier).clear();
+      });
+    });
 
     final layers = ref.watch(layersProvider).asData?.value ?? const <Layer>[];
     final circles =
@@ -2031,6 +2137,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
         ref.watch(poiSetsProvider).asData?.value ?? const <PoiSet>[];
     final poiPoints =
         ref.watch(poiPointsProvider).asData?.value ?? const <PoiPoint>[];
+    final mode = ref.watch(mapModeProvider);
     final settings = ref.watch(settingsProvider).asData?.value;
     final uncertainty = settings?.uncertaintyMeters ?? 0;
     final transportOverlay = settings?.transportOverlay ?? false;
@@ -2111,7 +2218,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           _hint('Drag a point to move it · long-press it for options · '
-              'long-press the map to add one');
+              'long-press the map to select or add');
         }
       });
     }
@@ -2127,14 +2234,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final isFreeAreaLayer = activeLayer?.type == 'freearea';
     final isHeightLayer = activeLayer?.type == 'height';
     final isPoiLayer = activeLayer?.type == 'poi';
-    // In a subspace layer the Add FAB seeds a new object, or — once one exists —
-    // appends a point to it.
-    final subspaceExists = isSubspaceLayer &&
-        subspaces.any((s) => s.layerId == activeLayer!.id);
-    final freeLineExists = isFreeLineLayer &&
-        freeLines.any((l) => l.layerId == activeLayer!.id);
-    final freeAreaExists = isFreeAreaLayer &&
-        freeAreas.any((a) => a.layerId == activeLayer!.id);
 
     // Restore the last camera; fall back to Munich on first launch. Resolved
     // once, when settings first load — FlutterMap ignores these after creation.
@@ -2198,20 +2297,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       _scheduleBordersRefresh();
                       _schedulePrefetch();
                     },
-                    onTap: (_, latlng) => _handleTap(
-                      latlng,
-                      layers,
-                      circles,
-                      planes,
-                      subspaces,
-                      subspacePoints,
-                      freeLines,
-                      freeLinePoints,
-                      freeAreas,
-                      freeAreaPoints,
-                      heightRegions,
-                    ),
+                    onTap: (_, latlng) => _handleTap(latlng),
                     onLongPress: (tapPos, latlng) => _handleMapLongPress(
+                        tapPos.global, latlng, activeLayer),
+                    // Desktop right-click reaches the same context menu.
+                    onSecondaryTap: (tapPos, latlng) => _handleMapLongPress(
                         tapPos.global, latlng, activeLayer),
                   ),
                   children: [
@@ -2408,6 +2498,24 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               Icons.my_location,
                               color: Colors.blue,
                               size: 24,
+                            ),
+                          ),
+                        ],
+                      ),
+                    // Add mode, planes: the buffered first tap (point A), shown
+                    // until the second tap completes the plane.
+                    if (_pendingPlaneA != null)
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: _pendingPlaneA!,
+                            width: 32,
+                            height: 40,
+                            alignment: Alignment.topCenter,
+                            child: Icon(
+                              Icons.place,
+                              size: 32,
+                              color: Theme.of(context).colorScheme.primary,
                             ),
                           ),
                         ],
@@ -2676,8 +2784,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     ),
                   ),
                 ),
-                // Tap-to-place banner: guides the user and offers Done.
-                if (_placeLayerId != null)
+                // Add-mode banner: what to tap, plus Undo / Edit last / Done.
+                if (mode == MapMode.add && _placeLayerId != null)
                   SafeArea(
                     child: Align(
                       alignment: Alignment.topCenter,
@@ -2694,10 +2802,27 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               children: [
                                 const Icon(Icons.touch_app_outlined, size: 16),
                                 const SizedBox(width: 6),
-                                const Text('Tap to add points'),
-                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    _addBannerText(
+                                        _placeType, _addSteps.length),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
                                 TextButton(
-                                  onPressed: _exitPlacement,
+                                  onPressed: (_addSteps.isEmpty &&
+                                          _pendingPlaneA == null)
+                                      ? null
+                                      : _undoLastAdd,
+                                  child: const Text('Undo'),
+                                ),
+                                if (_addSteps.isNotEmpty)
+                                  TextButton(
+                                    onPressed: _editLastAdded,
+                                    child: const Text('Edit'),
+                                  ),
+                                TextButton(
+                                  onPressed: _exitAddMode,
                                   child: const Text('Done'),
                                 ),
                               ],
@@ -2743,10 +2868,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     ),
                   ),
                 // Elevation readout: the measured point and/or current location.
-                if (_probeMode ||
+                if (mode == MapMode.elevation ||
                     _probePoint != null ||
                     _myElevation != null ||
-                    _distanceMode ||
+                    mode == MapMode.distance ||
                     _distA != null)
                   SafeArea(
                     child: Align(
@@ -2763,7 +2888,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                if (_probeMode || _probePoint != null)
+                                if (mode == MapMode.elevation || _probePoint != null)
                                   Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
@@ -2797,7 +2922,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                       ),
                                     ],
                                   ),
-                                if (_distanceMode || _distA != null)
+                                if (mode == MapMode.distance || _distA != null)
                                   Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
@@ -2814,7 +2939,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                             .textTheme
                                             .bodyMedium,
                                       ),
-                                      if (_distanceMode) ...[
+                                      if (mode == MapMode.distance) ...[
                                         const SizedBox(width: 8),
                                         TextButton.icon(
                                           onPressed: _distanceFromMyLocation,
@@ -2890,10 +3015,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   FloatingActionButton.small(
                     heroTag: 'probe',
                     tooltip: 'Measure elevation',
-                    backgroundColor: _probeMode
+                    backgroundColor: mode == MapMode.elevation
                         ? Theme.of(context).colorScheme.primary
                         : null,
-                    foregroundColor: _probeMode
+                    foregroundColor: mode == MapMode.elevation
                         ? Theme.of(context).colorScheme.onPrimary
                         : null,
                     onPressed: _toggleProbe,
@@ -2903,10 +3028,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   FloatingActionButton.small(
                     heroTag: 'distance',
                     tooltip: 'Measure distance',
-                    backgroundColor: _distanceMode
+                    backgroundColor: mode == MapMode.distance
                         ? Theme.of(context).colorScheme.primary
                         : null,
-                    foregroundColor: _distanceMode
+                    foregroundColor: mode == MapMode.distance
                         ? Theme.of(context).colorScheme.onPrimary
                         : null,
                     onPressed: _toggleDistance,
@@ -2929,6 +3054,30 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         toolsExpanded ? Icons.unfold_less : Icons.unfold_more,
                       ),
                     ),
+                    const SizedBox(width: 12),
+                    // Edit mode: while on, a plain tap selects the object under
+                    // it. Kept outside the collapsible tools group — selecting
+                    // by tap must always be one press away.
+                    FloatingActionButton.small(
+                      heroTag: 'editMode',
+                      tooltip: mode == MapMode.edit
+                          ? 'Stop selecting by tap'
+                          : 'Select by tapping the map',
+                      backgroundColor: mode == MapMode.edit
+                          ? Theme.of(context).colorScheme.primary
+                          : null,
+                      foregroundColor: mode == MapMode.edit
+                          ? Theme.of(context).colorScheme.onPrimary
+                          : null,
+                      onPressed: activeLayer == null
+                          ? null
+                          : () => _enterMode(mode == MapMode.edit
+                              ? MapMode.view
+                              : MapMode.edit),
+                      child: Icon(mode == MapMode.edit
+                          ? Icons.edit
+                          : Icons.edit_outlined),
+                    ),
                     if (isCircleLayer || isSubspaceLayer) ...[
                       const SizedBox(width: 12),
                       FloatingActionButton.small(
@@ -2941,76 +3090,56 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       ),
                     ],
                     const SizedBox(width: 12),
-                    FloatingActionButton.extended(
-                      heroTag: 'add',
-                      onPressed: activeLayer == null
+                    // Add is a sticky *mode*, not an instant create: tapping it
+                    // arms the map so a tap places the object exactly where you
+                    // point. Long-press keeps the old one-shot behaviour (place
+                    // at the map centre, open the editor) as a no-aim fallback.
+                    GestureDetector(
+                      onLongPress: activeLayer == null
                           ? null
-                          : () {
-                              final c = _mapController.camera.center;
-                              // A POI layer's only "add" is importing a set.
-                              if (isPoiLayer) {
-                                _importPois(activeLayer);
-                                return;
-                              }
-                              // Empty point-set layer: tap-to-place the initial
-                              // points instead of dropping a fixed seed.
-                              if ((isSubspaceLayer && !subspaceExists) ||
-                                  (isFreeLineLayer && !freeLineExists) ||
-                                  (isFreeAreaLayer && !freeAreaExists)) {
-                                _enterPlacement(activeLayer);
-                              } else if (isSubspaceLayer) {
-                                _addSubspaceAt(c, activeLayer, subspaces);
-                              } else if (isFreeLineLayer) {
-                                _addFreeLineAt(c, activeLayer, freeLines);
-                              } else if (isFreeAreaLayer) {
-                                _addFreeAreaAt(c, activeLayer, freeAreas);
-                              } else if (isHeightLayer) {
-                                _addHeightRegionAt(c, activeLayer);
-                              } else if (isPlaneLayer) {
-                                _addPlaneAt(c, activeLayer);
-                              } else {
-                                _addCircleAt(c, activeLayer);
-                              }
-                            },
-                      backgroundColor: activeLayer == null
-                          ? Theme.of(context).disabledColor
-                          : null,
-                      icon: Icon(
-                        isPoiLayer
-                            ? Icons.travel_explore
-                            : isSubspaceLayer
-                                ? Icons.scatter_plot_outlined
-                                : isFreeLineLayer
-                                    ? Icons.polyline
-                                    : isFreeAreaLayer
-                                        ? Icons.hexagon_outlined
-                                        : isHeightLayer
-                                            ? Icons.terrain
-                                            : isPlaneLayer
-                                                ? Icons.change_history
-                                                : Icons
-                                                    .add_location_alt_outlined,
-                      ),
-                      label: Text(
-                        isPoiLayer
-                            ? 'Import POIs'
-                            : isSubspaceLayer
-                                ? (subspaceExists
-                                    ? 'Add point'
-                                    : 'Add subspace')
-                                : isFreeLineLayer
-                                    ? (freeLineExists
-                                        ? 'Add point'
-                                        : 'Add line')
-                                    : isFreeAreaLayer
-                                        ? (freeAreaExists
-                                            ? 'Add point'
-                                            : 'Add area')
-                                        : isHeightLayer
-                                            ? 'Add height area'
-                                            : isPlaneLayer
-                                                ? 'Add plane'
-                                                : 'Add circle',
+                          : () => _addAtMapCentre(
+                                activeLayer,
+                                subspaces: subspaces,
+                                freeLines: freeLines,
+                                freeAreas: freeAreas,
+                              ),
+                      child: FloatingActionButton.extended(
+                        heroTag: 'add',
+                        tooltip: 'Tap the map to add · long-press for the '
+                            'map centre',
+                        onPressed: activeLayer == null
+                            ? null
+                            : () => mode == MapMode.add
+                                ? _exitAddMode()
+                                : _enterAddMode(activeLayer),
+                        backgroundColor: activeLayer == null
+                            ? Theme.of(context).disabledColor
+                            : mode == MapMode.add
+                                ? Theme.of(context).colorScheme.primary
+                                : null,
+                        foregroundColor: mode == MapMode.add
+                            ? Theme.of(context).colorScheme.onPrimary
+                            : null,
+                        icon: Icon(mode == MapMode.add
+                            ? Icons.check
+                            : typeIcon(activeLayer?.type ?? 'circles')),
+                        label: Text(
+                          mode == MapMode.add
+                              ? 'Done'
+                              : isPoiLayer
+                                  ? 'Import POIs'
+                                  : isSubspaceLayer
+                                      ? 'Add subspace'
+                                      : isFreeLineLayer
+                                          ? 'Add line'
+                                          : isFreeAreaLayer
+                                              ? 'Add area'
+                                              : isHeightLayer
+                                                  ? 'Add height area'
+                                                  : isPlaneLayer
+                                                      ? 'Add plane'
+                                                      : 'Add circle',
+                        ),
                       ),
                     ),
                   ],

@@ -1,7 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:latlong2/latlong.dart' hide Circle;
 
 import '../data/database.dart';
 import '../data/repository.dart';
+import 'map_mode.dart';
 
 /// Single long-lived database instance.
 final databaseProvider = Provider<AppDatabase>((ref) {
@@ -95,6 +97,41 @@ final settingsProvider = StreamProvider<AppSetting>((ref) {
 final seedProvider = FutureProvider<String>((ref) {
   return ref.watch(repositoryProvider).ensureDefaultLayer();
 });
+
+/// The seven object types a layer can hold, in one closed enum — the type tag
+/// the six parallel `selectedXProvider`s don't carry themselves.
+enum ObjectKind {
+  circle,
+  plane,
+  subspace,
+  freeLine,
+  freeArea,
+  heightRegion,
+  poiSet;
+
+  /// The `Layers.type` string that holds this kind of object.
+  String get layerType => switch (this) {
+        ObjectKind.circle => 'circles',
+        ObjectKind.plane => 'planes',
+        ObjectKind.subspace => 'subspace',
+        ObjectKind.freeLine => 'freeline',
+        ObjectKind.freeArea => 'freearea',
+        ObjectKind.heightRegion => 'height',
+        ObjectKind.poiSet => 'poi',
+      };
+
+  /// The kind a layer of [layerType] holds, or null for an unknown type.
+  static ObjectKind? forLayerType(String layerType) => switch (layerType) {
+        'circles' => ObjectKind.circle,
+        'planes' => ObjectKind.plane,
+        'subspace' => ObjectKind.subspace,
+        'freeline' => ObjectKind.freeLine,
+        'freearea' => ObjectKind.freeArea,
+        'height' => ObjectKind.heightRegion,
+        'poi' => ObjectKind.poiSet,
+        _ => null,
+      };
+}
 
 /// Sentinel [activeLayerProvider] value meaning "the user explicitly chose to
 /// have no active layer" — distinct from `null`, which means "nothing chosen
@@ -286,6 +323,95 @@ class HeightPlacementNotifier extends Notifier<bool> {
 
 final heightPlacementProvider =
     NotifierProvider<HeightPlacementNotifier, bool>(HeightPlacementNotifier.new);
+
+/// Clears every object selection and disarms every "the next map tap places
+/// this point" flag.
+///
+/// The six `selectedXProvider`s are mutually exclusive **by convention only**
+/// (nothing in the providers enforces it), so this is the single place that
+/// convention is implemented. Callers outside the map screen (the layers
+/// drawer's Elements list) rely on it too — keep it here, not in a widget.
+void clearSelection(WidgetRef ref) {
+  ref.read(selectedCircleProvider.notifier).select(null);
+  ref.read(circlePlacementProvider.notifier).arm(false);
+  ref.read(selectedPlaneProvider.notifier).select(null);
+  ref.read(planePlacementProvider.notifier).arm(null);
+  ref.read(selectedSubspaceProvider.notifier).select(null);
+  ref.read(subspacePlacementProvider.notifier).arm(null);
+  ref.read(selectedFreeLineProvider.notifier).select(null);
+  ref.read(freeLinePlacementProvider.notifier).arm(null);
+  ref.read(freeLineCenterPlacementProvider.notifier).arm(false);
+  ref.read(selectedFreeAreaProvider.notifier).select(null);
+  ref.read(freeAreaPlacementProvider.notifier).arm(null);
+  ref.read(selectedHeightRegionProvider.notifier).select(null);
+  ref.read(heightPlacementProvider.notifier).arm(false);
+}
+
+/// Whether any object is currently selected.
+bool hasAnySelection(WidgetRef ref) =>
+    ref.read(selectedCircleProvider) != null ||
+    ref.read(selectedPlaneProvider) != null ||
+    ref.read(selectedSubspaceProvider) != null ||
+    ref.read(selectedFreeLineProvider) != null ||
+    ref.read(selectedFreeAreaProvider) != null ||
+    ref.read(selectedHeightRegionProvider) != null;
+
+/// Selects exactly one object, clearing the others (and any armed placement),
+/// and leaves whatever map mode was armed — editing the object is now the job.
+///
+/// [ObjectKind.poiSet] is a no-op: POI sets have no editor, so there is no
+/// selection provider for them.
+void selectObject(WidgetRef ref, ObjectKind kind, String id) {
+  clearSelection(ref);
+  if (ref.read(mapModeProvider) != MapMode.edit) {
+    ref.read(mapModeProvider.notifier).set(MapMode.view);
+  }
+  switch (kind) {
+    case ObjectKind.circle:
+      ref.read(selectedCircleProvider.notifier).select(id);
+    case ObjectKind.plane:
+      ref.read(selectedPlaneProvider.notifier).select(id);
+    case ObjectKind.subspace:
+      ref.read(selectedSubspaceProvider.notifier).select(id);
+    case ObjectKind.freeLine:
+      ref.read(selectedFreeLineProvider.notifier).select(id);
+    case ObjectKind.freeArea:
+      ref.read(selectedFreeAreaProvider.notifier).select(id);
+    case ObjectKind.heightRegion:
+      ref.read(selectedHeightRegionProvider.notifier).select(id);
+    case ObjectKind.poiSet:
+      break; // no editor sheet — nothing to select
+  }
+}
+
+/// A one-shot request for the map to frame something (the layers drawer's
+/// "Zoom to" / "Edit" actions, which have no access to the [MapController]).
+///
+/// Deliberately has **no** `operator ==`: asking twice for the same object must
+/// re-fire the listener rather than be swallowed as an unchanged state.
+class MapFocusRequest {
+  const MapFocusRequest(this.points);
+
+  /// One or more lat/lng points to bring into view. A single point means
+  /// "centre here" — a camera fit on a degenerate box zooms to the maximum.
+  final List<LatLng> points;
+}
+
+class PendingFocusNotifier extends Notifier<MapFocusRequest?> {
+  @override
+  MapFocusRequest? build() => null;
+
+  void request(List<LatLng> points) {
+    if (points.isEmpty) return;
+    state = MapFocusRequest(points);
+  }
+
+  void clear() => state = null;
+}
+
+final pendingFocusProvider =
+    NotifierProvider<PendingFocusNotifier, MapFocusRequest?>(
+        PendingFocusNotifier.new);
 
 /// Resolves the effective active layer id given the current layer list:
 /// [noActiveLayer] ⇒ none; a still-present selection ⇒ itself; otherwise (nothing
