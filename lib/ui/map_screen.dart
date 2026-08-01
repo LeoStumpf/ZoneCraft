@@ -1543,6 +1543,26 @@ class _MapScreenState extends ConsumerState<MapScreen>
     _hint(_addBannerText(layer.type, 0));
   }
 
+  /// What Done does. With a transit corner already buffered it **commits the
+  /// box you can see** — the rubber band runs from that corner to the map
+  /// centre, so discarding it on Done would throw away the thing being aimed.
+  /// It is also the one path to an import that no gesture can swallow.
+  Future<void> _finishAdd() async {
+    final a = _pendingBoxA;
+    if (a != null && _placeType == 'transit') {
+      final layerId = _placeLayerId;
+      final layer = (ref.read(layersProvider).asData?.value ?? const <Layer>[])
+          .where((l) => l.id == layerId)
+          .firstOrNull;
+      final b = _mapController.camera.center;
+      setState(() => _pendingBoxA = null);
+      _exitAddMode();
+      if (layer != null) await _importTransit(layer, box: LatLngBounds(a, b));
+      return;
+    }
+    _exitAddMode();
+  }
+
   /// Leaves Add mode. For the point-set types the object just built is selected
   /// (so its editor and draggable handles appear) — the long-standing "Done ⇒
   /// now edit it" behaviour.
@@ -1620,9 +1640,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
   String _addBannerText(String? layerType, int placed) {
     if (layerType == 'poi') return 'Tap the search centre';
     if (layerType == 'transit') {
+      // Once a corner is down the rubber band tracks the map centre, so Done is
+      // a real second way to finish — say so, rather than leaving it looking
+      // like "cancel".
       return _pendingBoxA == null
           ? 'Tap one corner of the area'
-          : 'Tap the opposite corner';
+          : 'Tap the opposite corner · or Done for the centre';
     }
     if (layerType == 'planes' && _pendingPlaneA != null) {
       return 'Tap point B';
@@ -1877,6 +1900,26 @@ class _MapScreenState extends ConsumerState<MapScreen>
     }
     _selectFreeArea(id);
   }
+
+  /// Map gestures, minus double-tap zoom whenever a tap *places* something.
+  ///
+  /// Double-tap-to-zoom swallows **both** taps when two land near each other in
+  /// quick succession: flutter_map holds a single tap back until the double-tap
+  /// window closes, then reports a zoom and never delivers `onTap`. That is
+  /// exactly the gesture for marking the two corners of a transit import box, a
+  /// plane's A and B, or dropping freehand points — measured on device: two taps
+  /// 60 px apart placed *nothing* and zoomed the map instead, which reads as
+  /// "I drew the rectangle and nothing happened".
+  ///
+  /// So while a tap means something the zoom gesture is off; pinch, the zoom
+  /// buttons and plain view mode are untouched.
+  InteractionOptions _interactionOptions(bool tapPlaces) => InteractionOptions(
+        flags: tapPlaces
+            ? InteractiveFlag.all &
+                ~InteractiveFlag.doubleTapZoom &
+                ~InteractiveFlag.doubleTapDragZoom
+            : InteractiveFlag.all,
+      );
 
   /// A map tap. Everything it can do is decided by exactly two things: whether
   /// an editor armed the next tap, and the current [MapMode]. In the default
@@ -2345,6 +2388,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
       transitVisibleMask[s.id] = s.visibleModeMask;
     }
     final mode = ref.watch(mapModeProvider);
+    // Whether a map tap currently *does* something — see [_interactionOptions].
+    final tapPlaces = mode != MapMode.view ||
+        ref.watch(circlePlacementProvider) ||
+        ref.watch(heightPlacementProvider) ||
+        ref.watch(freeLineCenterPlacementProvider) ||
+        ref.watch(freeLinePlacementProvider) != null ||
+        ref.watch(freeAreaPlacementProvider) != null ||
+        ref.watch(subspacePlacementProvider) != null ||
+        ref.watch(planePlacementProvider) != null;
     final settings = ref.watch(settingsProvider).asData?.value;
     final uncertainty = settings?.uncertaintyMeters ?? 0;
     final transportOverlay = settings?.transportOverlay ?? false;
@@ -2474,6 +2526,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     // zoom-out gestures from degenerating into a NaN camera.
                     maxZoom: 19,
                     minZoom: 2,
+                    interactionOptions: _interactionOptions(tapPlaces),
                     onMapReady: () {
                       _mapReady = true;
                       _scheduleBordersRefresh();
@@ -3093,7 +3146,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                     child: const Text('Edit'),
                                   ),
                                 TextButton(
-                                  onPressed: _exitAddMode,
+                                  onPressed: _finishAdd,
                                   child: const Text('Done'),
                                 ),
                               ],
@@ -3381,7 +3434,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         onPressed: activeLayer == null
                             ? null
                             : () => mode == MapMode.add
-                                ? _exitAddMode()
+                                ? _finishAdd()
                                 : _enterAddMode(activeLayer),
                         backgroundColor: activeLayer == null
                             ? Theme.of(context).disabledColor
