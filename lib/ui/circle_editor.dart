@@ -135,20 +135,26 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
               Row(
                 children: [
                   Expanded(child: Text('Radius: ${_radiusLabel(_radius)}')),
-                  DropdownButton<String>(
-                    value: widget.layers.any((l) => l.id == widget.circle.layerId)
-                        ? widget.circle.layerId
-                        : null,
-                    hint: const Text('Layer'),
-                    items: [
-                      for (final l in widget.layers)
-                        DropdownMenuItem(value: l.id, child: Text(l.name)),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) {
-                        _repo.updateCircle(widget.circle.id, layerId: v);
-                      }
-                    },
+                  // The layer picker takes the slack and ellipsises: a layer named
+                  // after an imported border ("Ludwigsvorstadt-Isarvorstadt") is
+                  // far longer than this row is wide.
+                  Flexible(
+                    child: DropdownButton<String>(
+                      isExpanded: true,
+                      value: widget.layers.any((l) => l.id == widget.circle.layerId)
+                          ? widget.circle.layerId
+                          : null,
+                      hint: const Text('Layer'),
+                      items: [
+                        for (final l in widget.layers)
+                          DropdownMenuItem(value: l.id, child: Text(l.name)),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) {
+                          _repo.updateCircle(widget.circle.id, layerId: v);
+                        }
+                      },
+                    ),
                   ),
                 ],
               ),

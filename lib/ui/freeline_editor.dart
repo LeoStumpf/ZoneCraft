@@ -161,19 +161,25 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
                   const SizedBox(width: 8),
                   Text('Edit freehand line',
                       style: Theme.of(context).textTheme.titleMedium),
-                  const Spacer(),
-                  DropdownButton<String>(
-                    value: lineLayers.any((l) => l.id == widget.freeLine.layerId)
-                        ? widget.freeLine.layerId
-                        : null,
-                    hint: const Text('Layer'),
-                    items: [
-                      for (final l in lineLayers)
-                        DropdownMenuItem(value: l.id, child: Text(l.name)),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) _repo.updateFreeLine(id, layerId: v);
-                    },
+                  const SizedBox(width: 12),
+                  // The layer picker takes the slack and ellipsises: a layer named
+                  // after an imported border ("Ludwigsvorstadt-Isarvorstadt") is
+                  // far longer than this row is wide.
+                  Flexible(
+                    child: DropdownButton<String>(
+                      isExpanded: true,
+                      value: lineLayers.any((l) => l.id == widget.freeLine.layerId)
+                          ? widget.freeLine.layerId
+                          : null,
+                      hint: const Text('Layer'),
+                      items: [
+                        for (final l in lineLayers)
+                          DropdownMenuItem(value: l.id, child: Text(l.name)),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) _repo.updateFreeLine(id, layerId: v);
+                      },
+                    ),
                   ),
                   IconButton(
                     tooltip: 'Delete line',

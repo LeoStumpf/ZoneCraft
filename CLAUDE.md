@@ -21,10 +21,14 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   train-only import works while a bus one is refused),
   `borders` (administrative **areas** of one OSM `admin_level`, chosen when the layer is
   created, fetched **once** over a tap-two-corners bbox and stored offline; whole relations
-  are downloaded — clipped member ways have no fillable interior — then assembled, clipped
-  to the box and thinned on the device. Drawn as outlines in the layer colour with two
-  per-layer toggles, **Colour areas** (a 6-colour palette assigned so no two neighbours
-  match, adjacency = shared OSM way id) and **Show names**; no editor, no retry row).
+  are downloaded — clipped member ways have no fillable interior — then assembled and
+  thinned on the device. **Nothing is cut to the box**: the box limits what is fetched, not
+  what is kept, so an area may reach well past it. Drawn as outlines in the layer colour
+  with two per-layer toggles, **Colour areas** (a 6-colour palette assigned so no two
+  neighbours match, adjacency = shared OSM way id) and **Show names**. The Elements list
+  names the **areas** ("Maxvorstadt"), not the imports, and each row can be
+  **converted to a freehand area layer** — the offline twin of the by-name feature import,
+  and the only way geometry leaves this read-only snapshot. No editor).
   The region types have a `geo/*.dart` region builder and a `ui/*_editor.dart` docked editor.
 - **Compositing engine** (`ui/region_layer.dart`): per layer, every object yields an
   `outer`+`core` screen-space polygon; these union via `Path.combine`, then paint core (solid)
@@ -64,7 +68,8 @@ the shared compositing engine (union / band / invert; the `height` type uses eve
 and is bounded, so it skips band/invert) plus three import types with their own painters:
 `poi` (offline sets, screen-space clustering), `transit` (offline station imports over a
 bbox, per-type visibility, retryable failed imports) and `borders` (offline area imports
-per admin level, neighbour-distinct colouring, name plates) — the layers drawer + per-type
+per admin level, neighbour-distinct colouring, name plates, per-area convert-to-freehand)
+— the layers drawer + per-type
 editors, settings (uncertainty, clear-all, offline cache, import/export), opt-in locate-me,
 persisted camera, offline resilience (cache-first tiles + prefetch), and import/export
 (whole-DB + per-layer + external GeoJSON/KML/KMZ/GPX; freeline imports prompt for their

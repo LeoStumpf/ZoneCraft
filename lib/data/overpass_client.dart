@@ -54,6 +54,7 @@ class OverpassProgress {
     required this.endpointIndex,
     required this.endpointCount,
     required this.attempt,
+    required this.timeout,
     this.bytes = 0,
     this.totalBytes,
   });
@@ -67,6 +68,10 @@ class OverpassProgress {
 
   /// 1-based try against *this* endpoint.
   final int attempt;
+
+  /// How long this attempt will be given before it is abandoned — so a display
+  /// can say when the waiting ends rather than leaving it open-ended.
+  final Duration timeout;
 
   /// Bytes received so far, and the total if the server sent a Content-Length
   /// (it often doesn't — Overpass usually streams chunked).
@@ -180,6 +185,7 @@ Future<OverpassOutcome<T>> overpassPost<T>(
               endpointIndex: i + 1,
               endpointCount: endpoints.length,
               attempt: attempt,
+              timeout: timeout,
               bytes: bytes,
               totalBytes: totalBytes,
             );

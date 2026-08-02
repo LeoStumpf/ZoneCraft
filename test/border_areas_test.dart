@@ -163,77 +163,6 @@ void main() {
     });
   });
 
-  group('clipRingsToBox', () {
-    const box = LatLngBox(south: 0, west: 0, north: 1, east: 1);
-
-    List<List<LatLng>> ring(List<List<double>> pts) => [
-          [for (final p in pts) LatLng(p[0], p[1])]
-        ];
-
-    test('a ring already inside is unchanged', () {
-      final r = ring([
-        [0.2, 0.2],
-        [0.2, 0.8],
-        [0.8, 0.8]
-      ]);
-      expect(clipRingsToBox(r, box).single, hasLength(3));
-    });
-
-    test('a straddling ring is cut at the box edge', () {
-      final out = clipRingsToBox(
-        ring([
-          [0.5, 0.5],
-          [0.5, 2.0],
-          [0.9, 2.0],
-          [0.9, 0.5]
-        ]),
-        box,
-      ).single;
-      // Nothing survives east of the box.
-      for (final p in out) {
-        expect(p.longitude, lessThanOrEqualTo(1.0 + 1e-9));
-        expect(p.longitude, greaterThanOrEqualTo(-1e-9));
-      }
-      // And the cut vertices land exactly on the edge, which is what lets the
-      // painter recognise them as a cut rather than a border.
-      expect(out.any((p) => onBoxEdge(p, box, 1e-9)), isTrue);
-    });
-
-    test('a disjoint ring is dropped, not clamped into the box', () {
-      expect(
-        clipRingsToBox(
-          ring([
-            [5, 5],
-            [5, 6],
-            [6, 6]
-          ]),
-          box,
-        ),
-        isEmpty,
-      );
-    });
-
-    test('a hole inside the box survives alongside its outer ring', () {
-      final rings = [
-        [
-          const LatLng(0, 0),
-          const LatLng(0, 1),
-          const LatLng(1, 1),
-          const LatLng(1, 0),
-        ],
-        [
-          const LatLng(0.3, 0.3),
-          const LatLng(0.3, 0.7),
-          const LatLng(0.7, 0.7),
-          const LatLng(0.7, 0.3),
-        ],
-      ];
-      final out = clipRingsToBox(rings, box);
-      expect(out, hasLength(2), reason: 'even-odd parity must survive the clip');
-      expect(out.last, hasLength(4));
-    });
-  });
-
   group('assignAreaColors', () {
     AreaAdjacencyInput a(int id, List<int> ways) =>
         AreaAdjacencyInput(osmId: id, wayIds: ways);
@@ -395,92 +324,118 @@ void main() {
     });
   });
 
-  group('onBoxEdge', () {
-    const box = LatLngBox(south: 0, west: 0, north: 1, east: 1);
+  group('outerRings', () {
+    List<LatLng> square(double x0, double y0, double x1, double y1) => [
+          LatLng(y0, x0),
+          LatLng(y0, x1),
+          LatLng(y1, x1),
+          LatLng(y1, x0),
+        ];
 
-    test('recognises a cut vertex on any of the four edges', () {
-      for (final p in [
-        const LatLng(0, 0.5),
-        const LatLng(1, 0.5),
-        const LatLng(0.5, 0),
-        const LatLng(0.5, 1),
-      ]) {
-        expect(onBoxEdge(p, box, 1e-7), isTrue);
-      }
+    test('a lone ring is its own outer ring', () {
+      final r = [square(0, 0, 1, 1)];
+      expect(outerRings(r), r);
     });
 
-    test('an interior vertex is a real border', () {
-      expect(onBoxEdge(const LatLng(0.5, 0.5), box, 1e-7), isFalse);
+    test('a hole is dropped — a freehand area cannot express one', () {
+      final outer = square(0, 0, 10, 10);
+      final hole = square(2, 2, 4, 4);
+      final out = outerRings([outer, hole]);
+      expect(out, hasLength(1));
+      expect(out.single, outer);
+    });
+
+    test('an exclave survives as its own area', () {
+      final a = square(0, 0, 1, 1);
+      final b = square(5, 5, 6, 6);
+      expect(outerRings([a, b]), hasLength(2));
+    });
+
+    test('a hole inside one of two outers still goes', () {
+      final a = square(0, 0, 10, 10);
+      final hole = square(1, 1, 2, 2);
+      final b = square(20, 20, 30, 30);
+      final out = outerRings([a, hole, b]);
+      expect(out, hasLength(2));
+      expect(out, isNot(contains(hole)));
     });
   });
 
   group('buildBorderAreas', () {
-    test('assembles, clips and thins in one pass', () {
+    test('assembles and thins, keeping the WHOLE boundary', () {
+      // The area runs far outside any box it might have been imported over.
+      // Nothing may be cut: the box limits the download, not the result.
       final rel = BorderRelationData(
         osmId: 42,
-        name: 'Half in',
+        name: 'Sticks out',
         ways: [
           BorderWay(id: 1, role: 'outer', points: const [
             LatLng(0.2, 0.2),
-            LatLng(0.2, 2.0),
+            LatLng(0.2, 20.0),
           ]),
           BorderWay(id: 2, role: 'outer', points: const [
-            LatLng(0.2, 2.0),
-            LatLng(0.8, 2.0),
+            LatLng(0.2, 20.0),
+            LatLng(0.8, 20.0),
             LatLng(0.8, 0.2),
             LatLng(0.2, 0.2),
           ]),
         ],
       );
-      final built = buildBorderAreas(BorderBuildRequest(
-        relations: [rel],
-        box: const LatLngBox(south: 0, west: 0, north: 1, east: 1),
-      ));
+      final built = buildBorderAreas([rel]);
       expect(built, hasLength(1));
       final a = built.single;
       expect(a.osmId, 42);
-      expect(a.name, 'Half in');
+      expect(a.name, 'Sticks out');
       expect(a.wayIds, [1, 2]);
-      // Only the part inside the box is stored.
-      expect(a.east, lessThanOrEqualTo(1.0 + 1e-9));
-      expect(a.pointCount, greaterThanOrEqualTo(3));
+      expect(a.east, closeTo(20.0, 1e-9),
+          reason: 'the far edge is kept, not clipped away');
       expect(decodeRings(a.rings), hasLength(1));
       expect(totalPointCount(built), a.pointCount);
     });
 
-    test('an area entirely outside the box is not part of this import', () {
-      final built = buildBorderAreas(BorderBuildRequest(
-        relations: [
-          BorderRelationData(osmId: 1, name: 'Elsewhere', ways: [
-            BorderWay(id: 1, role: 'outer', points: const [
-              LatLng(50, 50),
-              LatLng(50, 51),
-              LatLng(51, 51),
-              LatLng(50, 50),
-            ]),
+    test('a relation with no usable rings yields no area', () {
+      final built = buildBorderAreas([
+        BorderRelationData(osmId: 1, name: 'Too thin', ways: [
+          BorderWay(id: 1, role: 'outer', points: const [
+            LatLng(0, 0),
+            LatLng(0, 1),
           ]),
-        ],
-        box: const LatLngBox(south: 0, west: 0, north: 1, east: 1),
-      ));
+        ]),
+      ]);
       expect(built, isEmpty);
     });
 
     test('simplification thins a dense boundary without losing the shape', () {
-      // 400 points along one edge, all within a metre of the straight line.
       final dense = <LatLng>[
         for (var i = 0; i < 400; i++) LatLng(0.2, 0.2 + i * 0.0015),
         const LatLng(0.8, 0.8),
       ];
-      final built = buildBorderAreas(BorderBuildRequest(
-        relations: [
-          BorderRelationData(osmId: 1, name: null, ways: [
-            BorderWay(id: 1, role: 'outer', points: dense),
-          ]),
-        ],
-        box: const LatLngBox(south: 0, west: 0, north: 1, east: 1),
-      ));
+      final built = buildBorderAreas([
+        BorderRelationData(osmId: 1, name: null, ways: [
+          BorderWay(id: 1, role: 'outer', points: dense),
+        ]),
+      ]);
       expect(built.single.pointCount, lessThan(dense.length));
       expect(built.single.pointCount, greaterThanOrEqualTo(3));
+    });
+
+    test('the label anchor lands inside the area', () {
+      final built = buildBorderAreas([
+        BorderRelationData(osmId: 1, name: 'Box', ways: [
+          BorderWay(id: 1, role: 'outer', points: const [
+            LatLng(0, 0),
+            LatLng(0, 2),
+            LatLng(2, 2),
+            LatLng(2, 0),
+            LatLng(0, 0),
+          ]),
+        ]),
+      ]);
+      final a = built.single;
+      expect(a.labelLat, greaterThan(a.south));
+      expect(a.labelLat, lessThan(a.north));
+      expect(a.labelLng, greaterThan(a.west));
+      expect(a.labelLng, lessThan(a.east));
     });
   });
 }

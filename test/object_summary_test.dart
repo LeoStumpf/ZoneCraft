@@ -326,4 +326,85 @@ void main() {
   test('typeIcon knows the transit type', () {
     expect(typeIcon('transit'), isNot(typeIcon('unknown-type')));
   });
+
+  group('borders elements list the areas, not the imports', () {
+    /// Seeds a borders layer holding [names] as areas of one import.
+    Future<Layer> seed(List<String?> names) async {
+      final layerId = await repo.createLayer(
+          name: 'Districts',
+          colorArgb: 0xFF000000,
+          type: 'borders',
+          borderLevel: '9');
+      await repo.addBorderSet(
+        layerId: layerId,
+        south: 48.0,
+        west: 11.0,
+        north: 48.3,
+        east: 11.8,
+        adminLevel: '9',
+        areas: [
+          for (var i = 0; i < names.length; i++)
+            (
+              osmId: i + 1,
+              name: names[i],
+              south: 48.1,
+              west: 11.5,
+              north: 48.2,
+              east: 11.6,
+              labelLat: 48.15,
+              labelLng: 11.55,
+              pointCount: 42,
+              rings: '[[[48.1,11.5],[48.1,11.6],[48.2,11.6]]]',
+              wayIds: <int>[i + 1],
+            ),
+        ],
+      );
+      return (await repo.watchLayers().first).firstWhere((l) => l.id == layerId);
+    }
+
+    Future<List<ObjectSummary>> rowsFor(Layer layer) async => summariseLayer(
+          layer,
+          borderSets: await repo.watchAllBorderSets().first,
+          borderAreas: await repo.watchAllBorderAreas().first,
+        );
+
+    test('rows are the areas, named and sorted by name', () async {
+      final layer = await seed(['Schwabing', 'Maxvorstadt', 'Altstadt-Lehel']);
+      final rows = await rowsFor(layer);
+      expect(rows.map((r) => r.title),
+          ['Altstadt-Lehel', 'Maxvorstadt', 'Schwabing']);
+      expect(rows.first.ref.kind, ObjectKind.borderArea);
+      expect(rows.first.subtitle, contains('42 points'));
+    });
+
+    test('the ref points at the AREA, so rename/delete hit one district',
+        () async {
+      final layer = await seed(['Maxvorstadt']);
+      final rows = await rowsFor(layer);
+      final areas = await repo.watchAllBorderAreas().first;
+      expect(rows.single.ref.id, areas.single.id);
+      expect(rows.single.ref.id, isNot(areas.single.setId));
+    });
+
+    test('unnamed areas sort last and get a positional name', () async {
+      final layer = await seed([null, 'Named']);
+      final rows = await rowsFor(layer);
+      expect(rows.first.title, 'Named');
+      expect(rows.last.title, startsWith('Area '));
+    });
+
+    test('areas of another layer are not listed', () async {
+      final mine = await seed(['Mine']);
+      await seed(['Theirs']);
+      expect((await rowsFor(mine)).map((r) => r.title), ['Mine']);
+    });
+
+    test('the row frames the area itself, so Zoom to lands on it', () async {
+      final layer = await seed(['Maxvorstadt']);
+      final rows = await rowsFor(layer);
+      expect(rows.single.fitPoints, hasLength(2));
+      expect(rows.single.fitPoints.first.latitude, 48.1);
+      expect(rows.single.fitPoints.last.longitude, 11.6);
+    });
+  });
 }

@@ -1442,20 +1442,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
       // over 100 000 points through RDP.
       final relations = outcome.value!;
       progress.update('Building ${relations.length} '
-          'area${relations.length == 1 ? '' : 's'} — stitching, clipping to '
-          'the box, thinning…');
-      final built = await compute(
-        buildBorderAreas,
-        BorderBuildRequest(
-          relations: relations,
-          box: LatLngBox(
-            south: config.south,
-            west: config.west,
-            north: config.north,
-            east: config.east,
-          ),
-        ),
-      );
+          'area${relations.length == 1 ? '' : 's'} — stitching and thinning…');
+      final built = await compute(buildBorderAreas, relations);
       if (built.isEmpty) {
         progress.close();
         // Overpass matches a relation when one of its *members* is in the box,
@@ -2311,6 +2299,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       transitSets: ref.read(transitSetsProvider).asData?.value ?? const [],
       transitStops: ref.read(transitStopsProvider).asData?.value ?? const [],
       borderSets: ref.read(borderSetsProvider).asData?.value ?? const [],
+      borderAreas: ref.read(borderAreasProvider).asData?.value ?? const [],
     );
     return {for (final r in rows) r.ref: r};
   }

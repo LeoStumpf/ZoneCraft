@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
@@ -777,6 +778,49 @@ void main() {
       repo.combineLayers(sourceId: a, targetId: b),
       throwsArgumentError,
     );
+  });
+
+  test('an area can be renamed, deleted and read back as rings', () async {
+    final layerId = await repo.createLayer(
+        name: 'B', colorArgb: 0xFF123456, type: 'borders', borderLevel: '9');
+    await seedBorders(layerId);
+
+    final areas = await repo.watchAllBorderAreas().first;
+    final munich = areas.firstWhere((a) => a.osmId == 1);
+
+    // The rings come back decoded, which is what "convert to freehand" needs.
+    final rings = await repo.borderAreaRings(munich.id);
+    expect(rings, hasLength(1));
+    expect(rings.single, hasLength(4));
+    expect(await repo.borderAreaRings('nope'), isEmpty);
+
+    // Renaming a row renames the area, because the row *is* the area.
+    await repo.updateBorderArea(munich.id, name: const Value('Renamed'));
+    expect(
+      (await repo.watchAllBorderAreas().first)
+          .firstWhere((a) => a.id == munich.id)
+          .name,
+      'Renamed',
+    );
+
+    // Deleting one area leaves the other two, and the set behind them.
+    await repo.deleteBorderArea(munich.id);
+    final left = await repo.watchAllBorderAreas().first;
+    expect(left, hasLength(2));
+    expect(left.map((a) => a.osmId), isNot(contains(1)));
+    expect(await repo.watchAllBorderSets().first, hasLength(1));
+  });
+
+  test('deleting an area recolours the neighbours it was constraining',
+      () async {
+    final layerId = await repo.createLayer(
+        name: 'B', colorArgb: 0xFF123456, type: 'borders', borderLevel: '8');
+    await seedBorders(layerId);
+    final before = await repo.watchAllBorderAreas().first;
+    await repo.deleteBorderArea(before.firstWhere((a) => a.osmId == 1).id);
+    // Germering no longer borders anything, so it may take colour 0 again.
+    final after = await repo.watchAllBorderAreas().first;
+    expect(after.map((a) => a.colorIndex), everyElement(0));
   });
 
   test('borders export nothing — derived data is re-fetched, not restored',

@@ -126,19 +126,25 @@ class _FreeAreaEditorSheetState extends ConsumerState<FreeAreaEditorSheet> {
                   const SizedBox(width: 8),
                   Text('Edit freehand area',
                       style: Theme.of(context).textTheme.titleMedium),
-                  const Spacer(),
-                  DropdownButton<String>(
-                    value: areaLayers.any((l) => l.id == widget.freeArea.layerId)
-                        ? widget.freeArea.layerId
-                        : null,
-                    hint: const Text('Layer'),
-                    items: [
-                      for (final l in areaLayers)
-                        DropdownMenuItem(value: l.id, child: Text(l.name)),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) _repo.updateFreeArea(id, layerId: v);
-                    },
+                  const SizedBox(width: 12),
+                  // The layer picker takes the slack and ellipsises: a layer named
+                  // after an imported border ("Ludwigsvorstadt-Isarvorstadt") is
+                  // far longer than this row is wide.
+                  Flexible(
+                    child: DropdownButton<String>(
+                      isExpanded: true,
+                      value: areaLayers.any((l) => l.id == widget.freeArea.layerId)
+                          ? widget.freeArea.layerId
+                          : null,
+                      hint: const Text('Layer'),
+                      items: [
+                        for (final l in areaLayers)
+                          DropdownMenuItem(value: l.id, child: Text(l.name)),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) _repo.updateFreeArea(id, layerId: v);
+                      },
+                    ),
                   ),
                   IconButton(
                     tooltip: 'Delete area',

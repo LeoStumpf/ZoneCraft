@@ -1211,6 +1211,40 @@ class Repository {
     ];
   }
 
+  /// Renames one imported area. This overwrites the OSM `name`, which is the
+  /// point: the Elements list shows areas, so renaming a row renames the thing
+  /// the row is.
+  Future<void> updateBorderArea(
+    String id, {
+    Value<String?> name = const Value.absent(),
+  }) async {
+    await (_db.update(_db.borderAreas)..where((a) => a.id.equals(id)))
+        .write(BorderAreasCompanion(name: name));
+  }
+
+  /// Deletes one imported area, then recolours what is left of its layer.
+  Future<void> deleteBorderArea(String id) async {
+    final area = await (_db.select(_db.borderAreas)
+          ..where((a) => a.id.equals(id)))
+        .getSingleOrNull();
+    if (area == null) return;
+    final set = await (_db.select(_db.borderSets)
+          ..where((s) => s.id.equals(area.setId)))
+        .getSingleOrNull();
+    await (_db.delete(_db.borderAreas)..where((a) => a.id.equals(id))).go();
+    if (set != null) await recolourBorderLayer(set.layerId);
+  }
+
+  /// The decoded rings of one area, or empty when it is gone. Used by the
+  /// "convert to freehand area" action, which needs the geometry rather than
+  /// the summary row.
+  Future<List<List<LatLng>>> borderAreaRings(String id) async {
+    final area = await (_db.select(_db.borderAreas)
+          ..where((a) => a.id.equals(id)))
+        .getSingleOrNull();
+    return area == null ? const [] : decodeRings(area.rings);
+  }
+
   /// Renames an import (or moves it to another `borders` layer). The imported
   /// area and level are immutable — a different area means a new import.
   Future<void> updateBorderSet(

@@ -3,45 +3,20 @@ import 'dart:convert';
 import 'package:latlong2/latlong.dart';
 
 import '../data/borders.dart';
-import 'height.dart' show clipToConvex;
 import 'simplify.dart';
 
 /// Geometry for the `borders` layer: stitch an OSM relation's member ways into
-/// closed rings, cut them down to the imported box, thin them, and colour the
-/// areas so no two neighbours match.
+/// closed rings, thin them, and colour the areas so no two neighbours match.
+///
+/// **Nothing is cut to the imported box.** The box bounds what is *asked for*,
+/// not what is kept: if a boundary came down, you get all of it, even where that
+/// means an area extending well past the box you drew. Clipping used to happen
+/// here, and it was wrong twice over — it threw away data already paid for, and
+/// it left straight fake edges the painter then had to recognise and hide.
 ///
 /// Pure Dart — no Flutter, no drift — so [buildBorderAreas] runs inside a
 /// `compute()` isolate (the precedent being `data/height_generator.dart`), and
 /// every step here is directly unit-testable.
-
-/// An axis-aligned lat/lng box: the imported area, and the clip rectangle the
-/// stored geometry is cut to.
-class LatLngBox {
-  const LatLngBox({
-    required this.south,
-    required this.west,
-    required this.north,
-    required this.east,
-  });
-
-  final double south, west, north, east;
-
-  LatLng get center => LatLng((south + north) / 2, (west + east) / 2);
-
-  /// The box as a ring, for [clipToConvex].
-  List<LatLng> get ring => [
-        LatLng(south, west),
-        LatLng(south, east),
-        LatLng(north, east),
-        LatLng(north, west),
-      ];
-
-  bool contains(LatLng p) =>
-      p.latitude >= south &&
-      p.latitude <= north &&
-      p.longitude >= west &&
-      p.longitude <= east;
-}
 
 // --- Ring assembly ----------------------------------------------------------
 
@@ -116,26 +91,6 @@ List<List<LatLng>> _stitch(List<BorderWay> ways) {
     if (ring.length >= 3) rings.add(ring);
   }
   return rings;
-}
-
-// --- Clipping ---------------------------------------------------------------
-
-/// Clips each ring to [box] independently.
-///
-/// Clipping rings one at a time preserves even-odd parity inside the box: under
-/// intersection with the same convex region a point keeps its in/out state for
-/// every ring, so a hole stays a hole. Rings that fall entirely outside come
-/// back empty and are dropped.
-List<List<LatLng>> clipRingsToBox(List<List<LatLng>> rings, LatLngBox box) {
-  final clip = box.ring;
-  final inside = box.center;
-  final out = <List<LatLng>>[];
-  for (final ring in rings) {
-    if (ring.length < 3) continue;
-    final clipped = clipToConvex(ring, clip, inside);
-    if (clipped.length >= 3) out.add(clipped);
-  }
-  return out;
 }
 
 // --- Colouring --------------------------------------------------------------
@@ -359,14 +314,6 @@ List<List<LatLng>> decodeRings(String json) {
 
 // --- The pipeline -----------------------------------------------------------
 
-/// Isolate-transferable input for [buildBorderAreas].
-class BorderBuildRequest {
-  const BorderBuildRequest({required this.relations, required this.box});
-
-  final List<BorderRelationData> relations;
-  final LatLngBox box;
-}
-
 /// One finished area, ready to be written as a `border_areas` row.
 class BuiltBorderArea {
   const BuiltBorderArea({
@@ -394,24 +341,22 @@ class BuiltBorderArea {
   final List<int> wayIds;
 }
 
-/// Assemble → clip → simplify, for every relation in one go. Runs in a
-/// `compute()` isolate: a state-level import is 119 238 points through RDP,
-/// which is not something to do on the UI thread.
+/// Assemble → simplify, for every relation in one go. Runs in a `compute()`
+/// isolate: a state-level import is 119 238 points through RDP, which is not
+/// something to do on the UI thread.
 ///
-/// Colouring is deliberately **not** here: it has to run over every area in the
-/// layer (including ones already stored from an earlier import), which is a
-/// database read — see [assignAreaColors] and the repository's recolour step.
-List<BuiltBorderArea> buildBorderAreas(BorderBuildRequest req) {
+/// Nothing is clipped — see this file's header. Colouring is deliberately not
+/// here either: it has to run over every area in the layer (including ones
+/// already stored from an earlier import), which is a database read — see
+/// [assignAreaColors] and the repository's recolour step.
+List<BuiltBorderArea> buildBorderAreas(List<BorderRelationData> relations) {
   final out = <BuiltBorderArea>[];
-  for (final rel in req.relations) {
-    final assembled = assembleRings(rel.ways);
-    final clipped = clipRingsToBox(assembled, req.box);
+  for (final rel in relations) {
     final rings = <List<LatLng>>[];
-    for (final r in clipped) {
+    for (final r in assembleRings(rel.ways)) {
       final s = simplifyRing(r, kImportSimplifyMeters, minPoints: 3);
       if (s.length >= 3) rings.add(s);
     }
-    // An area whose every ring fell outside the box isn't in this import.
     if (rings.isEmpty) continue;
 
     var south = 90.0, north = -90.0, west = 180.0, east = -180.0;
@@ -443,19 +388,35 @@ List<BuiltBorderArea> buildBorderAreas(BorderBuildRequest req) {
   return out;
 }
 
+/// The rings of an area that are **not** holes: those not enclosed by another
+/// ring of the same area.
+///
+/// The stored geometry carries no role flag, because the painter fills with
+/// even-odd parity and doesn't need one. Converting to a freehand area does
+/// need one, though — a freehand area is a single ring with no notion of a
+/// hole, so a hole exported as its own area would render as solid fill exactly
+/// where the real area has a gap. Containment recovers what the role flag would
+/// have said, and an exclave (a second outer ring) survives as its own area.
+List<List<LatLng>> outerRings(List<List<LatLng>> rings) {
+  if (rings.length < 2) return rings;
+  return [
+    for (var i = 0; i < rings.length; i++)
+      if (!_isEnclosed(rings[i], rings, i)) rings[i],
+  ];
+}
+
+bool _isEnclosed(List<LatLng> ring, List<List<LatLng>> all, int self) {
+  // One vertex decides it: rings of one area never cross, so a ring is either
+  // wholly inside another or wholly outside it.
+  final probe = ring.first;
+  for (var j = 0; j < all.length; j++) {
+    if (j == self || all[j].length < 3) continue;
+    if (_containsPoint(all[j], probe)) return true;
+  }
+  return false;
+}
+
 /// Total points across [areas] — the import's headline cost, denormalised onto
 /// the set row.
 int totalPointCount(Iterable<BuiltBorderArea> areas) =>
     areas.fold(0, (a, x) => a + x.pointCount);
-
-/// Whether [p] lies on one of [box]'s four edges, to within [epsilon] degrees.
-///
-/// The painter skips outline segments whose **both** endpoints answer true:
-/// those edges are where the import cut the boundary, not a real border, and
-/// drawing them would put a confident straight line through the middle of a
-/// municipality. Same trick as the height layer's bounding-circle arcs.
-bool onBoxEdge(LatLng p, LatLngBox box, double epsilon) =>
-    (p.latitude - box.south).abs() <= epsilon ||
-    (p.latitude - box.north).abs() <= epsilon ||
-    (p.longitude - box.west).abs() <= epsilon ||
-    (p.longitude - box.east).abs() <= epsilon;

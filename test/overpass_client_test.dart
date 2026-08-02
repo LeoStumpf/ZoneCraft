@@ -214,14 +214,18 @@ void main() {
           endpointIndex: index,
           endpointCount: 3,
           attempt: attempt,
+          timeout: const Duration(seconds: 150),
           bytes: bytes,
           totalBytes: total,
         );
 
     test('the happy path names the host without failover noise', () {
       final s = describeOverpassProgress(p(OverpassStage.contacting));
-      expect(s, 'Asking overpass-api.de…');
+      expect(s, contains('overpass-api.de'));
       expect(s, isNot(contains('instance')));
+      // The two things a stuck-looking wait has to answer.
+      expect(s, contains('nothing yet'));
+      expect(s, contains('gives up after 2m'));
     });
 
     test('having moved on, it says how far down the list we are', () {

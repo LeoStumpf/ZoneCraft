@@ -190,9 +190,9 @@ class _BorderImportDialogState extends State<_BorderImportDialog> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Every boundary the box touches is downloaded whole — there is '
-                'no other way to get an area you can fill or name — and only '
-                'the part inside the box is kept.',
+                'Every boundary the box touches is downloaded and kept whole, '
+                'so an area can reach well past the box you drew. The box '
+                'decides what gets fetched, not what you end up with.',
                 style: theme.textTheme.bodySmall,
               ),
               const SizedBox(height: 8),

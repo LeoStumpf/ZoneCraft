@@ -13,6 +13,11 @@ import 'screen_cluster.dart';
 /// the layer colour, optionally filled from a palette that no two neighbours
 /// share, optionally named.
 ///
+/// Areas are drawn **whole**, not cut to the box they were imported over: if it
+/// came down, you see it. That means an area can extend well past the box you
+/// drew, which is the intended trade — the box limits the download, not the
+/// result.
+///
 /// Two things make this its own painter rather than a `RegionLayer` type. The
 /// areas are **not** unioned — the whole point is the individual borders — so
 /// there is no `Path.combine` anywhere here (the freearea precedent, and the
@@ -32,12 +37,7 @@ const List<Color> borderPalette = [
   Color(0xFF76B7B2),
 ];
 
-/// A vertex within this many degrees (~1 cm) of the import box edge is a cut,
-/// not a border. Clipping produces exact edge coordinates and simplification
-/// only ever *drops* vertices, so nothing drifts off the edge in between.
-const double _edgeEpsilonDegrees = 1e-7;
-
-/// One area with its geometry decoded, plus the box it was clipped to.
+/// One area with its geometry decoded.
 ///
 /// Decoding happens once per stream emission (see [borderShapesProvider]), not
 /// per frame: a state-level area is over 100 000 points, and re-parsing that
@@ -53,7 +53,6 @@ class BorderShape {
     required this.east,
     required this.labelPoint,
     required this.rings,
-    required this.box,
   });
 
   final String id;
@@ -67,10 +66,6 @@ class BorderShape {
   /// Outer ring(s) and holes together, filled with even-odd parity — a ring
   /// inside another *is* a hole, so no role flag is needed.
   final List<List<LatLng>> rings;
-
-  /// The set's imported box, so the painter can tell a real border from the
-  /// straight edge where the import cut one.
-  final LatLngBox box;
 }
 
 /// The decoded areas of one borders layer, rebuilt only when the rows change.
@@ -78,16 +73,14 @@ final borderShapesProvider =
     Provider.family<List<BorderShape>, String>((ref, layerId) {
   final sets = ref.watch(borderSetsProvider).asData?.value ?? const [];
   final areas = ref.watch(borderAreasProvider).asData?.value ?? const [];
-  final boxes = <String, LatLngBox>{
+  final mine = {
     for (final s in sets)
-      if (s.layerId == layerId)
-        s.id: LatLngBox(
-            south: s.south, west: s.west, north: s.north, east: s.east),
+      if (s.layerId == layerId) s.id,
   };
-  if (boxes.isEmpty) return const [];
+  if (mine.isEmpty) return const [];
   return [
     for (final a in areas)
-      if (boxes[a.setId] case final box?)
+      if (mine.contains(a.setId))
         BorderShape(
           id: a.id,
           name: a.name,
@@ -98,7 +91,6 @@ final borderShapesProvider =
           east: a.east,
           labelPoint: LatLng(a.labelLat, a.labelLng),
           rings: decodeRings(a.rings),
-          box: box,
         ),
   ];
 });
@@ -271,22 +263,17 @@ class _BorderPainter extends CustomPainter {
         }
       }
 
-      // The outline is drawn segment by segment rather than as a ring, because
-      // the segments lying on the import box edge have to be left out: those
-      // are where the import cut the boundary, and drawing them would put a
-      // confident straight line through the middle of a real area.
+      // Stroked segment by segment (rather than as a closed ring) so each one
+      // can be clipped to the viewport on its own: a city-sized outline at
+      // street zoom projects to ±10⁵ px, which Skia strokes badly.
       final border = Path();
       for (final ring in s.rings) {
         if (ring.length < 2) continue;
         for (var i = 0; i < ring.length; i++) {
-          final a = ring[i];
-          final b = ring[(i + 1) % ring.length];
-          if (onBoxEdge(a, s.box, _edgeEpsilonDegrees) &&
-              onBoxEdge(b, s.box, _edgeEpsilonDegrees)) {
-            continue;
-          }
-          final seg = clipSegmentToRect(camera.latLngToScreenOffset(a),
-              camera.latLngToScreenOffset(b), clip);
+          final seg = clipSegmentToRect(
+              camera.latLngToScreenOffset(ring[i]),
+              camera.latLngToScreenOffset(ring[(i + 1) % ring.length]),
+              clip);
           if (seg == null) continue;
           border.moveTo(seg.$1.dx, seg.$1.dy);
           border.lineTo(seg.$2.dx, seg.$2.dy);

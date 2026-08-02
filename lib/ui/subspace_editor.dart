@@ -132,19 +132,25 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
                   const SizedBox(width: 8),
                   Text('Edit subspace',
                       style: Theme.of(context).textTheme.titleMedium),
-                  const Spacer(),
-                  DropdownButton<String>(
-                    value: subspaceLayers.any((l) => l.id == widget.subspace.layerId)
-                        ? widget.subspace.layerId
-                        : null,
-                    hint: const Text('Layer'),
-                    items: [
-                      for (final l in subspaceLayers)
-                        DropdownMenuItem(value: l.id, child: Text(l.name)),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) _repo.updateSubspace(id, layerId: v);
-                    },
+                  const SizedBox(width: 12),
+                  // The layer picker takes the slack and ellipsises: a layer named
+                  // after an imported border ("Ludwigsvorstadt-Isarvorstadt") is
+                  // far longer than this row is wide.
+                  Flexible(
+                    child: DropdownButton<String>(
+                      isExpanded: true,
+                      value: subspaceLayers.any((l) => l.id == widget.subspace.layerId)
+                          ? widget.subspace.layerId
+                          : null,
+                      hint: const Text('Layer'),
+                      items: [
+                        for (final l in subspaceLayers)
+                          DropdownMenuItem(value: l.id, child: Text(l.name)),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) _repo.updateSubspace(id, layerId: v);
+                      },
+                    ),
                   ),
                   IconButton(
                     tooltip: 'Delete subspace',

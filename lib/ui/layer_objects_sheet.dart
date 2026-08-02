@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/database.dart';
 import '../state/providers.dart';
+import 'import_actions.dart' show convertBorderAreaFlow;
 import 'object_summary.dart';
 import 'transit_modes_sheet.dart'
     show TransitModeFilter, transitTallyProvider;
@@ -77,6 +78,7 @@ class _LayerObjectsList extends ConsumerWidget {
       transitSets: ref.watch(transitSetsProvider).asData?.value ?? const [],
       transitStops: ref.watch(transitStopsProvider).asData?.value ?? const [],
       borderSets: ref.watch(borderSetsProvider).asData?.value ?? const [],
+      borderAreas: ref.watch(borderAreasProvider).asData?.value ?? const [],
     );
     // Imports (POI, transit, borders) have no editor sheet, so their row taps
     // frame the object instead of selecting it.
@@ -183,6 +185,8 @@ class _LayerObjectsList extends ConsumerWidget {
               Navigator.pop(context, ElementResult(ElementAction.zoom, s));
             case 'retry':
               Navigator.pop(context, ElementResult(ElementAction.retry, s));
+            case 'toFreehand':
+              await _convertToFreehand(context, ref, s);
             case 'rename':
               await _rename(context, ref, s);
             case 'delete':
@@ -195,11 +199,36 @@ class _LayerObjectsList extends ConsumerWidget {
           if (canEdit && !s.isPending)
             const PopupMenuItem(value: 'edit', child: Text('Edit')),
           const PopupMenuItem(value: 'zoom', child: Text('Zoom to')),
+          // A borders layer is a read-only snapshot; this is how a shape gets
+          // out of it and into geometry you can actually edit.
+          if (s.ref.kind == ObjectKind.borderArea)
+            const PopupMenuItem(
+              value: 'toFreehand',
+              child: Text('Convert to freehand area…'),
+            ),
           const PopupMenuItem(value: 'rename', child: Text('Rename…')),
           const PopupMenuItem(value: 'delete', child: Text('Delete')),
         ],
       ),
     );
+  }
+
+  /// Copies one imported border area into a freehand area layer, so it becomes
+  /// geometry the user owns. Reads the rings from the database rather than the
+  /// summary row — the row carries a bounding box, not the outline.
+  Future<void> _convertToFreehand(
+      BuildContext context, WidgetRef ref, ObjectSummary s) async {
+    final repo = ref.read(repositoryProvider);
+    final rings = await repo.borderAreaRings(s.ref.id);
+    if (!context.mounted) return;
+    await convertBorderAreaFlow(
+      context,
+      repo,
+      ref.read(layersProvider).asData?.value ?? const [],
+      name: s.title,
+      rings: rings,
+    );
+    if (context.mounted) Navigator.pop(context);
   }
 
   Future<void> _rename(
@@ -252,8 +281,8 @@ class _LayerObjectsList extends ConsumerWidget {
         await repo.updatePoiSet(s.ref.id, label: label);
       case ObjectKind.transitSet:
         await repo.updateTransitSet(s.ref.id, label: label);
-      case ObjectKind.borderSet:
-        await repo.updateBorderSet(s.ref.id, label: label);
+      case ObjectKind.borderArea:
+        await repo.updateBorderArea(s.ref.id, name: label);
     }
   }
 
@@ -295,8 +324,8 @@ class _LayerObjectsList extends ConsumerWidget {
         await repo.deletePoiSet(s.ref.id);
       case ObjectKind.transitSet:
         await repo.deleteTransitSet(s.ref.id);
-      case ObjectKind.borderSet:
-        await repo.deleteBorderSet(s.ref.id);
+      case ObjectKind.borderArea:
+        await repo.deleteBorderArea(s.ref.id);
     }
     // The editor sheet resolves its row from the global list, so a deleted
     // selection would just vanish — clear it explicitly to keep the state tidy.
@@ -367,7 +396,8 @@ class _EmptyHint extends StatelessWidget {
       'transit' =>
         'No imports yet — tap Import transit, then tap two corners of an area.',
       'borders' =>
-        'No imports yet — tap Import borders, then tap two corners of an area.',
+        'No areas yet — tap Import borders, then tap two corners of an area to '
+            'fetch every boundary that crosses it.',
       _ => 'No elements yet — tap Add, then tap the map to place one.',
     };
     return Padding(

@@ -2,7 +2,6 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter/material.dart' show Icons;
 import 'package:latlong2/latlong.dart' hide Circle;
 
-import '../data/borders.dart';
 import '../data/database.dart';
 import '../data/transit.dart';
 import '../state/providers.dart';
@@ -173,6 +172,7 @@ List<ObjectSummary> summariseLayer(
   List<TransitSet> transitSets = const [],
   List<TransitStop> transitStops = const [],
   List<BorderSet> borderSets = const [],
+  List<BorderArea> borderAreas = const [],
 }) {
   switch (layer.type) {
     case 'circles':
@@ -232,11 +232,19 @@ List<ObjectSummary> summariseLayer(
           _transitSetSummary(rows[i], layer.id, i, transitStops),
       ];
     case 'borders':
-      final rows = _ordered(borderSets.where((s) => s.layerId == layer.id),
-          (s) => s.createdAt, (s) => s.id);
+      // The imports are bookkeeping; the *areas* are what you came to look at,
+      // so the list names them — "Maxvorstadt", not "Border import 1".
+      final mine = {
+        for (final s in borderSets)
+          if (s.layerId == layer.id) s.id,
+      };
+      final rows = [
+        for (final a in borderAreas)
+          if (mine.contains(a.setId)) a,
+      ]..sort(_byName);
       return [
         for (var i = 0; i < rows.length; i++)
-          _borderSetSummary(rows[i], layer.id, i),
+          _borderAreaSummary(rows[i], layer.id, i),
       ];
     default:
       return const [];
@@ -438,30 +446,37 @@ ObjectSummary _transitSetSummary(
   );
 }
 
-/// One administrative-border import. Like transit's, the Elements row frames
-/// the **imported box** — the thing that was chosen, and the thing the stored
-/// geometry was cut to.
+/// Sorts border areas the way a person would look for one: by name, then by id
+/// so the order is stable. Deliberately not `_ordered`'s creation order — these
+/// are named, non-positional objects arriving in whatever order Overpass listed
+/// them, and "find Maxvorstadt in a list of 97" is the actual task.
+int _byName(BorderArea a, BorderArea b) {
+  final an = a.name?.trim() ?? '';
+  final bn = b.name?.trim() ?? '';
+  if (an.isEmpty != bn.isEmpty) return an.isEmpty ? 1 : -1; // unnamed last
+  final c = an.toLowerCase().compareTo(bn.toLowerCase());
+  return c != 0 ? c : a.id.compareTo(b.id);
+}
+
+/// One imported administrative area — a district, a municipality, a country.
 ///
-/// There is no pending state here: a failed border import writes nothing, so
-/// every row in this list is data you have.
-ObjectSummary _borderSetSummary(BorderSet s, String layerId, int index) {
-  final center = LatLng((s.south + s.north) / 2, (s.west + s.east) / 2);
+/// The row frames the **area itself**, which is possible because nothing is
+/// clipped to the import box: what is stored is the whole boundary.
+ObjectSummary _borderAreaSummary(BorderArea a, String layerId, int index) {
+  final center = LatLng((a.south + a.north) / 2, (a.west + a.east) / 2);
   final width = geoDistance.as(
-      LengthUnit.Meter, LatLng(s.south, s.west), LatLng(s.south, s.east));
+      LengthUnit.Meter, LatLng(a.south, a.west), LatLng(a.south, a.east));
   final height = geoDistance.as(
-      LengthUnit.Meter, LatLng(s.south, s.west), LatLng(s.north, s.west));
-  final level = borderLevelByAdminLevel(s.adminLevel);
+      LengthUnit.Meter, LatLng(a.south, a.west), LatLng(a.north, a.west));
   return ObjectSummary(
-    ref: ObjectRef(kind: ObjectKind.borderSet, id: s.id, layerId: layerId),
-    title: _titleOr(s.label, 'Border import', index),
+    ref: ObjectRef(kind: ObjectKind.borderArea, id: a.id, layerId: layerId),
+    title: _titleOr(a.name, 'Area', index),
     subtitle: [
-      _plural(s.areaCount, 'area'),
-      if (level != null) level.label,
       '${formatMeters(width)} × ${formatMeters(height)}',
-      'imported ${_shortDate(s.fetchedAt)}',
+      _plural(a.pointCount, 'point'),
     ].join(' · '),
     center: center,
-    fitPoints: [LatLng(s.south, s.west), LatLng(s.north, s.east)],
+    fitPoints: [LatLng(a.south, a.west), LatLng(a.north, a.east)],
   );
 }
 

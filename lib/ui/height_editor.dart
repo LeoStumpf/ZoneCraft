@@ -141,19 +141,25 @@ class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
                   const SizedBox(width: 8),
                   Text('Edit height area',
                       style: Theme.of(context).textTheme.titleMedium),
-                  const Spacer(),
-                  DropdownButton<String>(
-                    value: heightLayers.any((l) => l.id == r.layerId)
-                        ? r.layerId
-                        : null,
-                    hint: const Text('Layer'),
-                    items: [
-                      for (final l in heightLayers)
-                        DropdownMenuItem(value: l.id, child: Text(l.name)),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) _repo.updateHeightRegion(id, layerId: v);
-                    },
+                  const SizedBox(width: 12),
+                  // The layer picker takes the slack and ellipsises: a layer named
+                  // after an imported border ("Ludwigsvorstadt-Isarvorstadt") is
+                  // far longer than this row is wide.
+                  Flexible(
+                    child: DropdownButton<String>(
+                      isExpanded: true,
+                      value: heightLayers.any((l) => l.id == r.layerId)
+                          ? r.layerId
+                          : null,
+                      hint: const Text('Layer'),
+                      items: [
+                        for (final l in heightLayers)
+                          DropdownMenuItem(value: l.id, child: Text(l.name)),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) _repo.updateHeightRegion(id, layerId: v);
+                      },
+                    ),
                   ),
                   IconButton(
                     tooltip: 'Delete area',

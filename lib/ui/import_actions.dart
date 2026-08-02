@@ -12,6 +12,7 @@ import '../data/database.dart';
 import '../data/geo_import.dart';
 import '../data/repository.dart';
 import '../data/serialization.dart';
+import '../geo/border_areas.dart' show outerRings;
 import 'feature_search_dialog.dart';
 import 'region_geometry.dart';
 
@@ -395,6 +396,68 @@ Future<void> importLayerFlow(
     messenger.showSnackBar(SnackBar(content: Text('Import failed: ${e.message}')));
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text('Import failed: $e')));
+  }
+}
+
+/// Turns one **already-imported** border area into freehand areas — the offline
+/// twin of [importFeatureFlow].
+///
+/// The point is not to re-fetch something you already have on the device: a
+/// borders layer is a read-only OSM snapshot with no editor, and this is how a
+/// shape gets out of it and into geometry you own, can drag, offset, invert and
+/// export. Same new-or-merge choice as every other import, so it lands where
+/// you want it.
+///
+/// Holes are dropped: a freehand area is a single ring with no notion of one,
+/// so a hole carried across would render as solid fill exactly where the real
+/// area has a gap. Exclaves survive as separate areas ([outerRings]).
+Future<void> convertBorderAreaFlow(
+  BuildContext context,
+  Repository repo,
+  List<Layer> layers, {
+  required String name,
+  required List<List<LatLng>> rings,
+}) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final usable = [
+    for (final r in outerRings(rings))
+      if (r.length >= 3) r,
+  ];
+  if (usable.isEmpty) {
+    messenger.showSnackBar(
+      const SnackBar(content: Text('That area has no usable geometry')),
+    );
+    return;
+  }
+
+  final target = await _askNewOrMerge(context, layers, 'freearea');
+  if (target == null) return; // cancelled
+
+  final layer = ExportLayer(
+    name: name,
+    colorArgb: 0xFF43A047,
+    type: 'freearea',
+    isInverted: false,
+    objects: [
+      for (var i = 0; i < usable.length; i++)
+        ExportObject(
+          kind: 'freearea',
+          coords: usable[i],
+          label: usable.length == 1 ? name : '$name ${i + 1}',
+        ),
+    ],
+  );
+
+  try {
+    final count = target.mergeLayerId != null
+        ? await repo.mergeIntoLayer(target.mergeLayerId!, layer)
+        : await repo.importData(ExportData([layer]));
+    messenger.showSnackBar(SnackBar(
+      content: Text('Converted $name to $count freehand '
+          'area${count == 1 ? '' : 's'}'),
+    ));
+  } catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text('Convert failed: $e')));
   }
 }
 

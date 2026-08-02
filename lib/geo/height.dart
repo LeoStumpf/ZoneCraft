@@ -241,7 +241,7 @@ List<List<double>> buildHeightRings(HeightGenRequest req) {
       // augmented (col,row) -> real grid coords (subtract the 1-cell border).
       for (final p in loop) LatLng(latAt(p.y - 1), lngAt(p.x - 1)),
     ];
-    final clipped = clipToConvex(ring, clipPoly, center);
+    final clipped = _clipToConvex(ring, clipPoly, center);
     // Thin the marching-squares stair-steps (many collinear points) before
     // storing; runs in this isolate so the cost stays off the UI thread.
     final simplified =
@@ -339,15 +339,10 @@ double _latToTileY(double lat, int z) {
 }
 
 /// Clips [subject] against the convex polygon [clip] (Sutherland–Hodgman),
-/// using [inside] (a point known to be within [clip]) to pick each edge's
-/// inside half-plane, so the result is independent of [clip]'s winding.
-/// Coordinates are treated as planar (lng = x, lat = y), fine at the small
-/// scales involved.
-///
-/// Public because the borders layer clips its areas to the imported box with
-/// exactly this — a second lat/lng Sutherland–Hodgman would be a second set of
-/// edge cases to get wrong.
-List<LatLng> clipToConvex(
+/// using [inside] (the circle centre) to pick each edge's inside half-plane so
+/// the result is independent of [clip]'s winding. Coordinates are treated as
+/// planar (lng = x, lat = y), fine at the small scales involved.
+List<LatLng> _clipToConvex(
     List<LatLng> subject, List<LatLng> clip, LatLng inside) {
   var output = subject;
   for (var i = 0; i < clip.length; i++) {

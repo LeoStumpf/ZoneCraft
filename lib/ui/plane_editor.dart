@@ -133,18 +133,24 @@ class _PlaneEditorSheetState extends ConsumerState<PlaneEditorSheet> {
                         _repo.updatePlane(id, nearA: s.first),
                   ),
                   const SizedBox(width: 8),
-                  DropdownButton<String>(
-                    value: widget.layers.any((l) => l.id == widget.plane.layerId)
-                        ? widget.plane.layerId
-                        : null,
-                    hint: const Text('Layer'),
-                    items: [
-                      for (final l in widget.layers)
-                        DropdownMenuItem(value: l.id, child: Text(l.name)),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) _repo.updatePlane(id, layerId: v);
-                    },
+                  // The layer picker takes the slack and ellipsises: a layer named
+                  // after an imported border ("Ludwigsvorstadt-Isarvorstadt") is
+                  // far longer than this row is wide.
+                  Flexible(
+                    child: DropdownButton<String>(
+                      isExpanded: true,
+                      value: widget.layers.any((l) => l.id == widget.plane.layerId)
+                          ? widget.plane.layerId
+                          : null,
+                      hint: const Text('Layer'),
+                      items: [
+                        for (final l in widget.layers)
+                          DropdownMenuItem(value: l.id, child: Text(l.name)),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) _repo.updatePlane(id, layerId: v);
+                      },
+                    ),
                   ),
                 ],
               ),

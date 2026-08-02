@@ -51,7 +51,13 @@ String describeOverpassProgress(OverpassProgress p) {
   final retry = p.attempt > 1 ? ', try ${p.attempt}' : '';
   switch (p.stage) {
     case OverpassStage.contacting:
-      return 'Asking $where$retry…';
+      // Named as a *wait*, not as progress, and bounded. This phase can sit
+      // still for over a minute on a slow instance, and "is this downloading or
+      // is it just going to time out?" is the only question worth answering
+      // while it does — so say that nothing has arrived, and when we give up.
+      final giveUp = p.timeout.inSeconds;
+      return 'Waiting for a reply from $where$retry — nothing yet '
+          '(gives up after ${giveUp < 60 ? '${giveUp}s' : '${giveUp ~/ 60}m'})';
     case OverpassStage.downloading:
       final got = formatBytes(p.bytes);
       final total = p.totalBytes;

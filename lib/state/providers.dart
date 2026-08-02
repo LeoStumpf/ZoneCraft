@@ -130,7 +130,7 @@ enum ObjectKind {
   heightRegion,
   poiSet,
   transitSet,
-  borderSet;
+  borderArea;
 
   /// The `Layers.type` string that holds this kind of object.
   String get layerType => switch (this) {
@@ -142,7 +142,7 @@ enum ObjectKind {
         ObjectKind.heightRegion => 'height',
         ObjectKind.poiSet => 'poi',
         ObjectKind.transitSet => 'transit',
-        ObjectKind.borderSet => 'borders',
+        ObjectKind.borderArea => 'borders',
       };
 
   /// The kind a layer of [layerType] holds, or null for an unknown type.
@@ -155,7 +155,7 @@ enum ObjectKind {
         'height' => ObjectKind.heightRegion,
         'poi' => ObjectKind.poiSet,
         'transit' => ObjectKind.transitSet,
-        'borders' => ObjectKind.borderSet,
+        'borders' => ObjectKind.borderArea,
         _ => null,
       };
 }
@@ -386,9 +386,9 @@ bool hasAnySelection(WidgetRef ref) =>
 /// Selects exactly one object, clearing the others (and any armed placement),
 /// and leaves whatever map mode was armed — editing the object is now the job.
 ///
-/// The import kinds ([ObjectKind.poiSet], [ObjectKind.transitSet],
-/// [ObjectKind.borderSet]) are a no-op: imports have no editor, so there is no
-/// selection provider for them.
+/// The imported kinds ([ObjectKind.poiSet], [ObjectKind.transitSet],
+/// [ObjectKind.borderArea]) are a no-op: imported objects have no editor, so
+/// there is no selection provider for them.
 void selectObject(WidgetRef ref, ObjectKind kind, String id) {
   clearSelection(ref);
   if (ref.read(mapModeProvider) != MapMode.edit) {
@@ -409,7 +409,7 @@ void selectObject(WidgetRef ref, ObjectKind kind, String id) {
       ref.read(selectedHeightRegionProvider.notifier).select(id);
     case ObjectKind.poiSet:
     case ObjectKind.transitSet:
-    case ObjectKind.borderSet:
+    case ObjectKind.borderArea:
       break; // no editor sheet — nothing to select
   }
 }
