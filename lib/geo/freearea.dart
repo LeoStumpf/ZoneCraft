@@ -11,11 +11,11 @@ import 'package:latlong2/latlong.dart';
 /// inward normal bearing — so a fixed `offsetMeters` holds a constant real-world
 /// width regardless of latitude. To match the engine's `band = outer − core`
 /// model one ring is the nominal interior (inset by `offsetMeters`) and the
-/// other offsets it by `bandMeters` to put the band on the **uncoloured** side:
-/// normally (`bandInward` false) [outer] grows past the ring (`offsetMeters −
-/// bandMeters`) and [core] is the nominal interior; when the layer is inverted
-/// (`bandInward` true) [outer] is the nominal interior and [core] is shrunk
-/// inward (`offsetMeters + bandMeters`).
+/// other offsets it by `bandMeters` to put the band on the chosen side of the
+/// (never-moving) boundary: with `bandInward` false [outer] grows past the ring
+/// (`offsetMeters − bandMeters`) and [core] is the nominal interior; with
+/// `bandInward` true [outer] is the nominal interior and [core] is shrunk inward
+/// (`offsetMeters + bandMeters`).
 class FreeAreaRegion {
   const FreeAreaRegion(this.outer, this.core);
 
@@ -43,9 +43,9 @@ FreeAreaRegion freeAreaRegion({
       if (p.latitude.isFinite && p.longitude.isFinite) p,
   ];
   if (pts.length < 3) return const FreeAreaRegion(<LatLng>[], <LatLng>[]);
-  // Keep the nominal ring (inset by offset) on the coloured side; offset the
-  // other ring by the band onto the uncoloured side (outward by default, inward
-  // when inverted), so the band hugs the divide on its uncoloured side.
+  // One ring stays on the nominal boundary (inset by offset); the other is
+  // offset by the band — outward by default, inward with [bandInward] — so the
+  // band hugs the boundary on that side without moving the boundary itself.
   final outerInset = bandInward ? offsetMeters : offsetMeters - bandMeters;
   final coreInset = bandInward ? offsetMeters + bandMeters : offsetMeters;
   return FreeAreaRegion(_inset(pts, outerInset), _inset(pts, coreInset));

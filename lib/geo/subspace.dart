@@ -14,18 +14,21 @@ import 'spherical.dart';
 /// returned as densified lat/lng rings the painter projects — like
 /// [geodesicCircle].
 ///
-/// To match the engine's `band = outer − core` model: [core] is the **strict**
-/// cell (its boundary is the true divide, drawn solid + outlined), and [outer]
-/// is that cell grown **outward** by the uncertainty band, so the difference is
-/// the band hugging the divide on its outside.
+/// To match the engine's `band = outer − core` model, one ring is the **strict**
+/// cell (its boundary is the true divide, the one the engine outlines) and the
+/// other is it offset by the uncertainty band — grown outward (`bandInward`
+/// false) or shrunk inward (true), so the difference is the band hugging the
+/// divide on the chosen side. See [sphericalCell].
 class SubspaceRegion {
   const SubspaceRegion(this.outer, this.core);
 
-  /// The strict cell grown outward by the band, as a lat/lng ring. Empty when
-  /// there are no other points or the geometry is degenerate.
+  /// The cell on the band's outer edge — the strict cell grown outward by the
+  /// band, or (with `bandInward`) the strict cell itself. Empty when there are
+  /// no other points or the geometry is degenerate.
   final List<LatLng> outer;
 
-  /// The strict cell (the true "closer to main" region). Empty only when the
+  /// The cell on the band's inner edge — the strict cell ("closer to main"), or
+  /// (with `bandInward`) that cell shrunk by the band. Empty only when the
   /// geometry is degenerate.
   final List<LatLng> core;
 }

@@ -10,10 +10,12 @@ import '../data/database.dart';
 /// screen and fills them — the expensive offset/band buffering never runs on the
 /// per-frame paint path.
 ///
-/// [core] is the nominal (offset) boundary; [bandEdge] is the band's far edge
-/// (the boundary grown outward by the uncertainty for a normal layer, or shrunk
-/// inward for an inverted one). Each is a list of contours so holes and islands
-/// from an offset survive; fill them with the even-odd rule.
+/// [core] is the nominal (offset) boundary — the outline, which never moves;
+/// [bandEdge] is the band's far edge, i.e. where the solid fill starts: the
+/// boundary shrunk **inward** by the uncertainty for a normal layer, or grown
+/// **outward** for an inverted one (whose coloured side is the outside). Each is
+/// a list of contours so holes and islands from an offset survive; fill them
+/// with the even-odd rule.
 class ResolvedArea {
   const ResolvedArea({required this.core, required this.bandEdge});
 
@@ -26,7 +28,7 @@ class ResolvedArea {
 /// Resolves one ring's render geometry. [offsetMeters] is the signed inward
 /// offset (positive shrinks/erodes, negative grows/dilates); [bandMeters] the
 /// uncertainty half-band; [inverted] whether the layer's fill is the complement
-/// (then the band sits inside the boundary instead of outside).
+/// (then the band sits outside the boundary instead of inside).
 ///
 /// The offset and band are computed as Minkowski erosion/dilation
 /// (`ring ∓ buffer(boundary)`) in a local equirectangular metre plane via
@@ -67,8 +69,9 @@ ResolvedArea resolveAreaGeometry(
       LatLng(lat0 + o.dy / mPerDegLat, lon0 + o.dx / mPerDegLon);
   final base = [for (final p in clean) toPlane(p)];
 
-  // Band edge: outward (smaller signed inset) normally, inward when inverted.
-  final bandEdgeOffset = offsetMeters + (inverted ? bandMeters : -bandMeters);
+  // Band edge: it bounds the *coloured* side, so it is inset further inward
+  // (larger signed inset) normally and grown outward when inverted.
+  final bandEdgeOffset = offsetMeters + (inverted ? -bandMeters : bandMeters);
 
   final core = offsetMeters == 0
       ? [List<LatLng>.of(clean)]

@@ -189,8 +189,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           Text('Uncertainty', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 4),
           Text(
-            'A measurement-uncertainty band drawn lighter on the outer edge of '
-            'every object. Set to 0 to disable.',
+            'A measurement-uncertainty band drawn lighter just inside every '
+            "object's border, before the fill turns solid. Set to 0 to disable.",
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 12),

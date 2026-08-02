@@ -140,14 +140,16 @@ double bandThreshold(double bandMeters) {
 /// One of `outer`/`core` is always the **strict cell** (the true "closer to
 /// [main]" region, whose boundary is the equidistant divide the engine outlines)
 /// and the other offsets it by [bandMeters] to make the uncertainty band as
-/// `outer − core`. Normally (`bandInward` false) `core` is the strict cell and
-/// `outer` grows **outward** (band on the divide's outside) — the right shape for
-/// the solid "closer-to-main" fill. When the layer is **inverted** the coloured
-/// region is the complement, so pass `bandInward: true`: then `outer` is the
-/// strict cell and `core` is it shrunk **inward**, putting the band on the
-/// divide's inside (the now-uncoloured cell) while the outline stays on the
-/// divide. Returns empty rings when there are no others, a point coincides with
-/// [main], or the geometry is non-finite.
+/// `outer − core`. With `bandInward` false, `core` is the strict cell and
+/// `outer` grows **outward**, so the band lies on the divide's outside; with
+/// `bandInward: true`, `outer` is the strict cell and `core` is it shrunk
+/// **inward**, putting the band on the divide's inside. Either way the divide
+/// itself — the ring the engine outlines — does not move.
+///
+/// The painter picks the direction so the band always falls on the *coloured*
+/// side (inward for a normal layer, outward for an inverted one, whose fill is
+/// the complement). Returns empty rings when there are no others, a point
+/// coincides with [main], or the geometry is non-finite.
 ({List<LatLng> outer, List<LatLng> core}) sphericalCell({
   required LatLng main,
   required List<LatLng> others,
@@ -182,8 +184,8 @@ double bandThreshold(double bandMeters) {
   // The band is a **fixed** offset of the divide — every bisector is pushed by
   // the same [bandMeters], so the halo is uniformly that wide on all sides
   // regardless of how near each neighbour is. One ring is the strict cell
-  // (threshold 0); the other is offset by ±s. Outward (default) grows the cell;
-  // inward (inverted layers) shrinks it, keeping the band on the divide's inside.
+  // (threshold 0); the other is offset by ±s. Outward (default) grows the cell,
+  // inward shrinks it — the divide stays put either way.
   final s = bandThreshold(bandMeters);
   final outerThresh = bandInward ? 0.0 : -s;
   final coreThresh = bandInward ? s : 0.0;

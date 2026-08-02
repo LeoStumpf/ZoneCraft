@@ -4,7 +4,6 @@ import 'package:latlong2/latlong.dart' hide Circle, Path;
 
 import '../data/database.dart';
 import '../geo/freeline.dart';
-import '../geo/geodesic.dart';
 import '../geo/plane.dart';
 import '../geo/subspace.dart';
 import 'area_geometry.dart';
@@ -14,11 +13,12 @@ import 'screen_clip.dart';
 /// Renders one layer's objects as a single composited region.
 ///
 /// All of a layer's objects are unioned into one shape before painting, so
-/// overlaps show a flat colour instead of compounding opacity. A lighter
-/// "uncertainty" band is drawn between the core (object shrunk by
-/// [uncertaintyMeters]) and the full outline. When [Layer.isInverted] is set,
-/// the solid fill becomes the complement (everything outside the objects),
-/// while the band still hugs the boundary.
+/// overlaps show a flat colour instead of compounding opacity. The outline
+/// marks the nominal boundary and never moves; a lighter "uncertainty" band
+/// occupies the first [uncertaintyMeters] of the *coloured* side, and the solid
+/// fill starts only past it. When [Layer.isInverted] is set, the coloured side
+/// is the complement (everything outside the objects), so the band sits just
+/// outside the boundary instead — always on the same side as the fill.
 ///
 /// Every object type builds its boundary in **lat/lng** (geodesically) and the
 /// painter projects those rings to screen with [MapCamera.latLngToScreenOffset];
@@ -228,17 +228,19 @@ class _RegionPainter extends CustomPainter {
     }
 
     // Every type keeps its nominal boundary (the outline) fixed and puts the
-    // uncertainty band on the **uncoloured** side: normal layers grow the region
-    // outward, inverted layers shrink it inward (the fill is `viewport − outer`).
+    // uncertainty band on the **coloured** side, just inside it, so the solid
+    // fill only starts a band-width past the line: normal layers shrink the
+    // solid inward, inverted layers (whose fill is `viewport − outer`) push it
+    // outward.
     final band = uncertaintyMeters > 0 ? uncertaintyMeters : 0.0;
 
     for (final c in circles) {
       final center = LatLng(c.centerLat, c.centerLng);
-      // Outline stays at the drawn radius; the band sits just outside it (normal)
-      // or just inside it (inverted). Rings are memoised by centre+radius, so a
+      // Outline stays at the drawn radius; the band sits just inside it (normal)
+      // or just outside it (inverted). Rings are memoised by centre+radius, so a
       // pan/zoom just re-projects them instead of recomputing the geodesic ring.
-      final outerRadius = inverted ? c.radiusMeters : c.radiusMeters + band;
-      final coreRadius = inverted ? c.radiusMeters - band : c.radiusMeters;
+      final outerRadius = inverted ? c.radiusMeters + band : c.radiusMeters;
+      final coreRadius = inverted ? c.radiusMeters : c.radiusMeters - band;
       if (outerRadius <= 0) continue; // invalid geometry -> skip
       addOuter(regionGeometryCache.circleRing(center, outerRadius, _ringPoints));
       if (coreRadius > 0) {
@@ -265,7 +267,7 @@ class _RegionPainter extends CustomPainter {
             nearA: p.nearA,
             bandMeters: band,
             viewportCorners: bound.quad,
-            bandInward: inverted,
+            bandInward: !inverted,
           );
           return (outer: r.outer, core: r.core);
         });
@@ -292,7 +294,7 @@ class _RegionPainter extends CustomPainter {
             others: others,
             bandMeters: band,
             viewportCorners: bound.quad,
-            bandInward: inverted,
+            bandInward: !inverted,
           );
           return (outer: r.outer, core: r.core);
         });
@@ -331,9 +333,10 @@ class _RegionPainter extends CustomPainter {
       ..color = color.withValues(alpha: _strokeAlpha);
 
     // The outline traces the *nominal* boundary, which every type keeps fixed
-    // regardless of invert: normally that's `core` (the band grows outward from
-    // it); when inverted the band shrinks inward so the nominal edge is `outer`.
-    final outline = inverted ? outer : core;
+    // regardless of invert: normally that's `outer` (the band eats inward from
+    // it into the fill); when inverted the band grows outward so the nominal
+    // edge is `core`.
+    final outline = inverted ? core : outer;
 
     // All geometry was pre-clipped to `_clip` at projection time (see
     // [_ringToPath]), so it can be drawn directly — no per-frame path-op
@@ -358,73 +361,88 @@ class _RegionPainter extends CustomPainter {
   /// Paints a freehand-area layer from its **pre-resolved** geometry
   /// ([resolvedAreas]). The expensive offset/band buffering happened once
   /// off-frame (see [resolveAreaGeometry]); here we only project the cached
-  /// lat/lng rings to screen and fill. The solid is the interior (or the
-  /// viewport complement when inverted); the band is the annulus between the
-  /// boundary and its band edge — a fill, not a wide stroke; the outline traces
-  /// the boundary.
+  /// lat/lng rings to screen and fill. The outline traces the nominal boundary
+  /// (`core`); the band is the annulus between it and its band edge (which sits
+  /// on the *coloured* side) — a fill, not a wide stroke — and the solid starts
+  /// at that band edge: the shrunk interior, or the viewport complement of the
+  /// grown one when inverted.
+  ///
+  /// The composite is built by **overpainting inside a layer**, not with
+  /// `Path.combine`: these buffered city-sized outlines are thousands of
+  /// near-collinear vertices, exactly the input Skia's path-ops fail on — and a
+  /// failed `viewport − objects` would paint the complement over *everything*.
+  /// Painting the wider region first and replacing it with the narrower one
+  /// ([BlendMode.src], [BlendMode.clear]) needs no path-ops at all and keeps
+  /// overlapping objects flat, which is the whole point of the union anyway.
   void _paintFreeAreas(Canvas canvas, Size size) {
-    Path? coreUnion;
-    Path? bandEdgeUnion;
+    // Per-object screen geometry: the nominal boundary, and the band's far edge
+    // (where the solid starts). With no uncertainty the two coincide; an empty
+    // band edge under a positive uncertainty means the band swallowed the whole
+    // object, so it contributes no solid at all.
+    final cores = <Path>[];
+    final edges = <Path>[];
     for (final r in resolvedAreas) {
       if (r.isEmpty) continue;
       final cp = _contoursToPath(r.core);
-      coreUnion = coreUnion == null
+      cores.add(cp);
+      edges.add(uncertaintyMeters <= 0
           ? cp
-          : Path.combine(PathOperation.union, coreUnion, cp);
-      if (r.bandEdge.isNotEmpty) {
-        final bp = _contoursToPath(r.bandEdge);
-        bandEdgeUnion = bandEdgeUnion == null
-            ? bp
-            : Path.combine(PathOperation.union, bandEdgeUnion, bp);
-      }
+          : (r.bandEdge.isEmpty ? Path() : _contoursToPath(r.bandEdge)));
     }
-    final core = coreUnion;
-    if (core == null) return;
+    if (cores.isEmpty) return;
 
     final solidPaint = Paint()
       ..style = PaintingStyle.fill
+      ..blendMode = BlendMode.src
       ..color = color.withValues(alpha: _solidAlpha);
     final bandPaint = Paint()
       ..style = PaintingStyle.fill
+      ..blendMode = BlendMode.src
       ..color = color.withValues(alpha: _bandAlpha);
+    final clearPaint = Paint()..blendMode = BlendMode.clear;
     final strokePaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5
       ..color = color.withValues(alpha: _strokeAlpha);
 
-    // Rings were pre-clipped to `_clip` at projection time ([_contoursToPath]),
-    // so every path here is viewport-sized: the path-ops below are cheap and
-    // stay well inside Skia's numeric comfort zone, and the fills draw
-    // directly.
-    final viewport = Path()..addRect(_clip);
-
-    // Solid: interior normally, the viewport complement when inverted.
-    final solid = inverted
-        ? Path.combine(PathOperation.difference, viewport, core)
-        : core;
-    canvas.drawPath(solid, solidPaint);
-
-    // Band: the annulus between the boundary and its band edge (outside the
-    // boundary normally, inside it when inverted). Its operands hug each other
-    // — path-ops' worst case — so drop the band for a frame rather than throw.
-    if (bandEdgeUnion != null) {
-      final band = inverted
-          ? _tryCombine(PathOperation.difference, core, bandEdgeUnion)
-          : _tryCombine(PathOperation.difference, bandEdgeUnion, core);
-      if (band != null) canvas.drawPath(band, bandPaint);
+    // Layer the fill widest-first, each pass replacing the last. Normally that
+    // is: whole interior at band alpha, then the band edge (the interior shrunk
+    // by the uncertainty) solid. Inverted, the coloured side is the outside, so
+    // it is: whole viewport solid, then the grown band edge at band alpha, then
+    // the interior cleared away.
+    canvas.saveLayer(_clip, Paint());
+    if (inverted) {
+      canvas.drawRect(_clip, solidPaint);
+      for (final e in edges) {
+        canvas.drawPath(e, bandPaint);
+      }
+      for (final c in cores) {
+        canvas.drawPath(c, clearPaint);
+      }
+    } else {
+      for (final c in cores) {
+        canvas.drawPath(c, bandPaint);
+      }
+      for (final e in edges) {
+        canvas.drawPath(e, solidPaint);
+      }
     }
+    canvas.restore();
 
     // Outline traces the nominal boundary.
-    canvas.drawPath(core, strokePaint);
+    for (final c in cores) {
+      canvas.drawPath(c, strokePaint);
+    }
   }
 
   /// Paints a freehand-line layer. Each line **cuts** its inclusion circle: the
   /// filled side is the even-odd XOR of the cut runs ∩ the disk, and the layer's
   /// invert fills the other side (`disk − filled`). The uncertainty band is the
-  /// strip of the *uncoloured* side closest to the dividing line — obtained by
+  /// strip of the *coloured* side closest to the dividing line — obtained by
   /// stroking the boundary line (only the line, never the circle arc) by twice
-  /// the uncertainty radius and clipping it to the uncoloured side — so it can
-  /// never end up on the far side. The outline traces the dividing line.
+  /// the uncertainty radius and clipping it to the coloured side — so the fill
+  /// turns solid only a band-width past the divider and nothing ever spills onto
+  /// the far side. The outline traces the dividing line.
   void _paintFreeLines(Canvas canvas, Size size) {
     final bandMeters = uncertaintyMeters > 0 ? uncertaintyMeters : 0.0;
 
@@ -520,11 +538,9 @@ class _RegionPainter extends CustomPainter {
     if (disk == null) return;
     final core = coreUnion ?? Path();
 
-    // Coloured side, and the uncoloured complement within the disk.
+    // The coloured side within the disk (the other side stays empty).
     final coloured =
         inverted ? Path.combine(PathOperation.difference, disk, core) : core;
-    final uncoloured =
-        inverted ? core : Path.combine(PathOperation.difference, disk, core);
 
     final solidPaint = Paint()
       ..style = PaintingStyle.fill
@@ -542,19 +558,30 @@ class _RegionPainter extends CustomPainter {
     final clip = Path()..addRect(_clip);
     Path bounded(Path p) => Path.combine(PathOperation.intersect, p, clip);
 
-    canvas.drawPath(bounded(coloured), solidPaint);
-
-    // Band: the uncertainty-wide strip of the uncoloured side hugging the line.
-    // Stroke the dividing line at 2× the radius and clip it to the uncoloured
-    // side ∩ disk, so only the near strip (never the arc) lights up.
+    // Band: the uncertainty-wide strip of the **coloured** side hugging the
+    // line — the fill only becomes solid a band-width past the divider. Stroke
+    // the dividing line at 2× the radius and clip it to the coloured side, so
+    // only the near strip (never the arc, never the far side) lights up.
+    //
+    // The strip lies *on* the solid, so painting it normally would compound the
+    // two alphas into something darker than either. Draw both into an offscreen
+    // layer and give the band `BlendMode.src`: it replaces the solid's pixels
+    // there instead of stacking on them, and the layer then composites once.
     final bandPx = bandMeters > 0 && bandRef != null
         ? _metersToPixels(bandRef, bandMeters)
         : 0.0;
+    final coloredArea = bounded(coloured);
+    if (bandPx > 0) canvas.saveLayer(_clip, Paint());
+    canvas.drawPath(coloredArea, solidPaint);
     if (bandPx > 0) {
       canvas.save();
-      canvas.clipPath(
-          bounded(Path.combine(PathOperation.intersect, uncoloured, disk)));
-      canvas.drawPath(boundary, bandPaint..strokeWidth = 2 * bandPx);
+      canvas.clipPath(coloredArea);
+      canvas.drawPath(
+          boundary,
+          bandPaint
+            ..strokeWidth = 2 * bandPx
+            ..blendMode = BlendMode.src);
+      canvas.restore();
       canvas.restore();
     }
 
@@ -630,11 +657,11 @@ class _RegionPainter extends CustomPainter {
 
   /// Paints a height layer: each region's stored polygons fill with an even-odd
   /// path (so enclosed sub-threshold pockets read as holes), plus an uncertainty
-  /// **band** along the *elevation* border only (the circle clip arc is excluded)
-  /// and clipped to the region's circle. The filled area stays fully solid; the
-  /// band is drawn only *outside* the fill (the outer halo, and the halo inside
-  /// holes), so the confident core never darkens and only the genuinely uncertain
-  /// strip beyond the border is lightened. The fill already encodes above/below
+  /// **band** along the *elevation* border only (the circle clip arc is
+  /// excluded). Like every other type, the band is the uncertain strip on the
+  /// **coloured** side: it is clipped to the fill, so the border line stays put
+  /// and the fill only reads as fully solid a band-width inside it (holes get
+  /// the same treatment from their side). The fill already encodes above/below
   /// and is bounded, so there is no viewport invert here.
   void _paintHeight(Canvas canvas, Size size) {
     final solidPaint = Paint()
@@ -689,24 +716,30 @@ class _RegionPainter extends CustomPainter {
       }
       if (!hasFill) continue;
 
-      // Solid fill stays fully solid.
-      canvas.drawPath(fill, solidPaint);
-
       final bandPx =
           uncertaintyMeters > 0 ? _metersToPixels(center, uncertaintyMeters) : 0.0;
-      if (bandPx > 0) {
-        // Band only where it isn't already filled: clip to (circle − fill), so
-        // the inner half of the corridor (over the solid core) is dropped and
-        // the core never lightens. The outer half — and the halo inside any
-        // sub-threshold holes — shows the uncertain strip.
-        final ring = geodesicCircle(center, rMeters, points: _ringPoints);
-        final bound = ring.isNotEmpty
-            ? _ringToPath(ring)
-            : (Path()..addRect(Offset.zero & size));
-        final outside = Path.combine(PathOperation.difference, bound, fill);
+      if (bandPx <= 0) {
+        canvas.drawPath(fill, solidPaint);
+      } else {
+        // Band only *inside* the fill: stroke the contour at twice the radius
+        // and clip it to the fill, so the outer half of the corridor is dropped
+        // and the band is exactly the uncertain strip just inside the border
+        // (and just inside any sub-threshold hole's border). The solid starts
+        // where it ends.
+        //
+        // The strip overlays the solid, so drawing it plainly would compound the
+        // alphas; render both into an offscreen layer and let the band
+        // `BlendMode.src`-replace the solid's pixels there instead.
+        canvas.saveLayer(_clip, Paint());
+        canvas.drawPath(fill, solidPaint);
         canvas.save();
-        canvas.clipPath(outside);
-        canvas.drawPath(contour, bandPaint..strokeWidth = bandPx);
+        canvas.clipPath(fill);
+        canvas.drawPath(
+            contour,
+            bandPaint
+              ..strokeWidth = 2 * bandPx
+              ..blendMode = BlendMode.src);
+        canvas.restore();
         canvas.restore();
       }
       canvas.drawPath(contour, strokePaint);

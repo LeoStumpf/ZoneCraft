@@ -13,8 +13,9 @@ import 'spherical.dart';
 /// "other" (far) point.
 ///
 /// To match the rendering engine's `band = outer − core` model, the bisector is
-/// offset by the uncertainty half-band: [outer] is the near side enlarged onto
-/// the far side, [core] retracted onto the near side.
+/// offset by the uncertainty half-band — one ring stays on the true bisector and
+/// the other is pushed off it by `bandMeters`, per `bandInward` (see
+/// [sphericalCell]); the bisector itself, which the engine outlines, never moves.
 class PlaneRegion {
   const PlaneRegion(this.outer, this.core);
 

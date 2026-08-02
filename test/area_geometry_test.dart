@@ -56,22 +56,25 @@ void main() {
     expect(b.maxLng, greaterThan(11.01));
   });
 
-  test('normal layer: band edge grows beyond the boundary', () {
+  test('normal layer: band edge (where the solid starts) shrinks inward', () {
     final r = resolveAreaGeometry(square,
         offsetMeters: 0, bandMeters: 500, inverted: false);
     expect(r.bandEdge, isNotEmpty);
     final b = bbox(r.bandEdge);
-    expect(b.maxLat, greaterThan(48.01)); // pushed out past the ring
-    expect(b.minLng, lessThan(10.99));
+    expect(b.maxLat, lessThan(48.01)); // pulled in inside the ring
+    expect(b.minLng, greaterThan(10.99));
+    // The boundary itself (the outline) has not moved.
+    expect(bbox(r.core).maxLat, closeTo(48.01, 1e-9));
   });
 
-  test('inverted layer: band edge shrinks inside the boundary', () {
+  test('inverted layer: band edge grows beyond the boundary', () {
     final r = resolveAreaGeometry(square,
         offsetMeters: 0, bandMeters: 500, inverted: true);
     expect(r.bandEdge, isNotEmpty);
     final b = bbox(r.bandEdge);
-    expect(b.maxLat, lessThan(48.01)); // pulled in inside the ring
-    expect(b.minLng, greaterThan(10.99));
+    expect(b.maxLat, greaterThan(48.01)); // pushed out past the ring
+    expect(b.minLng, lessThan(10.99));
+    expect(bbox(r.core).maxLat, closeTo(48.01, 1e-9));
   });
 
   test('degenerate ring (<3 points) resolves to empty', () {
