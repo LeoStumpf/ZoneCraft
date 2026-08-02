@@ -15,7 +15,10 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   `transit` (public-transport **stations** fetched **once** from Overpass over a
   tap-two-corners bbox and stored offline; **no line geometry is ever fetched** — only which
   transit *types* serve each station — drawn as clustered markers and filtered by a per-layer
-  **Stations** menu; a failed import stays on the layer as a retry row, no editor).
+  **Stations** menu; a failed import stays on the layer as a retry row, no editor.
+  The import dialog also asks **which types to fetch**, pre-ticked from the box size and
+  size-limited per type — bus stops are ~25× the data of train stops, so a state-sized
+  train-only import works while a bus one is refused).
   The region types have a `geo/*.dart` region builder and a `ui/*_editor.dart` docked editor.
 - **Compositing engine** (`ui/region_layer.dart`): per layer, every object yields an
   `outer`+`core` screen-space polygon; these union via `Path.combine`, then paint core (solid)

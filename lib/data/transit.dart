@@ -20,6 +20,17 @@ import 'package:latlong2/latlong.dart';
 /// numbers. Each station records **which modes serve it**, which is what the
 /// filter needs and what 97 % of Munich's stop nodes tag directly on the node.
 ///
+/// ## What is imported is chosen up front
+///
+/// One query is cheap for a city but not for a state, and the cost is almost
+/// entirely bus stops: over Bavaria (511 km across) bus nodes are 68 MB and
+/// 126 s, train nodes 3 MB and 40 s. So the import dialog asks *which types*,
+/// pre-ticked from the box size ([recommendedImportModes]), and a subset is
+/// fetched with a much narrower query ([buildTransitStopsQuery]). Each mode
+/// carries the widest box it may be asked over ([TransitMode.maxDiagonalMeters]),
+/// which is what lets "train stations in all of Bavaria" work while "every bus
+/// stop in Bavaria" is refused instead of timing out.
+///
 /// ## The merge matters
 ///
 /// A physical stop is usually several OSM nodes — a `stop_position` per
@@ -39,8 +50,10 @@ class TransitMode {
     required this.label,
     required this.blurb,
     required this.tagKeys,
+    required this.stopSelectors,
     required this.colorArgb,
     required this.bit,
+    required this.maxDiagonalMeters,
     this.isRail = false,
   });
 
@@ -56,11 +69,29 @@ class TransitMode {
   /// OSM tag keys that mean this mode is served here.
   final List<String> tagKeys;
 
+  /// Overpass **node selectors** that find this mode's stops on their own, used
+  /// when only some modes are imported. Each is appended to `node` in front of
+  /// the bbox, so they must be plain tag filters — and equality filters, not
+  /// regexes, so Overpass can use its tag index.
+  final List<String> stopSelectors;
+
   /// Swatch colour in the filter sheet.
   final int colorArgb;
 
   /// Positional bit for the persisted mode masks.
   final int bit;
+
+  /// The widest box this mode may be imported over, and (at half of it) where
+  /// the import dialog starts warning. These are density limits, not opinions:
+  /// over all of Bavaria (511 km across) bus stops are **200 941 nodes /
+  /// 68 MB / 126 s** — past both [transitMaxResponseBytes] and the request
+  /// timeout — while train stops are 8 345 nodes / 3.0 MB / 40 s, and every
+  /// other mode is under 1 700 nodes. Node count grows with the *area*, so each
+  /// limit is Bavaria's diagonal scaled by √(density relative to bus), anchored
+  /// on the 120 km that bus was already capped at.
+  final double maxDiagonalMeters;
+
+  double get warnDiagonalMeters => maxDiagonalMeters / 2;
 
   /// Whether "Rail only" includes this mode.
   final bool isRail;
@@ -75,16 +106,25 @@ const List<TransitMode> transitModes = [
     label: 'Bus',
     blurb: 'Local buses and trolleybuses',
     tagKeys: ['bus', 'trolleybus', 'share_taxi'],
+    stopSelectors: [
+      '["highway"="bus_stop"]',
+      '["bus"="yes"]',
+      '["trolleybus"="yes"]',
+      '["share_taxi"="yes"]',
+    ],
     colorArgb: 0xFF1565C0,
     bit: 1 << 0,
+    maxDiagonalMeters: 120000,
   ),
   TransitMode(
     key: 'tram',
     label: 'Tram',
     blurb: 'Street-running trams / streetcars',
     tagKeys: ['tram'],
+    stopSelectors: ['["railway"="tram_stop"]', '["tram"="yes"]'],
     colorArgb: 0xFFD32F2F,
     bit: 1 << 1,
+    maxDiagonalMeters: 800000,
     isRail: true,
   ),
   TransitMode(
@@ -92,8 +132,10 @@ const List<TransitMode> transitModes = [
     label: 'Subway',
     blurb: 'Metro / underground (U-Bahn)',
     tagKeys: ['subway'],
+    stopSelectors: ['["subway"="yes"]', '["station"="subway"]'],
     colorArgb: 0xFF1B5E20,
     bit: 1 << 2,
+    maxDiagonalMeters: 1000000,
     isRail: true,
   ),
   TransitMode(
@@ -101,8 +143,10 @@ const List<TransitMode> transitModes = [
     label: 'Light rail',
     blurb: 'Light rail and metro-like commuter rail',
     tagKeys: ['light_rail'],
+    stopSelectors: ['["light_rail"="yes"]', '["station"="light_rail"]'],
     colorArgb: 0xFF00897B,
     bit: 1 << 3,
+    maxDiagonalMeters: 1000000,
     isRail: true,
   ),
   TransitMode(
@@ -110,8 +154,14 @@ const List<TransitMode> transitModes = [
     label: 'Train',
     blurb: 'Mainline and suburban trains (S-Bahn, regional, long distance)',
     tagKeys: ['train'],
+    stopSelectors: [
+      '["railway"="station"]',
+      '["railway"="halt"]',
+      '["train"="yes"]',
+    ],
     colorArgb: 0xFF424242,
     bit: 1 << 4,
+    maxDiagonalMeters: 600000,
     isRail: true,
   ),
   TransitMode(
@@ -119,8 +169,10 @@ const List<TransitMode> transitModes = [
     label: 'Monorail',
     blurb: 'Monorail',
     tagKeys: ['monorail'],
+    stopSelectors: ['["monorail"="yes"]', '["station"="monorail"]'],
     colorArgb: 0xFF6A1B9A,
     bit: 1 << 5,
+    maxDiagonalMeters: 1000000,
     isRail: true,
   ),
   TransitMode(
@@ -128,8 +180,10 @@ const List<TransitMode> transitModes = [
     label: 'Ferry',
     blurb: 'Passenger ferries and water buses',
     tagKeys: ['ferry'],
+    stopSelectors: ['["ferry"="yes"]', '["amenity"="ferry_terminal"]'],
     colorArgb: 0xFF0288D1,
     bit: 1 << 6,
+    maxDiagonalMeters: 1000000,
   ),
 ];
 
@@ -157,15 +211,24 @@ int get transitAllModesMask => transitMaskOf(transitModes);
 /// The rail modes, for the filter sheet's "Rail only" shortcut.
 int get transitRailMask => transitMaskOf(transitModes.where((m) => m.isRail));
 
+/// The modes in [mask], named — "Train, Tram" — for a subtitle. Empty mask
+/// gives 'nothing'; the full mask gives 'all types'.
+String transitModeLabels(int mask) {
+  if (mask & transitAllModesMask == transitAllModesMask) return 'all types';
+  final names = [for (final m in transitModes) if (mask & m.bit != 0) m.label];
+  if (names.isEmpty) return 'nothing';
+  return names.join(', ');
+}
+
 /// Above this imported diagonal, bus stations start out hidden.
 const double kTransitBusDefaultMaxMeters = 10000;
 
-/// Which modes a **freshly imported** set shows by default.
+/// Which of the **imported** modes a fresh set shows by default.
 ///
-/// Everything is always *imported* (it is one cheap query), so this only picks
-/// what is shown — ticking Bus later never needs a re-import. Buses dominate:
+/// Only ever narrows what was imported (the caller intersects). Buses dominate:
 /// 3 147 of Munich's 3 629 stations are bus-only, which swamps a city-wide view
-/// but is exactly what you want in a neighbourhood.
+/// but is exactly what you want in a neighbourhood — and unticking them here
+/// costs nothing, since they are already stored.
 int defaultVisibleModes(double diagonalMeters) {
   if (!diagonalMeters.isFinite ||
       diagonalMeters <= kTransitBusDefaultMaxMeters) {
@@ -173,6 +236,72 @@ int defaultVisibleModes(double diagonalMeters) {
   }
   final bus = transitModeByKey('bus');
   return bus == null ? transitAllModesMask : transitAllModesMask & ~bus.bit;
+}
+
+/// Above this diagonal an import defaults to dropping buses; above
+/// [kTransitWideMaxMeters] it defaults to trains alone.
+const double kTransitRegionalMaxMeters = 60000;
+const double kTransitWideMaxMeters = 150000;
+
+/// Which modes to **fetch** for a box this size — the import dialog's
+/// pre-ticked answer, which the user may then narrow or widen.
+///
+/// Three tiers, from the density measurements on [TransitMode.maxDiagonalMeters]:
+/// a city-sized box can afford everything (all of Munich is 5.7 s / 3.1 MB);
+/// past that buses are what makes a query expensive, so they drop out; and for
+/// a state-sized box only trains are worth asking for — "every bus stop in
+/// Bavaria" is 68 MB and does not come back.
+int recommendedImportModes(double diagonalMeters) {
+  if (!diagonalMeters.isFinite ||
+      diagonalMeters <= kTransitRegionalMaxMeters) {
+    return transitAllModesMask;
+  }
+  if (diagonalMeters <= kTransitWideMaxMeters) {
+    final bus = transitModeByKey('bus');
+    return bus == null ? transitAllModesMask : transitAllModesMask & ~bus.bit;
+  }
+  return transitModeByKey('train')?.bit ?? transitRailMask;
+}
+
+/// The widest / least alarming box the selected modes can be fetched over: the
+/// strictest limit among them, because one dense mode is enough to sink the
+/// whole query.
+double transitMaxDiagonalFor(int mask) => _limitFor(mask, (m) => m.maxDiagonalMeters);
+
+double transitWarnDiagonalFor(int mask) =>
+    _limitFor(mask, (m) => m.warnDiagonalMeters);
+
+double _limitFor(int mask, double Function(TransitMode) of) {
+  var limit = double.infinity;
+  for (final m in transitModes) {
+    if (mask & m.bit != 0 && of(m) < limit) limit = of(m);
+  }
+  // An empty selection has nothing to limit; the dialog blocks it separately.
+  return limit.isFinite ? limit : transitModes.first.maxDiagonalMeters;
+}
+
+/// The selected modes that a box this size is too big for, worst first — what
+/// the dialog names when it refuses, so "too large" always says *for what*.
+List<TransitMode> transitModesOverLimit(int mask, double diagonalMeters) {
+  final over = [
+    for (final m in transitModes)
+      if (mask & m.bit != 0 && diagonalMeters > m.maxDiagonalMeters) m,
+  ];
+  over.sort((a, b) => a.maxDiagonalMeters.compareTo(b.maxDiagonalMeters));
+  return over;
+}
+
+/// The selected modes this box is merely *large* for — a warning, not a block.
+List<TransitMode> transitModesOverWarning(int mask, double diagonalMeters) {
+  final over = [
+    for (final m in transitModes)
+      if (mask & m.bit != 0 &&
+          diagonalMeters > m.warnDiagonalMeters &&
+          diagonalMeters <= m.maxDiagonalMeters)
+        m,
+  ];
+  over.sort((a, b) => a.warnDiagonalMeters.compareTo(b.warnDiagonalMeters));
+  return over;
 }
 
 // --- Result models (drift-free, isolate-safe) --------------------------------
@@ -234,11 +363,22 @@ class TransitOutcome<T> {
 /// leaves roughly 8× headroom.
 const int transitMaxResponseBytes = 24 * 1024 * 1024;
 
-/// Warn above this bbox diagonal; block above [transitMaxDiagonalMeters].
-/// Munich end-to-end is ~45 km and imports in seconds, so the old 50 km block
-/// was far too tight.
-const double transitWarnDiagonalMeters = 60000;
-const double transitMaxDiagonalMeters = 120000;
+/// The limits when **every** mode is imported — i.e. bus's, the strictest.
+/// Selective imports get more room; see [transitMaxDiagonalFor].
+double get transitWarnDiagonalMeters =>
+    transitWarnDiagonalFor(transitAllModesMask);
+double get transitMaxDiagonalMeters =>
+    transitMaxDiagonalFor(transitAllModesMask);
+
+/// Overpass's own budget for the query, and how long we wait for it. A wide
+/// train-only box is legitimately slow — all of Bavaria took 40 s — so the
+/// allowance grows with the box rather than failing something that was going
+/// to work.
+Duration transitQueryTimeout(double diagonalMeters) =>
+    Duration(seconds: diagonalMeters > kTransitRegionalMaxMeters ? 180 : 90);
+
+Duration transitRequestTimeout(double diagonalMeters) =>
+    transitQueryTimeout(diagonalMeters) + const Duration(seconds: 30);
 
 /// Nodes sharing a name within this distance become one station. Pasing
 /// Bahnhof's 11 nodes span ~110 m, so this has to be generous.
@@ -260,24 +400,51 @@ const String _userAgent =
 
 // --- Query ------------------------------------------------------------------
 
-/// Every public-transport stop node in the bbox.
+/// The public-transport stop nodes in the bbox that serve [modeMask].
 ///
 /// Nodes only, tags only, no relation traversal — deliberately the cheapest
 /// shape Overpass offers, which is what makes a whole city importable.
+///
+/// Two shapes, because they answer different questions:
+///
+/// * **All modes** — the generic `public_transport=*` sweep (plus bus stops and
+///   railway stations), which is every stop however it is tagged, including the
+///   ~3 % that name no mode at all.
+/// * **A subset** — the union of the chosen modes' [TransitMode.stopSelectors],
+///   which is far cheaper on a wide box because it never touches the 200 000
+///   bus nodes you didn't ask for. It relies on the mode being tagged on the
+///   node, which 97 % of Munich's stops do, and picks up the rest through the
+///   `railway=`/`highway=` selectors; untagged stops of *unknown* mode are the
+///   deliberate loss — you asked for trains, not for "possibly a train".
 String buildTransitStopsQuery({
   required double south,
   required double west,
   required double north,
   required double east,
+  int modeMask = -1,
+  double? diagonalMeters,
 }) {
   final bbox = '($south,$west,$north,$east)';
-  return '[out:json][timeout:90];'
+  final all = modeMask & transitAllModesMask == transitAllModesMask;
+  final selectors = all
+      ? const [
+          '["public_transport"="stop_position"]',
+          '["public_transport"="station"]',
+          '["public_transport"="platform"]',
+          '["highway"="bus_stop"]',
+          '["railway"="station"]',
+          '["railway"="halt"]',
+          '["railway"="tram_stop"]',
+        ]
+      : [
+          for (final m in transitModes)
+            if (modeMask & m.bit != 0) ...m.stopSelectors,
+        ];
+  final timeout =
+      transitQueryTimeout(diagonalMeters ?? double.nan).inSeconds;
+  return '[out:json][timeout:$timeout];'
       '('
-      'node["public_transport"="stop_position"]$bbox;'
-      'node["public_transport"="station"]$bbox;'
-      'node["public_transport"="platform"]$bbox;'
-      'node["highway"="bus_stop"]$bbox;'
-      'node["railway"~"^(station|halt|tram_stop)\$"]$bbox;'
+      '${[for (final s in selectors) 'node$s$bbox;'].join()}'
       ');'
       'out body qt;';
 }
@@ -312,6 +479,17 @@ int stopModeMask(Map tags) {
   if (mask != 0) return mask;
 
   int bitOf(String key) => transitModeByKey(key)?.bit ?? 0;
+  // `station=subway` on a `railway=station` node is how a fair few metro
+  // stations are tagged. Reading it before the railway fallback keeps them out
+  // of a train-only import, which would otherwise inherit them as trains.
+  switch (_tag(tags, 'station')) {
+    case 'subway':
+      return bitOf('subway');
+    case 'light_rail':
+      return bitOf('light_rail');
+    case 'monorail':
+      return bitOf('monorail');
+  }
   switch (_tag(tags, 'railway')) {
     case 'tram_stop':
       return bitOf('tram');
@@ -349,12 +527,21 @@ class TransitStopNode {
   final String? routeRef;
 }
 
-/// Parses an Overpass stops response into merged stations.
+/// Parses an Overpass stops response into merged stations, keeping only those
+/// served by [keepModes].
+///
+/// The filter runs **after** the merge, so a station is judged on everything
+/// known about it: Pasing Bahnhof survives a train-only import even though most
+/// of its nodes are bus platforms, and it keeps their bus bit, because that is
+/// what the data says. A partial import drops stations whose mode is unknown —
+/// with the selective query they are noise; an all-modes import keeps them, and
+/// the filter sheet lists them under "No type given".
 ///
 /// Never throws. Returns **null** when the body could not be understood at all,
 /// so a malformed response stays distinguishable from a genuinely empty area
 /// (the old code conflated the two and reported "nothing found here").
-List<TransitStationData>? parseTransitStations(String body) {
+List<TransitStationData>? parseTransitStations(String body,
+    {int keepModes = -1}) {
   final dynamic decoded;
   try {
     decoded = jsonDecode(body);
@@ -384,7 +571,12 @@ List<TransitStationData>? parseTransitStations(String body) {
       routeRef: _tag(t, 'route_ref'),
     ));
   }
-  return mergeStations(raw);
+  final merged = mergeStations(raw);
+  if (keepModes & transitAllModesMask == transitAllModesMask) return merged;
+  return [
+    for (final s in merged)
+      if (s.modeMask & keepModes != 0) s,
+  ];
 }
 
 /// Merges raw stop nodes into stations: same **name**, within
@@ -532,7 +724,7 @@ class _Station {
 
 // --- Network ----------------------------------------------------------------
 
-/// Fetches every public-transport station in the bbox.
+/// Fetches the bbox's public-transport stations that serve [modeMask].
 ///
 /// Returns the merged stations (empty = none there), or a failure carrying a
 /// message to show. Never throws.
@@ -541,22 +733,33 @@ Future<TransitOutcome<List<TransitStationData>>> fetchTransitStations({
   required double west,
   required double north,
   required double east,
+  int modeMask = -1,
   http.Client? client,
   String? preferEndpoint,
 }) {
+  final diagonal = _diagonalMeters(south, west, north, east);
   return _post(
     buildTransitStopsQuery(
       south: south,
       west: west,
       north: north,
       east: east,
+      modeMask: modeMask,
+      diagonalMeters: diagonal,
     ),
     client: client,
-    timeout: const Duration(seconds: 120),
+    timeout: transitRequestTimeout(diagonal),
     maxBytes: transitMaxResponseBytes,
     preferEndpoint: preferEndpoint,
-    parse: parseTransitStations,
+    parse: (body) => parseTransitStations(body, keepModes: modeMask),
   );
+}
+
+double _diagonalMeters(
+    double south, double west, double north, double east) {
+  final d = _distance.as(
+      LengthUnit.Meter, LatLng(south, west), LatLng(north, east));
+  return d.isFinite ? d : double.nan;
 }
 
 /// Statuses the public instances use for "I am overloaded", not "your query is
@@ -607,7 +810,8 @@ Future<TransitOutcome<T>> _post<T>(
       if (resp.statusCode == 200) {
         if (maxBytes != null && resp.bodyBytes.length > maxBytes) {
           return const TransitOutcome.failed(
-              'That area returns too much data — pick a smaller box.');
+              'That area returns too much data — pick a smaller box, or '
+              'import fewer types (bus stops are the bulk of it).');
         }
         final parsed = parse(resp.body);
         if (parsed == null) {

@@ -7653,14 +7653,15 @@ class TransitSet extends DataClass implements Insertable<TransitSet> {
   final double north;
   final double east;
 
-  /// Which modes were requested (packed `TransitMode.bit`s). Everything is
-  /// imported, so this is currently always "all" — kept so a future partial
-  /// import stays expressible.
+  /// Which modes were fetched (packed `TransitMode.bit`s), chosen in the import
+  /// dialog. This is the **contents** of the set, not a filter: what it omits
+  /// was never stored, so widening it means importing again — which is exactly
+  /// what a retry of a failed import must not do differently.
   final int modeMask;
 
-  /// Which modes are **shown**. This is what the filter sheet writes; it starts
-  /// from `defaultVisibleModes(diagonal)`, which hides buses on a city-sized
-  /// import because they outnumber everything else ~7:1.
+  /// Which of those modes are **shown**. This is what the filter sheet writes;
+  /// it starts from `modeMask & defaultVisibleModes(diagonal)`, which hides
+  /// buses on a city-sized import because they outnumber everything else ~7:1.
   final int visibleModeMask;
   final String? label;
 

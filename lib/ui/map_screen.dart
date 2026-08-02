@@ -1369,10 +1369,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
       north: config.north,
       east: config.east,
       diagonalMeters: config.diagonalMeters,
+      modeMask: config.modeMask,
     );
   }
 
-  /// Retries an import that didn't finish, using the box it remembered.
+  /// Retries an import that didn't finish, using the box **and the types** it
+  /// remembered — a retry has to ask the same question, or the row would come
+  /// back holding something other than what was asked for.
   Future<void> retryTransitImport(TransitSet set) {
     return _runTransitImport(
       layerId: set.layerId,
@@ -1382,6 +1385,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       east: set.east,
       diagonalMeters:
           bboxDiagonalMeters(set.south, set.west, set.north, set.east),
+      modeMask: set.modeMask,
       existingSetId: set.id,
     );
   }
@@ -1393,6 +1397,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     required double north,
     required double east,
     required double diagonalMeters,
+    required int modeMask,
     String? existingSetId,
   }) async {
     final repo = ref.read(repositoryProvider);
@@ -1403,15 +1408,21 @@ class _MapScreenState extends ConsumerState<MapScreen>
           west: west,
           north: north,
           east: east,
-          modeMask: transitAllModesMask,
-          visibleModeMask: defaultVisibleModes(diagonalMeters),
+          modeMask: modeMask,
+          // Never show what wasn't fetched; within that, a city-sized import
+          // still starts with buses hidden so it doesn't open as a wall of pins.
+          visibleModeMask: modeMask & defaultVisibleModes(diagonalMeters),
         );
     if (!mounted) return;
 
     // The closer is captured, so the spinner is dismissed by identity rather
     // than by popping whatever happens to be on top of the ambient navigator.
-    final closeProgress =
-        showTransitProgress(context, 'Importing transit stations…');
+    final closeProgress = showTransitProgress(
+      context,
+      diagonalMeters > kTransitRegionalMaxMeters
+          ? 'Importing transit stations — a large area can take a minute…'
+          : 'Importing transit stations…',
+    );
     try {
       final settings = ref.read(settingsProvider).asData?.value;
       final outcome = await fetchTransitStations(
@@ -1419,6 +1430,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
         west: west,
         north: north,
         east: east,
+        modeMask: modeMask,
         client: _tileClient,
         preferEndpoint: settings?.transitEndpoint,
       );
@@ -1453,16 +1465,22 @@ class _MapScreenState extends ConsumerState<MapScreen>
       closeProgress();
       if (!mounted) return;
       if (stations.isEmpty) {
-        _hint('No transit stations found in that area.');
+        _hint(modeMask == transitAllModesMask
+            ? 'No transit stations found in that area.'
+            : 'No ${transitModeLabels(modeMask).toLowerCase()} stations found '
+                'in that area.');
         return;
       }
-      final hidden = transitAllModesMask &
+      // Hidden *within what was imported* — saying "bus hidden" about buses
+      // that were never fetched would send people to a filter that can't help.
+      final hidden = modeMask &
           ~(await repo.watchAllTransitSets().first)
               .firstWhere((t) => t.id == setId)
               .visibleModeMask;
       _hint(hidden == 0
           ? 'Imported ${stations.length} stations.'
-          : 'Imported ${stations.length} stations · bus hidden for now '
+          : 'Imported ${stations.length} stations · '
+              '${transitModeLabels(hidden).toLowerCase()} hidden for now '
               '(Stations… to show).');
     } catch (e) {
       // A write failure used to become an unhandled async error with no

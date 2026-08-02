@@ -3,6 +3,7 @@ import 'package:flutter/material.dart' show Icons;
 import 'package:latlong2/latlong.dart' hide Circle;
 
 import '../data/database.dart';
+import '../data/transit.dart';
 import '../state/providers.dart';
 import 'hit_test.dart';
 import 'region_geometry.dart';
@@ -387,6 +388,11 @@ ObjectSummary _transitSetSummary(
       LengthUnit.Meter, LatLng(s.south, s.west), LatLng(s.north, s.west));
   final size = '${formatMeters(width)} × ${formatMeters(height)}';
 
+  // Which types were asked for is part of what this row *is*: a set holding
+  // only trains looks identical to a failed bus import otherwise.
+  final partial = s.modeMask & transitAllModesMask != transitAllModesMask;
+  final types = partial ? transitModeLabels(s.modeMask).toLowerCase() : null;
+
   final pending = s.fetchedAt == null;
   final String title;
   final String subtitle;
@@ -394,6 +400,7 @@ ObjectSummary _transitSetSummary(
     title = 'Import didn\'t finish';
     subtitle = [
       if (s.lastError != null) s.lastError!,
+      ?types,
       size,
       'tap to try again',
     ].join(' · ');
@@ -401,8 +408,12 @@ ObjectSummary _transitSetSummary(
     final stations =
         s.stationCount > 0 ? s.stationCount : allStops.where((x) => x.setId == s.id).length;
     title = _titleOr(s.label, 'Transit import', index);
-    subtitle = '${_plural(stations, 'station')} · $size · '
-        'imported ${_shortDate(s.fetchedAt!)}';
+    subtitle = [
+      _plural(stations, 'station'),
+      ?types,
+      size,
+      'imported ${_shortDate(s.fetchedAt!)}',
+    ].join(' · ');
   }
 
   return ObjectSummary(

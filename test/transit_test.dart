@@ -86,6 +86,73 @@ void main() {
     });
   });
 
+  group('recommendedImportModes', () {
+    test('a city-sized box asks for everything', () {
+      expect(recommendedImportModes(2000), transitAllModesMask);
+      expect(recommendedImportModes(kTransitRegionalMaxMeters),
+          transitAllModesMask);
+    });
+
+    test('a region drops the buses, which are the expensive half', () {
+      final m = recommendedImportModes(100000);
+      expect(m & bit('bus'), 0);
+      expect(m & bit('train'), isNot(0));
+      expect(m & bit('tram'), isNot(0));
+    });
+
+    test('a state-sized box asks for trains alone', () {
+      // Bavaria is ~511 km across: 8 345 train nodes, 200 941 bus ones.
+      expect(recommendedImportModes(511000), bit('train'));
+    });
+
+    test('an unusable box suggests everything rather than nothing', () {
+      expect(recommendedImportModes(double.nan), transitAllModesMask);
+    });
+  });
+
+  group('per-mode size limits', () {
+    test('the limit of a selection is its strictest member', () {
+      expect(transitMaxDiagonalFor(bit('train')),
+          transitModeByKey('train')!.maxDiagonalMeters);
+      expect(transitMaxDiagonalFor(bit('train') | bit('bus')),
+          transitModeByKey('bus')!.maxDiagonalMeters);
+      expect(transitWarnDiagonalFor(transitAllModesMask),
+          transitModeByKey('bus')!.warnDiagonalMeters);
+    });
+
+    test('Bavaria is fine for trains and out of the question for buses', () {
+      const bavaria = 511000.0;
+      expect(transitModesOverLimit(bit('train'), bavaria), isEmpty);
+      expect(transitModesOverLimit(bit('train') | bit('bus'), bavaria)
+          .map((m) => m.key), ['bus']);
+    });
+
+    test('a mode only over its warning is warned about, not refused', () {
+      final bus = transitModeByKey('bus')!;
+      final d = bus.warnDiagonalMeters + 1;
+      expect(transitModesOverLimit(bus.bit, d), isEmpty);
+      expect(transitModesOverWarning(bus.bit, d).single.key, 'bus');
+      // Past the hard limit it is a refusal instead — never both.
+      final past = bus.maxDiagonalMeters + 1;
+      expect(transitModesOverWarning(bus.bit, past), isEmpty);
+      expect(transitModesOverLimit(bus.bit, past).single.key, 'bus');
+    });
+
+    test('an unusable diagonal warns about nothing', () {
+      expect(transitModesOverLimit(transitAllModesMask, double.nan), isEmpty);
+      expect(transitModesOverWarning(transitAllModesMask, double.nan), isEmpty);
+    });
+  });
+
+  group('transitModeLabels', () {
+    test('names a subset, and collapses the full set', () {
+      expect(transitModeLabels(bit('train')), 'Train');
+      expect(transitModeLabels(bit('train') | bit('bus')), 'Bus, Train');
+      expect(transitModeLabels(transitAllModesMask), 'all types');
+      expect(transitModeLabels(0), 'nothing');
+    });
+  });
+
   group('stopModeMask', () {
     test('reads the mode tags on the node', () {
       expect(stopModeMask({'bus': 'yes'}), bit('bus'));
@@ -107,6 +174,15 @@ void main() {
       expect(stopModeMask({'railway': 'station'}), bit('train'));
       expect(stopModeMask({'railway': 'halt'}), bit('train'));
       expect(stopModeMask({'highway': 'bus_stop'}), bit('bus'));
+    });
+
+    test('station=* beats the bare railway fallback', () {
+      // Otherwise a metro station tagged the old way lands in a train-only
+      // import as a train.
+      expect(stopModeMask({'railway': 'station', 'station': 'subway'}),
+          bit('subway'));
+      expect(stopModeMask({'railway': 'station', 'station': 'light_rail'}),
+          bit('light_rail'));
     });
 
     test('an explicit tag beats the stop-kind fallback', () {
@@ -222,6 +298,33 @@ void main() {
       expect(q, isNot(contains('rel')));
       expect(q, isNot(contains('geom')));
     });
+
+    test('a subset asks only for the chosen modes', () {
+      final q = buildTransitStopsQuery(
+        south: 47.27,
+        west: 8.97,
+        north: 50.57,
+        east: 13.84,
+        modeMask: transitModeByKey('train')!.bit,
+      );
+      expect(q, contains('node["railway"="station"]'));
+      expect(q, contains('node["train"="yes"]'));
+      // The 200 000 bus nodes are exactly what this shape exists to avoid.
+      expect(q, isNot(contains('bus')));
+      expect(q, isNot(contains('public_transport')));
+    });
+
+    test('a wide box gets a longer Overpass budget', () {
+      String timeoutOf(double diagonal) => buildTransitStopsQuery(
+            south: 48.1,
+            west: 11.5,
+            north: 48.2,
+            east: 11.6,
+            diagonalMeters: diagonal,
+          ).split(';').first;
+      expect(timeoutOf(20000), contains('timeout:90'));
+      expect(timeoutOf(511000), contains('timeout:180'));
+    });
   });
 
   group('parseTransitStations', () {
@@ -255,6 +358,34 @@ void main() {
       ]))!;
       expect(s, hasLength(1));
       expect(s.single.modeMask, 0);
+    });
+
+    test('keepModes drops stations the import never asked for', () {
+      final stations = parseTransitStations(
+        bodyOf([
+          node(1, 48.1000, 11.5000, name: 'Hbf', tags: {'bus': 'yes'}),
+          node(2, 48.1002, 11.5001, name: 'Hbf', tags: {'train': 'yes'}),
+          node(3, 48.2000, 11.6000, name: 'Bus stop', tags: {'bus': 'yes'}),
+          node(4, 48.3000, 11.7000,
+              name: 'Mystery', tags: {'public_transport': 'platform'}),
+        ]),
+        keepModes: bit('train'),
+      )!;
+      // The merged Hbf survives on its train node and keeps its bus bit —
+      // that is what the data says about it.
+      expect(stations.map((s) => s.name), ['Hbf']);
+      expect(stations.single.modeMask, bit('bus') | bit('train'));
+    });
+
+    test('an all-modes import keeps the ones that name no mode', () {
+      final stations = parseTransitStations(
+        bodyOf([
+          node(1, 48.1, 11.5,
+              name: 'Mystery', tags: {'public_transport': 'platform'}),
+        ]),
+        keepModes: transitAllModesMask,
+      )!;
+      expect(stations.single.modeMask, 0);
     });
 
     test('an empty area parses to an empty list, NOT to null', () {
