@@ -315,6 +315,7 @@ Future<OverpassOutcome<List<BorderRelationData>>> fetchBorderAreas({
   required String adminLevel,
   http.Client? client,
   String? preferEndpoint,
+  OverpassProgressCallback? onProgress,
 }) {
   return overpassPost(
     buildBorderAreasQuery(
@@ -331,6 +332,7 @@ Future<OverpassOutcome<List<BorderRelationData>>> fetchBorderAreas({
         'boundary it touches has to come down. Pick a smaller box, or a finer '
         'level.',
     preferEndpoint: preferEndpoint,
+    onProgress: onProgress,
     parse: parseBorderRelations,
   );
 }

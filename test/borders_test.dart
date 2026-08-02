@@ -171,7 +171,10 @@ void main() {
       expect(out.endpoint, overpassEndpoints.first);
     });
 
-    test('a busy instance fails OVER to the next one', () async {
+    test('a busy instance is asked again before we fail over', () async {
+      // The level-9 failure that prompted this: overpass-api.de rejects roughly
+      // one ask in three in ~8 s, then answers. Failing straight over sent the
+      // import to a 160 s instance and then a dead one.
       var calls = 0;
       final out = await fetch(MockClient((_) async {
         calls++;
@@ -180,7 +183,7 @@ void main() {
             : http.Response(ok, 200);
       }));
       expect(out.ok, isTrue);
-      expect(out.endpoint, overpassEndpoints[1]);
+      expect(out.endpoint, overpassEndpoints.first);
     });
 
     test('a query error is reported as-is and does NOT fail over', () async {

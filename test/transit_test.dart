@@ -434,7 +434,9 @@ void main() {
       expect(out.endpoint, transitEndpoints.first);
     });
 
-    test('a busy instance fails OVER to the next one', () async {
+    test('a busy instance is asked again before we fail over', () async {
+      // A fast 5xx is the dispatcher queueing, not a verdict on the query, and
+      // the same instance usually answers next time — see overpass_client.dart.
       final tried = <String>[];
       final client = MockClient((req) async {
         tried.add(req.url.toString());
@@ -444,6 +446,20 @@ void main() {
       final out = await fetch(client);
       expect(out.ok, isTrue);
       expect(tried, hasLength(2));
+      expect(out.endpoint, transitEndpoints.first,
+          reason: 'the retry stays on the instance that just rejected');
+    });
+
+    test('an instance that keeps rejecting is abandoned for the next', () async {
+      final tried = <String>[];
+      final client = MockClient((req) async {
+        tried.add(req.url.toString());
+        return req.url.toString() == transitEndpoints.first
+            ? http.Response('busy', 504)
+            : http.Response(bodyOf([node(1, 48.1, 11.5, name: 'A')]), 200);
+      });
+      final out = await fetch(client);
+      expect(out.ok, isTrue);
       expect(out.endpoint, transitEndpoints[1]);
     });
 
@@ -456,7 +472,8 @@ void main() {
       });
       final out = await fetch(client);
       expect(out.ok, isTrue, reason: 'a timeout says nothing about the query');
-      expect(calls, 2);
+      expect(calls, 2,
+          reason: 'a dead instance is not retried in place — it is moved past');
     });
 
     test('all endpoints busy reports busy, never blames the connection',
@@ -468,7 +485,8 @@ void main() {
       });
       final out = await fetch(client);
       expect(out.ok, isFalse);
-      expect(calls, transitEndpoints.length);
+      expect(calls, greaterThanOrEqualTo(transitEndpoints.length),
+          reason: 'every instance is tried, each with its retry budget');
       expect(out.message, contains('busy'));
       expect(out.message, isNot(contains('connection')));
     });

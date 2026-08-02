@@ -16,6 +16,8 @@ import '../data/cached_tile_provider.dart';
 import '../data/database.dart';
 import '../data/height_generator.dart';
 import '../data/overpass.dart';
+import '../data/overpass_client.dart' show kOverpassPreferenceMaxElapsed;
+import '../data/repository.dart' show Repository;
 import '../data/transit.dart';
 import '../geo/border_areas.dart';
 import '../geo/coords.dart';
@@ -29,6 +31,7 @@ import 'freearea_editor.dart';
 import 'freeline_editor.dart';
 import 'height_editor.dart';
 import 'hit_test.dart';
+import 'import_progress.dart';
 import 'layers_panel.dart';
 import 'object_summary.dart';
 import 'plane_editor.dart';
@@ -1295,14 +1298,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
         );
     if (!mounted) return;
 
-    // The closer is captured, so the spinner is dismissed by identity rather
+    // The handle is captured, so the spinner is dismissed by identity rather
     // than by popping whatever happens to be on top of the ambient navigator.
-    final closeProgress = showTransitProgress(
+    final progress = showImportProgress(
       context,
-      diagonalMeters > kTransitRegionalMaxMeters
-          ? 'Importing transit stations — a large area can take a minute…'
-          : 'Importing transit stations…',
+      title: 'Importing transit stations',
+      message: diagonalMeters > kTransitRegionalMaxMeters
+          ? 'A large area can take a minute…'
+          : 'Preparing the query…',
     );
+    final elapsed = Stopwatch()..start();
     try {
       final settings = ref.read(settingsProvider).asData?.value;
       final outcome = await fetchTransitStations(
@@ -1313,23 +1318,21 @@ class _MapScreenState extends ConsumerState<MapScreen>
         modeMask: modeMask,
         client: _tileClient,
         preferEndpoint: settings?.transitEndpoint,
+        onProgress: progress.report,
       );
 
       if (!outcome.ok) {
         await repo.markTransitImportFailed(setId, outcome.message!);
-        closeProgress();
+        progress.close();
         if (!mounted) return;
         _hint('${outcome.message!} It\'s saved — retry it from Elements.');
         return;
       }
-      // Remember the instance that actually answered, so the next import
-      // starts there rather than at whichever one is currently swamped.
-      if (outcome.endpoint != null &&
-          outcome.endpoint != settings?.transitEndpoint) {
-        unawaited(repo.updateTransitEndpoint(outcome.endpoint!));
-      }
+      _rememberEndpoint(repo, outcome.endpoint, settings?.transitEndpoint,
+          elapsed.elapsed);
 
       final stations = outcome.value!;
+      progress.update('Saving ${stations.length} stations…');
       await repo.fillTransitSet(setId, [
         for (final s in stations)
           (
@@ -1342,7 +1345,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
             routeRef: s.routeRef,
           ),
       ]);
-      closeProgress();
+      progress.close();
       if (!mounted) return;
       if (stations.isEmpty) {
         _hint(modeMask == transitAllModesMask
@@ -1366,11 +1369,27 @@ class _MapScreenState extends ConsumerState<MapScreen>
       // A write failure used to become an unhandled async error with no
       // message at all. Say so, and leave the retry row behind.
       await repo.markTransitImportFailed(setId, 'Could not save the import.');
-      closeProgress();
+      progress.close();
       if (mounted) _hint('Could not save the import — retry from Elements.');
     } finally {
-      closeProgress(); // idempotent; guarantees the spinner never sticks
+      progress.close(); // idempotent; guarantees the spinner never sticks
     }
+  }
+
+  /// Remembers the instance that answered, so the next import can skip one that
+  /// is down — but **only if it answered quickly**.
+  ///
+  /// A slow instance that merely finished is not a good default: pinning to it
+  /// made every later import take minutes. See [kOverpassPreferenceMaxElapsed].
+  static void _rememberEndpoint(
+    Repository repo,
+    String? endpoint,
+    String? current,
+    Duration elapsed,
+  ) {
+    if (endpoint == null || endpoint == current) return;
+    if (elapsed > kOverpassPreferenceMaxElapsed) return;
+    unawaited(repo.updateTransitEndpoint(endpoint));
   }
 
   /// Imports every administrative area of [layer]'s level intersecting [box],
@@ -1393,11 +1412,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (config == null || !mounted) return;
 
     final repo = ref.read(repositoryProvider);
-    final closeProgress = showTransitProgress(
+    final progress = showImportProgress(
       context,
-      'Importing ${level.label.toLowerCase()} — whole boundaries have to '
-      'come down…',
+      title: 'Importing ${level.label.toLowerCase()}',
+      message: 'Preparing the query…',
     );
+    final elapsed = Stopwatch()..start();
     try {
       final settings = ref.read(settingsProvider).asData?.value;
       final outcome = await fetchBorderAreas(
@@ -1408,25 +1428,26 @@ class _MapScreenState extends ConsumerState<MapScreen>
         adminLevel: level.adminLevel,
         client: _tileClient,
         preferEndpoint: settings?.transitEndpoint,
+        onProgress: progress.report,
       );
       if (!outcome.ok) {
-        closeProgress();
+        progress.close();
         if (mounted) _hint(outcome.message!);
         return;
       }
-      // Remember the instance that actually answered, so the next import
-      // starts there rather than at whichever one is currently swamped.
-      if (outcome.endpoint != null &&
-          outcome.endpoint != settings?.transitEndpoint) {
-        unawaited(repo.updateTransitEndpoint(outcome.endpoint!));
-      }
+      _rememberEndpoint(repo, outcome.endpoint, settings?.transitEndpoint,
+          elapsed.elapsed);
 
       // Assemble → clip → simplify off the UI thread: a state-level import is
       // over 100 000 points through RDP.
+      final relations = outcome.value!;
+      progress.update('Building ${relations.length} '
+          'area${relations.length == 1 ? '' : 's'} — stitching, clipping to '
+          'the box, thinning…');
       final built = await compute(
         buildBorderAreas,
         BorderBuildRequest(
-          relations: outcome.value!,
+          relations: relations,
           box: LatLngBox(
             south: config.south,
             west: config.west,
@@ -1436,7 +1457,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
         ),
       );
       if (built.isEmpty) {
-        closeProgress();
+        progress.close();
         // Overpass matches a relation when one of its *members* is in the box,
         // so a box sitting wholly inside one municipality matches nothing at
         // all. That reads as a bug unless the message says what to do about it.
@@ -1447,6 +1468,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
         return;
       }
 
+      progress.update('Saving ${built.length} areas '
+          '(${totalPointCount(built)} points) and colouring them…');
       await repo.addBorderSet(
         layerId: layer.id,
         south: config.south,
@@ -1471,17 +1494,17 @@ class _MapScreenState extends ConsumerState<MapScreen>
             ),
         ],
       );
-      closeProgress();
+      progress.close();
       if (!mounted) return;
       _hint(layer.borderFillAreas
           ? 'Imported ${built.length} areas.'
           : 'Imported ${built.length} areas · Colour areas in the layer menu '
               'to fill them.');
     } catch (e) {
-      closeProgress();
+      progress.close();
       if (mounted) _hint('Could not save the import.');
     } finally {
-      closeProgress(); // idempotent; guarantees the spinner never sticks
+      progress.close(); // idempotent; guarantees the spinner never sticks
     }
   }
 
