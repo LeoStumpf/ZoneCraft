@@ -7,6 +7,7 @@ import 'package:zonecraft/data/database.dart';
 import 'package:zonecraft/data/repository.dart';
 import 'package:zonecraft/data/serialization.dart';
 import 'package:zonecraft/data/transit.dart';
+import 'package:zonecraft/geo/border_areas.dart';
 
 void main() {
   late AppDatabase db;
@@ -184,26 +185,10 @@ void main() {
     expect((await repo.watchSettings().first).uncertaintyMeters, 250);
   });
 
-  test('transport overlay defaults off and persists independently', () async {
-    expect((await repo.watchSettings().first).transportOverlay, isFalse);
-    await repo.updateUncertainty(750);
-    await repo.updateTransportOverlay(true);
-    final saved = await repo.watchSettings().first;
-    expect(saved.transportOverlay, isTrue);
-    // Toggling the overlay must not clobber the uncertainty (same row).
-    expect(saved.uncertaintyMeters, 750);
-  });
-
   test('POI category mask defaults to 0 and persists', () async {
     expect((await repo.watchSettings().first).poiCategories, 0);
     await repo.updatePoiCategories(0x05); // bench + drinking_water
     expect((await repo.watchSettings().first).poiCategories, 0x05);
-  });
-
-  test('border-levels mask defaults to 0 and persists', () async {
-    expect((await repo.watchSettings().first).borderLevels, 0);
-    await repo.updateBorderLevels(0x09); // country + city
-    expect((await repo.watchSettings().first).borderLevels, 0x09);
   });
 
   test('layer opacity defaults per type and updates', () async {
@@ -247,9 +232,7 @@ void main() {
       radiusMeters: 100,
     );
     await repo.updateUncertainty(0);
-    await repo.updateTransportOverlay(true);
     await repo.updatePoiCategories(0x0F);
-    await repo.updateBorderLevels(0x0F);
     await repo.saveCamera(48.1, 11.5, 12);
 
     final seededId = await repo.clearAll();
@@ -264,9 +247,7 @@ void main() {
     // Settings revert to defaults: uncertainty 500, camera null.
     final settings = await repo.watchSettings().first;
     expect(settings.uncertaintyMeters, 500);
-    expect(settings.transportOverlay, isFalse);
     expect(settings.poiCategories, 0);
-    expect(settings.borderLevels, 0);
     expect(settings.lastLat, isNull);
     expect(settings.lastZoom, isNull);
   });
@@ -569,5 +550,246 @@ void main() {
           .where((t) => t.layerId == fresh.single.id),
       isEmpty,
     );
+  });
+
+  // --- borders (schema v20) ---------------------------------------------------
+
+  /// Two municipalities sharing way 100, plus a detached third — enough for the
+  /// colouring to have something to say.
+  Future<String> seedBorders(String layerId, {String? label}) {
+    ({
+      int osmId,
+      String? name,
+      double south,
+      double west,
+      double north,
+      double east,
+      double labelLat,
+      double labelLng,
+      int pointCount,
+      String rings,
+      List<int> wayIds,
+    }) area(int id, String name, List<int> wayIds) => (
+          osmId: id,
+          name: name,
+          south: 48.0,
+          west: 11.0,
+          north: 48.1,
+          east: 11.1,
+          labelLat: 48.05,
+          labelLng: 11.05,
+          pointCount: 4,
+          rings: '[[[48.0,11.0],[48.0,11.1],[48.1,11.1],[48.1,11.0]]]',
+          wayIds: wayIds,
+        );
+    return repo.addBorderSet(
+      layerId: layerId,
+      south: 48.0,
+      west: 11.0,
+      north: 48.2,
+      east: 11.3,
+      adminLevel: '8',
+      label: label,
+      areas: [
+        area(1, 'München', [100, 101]),
+        area(2, 'Germering', [100, 102]),
+        area(3, 'Far away', [900]),
+      ],
+    );
+  }
+
+  test('an import stores areas with their geometry and counts', () async {
+    final layerId = await repo.createLayer(
+        name: 'B', colorArgb: 0xFF123456, type: 'borders', borderLevel: '8');
+    final setId = await seedBorders(layerId, label: 'Around Munich');
+
+    final set = (await repo.watchAllBorderSets().first).single;
+    expect(set.id, setId);
+    expect(set.label, 'Around Munich');
+    expect(set.adminLevel, '8');
+    expect(set.areaCount, 3);
+    expect(set.pointCount, 12);
+    expect(set.fetchedAt, isNotNull);
+    // The box is stored as-is: it is also the clip rect the geometry was cut to.
+    expect(set.south, 48.0);
+    expect(set.east, 11.3);
+
+    final areas = await repo.watchAllBorderAreas().first;
+    expect(areas, hasLength(3));
+    final munich = areas.firstWhere((a) => a.osmId == 1);
+    expect(munich.name, 'München');
+    expect(decodeRings(munich.rings).single, hasLength(4));
+    expect(jsonDecode(munich.wayIds), [100, 101]);
+  });
+
+  test('importing colours neighbours differently', () async {
+    final layerId = await repo.createLayer(
+        name: 'B', colorArgb: 0xFF123456, type: 'borders', borderLevel: '8');
+    await seedBorders(layerId);
+
+    final areas = await repo.watchAllBorderAreas().first;
+    final byId = {for (final a in areas) a.osmId: a.colorIndex};
+    // 1 and 2 share way 100, so they must differ; 3 shares nothing.
+    expect(byId[1], isNot(byId[2]));
+    for (final c in byId.values) {
+      expect(c, inInclusiveRange(0, kBorderColorCount - 1));
+    }
+  });
+
+  test('a second overlapping import is recoloured against the first', () async {
+    final layerId = await repo.createLayer(
+        name: 'B', colorArgb: 0xFF123456, type: 'borders', borderLevel: '8');
+    await seedBorders(layerId);
+    // A fourth area bordering both 1 and 2, imported separately.
+    await repo.addBorderSet(
+      layerId: layerId,
+      south: 48.0,
+      west: 11.0,
+      north: 48.2,
+      east: 11.3,
+      adminLevel: '8',
+      areas: [
+        (
+          osmId: 4,
+          name: 'Neighbour of both',
+          south: 48.0,
+          west: 11.0,
+          north: 48.1,
+          east: 11.1,
+          labelLat: 48.05,
+          labelLng: 11.05,
+          pointCount: 3,
+          rings: '[[[48.0,11.0],[48.0,11.1],[48.1,11.1]]]',
+          wayIds: [101, 102],
+        ),
+      ],
+    );
+
+    final areas = await repo.watchAllBorderAreas().first;
+    final byId = {for (final a in areas) a.osmId: a.colorIndex};
+    expect(byId[4], isNot(byId[1]), reason: 'they share way 101');
+    expect(byId[4], isNot(byId[2]), reason: 'they share way 102');
+  });
+
+  test('deleting a set removes its areas and recolours the rest', () async {
+    final layerId = await repo.createLayer(
+        name: 'B', colorArgb: 0xFF123456, type: 'borders', borderLevel: '8');
+    final setId = await seedBorders(layerId);
+    await repo.deleteBorderSet(setId);
+    expect(await repo.watchAllBorderSets().first, isEmpty);
+    expect(await repo.watchAllBorderAreas().first, isEmpty);
+  });
+
+  test('deleting the layer cascades to sets and areas', () async {
+    final layerId = await repo.createLayer(
+        name: 'B', colorArgb: 0xFF123456, type: 'borders', borderLevel: '8');
+    await seedBorders(layerId);
+    await repo.deleteLayer(layerId);
+    expect(await repo.watchAllBorderSets().first, isEmpty);
+    expect(await repo.watchAllBorderAreas().first, isEmpty);
+  });
+
+  test('a borders layer records its level and its two display toggles',
+      () async {
+    final id = await repo.createLayer(
+        name: 'B', colorArgb: 0xFF123456, type: 'borders', borderLevel: '4');
+    Future<Layer> row() =>
+        (db.select(db.layers)..where((l) => l.id.equals(id))).getSingle();
+
+    var layer = await row();
+    expect(layer.borderLevel, '4');
+    expect(layer.borderFillAreas, isFalse);
+    expect(layer.borderShowNames, isFalse);
+    // Region-like: it has an area fill, even though it starts unfilled.
+    expect(layer.opacity, kDefaultRegionLayerOpacity);
+
+    await repo.updateBorderLayerOptions(id, fillAreas: true);
+    layer = await row();
+    expect(layer.borderFillAreas, isTrue);
+    expect(layer.borderShowNames, isFalse, reason: 'one toggle at a time');
+
+    await repo.updateBorderLayerOptions(id, showNames: true);
+    layer = await row();
+    expect(layer.borderFillAreas, isTrue);
+    expect(layer.borderShowNames, isTrue);
+
+    // Other layer types never carry a level.
+    final circles = await repo.createLayer(name: 'C', colorArgb: 0xFF000000);
+    expect(
+      (await (db.select(db.layers)..where((l) => l.id.equals(circles)))
+              .getSingle())
+          .borderLevel,
+      isNull,
+    );
+  });
+
+  test('combining borders layers keeps both imports and re-resolves the seam',
+      () async {
+    // combineLayers' `default` re-points *circles*, then deletes the source —
+    // a type without its own case loses everything to the cascade.
+    final a = await repo.createLayer(
+        name: 'A', colorArgb: 0xFF111111, type: 'borders', borderLevel: '8');
+    final b = await repo.createLayer(
+        name: 'B', colorArgb: 0xFF222222, type: 'borders', borderLevel: '8');
+    await seedBorders(a);
+    await repo.addBorderSet(
+      layerId: b,
+      south: 48.0,
+      west: 11.0,
+      north: 48.2,
+      east: 11.3,
+      adminLevel: '8',
+      areas: [
+        (
+          osmId: 5,
+          name: 'Shares way 100',
+          south: 48.0,
+          west: 11.0,
+          north: 48.1,
+          east: 11.1,
+          labelLat: 48.05,
+          labelLng: 11.05,
+          pointCount: 3,
+          rings: '[[[48.0,11.0],[48.0,11.1],[48.1,11.1]]]',
+          wayIds: [100],
+        ),
+      ],
+    );
+
+    await repo.combineLayers(sourceId: a, targetId: b);
+
+    final sets = await repo.watchAllBorderSets().first;
+    expect(sets, hasLength(2), reason: 'the combined-away import must survive');
+    expect(sets.every((s) => s.layerId == b), isTrue);
+    final byId = {
+      for (final x in await repo.watchAllBorderAreas().first)
+        x.osmId: x.colorIndex,
+    };
+    expect(byId[5], isNot(byId[1]), reason: 'they share way 100');
+  });
+
+  test('borders layers of different levels refuse to combine', () async {
+    final a = await repo.createLayer(
+        name: 'A', colorArgb: 0xFF111111, type: 'borders', borderLevel: '8');
+    final b = await repo.createLayer(
+        name: 'B', colorArgb: 0xFF222222, type: 'borders', borderLevel: '4');
+    await expectLater(
+      repo.combineLayers(sourceId: a, targetId: b),
+      throwsArgumentError,
+    );
+  });
+
+  test('borders export nothing — derived data is re-fetched, not restored',
+      () async {
+    final layerId = await repo.createLayer(
+        name: 'B', colorArgb: 0xFF123456, type: 'borders', borderLevel: '8');
+    await seedBorders(layerId);
+
+    final data = await repo.exportData(onlyLayerId: layerId);
+    expect(data.layers.single.type, 'borders');
+    expect(data.layers.single.objects, isEmpty);
+
+    // Re-importing yields an empty borders layer, not a broken one.
+    expect(await repo.importData(data), 0);
   });
 }

@@ -17,6 +17,8 @@ const double kDefaultRegionLayerOpacity = 0.45;
 /// see the map through. One source of truth, because the repository (on create)
 /// and the drawer (deciding whether to show an opacity chip) must agree; they
 /// used to duplicate the rule inline, which is how a third type silently drifts.
+/// 'borders' is region-like (it has an area fill), so it takes the region
+/// default even though its fill is off until "Colour areas" is ticked.
 double defaultLayerOpacity(String type) =>
     (type == 'poi' || type == 'transit') ? 1.0 : kDefaultRegionLayerOpacity;
 
@@ -44,6 +46,25 @@ class Layers extends Table {
   /// band, outline / markers). 1 = fully opaque (the default); lower values let
   /// the map and lower layers show through.
   RealColumn get opacity => real().withDefault(const Constant(1.0))();
+
+  /// **`borders` layers only.** The OSM `admin_level` this layer holds, as a
+  /// string ('2', '4', '6', '8', '9', '10'); null on every other type.
+  ///
+  /// Chosen when the layer is created and never changed: one layer holds one
+  /// level, which is what makes "no two neighbours share a colour" well defined
+  /// (areas of different levels nest rather than tile, so mixing them would
+  /// make adjacency meaningless).
+  TextColumn get borderLevel => text().nullable()();
+
+  /// **`borders` only.** Fill each area with its [BorderAreas.colorIndex]
+  /// palette colour, instead of drawing outlines alone.
+  BoolColumn get borderFillAreas =>
+      boolean().withDefault(const Constant(false))();
+
+  /// **`borders` only.** Draw each area's name on a plate at its label anchor.
+  BoolColumn get borderShowNames =>
+      boolean().withDefault(const Constant(false))();
+
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 
   @override
@@ -373,6 +394,100 @@ class TransitStops extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// One administrative-border import on a `borders` layer: every area of the
+/// layer's [Layers.borderLevel] intersecting a chosen bounding box, fetched
+/// once (Overpass) and stored offline — the layer never refetches. A `borders`
+/// layer may hold several sets.
+///
+/// **Whole relations are downloaded and then clipped on the device.** A
+/// boundary is only fillable if you have all of it: asking Overpass for member
+/// ways clipped to the viewport (what the old settings overlay did) gives loose
+/// lines with no interior side. So the query fetches complete relations and the
+/// import stores only the part inside [south]…[east] — which is also what keeps
+/// a country-level box (17 MB downloaded near the DE/AT border) small on disk.
+class BorderSets extends Table {
+  TextColumn get id => text()();
+  TextColumn get layerId =>
+      text().references(Layers, #id, onDelete: KeyAction.cascade)();
+
+  /// The imported box. Doubles as the clip rectangle the stored geometry was
+  /// cut to, which is what lets the painter drop outline segments lying on it.
+  RealColumn get south => real()();
+  RealColumn get west => real()();
+  RealColumn get north => real()();
+  RealColumn get east => real()();
+
+  /// The OSM `admin_level` fetched, copied from the layer so a set stays
+  /// self-describing.
+  TextColumn get adminLevel => text()();
+
+  TextColumn get label => text().nullable()();
+
+  /// When the data was pulled from OSM. A failed import writes **nothing** —
+  /// unlike transit there is no retry row, because re-running an import is two
+  /// taps and a half-written set would have to remember the whole query.
+  DateTimeColumn get fetchedAt => dateTime()();
+
+  /// Denormalised for the Elements subtitle without a join.
+  IntColumn get areaCount => integer().withDefault(const Constant(0))();
+  IntColumn get pointCount => integer().withDefault(const Constant(0))();
+
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// One administrative area of a [BorderSets] import, clipped to its set's box.
+///
+/// **Geometry is an encoded blob, not point rows.** One state boundary is
+/// 119 238 points; the `HeightPolygons → HeightPolygonPoints` pattern would
+/// mean that many UUIDs and rows for a single area. Border areas are derived,
+/// non-editable OSM snapshots (like transit stops), so [rings] carries the whole
+/// multi-ring geometry through one codec instead — see `geo/border_areas.dart`.
+class BorderAreas extends Table {
+  TextColumn get id => text()();
+  TextColumn get setId =>
+      text().references(BorderSets, #id, onDelete: KeyAction.cascade)();
+
+  /// The OSM relation id, so the area can be looked up on osm.org — and the key
+  /// adjacency is computed against.
+  IntColumn get osmId => integer()();
+  TextColumn get name => text().nullable()();
+
+  /// Index into the painter's palette, assigned so no two areas sharing a
+  /// border get the same one. Stored rather than derived, so the palette can be
+  /// retuned without re-importing.
+  IntColumn get colorIndex => integer().withDefault(const Constant(0))();
+
+  /// The area's own bounding box, for viewport culling without decoding
+  /// [rings].
+  RealColumn get south => real()();
+  RealColumn get west => real()();
+  RealColumn get north => real()();
+  RealColumn get east => real()();
+
+  /// Precomputed anchor for the name plate.
+  RealColumn get labelLat => real()();
+  RealColumn get labelLng => real()();
+
+  IntColumn get pointCount => integer()();
+
+  /// `encodeRings` output: `[[[lat,lng], …], …]`, outer ring first, holes
+  /// after. **Holes carry no role flag** — the painter fills with
+  /// [PathFillType.evenOdd], exactly as the height layer does.
+  TextColumn get rings => text()();
+
+  /// JSON array of the relation's member way ids, kept only for adjacency:
+  /// two areas share a border iff they share a way id, which is exact and free.
+  TextColumn get wayIds => text()();
+
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 /// On-disk cache of map tile images, keyed by their full fetch [url] (so the base
 /// OSM layer and the transport overlays — which have distinct URLs — share one
 /// table). Filled as tiles are browsed/prefetched; evicted least-recently-used
@@ -499,6 +614,8 @@ class AppSettings extends Table {
     PoiPoints,
     TransitSets,
     TransitStops,
+    BorderSets,
+    BorderAreas,
     TileCache,
     OverpassCache,
   ],
@@ -510,7 +627,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 19;
+  int get schemaVersion => 20;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -625,6 +742,18 @@ class AppDatabase extends _$AppDatabase {
             await m.createTable(transitSets);
             await m.createTable(transitStops);
             await m.addColumn(appSettings, appSettings.transitEndpoint);
+          }
+          if (from < 20) {
+            // The `borders` layer type, replacing the two Settings overlays.
+            // `AppSettings.transportOverlay` and `.borderLevels` become dead
+            // columns rather than being dropped — the same treatment
+            // `poiCategories` got when the POI layer type replaced *its*
+            // overlay. Nothing reads them; nothing needs migrating out of them.
+            await m.addColumn(layers, layers.borderLevel);
+            await m.addColumn(layers, layers.borderFillAreas);
+            await m.addColumn(layers, layers.borderShowNames);
+            await m.createTable(borderSets);
+            await m.createTable(borderAreas);
           }
         },
         beforeOpen: (details) async {

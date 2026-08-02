@@ -98,6 +98,17 @@ final transitStopsProvider = StreamProvider<List<TransitStop>>((ref) {
   return ref.watch(repositoryProvider).watchAllTransitStops();
 });
 
+/// Reactive list of every administrative-border import across all layers.
+final borderSetsProvider = StreamProvider<List<BorderSet>>((ref) {
+  return ref.watch(repositoryProvider).watchAllBorderSets();
+});
+
+/// Reactive list of every imported border area (across all sets), geometry
+/// still encoded — decoding happens once per emission in [borderShapesProvider].
+final borderAreasProvider = StreamProvider<List<BorderArea>>((ref) {
+  return ref.watch(repositoryProvider).watchAllBorderAreas();
+});
+
 /// App-wide settings (currently the global uncertainty radius).
 final settingsProvider = StreamProvider<AppSetting>((ref) {
   return ref.watch(repositoryProvider).watchSettings();
@@ -108,7 +119,7 @@ final seedProvider = FutureProvider<String>((ref) {
   return ref.watch(repositoryProvider).ensureDefaultLayer();
 });
 
-/// The eight object types a layer can hold, in one closed enum — the type tag
+/// The nine object types a layer can hold, in one closed enum — the type tag
 /// the six parallel `selectedXProvider`s don't carry themselves.
 enum ObjectKind {
   circle,
@@ -118,7 +129,8 @@ enum ObjectKind {
   freeArea,
   heightRegion,
   poiSet,
-  transitSet;
+  transitSet,
+  borderSet;
 
   /// The `Layers.type` string that holds this kind of object.
   String get layerType => switch (this) {
@@ -130,6 +142,7 @@ enum ObjectKind {
         ObjectKind.heightRegion => 'height',
         ObjectKind.poiSet => 'poi',
         ObjectKind.transitSet => 'transit',
+        ObjectKind.borderSet => 'borders',
       };
 
   /// The kind a layer of [layerType] holds, or null for an unknown type.
@@ -142,6 +155,7 @@ enum ObjectKind {
         'height' => ObjectKind.heightRegion,
         'poi' => ObjectKind.poiSet,
         'transit' => ObjectKind.transitSet,
+        'borders' => ObjectKind.borderSet,
         _ => null,
       };
 }
@@ -372,7 +386,8 @@ bool hasAnySelection(WidgetRef ref) =>
 /// Selects exactly one object, clearing the others (and any armed placement),
 /// and leaves whatever map mode was armed — editing the object is now the job.
 ///
-/// [ObjectKind.poiSet] is a no-op: POI sets have no editor, so there is no
+/// The import kinds ([ObjectKind.poiSet], [ObjectKind.transitSet],
+/// [ObjectKind.borderSet]) are a no-op: imports have no editor, so there is no
 /// selection provider for them.
 void selectObject(WidgetRef ref, ObjectKind kind, String id) {
   clearSelection(ref);
@@ -394,6 +409,7 @@ void selectObject(WidgetRef ref, ObjectKind kind, String id) {
       ref.read(selectedHeightRegionProvider.notifier).select(id);
     case ObjectKind.poiSet:
     case ObjectKind.transitSet:
+    case ObjectKind.borderSet:
       break; // no editor sheet — nothing to select
   }
 }

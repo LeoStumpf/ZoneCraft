@@ -5,7 +5,7 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
 
 ## At a glance (current app)
 
-- **Eight object types**, one per layer: `circles` (geodesic), `planes` (closer-of-two-points
+- **Nine object types**, one per layer: `circles` (geodesic), `planes` (closer-of-two-points
   half-plane), `subspace` (closest-of-N Voronoi cell), `freeline` (drawn polyline dividing the
   view), `freearea` (drawn closed polygon), `height` (terrain above/below an elevation, bounded
   to a circle; generated from terrain tiles via marching squares, stored as fill polygons),
@@ -18,7 +18,13 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   **Stations** menu; a failed import stays on the layer as a retry row, no editor.
   The import dialog also asks **which types to fetch**, pre-ticked from the box size and
   size-limited per type — bus stops are ~25× the data of train stops, so a state-sized
-  train-only import works while a bus one is refused).
+  train-only import works while a bus one is refused),
+  `borders` (administrative **areas** of one OSM `admin_level`, chosen when the layer is
+  created, fetched **once** over a tap-two-corners bbox and stored offline; whole relations
+  are downloaded — clipped member ways have no fillable interior — then assembled, clipped
+  to the box and thinned on the device. Drawn as outlines in the layer colour with two
+  per-layer toggles, **Colour areas** (a 6-colour palette assigned so no two neighbours
+  match, adjacency = shared OSM way id) and **Show names**; no editor, no retry row).
   The region types have a `geo/*.dart` region builder and a `ui/*_editor.dart` docked editor.
 - **Compositing engine** (`ui/region_layer.dart`): per layer, every object yields an
   `outer`+`core` screen-space polygon; these union via `Path.combine`, then paint core (solid)
@@ -29,36 +35,40 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   layer that can never be deleted or reordered; its state lives in `AppSettings`) + **compass**,
   opt-in **Locate me** (also reads the terrain elevation there), a **Measure-elevation**
   probe (tap any point for its height), **persisted camera**, and a **Settings** screen
-  (uncertainty, clear-all, and the overlay toggles below).
-- **Optional overlays** (Overpass / tiles, all in Settings): public-transport tiles and
-  administrative borders. (Map POIs used to be a third settings overlay; they are now the
-  `poi` **layer type** — imported per area, offline, clustered.)
+  (uncertainty, clear-all, offline cache, import/export).
+- **No map overlays.** All three global Settings toggles are gone: map POIs became the
+  `poi` layer type, public-transport tiles and administrative borders were superseded by
+  `transit` and `borders`. `AppSettings.transportOverlay` / `.borderLevels` survive as
+  documented **dead columns** (the precedent `poiCategories` set), as does the now-unused
+  `OverpassCache` table.
 - **Offline caching:** a Drift-backed `TileCache` + custom `CachedTileProvider`
   (`data/cached_tile_provider.dart`) serve map tiles cache-first then network, plus a
   one-tile-ring **viewport prefetch** (`map_screen._prefetchTiles`, slippy maths in
-  `geo/tiles.dart`), so the map survives a few minutes with no reception; `OverpassCache`
-  persists the last POI/border results. LRU eviction (200 MB cap) + a Settings size readout /
-  "Clear cached map tiles" button.
+  `geo/tiles.dart`), so the map survives a few minutes with no reception. LRU eviction
+  (200 MB cap) + a Settings size readout / "Clear cached map tiles" button.
+- **One Overpass client** (`data/overpass_client.dart`): endpoint failover, transient-vs-fatal
+  status handling and a size cap, shared by `transit.dart` and `borders.dart`. The endpoint
+  that last answered is remembered in `AppSettings.transitEndpoint` (old name, shared use).
 - **Per-layer & external import/export:** besides whole-DB GeoJSON/KML, each layer can be
   exported alone and files imported as a new layer or **merged** into an existing same-type
   one (`ui/import_actions.dart`); generic **GeoJSON/KML/KMZ/GPX** tracks import into freehand
   layers (`data/geo_import.dart`).
-- **Drift schema is at v19**; migrations are append-only `if (from < N)` blocks. (v19 is the
+- **Drift schema is at v20**; migrations are append-only `if (from < N)` blocks. (v19 is the
   one exception: it *drops* the transit route tables, because route geometry was abandoned —
   see `data/transit.dart`'s header for the measurements behind that.)
 
 ## Current status
 
-Feature-complete for everything planned so far: eight object types — six region types with
+Feature-complete for everything planned so far: nine object types — six region types with
 the shared compositing engine (union / band / invert; the `height` type uses even-odd fill
-and is bounded, so it skips band/invert) plus the marker-based `poi` type (offline sets,
-screen-space clustering) and the `transit` type (offline station imports over a bbox,
-per-type visibility, retryable failed imports) — the layers drawer + per-type editors, settings (uncertainty,
-clear-all, overlay toggles), opt-in locate-me, persisted camera, optional overlays
-(public-transport tiles, admin borders), offline resilience (cache-first tiles + prefetch,
-persisted border overlay), and import/export (whole-DB + per-layer + external
-GeoJSON/KML/KMZ/GPX; freeline imports prompt for their inclusion-circle radius).
-Drift schema is **v19**.
+and is bounded, so it skips band/invert) plus three import types with their own painters:
+`poi` (offline sets, screen-space clustering), `transit` (offline station imports over a
+bbox, per-type visibility, retryable failed imports) and `borders` (offline area imports
+per admin level, neighbour-distinct colouring, name plates) — the layers drawer + per-type
+editors, settings (uncertainty, clear-all, offline cache, import/export), opt-in locate-me,
+persisted camera, offline resilience (cache-first tiles + prefetch), and import/export
+(whole-DB + per-layer + external GeoJSON/KML/KMZ/GPX; freeline imports prompt for their
+inclusion-circle radius). Drift schema is **v20**.
 
 `planning/PLAN.md` has no open roadmap items; future polish ideas are listed there.
 
@@ -105,29 +115,34 @@ lib/
                SubspacePoints, FreeLines, FreeLinePoints, FreeAreas,
                FreeAreaPoints, HeightRegions, HeightPolygons, HeightPolygonPoints,
                PoiSets, PoiPoints, TransitSets, TransitStops,
+               BorderSets, BorderAreas,
                TileCache, OverpassCache, AppSettings)
-               + repository; Overpass POI
-               client (overpass.dart) + admin-border client (borders.dart);
+               + repository; shared Overpass transport with endpoint failover
+               (overpass_client.dart); Overpass POI client (overpass.dart);
                offline tile cache (cached_tile_provider.dart); GeoJSON/KML
                import-export (serialization.dart); generic GeoJSON/KML/KMZ/GPX
                parser (geo_import.dart); height-layer terrain generation
                (height_generator.dart); public-transport Overpass client
-               (transit.dart)
+               (transit.dart); administrative-area Overpass client (borders.dart)
   geo/         geodesicCircle(), plane half-plane + subspace Voronoi-cell
                geometry, freehand line/area region geometry (freeline.dart,
                freearea.dart), height contouring/marching-squares (height.dart),
-               slippy-tile maths (tiles.dart), lat/lng parsing
+               border ring assembly / box clipping / area colouring
+               (border_areas.dart), slippy-tile maths (tiles.dart), lat/lng parsing
   state/       Riverpod providers (layers, circles, planes, subspaces,
                freehand lines/areas, height regions/polygons, poi sets/points,
-               transit sets/stops, settings, selection, map mode)
+               transit sets/stops, border sets/areas, settings, selection,
+               map mode)
   ui/          map_screen, layers_panel, circle_editor, plane_editor,
                subspace_editor, freeline_editor, freearea_editor, height_editor,
                import_actions, settings_screen, region_layer, poi_layer
                (clustered POI markers), transit_layer (clustered station
                markers), transit_import_dialog, transit_modes_sheet
                (the station-type tick boxes + the pure `transitTally`,
-               embedded in the Elements list), screen_cluster (greedy
-               screen-space clustering), screen_clip (viewport pre-clip)
+               embedded in the Elements list), border_layer (area fills +
+               outlines + name plates, no Path.combine), border_import_dialog,
+               screen_cluster (greedy screen-space clustering), screen_clip
+               (viewport pre-clip, rings and segments)
 ```
 
 ## Plans

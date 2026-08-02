@@ -46,6 +46,47 @@ List<Offset> clipRingToRect(List<Offset> ring, Rect rect) {
   return poly;
 }
 
+/// Clips the segment a→b to [rect] (Liang–Barsky), or null when it misses.
+///
+/// The ring clipper's counterpart for geometry that is **stroked but not
+/// filled** — the borders layer draws its outlines segment by segment, because
+/// it has to skip the ones lying on the import box edge, and so cannot hand
+/// Skia a closed ring. Same motivation as [clipRingToRect]: keep every
+/// coordinate Skia sees inside a viewport-sized box.
+(Offset, Offset)? clipSegmentToRect(Offset a, Offset b, Rect rect) {
+  if (!a.dx.isFinite || !a.dy.isFinite || !b.dx.isFinite || !b.dy.isFinite) {
+    return null;
+  }
+  var t0 = 0.0, t1 = 1.0;
+  final dx = b.dx - a.dx;
+  final dy = b.dy - a.dy;
+  // Each edge as `p * t <= q`; p == 0 means parallel, which only rejects when
+  // the segment already lies outside that edge.
+  for (final (p, q) in [
+    (-dx, a.dx - rect.left),
+    (dx, rect.right - a.dx),
+    (-dy, a.dy - rect.top),
+    (dy, rect.bottom - a.dy),
+  ]) {
+    if (p == 0) {
+      if (q < 0) return null;
+      continue;
+    }
+    final r = q / p;
+    if (p < 0) {
+      if (r > t1) return null;
+      if (r > t0) t0 = r;
+    } else {
+      if (r < t0) return null;
+      if (r < t1) t1 = r;
+    }
+  }
+  return (
+    Offset(a.dx + t0 * dx, a.dy + t0 * dy),
+    Offset(a.dx + t1 * dx, a.dy + t1 * dy),
+  );
+}
+
 /// One Sutherland–Hodgman pass: keeps the part of [poly] on the [keepBelow]
 /// side of the axis-aligned line `x == bound` ([xAxis]) or `y == bound`.
 List<Offset> _clipAxis(

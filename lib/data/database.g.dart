@@ -100,6 +100,47 @@ class $LayersTable extends Layers with TableInfo<$LayersTable, Layer> {
     requiredDuringInsert: false,
     defaultValue: const Constant(1.0),
   );
+  static const VerificationMeta _borderLevelMeta = const VerificationMeta(
+    'borderLevel',
+  );
+  @override
+  late final GeneratedColumn<String> borderLevel = GeneratedColumn<String>(
+    'border_level',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _borderFillAreasMeta = const VerificationMeta(
+    'borderFillAreas',
+  );
+  @override
+  late final GeneratedColumn<bool> borderFillAreas = GeneratedColumn<bool>(
+    'border_fill_areas',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("border_fill_areas" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _borderShowNamesMeta = const VerificationMeta(
+    'borderShowNames',
+  );
+  @override
+  late final GeneratedColumn<bool> borderShowNames = GeneratedColumn<bool>(
+    'border_show_names',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("border_show_names" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -122,6 +163,9 @@ class $LayersTable extends Layers with TableInfo<$LayersTable, Layer> {
     type,
     isInverted,
     opacity,
+    borderLevel,
+    borderFillAreas,
+    borderShowNames,
     createdAt,
   ];
   @override
@@ -189,6 +233,33 @@ class $LayersTable extends Layers with TableInfo<$LayersTable, Layer> {
         opacity.isAcceptableOrUnknown(data['opacity']!, _opacityMeta),
       );
     }
+    if (data.containsKey('border_level')) {
+      context.handle(
+        _borderLevelMeta,
+        borderLevel.isAcceptableOrUnknown(
+          data['border_level']!,
+          _borderLevelMeta,
+        ),
+      );
+    }
+    if (data.containsKey('border_fill_areas')) {
+      context.handle(
+        _borderFillAreasMeta,
+        borderFillAreas.isAcceptableOrUnknown(
+          data['border_fill_areas']!,
+          _borderFillAreasMeta,
+        ),
+      );
+    }
+    if (data.containsKey('border_show_names')) {
+      context.handle(
+        _borderShowNamesMeta,
+        borderShowNames.isAcceptableOrUnknown(
+          data['border_show_names']!,
+          _borderShowNamesMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -236,6 +307,18 @@ class $LayersTable extends Layers with TableInfo<$LayersTable, Layer> {
         DriftSqlType.double,
         data['${effectivePrefix}opacity'],
       )!,
+      borderLevel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}border_level'],
+      ),
+      borderFillAreas: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}border_fill_areas'],
+      )!,
+      borderShowNames: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}border_show_names'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -268,6 +351,22 @@ class Layer extends DataClass implements Insertable<Layer> {
   /// band, outline / markers). 1 = fully opaque (the default); lower values let
   /// the map and lower layers show through.
   final double opacity;
+
+  /// **`borders` layers only.** The OSM `admin_level` this layer holds, as a
+  /// string ('2', '4', '6', '8', '9', '10'); null on every other type.
+  ///
+  /// Chosen when the layer is created and never changed: one layer holds one
+  /// level, which is what makes "no two neighbours share a colour" well defined
+  /// (areas of different levels nest rather than tile, so mixing them would
+  /// make adjacency meaningless).
+  final String? borderLevel;
+
+  /// **`borders` only.** Fill each area with its [BorderAreas.colorIndex]
+  /// palette colour, instead of drawing outlines alone.
+  final bool borderFillAreas;
+
+  /// **`borders` only.** Draw each area's name on a plate at its label anchor.
+  final bool borderShowNames;
   final DateTime createdAt;
   const Layer({
     required this.id,
@@ -278,6 +377,9 @@ class Layer extends DataClass implements Insertable<Layer> {
     required this.type,
     required this.isInverted,
     required this.opacity,
+    this.borderLevel,
+    required this.borderFillAreas,
+    required this.borderShowNames,
     required this.createdAt,
   });
   @override
@@ -291,6 +393,11 @@ class Layer extends DataClass implements Insertable<Layer> {
     map['type'] = Variable<String>(type);
     map['is_inverted'] = Variable<bool>(isInverted);
     map['opacity'] = Variable<double>(opacity);
+    if (!nullToAbsent || borderLevel != null) {
+      map['border_level'] = Variable<String>(borderLevel);
+    }
+    map['border_fill_areas'] = Variable<bool>(borderFillAreas);
+    map['border_show_names'] = Variable<bool>(borderShowNames);
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -305,6 +412,11 @@ class Layer extends DataClass implements Insertable<Layer> {
       type: Value(type),
       isInverted: Value(isInverted),
       opacity: Value(opacity),
+      borderLevel: borderLevel == null && nullToAbsent
+          ? const Value.absent()
+          : Value(borderLevel),
+      borderFillAreas: Value(borderFillAreas),
+      borderShowNames: Value(borderShowNames),
       createdAt: Value(createdAt),
     );
   }
@@ -323,6 +435,9 @@ class Layer extends DataClass implements Insertable<Layer> {
       type: serializer.fromJson<String>(json['type']),
       isInverted: serializer.fromJson<bool>(json['isInverted']),
       opacity: serializer.fromJson<double>(json['opacity']),
+      borderLevel: serializer.fromJson<String?>(json['borderLevel']),
+      borderFillAreas: serializer.fromJson<bool>(json['borderFillAreas']),
+      borderShowNames: serializer.fromJson<bool>(json['borderShowNames']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -338,6 +453,9 @@ class Layer extends DataClass implements Insertable<Layer> {
       'type': serializer.toJson<String>(type),
       'isInverted': serializer.toJson<bool>(isInverted),
       'opacity': serializer.toJson<double>(opacity),
+      'borderLevel': serializer.toJson<String?>(borderLevel),
+      'borderFillAreas': serializer.toJson<bool>(borderFillAreas),
+      'borderShowNames': serializer.toJson<bool>(borderShowNames),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -351,6 +469,9 @@ class Layer extends DataClass implements Insertable<Layer> {
     String? type,
     bool? isInverted,
     double? opacity,
+    Value<String?> borderLevel = const Value.absent(),
+    bool? borderFillAreas,
+    bool? borderShowNames,
     DateTime? createdAt,
   }) => Layer(
     id: id ?? this.id,
@@ -361,6 +482,9 @@ class Layer extends DataClass implements Insertable<Layer> {
     type: type ?? this.type,
     isInverted: isInverted ?? this.isInverted,
     opacity: opacity ?? this.opacity,
+    borderLevel: borderLevel.present ? borderLevel.value : this.borderLevel,
+    borderFillAreas: borderFillAreas ?? this.borderFillAreas,
+    borderShowNames: borderShowNames ?? this.borderShowNames,
     createdAt: createdAt ?? this.createdAt,
   );
   Layer copyWithCompanion(LayersCompanion data) {
@@ -375,6 +499,15 @@ class Layer extends DataClass implements Insertable<Layer> {
           ? data.isInverted.value
           : this.isInverted,
       opacity: data.opacity.present ? data.opacity.value : this.opacity,
+      borderLevel: data.borderLevel.present
+          ? data.borderLevel.value
+          : this.borderLevel,
+      borderFillAreas: data.borderFillAreas.present
+          ? data.borderFillAreas.value
+          : this.borderFillAreas,
+      borderShowNames: data.borderShowNames.present
+          ? data.borderShowNames.value
+          : this.borderShowNames,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -390,6 +523,9 @@ class Layer extends DataClass implements Insertable<Layer> {
           ..write('type: $type, ')
           ..write('isInverted: $isInverted, ')
           ..write('opacity: $opacity, ')
+          ..write('borderLevel: $borderLevel, ')
+          ..write('borderFillAreas: $borderFillAreas, ')
+          ..write('borderShowNames: $borderShowNames, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -405,6 +541,9 @@ class Layer extends DataClass implements Insertable<Layer> {
     type,
     isInverted,
     opacity,
+    borderLevel,
+    borderFillAreas,
+    borderShowNames,
     createdAt,
   );
   @override
@@ -419,6 +558,9 @@ class Layer extends DataClass implements Insertable<Layer> {
           other.type == this.type &&
           other.isInverted == this.isInverted &&
           other.opacity == this.opacity &&
+          other.borderLevel == this.borderLevel &&
+          other.borderFillAreas == this.borderFillAreas &&
+          other.borderShowNames == this.borderShowNames &&
           other.createdAt == this.createdAt);
 }
 
@@ -431,6 +573,9 @@ class LayersCompanion extends UpdateCompanion<Layer> {
   final Value<String> type;
   final Value<bool> isInverted;
   final Value<double> opacity;
+  final Value<String?> borderLevel;
+  final Value<bool> borderFillAreas;
+  final Value<bool> borderShowNames;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const LayersCompanion({
@@ -442,6 +587,9 @@ class LayersCompanion extends UpdateCompanion<Layer> {
     this.type = const Value.absent(),
     this.isInverted = const Value.absent(),
     this.opacity = const Value.absent(),
+    this.borderLevel = const Value.absent(),
+    this.borderFillAreas = const Value.absent(),
+    this.borderShowNames = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -454,6 +602,9 @@ class LayersCompanion extends UpdateCompanion<Layer> {
     this.type = const Value.absent(),
     this.isInverted = const Value.absent(),
     this.opacity = const Value.absent(),
+    this.borderLevel = const Value.absent(),
+    this.borderFillAreas = const Value.absent(),
+    this.borderShowNames = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -469,6 +620,9 @@ class LayersCompanion extends UpdateCompanion<Layer> {
     Expression<String>? type,
     Expression<bool>? isInverted,
     Expression<double>? opacity,
+    Expression<String>? borderLevel,
+    Expression<bool>? borderFillAreas,
+    Expression<bool>? borderShowNames,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -481,6 +635,9 @@ class LayersCompanion extends UpdateCompanion<Layer> {
       if (type != null) 'type': type,
       if (isInverted != null) 'is_inverted': isInverted,
       if (opacity != null) 'opacity': opacity,
+      if (borderLevel != null) 'border_level': borderLevel,
+      if (borderFillAreas != null) 'border_fill_areas': borderFillAreas,
+      if (borderShowNames != null) 'border_show_names': borderShowNames,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -495,6 +652,9 @@ class LayersCompanion extends UpdateCompanion<Layer> {
     Value<String>? type,
     Value<bool>? isInverted,
     Value<double>? opacity,
+    Value<String?>? borderLevel,
+    Value<bool>? borderFillAreas,
+    Value<bool>? borderShowNames,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
@@ -507,6 +667,9 @@ class LayersCompanion extends UpdateCompanion<Layer> {
       type: type ?? this.type,
       isInverted: isInverted ?? this.isInverted,
       opacity: opacity ?? this.opacity,
+      borderLevel: borderLevel ?? this.borderLevel,
+      borderFillAreas: borderFillAreas ?? this.borderFillAreas,
+      borderShowNames: borderShowNames ?? this.borderShowNames,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -539,6 +702,15 @@ class LayersCompanion extends UpdateCompanion<Layer> {
     if (opacity.present) {
       map['opacity'] = Variable<double>(opacity.value);
     }
+    if (borderLevel.present) {
+      map['border_level'] = Variable<String>(borderLevel.value);
+    }
+    if (borderFillAreas.present) {
+      map['border_fill_areas'] = Variable<bool>(borderFillAreas.value);
+    }
+    if (borderShowNames.present) {
+      map['border_show_names'] = Variable<bool>(borderShowNames.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -559,6 +731,9 @@ class LayersCompanion extends UpdateCompanion<Layer> {
           ..write('type: $type, ')
           ..write('isInverted: $isInverted, ')
           ..write('opacity: $opacity, ')
+          ..write('borderLevel: $borderLevel, ')
+          ..write('borderFillAreas: $borderFillAreas, ')
+          ..write('borderShowNames: $borderShowNames, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -8708,6 +8883,1565 @@ class TransitStopsCompanion extends UpdateCompanion<TransitStop> {
   }
 }
 
+class $BorderSetsTable extends BorderSets
+    with TableInfo<$BorderSetsTable, BorderSet> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $BorderSetsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _layerIdMeta = const VerificationMeta(
+    'layerId',
+  );
+  @override
+  late final GeneratedColumn<String> layerId = GeneratedColumn<String>(
+    'layer_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES layers (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _southMeta = const VerificationMeta('south');
+  @override
+  late final GeneratedColumn<double> south = GeneratedColumn<double>(
+    'south',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _westMeta = const VerificationMeta('west');
+  @override
+  late final GeneratedColumn<double> west = GeneratedColumn<double>(
+    'west',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _northMeta = const VerificationMeta('north');
+  @override
+  late final GeneratedColumn<double> north = GeneratedColumn<double>(
+    'north',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _eastMeta = const VerificationMeta('east');
+  @override
+  late final GeneratedColumn<double> east = GeneratedColumn<double>(
+    'east',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _adminLevelMeta = const VerificationMeta(
+    'adminLevel',
+  );
+  @override
+  late final GeneratedColumn<String> adminLevel = GeneratedColumn<String>(
+    'admin_level',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _labelMeta = const VerificationMeta('label');
+  @override
+  late final GeneratedColumn<String> label = GeneratedColumn<String>(
+    'label',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _fetchedAtMeta = const VerificationMeta(
+    'fetchedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> fetchedAt = GeneratedColumn<DateTime>(
+    'fetched_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _areaCountMeta = const VerificationMeta(
+    'areaCount',
+  );
+  @override
+  late final GeneratedColumn<int> areaCount = GeneratedColumn<int>(
+    'area_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _pointCountMeta = const VerificationMeta(
+    'pointCount',
+  );
+  @override
+  late final GeneratedColumn<int> pointCount = GeneratedColumn<int>(
+    'point_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    layerId,
+    south,
+    west,
+    north,
+    east,
+    adminLevel,
+    label,
+    fetchedAt,
+    areaCount,
+    pointCount,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'border_sets';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<BorderSet> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('layer_id')) {
+      context.handle(
+        _layerIdMeta,
+        layerId.isAcceptableOrUnknown(data['layer_id']!, _layerIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_layerIdMeta);
+    }
+    if (data.containsKey('south')) {
+      context.handle(
+        _southMeta,
+        south.isAcceptableOrUnknown(data['south']!, _southMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_southMeta);
+    }
+    if (data.containsKey('west')) {
+      context.handle(
+        _westMeta,
+        west.isAcceptableOrUnknown(data['west']!, _westMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_westMeta);
+    }
+    if (data.containsKey('north')) {
+      context.handle(
+        _northMeta,
+        north.isAcceptableOrUnknown(data['north']!, _northMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_northMeta);
+    }
+    if (data.containsKey('east')) {
+      context.handle(
+        _eastMeta,
+        east.isAcceptableOrUnknown(data['east']!, _eastMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_eastMeta);
+    }
+    if (data.containsKey('admin_level')) {
+      context.handle(
+        _adminLevelMeta,
+        adminLevel.isAcceptableOrUnknown(data['admin_level']!, _adminLevelMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_adminLevelMeta);
+    }
+    if (data.containsKey('label')) {
+      context.handle(
+        _labelMeta,
+        label.isAcceptableOrUnknown(data['label']!, _labelMeta),
+      );
+    }
+    if (data.containsKey('fetched_at')) {
+      context.handle(
+        _fetchedAtMeta,
+        fetchedAt.isAcceptableOrUnknown(data['fetched_at']!, _fetchedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_fetchedAtMeta);
+    }
+    if (data.containsKey('area_count')) {
+      context.handle(
+        _areaCountMeta,
+        areaCount.isAcceptableOrUnknown(data['area_count']!, _areaCountMeta),
+      );
+    }
+    if (data.containsKey('point_count')) {
+      context.handle(
+        _pointCountMeta,
+        pointCount.isAcceptableOrUnknown(data['point_count']!, _pointCountMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  BorderSet map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return BorderSet(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      layerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}layer_id'],
+      )!,
+      south: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}south'],
+      )!,
+      west: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}west'],
+      )!,
+      north: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}north'],
+      )!,
+      east: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}east'],
+      )!,
+      adminLevel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}admin_level'],
+      )!,
+      label: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}label'],
+      ),
+      fetchedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}fetched_at'],
+      )!,
+      areaCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}area_count'],
+      )!,
+      pointCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}point_count'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $BorderSetsTable createAlias(String alias) {
+    return $BorderSetsTable(attachedDatabase, alias);
+  }
+}
+
+class BorderSet extends DataClass implements Insertable<BorderSet> {
+  final String id;
+  final String layerId;
+
+  /// The imported box. Doubles as the clip rectangle the stored geometry was
+  /// cut to, which is what lets the painter drop outline segments lying on it.
+  final double south;
+  final double west;
+  final double north;
+  final double east;
+
+  /// The OSM `admin_level` fetched, copied from the layer so a set stays
+  /// self-describing.
+  final String adminLevel;
+  final String? label;
+
+  /// When the data was pulled from OSM. A failed import writes **nothing** —
+  /// unlike transit there is no retry row, because re-running an import is two
+  /// taps and a half-written set would have to remember the whole query.
+  final DateTime fetchedAt;
+
+  /// Denormalised for the Elements subtitle without a join.
+  final int areaCount;
+  final int pointCount;
+  final DateTime createdAt;
+  const BorderSet({
+    required this.id,
+    required this.layerId,
+    required this.south,
+    required this.west,
+    required this.north,
+    required this.east,
+    required this.adminLevel,
+    this.label,
+    required this.fetchedAt,
+    required this.areaCount,
+    required this.pointCount,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['layer_id'] = Variable<String>(layerId);
+    map['south'] = Variable<double>(south);
+    map['west'] = Variable<double>(west);
+    map['north'] = Variable<double>(north);
+    map['east'] = Variable<double>(east);
+    map['admin_level'] = Variable<String>(adminLevel);
+    if (!nullToAbsent || label != null) {
+      map['label'] = Variable<String>(label);
+    }
+    map['fetched_at'] = Variable<DateTime>(fetchedAt);
+    map['area_count'] = Variable<int>(areaCount);
+    map['point_count'] = Variable<int>(pointCount);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  BorderSetsCompanion toCompanion(bool nullToAbsent) {
+    return BorderSetsCompanion(
+      id: Value(id),
+      layerId: Value(layerId),
+      south: Value(south),
+      west: Value(west),
+      north: Value(north),
+      east: Value(east),
+      adminLevel: Value(adminLevel),
+      label: label == null && nullToAbsent
+          ? const Value.absent()
+          : Value(label),
+      fetchedAt: Value(fetchedAt),
+      areaCount: Value(areaCount),
+      pointCount: Value(pointCount),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory BorderSet.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return BorderSet(
+      id: serializer.fromJson<String>(json['id']),
+      layerId: serializer.fromJson<String>(json['layerId']),
+      south: serializer.fromJson<double>(json['south']),
+      west: serializer.fromJson<double>(json['west']),
+      north: serializer.fromJson<double>(json['north']),
+      east: serializer.fromJson<double>(json['east']),
+      adminLevel: serializer.fromJson<String>(json['adminLevel']),
+      label: serializer.fromJson<String?>(json['label']),
+      fetchedAt: serializer.fromJson<DateTime>(json['fetchedAt']),
+      areaCount: serializer.fromJson<int>(json['areaCount']),
+      pointCount: serializer.fromJson<int>(json['pointCount']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'layerId': serializer.toJson<String>(layerId),
+      'south': serializer.toJson<double>(south),
+      'west': serializer.toJson<double>(west),
+      'north': serializer.toJson<double>(north),
+      'east': serializer.toJson<double>(east),
+      'adminLevel': serializer.toJson<String>(adminLevel),
+      'label': serializer.toJson<String?>(label),
+      'fetchedAt': serializer.toJson<DateTime>(fetchedAt),
+      'areaCount': serializer.toJson<int>(areaCount),
+      'pointCount': serializer.toJson<int>(pointCount),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  BorderSet copyWith({
+    String? id,
+    String? layerId,
+    double? south,
+    double? west,
+    double? north,
+    double? east,
+    String? adminLevel,
+    Value<String?> label = const Value.absent(),
+    DateTime? fetchedAt,
+    int? areaCount,
+    int? pointCount,
+    DateTime? createdAt,
+  }) => BorderSet(
+    id: id ?? this.id,
+    layerId: layerId ?? this.layerId,
+    south: south ?? this.south,
+    west: west ?? this.west,
+    north: north ?? this.north,
+    east: east ?? this.east,
+    adminLevel: adminLevel ?? this.adminLevel,
+    label: label.present ? label.value : this.label,
+    fetchedAt: fetchedAt ?? this.fetchedAt,
+    areaCount: areaCount ?? this.areaCount,
+    pointCount: pointCount ?? this.pointCount,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  BorderSet copyWithCompanion(BorderSetsCompanion data) {
+    return BorderSet(
+      id: data.id.present ? data.id.value : this.id,
+      layerId: data.layerId.present ? data.layerId.value : this.layerId,
+      south: data.south.present ? data.south.value : this.south,
+      west: data.west.present ? data.west.value : this.west,
+      north: data.north.present ? data.north.value : this.north,
+      east: data.east.present ? data.east.value : this.east,
+      adminLevel: data.adminLevel.present
+          ? data.adminLevel.value
+          : this.adminLevel,
+      label: data.label.present ? data.label.value : this.label,
+      fetchedAt: data.fetchedAt.present ? data.fetchedAt.value : this.fetchedAt,
+      areaCount: data.areaCount.present ? data.areaCount.value : this.areaCount,
+      pointCount: data.pointCount.present
+          ? data.pointCount.value
+          : this.pointCount,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BorderSet(')
+          ..write('id: $id, ')
+          ..write('layerId: $layerId, ')
+          ..write('south: $south, ')
+          ..write('west: $west, ')
+          ..write('north: $north, ')
+          ..write('east: $east, ')
+          ..write('adminLevel: $adminLevel, ')
+          ..write('label: $label, ')
+          ..write('fetchedAt: $fetchedAt, ')
+          ..write('areaCount: $areaCount, ')
+          ..write('pointCount: $pointCount, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    layerId,
+    south,
+    west,
+    north,
+    east,
+    adminLevel,
+    label,
+    fetchedAt,
+    areaCount,
+    pointCount,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is BorderSet &&
+          other.id == this.id &&
+          other.layerId == this.layerId &&
+          other.south == this.south &&
+          other.west == this.west &&
+          other.north == this.north &&
+          other.east == this.east &&
+          other.adminLevel == this.adminLevel &&
+          other.label == this.label &&
+          other.fetchedAt == this.fetchedAt &&
+          other.areaCount == this.areaCount &&
+          other.pointCount == this.pointCount &&
+          other.createdAt == this.createdAt);
+}
+
+class BorderSetsCompanion extends UpdateCompanion<BorderSet> {
+  final Value<String> id;
+  final Value<String> layerId;
+  final Value<double> south;
+  final Value<double> west;
+  final Value<double> north;
+  final Value<double> east;
+  final Value<String> adminLevel;
+  final Value<String?> label;
+  final Value<DateTime> fetchedAt;
+  final Value<int> areaCount;
+  final Value<int> pointCount;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const BorderSetsCompanion({
+    this.id = const Value.absent(),
+    this.layerId = const Value.absent(),
+    this.south = const Value.absent(),
+    this.west = const Value.absent(),
+    this.north = const Value.absent(),
+    this.east = const Value.absent(),
+    this.adminLevel = const Value.absent(),
+    this.label = const Value.absent(),
+    this.fetchedAt = const Value.absent(),
+    this.areaCount = const Value.absent(),
+    this.pointCount = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  BorderSetsCompanion.insert({
+    required String id,
+    required String layerId,
+    required double south,
+    required double west,
+    required double north,
+    required double east,
+    required String adminLevel,
+    this.label = const Value.absent(),
+    required DateTime fetchedAt,
+    this.areaCount = const Value.absent(),
+    this.pointCount = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       layerId = Value(layerId),
+       south = Value(south),
+       west = Value(west),
+       north = Value(north),
+       east = Value(east),
+       adminLevel = Value(adminLevel),
+       fetchedAt = Value(fetchedAt);
+  static Insertable<BorderSet> custom({
+    Expression<String>? id,
+    Expression<String>? layerId,
+    Expression<double>? south,
+    Expression<double>? west,
+    Expression<double>? north,
+    Expression<double>? east,
+    Expression<String>? adminLevel,
+    Expression<String>? label,
+    Expression<DateTime>? fetchedAt,
+    Expression<int>? areaCount,
+    Expression<int>? pointCount,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (layerId != null) 'layer_id': layerId,
+      if (south != null) 'south': south,
+      if (west != null) 'west': west,
+      if (north != null) 'north': north,
+      if (east != null) 'east': east,
+      if (adminLevel != null) 'admin_level': adminLevel,
+      if (label != null) 'label': label,
+      if (fetchedAt != null) 'fetched_at': fetchedAt,
+      if (areaCount != null) 'area_count': areaCount,
+      if (pointCount != null) 'point_count': pointCount,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  BorderSetsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? layerId,
+    Value<double>? south,
+    Value<double>? west,
+    Value<double>? north,
+    Value<double>? east,
+    Value<String>? adminLevel,
+    Value<String?>? label,
+    Value<DateTime>? fetchedAt,
+    Value<int>? areaCount,
+    Value<int>? pointCount,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return BorderSetsCompanion(
+      id: id ?? this.id,
+      layerId: layerId ?? this.layerId,
+      south: south ?? this.south,
+      west: west ?? this.west,
+      north: north ?? this.north,
+      east: east ?? this.east,
+      adminLevel: adminLevel ?? this.adminLevel,
+      label: label ?? this.label,
+      fetchedAt: fetchedAt ?? this.fetchedAt,
+      areaCount: areaCount ?? this.areaCount,
+      pointCount: pointCount ?? this.pointCount,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (layerId.present) {
+      map['layer_id'] = Variable<String>(layerId.value);
+    }
+    if (south.present) {
+      map['south'] = Variable<double>(south.value);
+    }
+    if (west.present) {
+      map['west'] = Variable<double>(west.value);
+    }
+    if (north.present) {
+      map['north'] = Variable<double>(north.value);
+    }
+    if (east.present) {
+      map['east'] = Variable<double>(east.value);
+    }
+    if (adminLevel.present) {
+      map['admin_level'] = Variable<String>(adminLevel.value);
+    }
+    if (label.present) {
+      map['label'] = Variable<String>(label.value);
+    }
+    if (fetchedAt.present) {
+      map['fetched_at'] = Variable<DateTime>(fetchedAt.value);
+    }
+    if (areaCount.present) {
+      map['area_count'] = Variable<int>(areaCount.value);
+    }
+    if (pointCount.present) {
+      map['point_count'] = Variable<int>(pointCount.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BorderSetsCompanion(')
+          ..write('id: $id, ')
+          ..write('layerId: $layerId, ')
+          ..write('south: $south, ')
+          ..write('west: $west, ')
+          ..write('north: $north, ')
+          ..write('east: $east, ')
+          ..write('adminLevel: $adminLevel, ')
+          ..write('label: $label, ')
+          ..write('fetchedAt: $fetchedAt, ')
+          ..write('areaCount: $areaCount, ')
+          ..write('pointCount: $pointCount, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $BorderAreasTable extends BorderAreas
+    with TableInfo<$BorderAreasTable, BorderArea> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $BorderAreasTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _setIdMeta = const VerificationMeta('setId');
+  @override
+  late final GeneratedColumn<String> setId = GeneratedColumn<String>(
+    'set_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES border_sets (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _osmIdMeta = const VerificationMeta('osmId');
+  @override
+  late final GeneratedColumn<int> osmId = GeneratedColumn<int>(
+    'osm_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _colorIndexMeta = const VerificationMeta(
+    'colorIndex',
+  );
+  @override
+  late final GeneratedColumn<int> colorIndex = GeneratedColumn<int>(
+    'color_index',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _southMeta = const VerificationMeta('south');
+  @override
+  late final GeneratedColumn<double> south = GeneratedColumn<double>(
+    'south',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _westMeta = const VerificationMeta('west');
+  @override
+  late final GeneratedColumn<double> west = GeneratedColumn<double>(
+    'west',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _northMeta = const VerificationMeta('north');
+  @override
+  late final GeneratedColumn<double> north = GeneratedColumn<double>(
+    'north',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _eastMeta = const VerificationMeta('east');
+  @override
+  late final GeneratedColumn<double> east = GeneratedColumn<double>(
+    'east',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _labelLatMeta = const VerificationMeta(
+    'labelLat',
+  );
+  @override
+  late final GeneratedColumn<double> labelLat = GeneratedColumn<double>(
+    'label_lat',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _labelLngMeta = const VerificationMeta(
+    'labelLng',
+  );
+  @override
+  late final GeneratedColumn<double> labelLng = GeneratedColumn<double>(
+    'label_lng',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _pointCountMeta = const VerificationMeta(
+    'pointCount',
+  );
+  @override
+  late final GeneratedColumn<int> pointCount = GeneratedColumn<int>(
+    'point_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _ringsMeta = const VerificationMeta('rings');
+  @override
+  late final GeneratedColumn<String> rings = GeneratedColumn<String>(
+    'rings',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _wayIdsMeta = const VerificationMeta('wayIds');
+  @override
+  late final GeneratedColumn<String> wayIds = GeneratedColumn<String>(
+    'way_ids',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    setId,
+    osmId,
+    name,
+    colorIndex,
+    south,
+    west,
+    north,
+    east,
+    labelLat,
+    labelLng,
+    pointCount,
+    rings,
+    wayIds,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'border_areas';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<BorderArea> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('set_id')) {
+      context.handle(
+        _setIdMeta,
+        setId.isAcceptableOrUnknown(data['set_id']!, _setIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_setIdMeta);
+    }
+    if (data.containsKey('osm_id')) {
+      context.handle(
+        _osmIdMeta,
+        osmId.isAcceptableOrUnknown(data['osm_id']!, _osmIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_osmIdMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    }
+    if (data.containsKey('color_index')) {
+      context.handle(
+        _colorIndexMeta,
+        colorIndex.isAcceptableOrUnknown(data['color_index']!, _colorIndexMeta),
+      );
+    }
+    if (data.containsKey('south')) {
+      context.handle(
+        _southMeta,
+        south.isAcceptableOrUnknown(data['south']!, _southMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_southMeta);
+    }
+    if (data.containsKey('west')) {
+      context.handle(
+        _westMeta,
+        west.isAcceptableOrUnknown(data['west']!, _westMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_westMeta);
+    }
+    if (data.containsKey('north')) {
+      context.handle(
+        _northMeta,
+        north.isAcceptableOrUnknown(data['north']!, _northMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_northMeta);
+    }
+    if (data.containsKey('east')) {
+      context.handle(
+        _eastMeta,
+        east.isAcceptableOrUnknown(data['east']!, _eastMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_eastMeta);
+    }
+    if (data.containsKey('label_lat')) {
+      context.handle(
+        _labelLatMeta,
+        labelLat.isAcceptableOrUnknown(data['label_lat']!, _labelLatMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_labelLatMeta);
+    }
+    if (data.containsKey('label_lng')) {
+      context.handle(
+        _labelLngMeta,
+        labelLng.isAcceptableOrUnknown(data['label_lng']!, _labelLngMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_labelLngMeta);
+    }
+    if (data.containsKey('point_count')) {
+      context.handle(
+        _pointCountMeta,
+        pointCount.isAcceptableOrUnknown(data['point_count']!, _pointCountMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_pointCountMeta);
+    }
+    if (data.containsKey('rings')) {
+      context.handle(
+        _ringsMeta,
+        rings.isAcceptableOrUnknown(data['rings']!, _ringsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_ringsMeta);
+    }
+    if (data.containsKey('way_ids')) {
+      context.handle(
+        _wayIdsMeta,
+        wayIds.isAcceptableOrUnknown(data['way_ids']!, _wayIdsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_wayIdsMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  BorderArea map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return BorderArea(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      setId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}set_id'],
+      )!,
+      osmId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}osm_id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      ),
+      colorIndex: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_index'],
+      )!,
+      south: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}south'],
+      )!,
+      west: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}west'],
+      )!,
+      north: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}north'],
+      )!,
+      east: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}east'],
+      )!,
+      labelLat: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}label_lat'],
+      )!,
+      labelLng: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}label_lng'],
+      )!,
+      pointCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}point_count'],
+      )!,
+      rings: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}rings'],
+      )!,
+      wayIds: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}way_ids'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $BorderAreasTable createAlias(String alias) {
+    return $BorderAreasTable(attachedDatabase, alias);
+  }
+}
+
+class BorderArea extends DataClass implements Insertable<BorderArea> {
+  final String id;
+  final String setId;
+
+  /// The OSM relation id, so the area can be looked up on osm.org — and the key
+  /// adjacency is computed against.
+  final int osmId;
+  final String? name;
+
+  /// Index into the painter's palette, assigned so no two areas sharing a
+  /// border get the same one. Stored rather than derived, so the palette can be
+  /// retuned without re-importing.
+  final int colorIndex;
+
+  /// The area's own bounding box, for viewport culling without decoding
+  /// [rings].
+  final double south;
+  final double west;
+  final double north;
+  final double east;
+
+  /// Precomputed anchor for the name plate.
+  final double labelLat;
+  final double labelLng;
+  final int pointCount;
+
+  /// `encodeRings` output: `[[[lat,lng], …], …]`, outer ring first, holes
+  /// after. **Holes carry no role flag** — the painter fills with
+  /// [PathFillType.evenOdd], exactly as the height layer does.
+  final String rings;
+
+  /// JSON array of the relation's member way ids, kept only for adjacency:
+  /// two areas share a border iff they share a way id, which is exact and free.
+  final String wayIds;
+  final DateTime createdAt;
+  const BorderArea({
+    required this.id,
+    required this.setId,
+    required this.osmId,
+    this.name,
+    required this.colorIndex,
+    required this.south,
+    required this.west,
+    required this.north,
+    required this.east,
+    required this.labelLat,
+    required this.labelLng,
+    required this.pointCount,
+    required this.rings,
+    required this.wayIds,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['set_id'] = Variable<String>(setId);
+    map['osm_id'] = Variable<int>(osmId);
+    if (!nullToAbsent || name != null) {
+      map['name'] = Variable<String>(name);
+    }
+    map['color_index'] = Variable<int>(colorIndex);
+    map['south'] = Variable<double>(south);
+    map['west'] = Variable<double>(west);
+    map['north'] = Variable<double>(north);
+    map['east'] = Variable<double>(east);
+    map['label_lat'] = Variable<double>(labelLat);
+    map['label_lng'] = Variable<double>(labelLng);
+    map['point_count'] = Variable<int>(pointCount);
+    map['rings'] = Variable<String>(rings);
+    map['way_ids'] = Variable<String>(wayIds);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  BorderAreasCompanion toCompanion(bool nullToAbsent) {
+    return BorderAreasCompanion(
+      id: Value(id),
+      setId: Value(setId),
+      osmId: Value(osmId),
+      name: name == null && nullToAbsent ? const Value.absent() : Value(name),
+      colorIndex: Value(colorIndex),
+      south: Value(south),
+      west: Value(west),
+      north: Value(north),
+      east: Value(east),
+      labelLat: Value(labelLat),
+      labelLng: Value(labelLng),
+      pointCount: Value(pointCount),
+      rings: Value(rings),
+      wayIds: Value(wayIds),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory BorderArea.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return BorderArea(
+      id: serializer.fromJson<String>(json['id']),
+      setId: serializer.fromJson<String>(json['setId']),
+      osmId: serializer.fromJson<int>(json['osmId']),
+      name: serializer.fromJson<String?>(json['name']),
+      colorIndex: serializer.fromJson<int>(json['colorIndex']),
+      south: serializer.fromJson<double>(json['south']),
+      west: serializer.fromJson<double>(json['west']),
+      north: serializer.fromJson<double>(json['north']),
+      east: serializer.fromJson<double>(json['east']),
+      labelLat: serializer.fromJson<double>(json['labelLat']),
+      labelLng: serializer.fromJson<double>(json['labelLng']),
+      pointCount: serializer.fromJson<int>(json['pointCount']),
+      rings: serializer.fromJson<String>(json['rings']),
+      wayIds: serializer.fromJson<String>(json['wayIds']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'setId': serializer.toJson<String>(setId),
+      'osmId': serializer.toJson<int>(osmId),
+      'name': serializer.toJson<String?>(name),
+      'colorIndex': serializer.toJson<int>(colorIndex),
+      'south': serializer.toJson<double>(south),
+      'west': serializer.toJson<double>(west),
+      'north': serializer.toJson<double>(north),
+      'east': serializer.toJson<double>(east),
+      'labelLat': serializer.toJson<double>(labelLat),
+      'labelLng': serializer.toJson<double>(labelLng),
+      'pointCount': serializer.toJson<int>(pointCount),
+      'rings': serializer.toJson<String>(rings),
+      'wayIds': serializer.toJson<String>(wayIds),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  BorderArea copyWith({
+    String? id,
+    String? setId,
+    int? osmId,
+    Value<String?> name = const Value.absent(),
+    int? colorIndex,
+    double? south,
+    double? west,
+    double? north,
+    double? east,
+    double? labelLat,
+    double? labelLng,
+    int? pointCount,
+    String? rings,
+    String? wayIds,
+    DateTime? createdAt,
+  }) => BorderArea(
+    id: id ?? this.id,
+    setId: setId ?? this.setId,
+    osmId: osmId ?? this.osmId,
+    name: name.present ? name.value : this.name,
+    colorIndex: colorIndex ?? this.colorIndex,
+    south: south ?? this.south,
+    west: west ?? this.west,
+    north: north ?? this.north,
+    east: east ?? this.east,
+    labelLat: labelLat ?? this.labelLat,
+    labelLng: labelLng ?? this.labelLng,
+    pointCount: pointCount ?? this.pointCount,
+    rings: rings ?? this.rings,
+    wayIds: wayIds ?? this.wayIds,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  BorderArea copyWithCompanion(BorderAreasCompanion data) {
+    return BorderArea(
+      id: data.id.present ? data.id.value : this.id,
+      setId: data.setId.present ? data.setId.value : this.setId,
+      osmId: data.osmId.present ? data.osmId.value : this.osmId,
+      name: data.name.present ? data.name.value : this.name,
+      colorIndex: data.colorIndex.present
+          ? data.colorIndex.value
+          : this.colorIndex,
+      south: data.south.present ? data.south.value : this.south,
+      west: data.west.present ? data.west.value : this.west,
+      north: data.north.present ? data.north.value : this.north,
+      east: data.east.present ? data.east.value : this.east,
+      labelLat: data.labelLat.present ? data.labelLat.value : this.labelLat,
+      labelLng: data.labelLng.present ? data.labelLng.value : this.labelLng,
+      pointCount: data.pointCount.present
+          ? data.pointCount.value
+          : this.pointCount,
+      rings: data.rings.present ? data.rings.value : this.rings,
+      wayIds: data.wayIds.present ? data.wayIds.value : this.wayIds,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BorderArea(')
+          ..write('id: $id, ')
+          ..write('setId: $setId, ')
+          ..write('osmId: $osmId, ')
+          ..write('name: $name, ')
+          ..write('colorIndex: $colorIndex, ')
+          ..write('south: $south, ')
+          ..write('west: $west, ')
+          ..write('north: $north, ')
+          ..write('east: $east, ')
+          ..write('labelLat: $labelLat, ')
+          ..write('labelLng: $labelLng, ')
+          ..write('pointCount: $pointCount, ')
+          ..write('rings: $rings, ')
+          ..write('wayIds: $wayIds, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    setId,
+    osmId,
+    name,
+    colorIndex,
+    south,
+    west,
+    north,
+    east,
+    labelLat,
+    labelLng,
+    pointCount,
+    rings,
+    wayIds,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is BorderArea &&
+          other.id == this.id &&
+          other.setId == this.setId &&
+          other.osmId == this.osmId &&
+          other.name == this.name &&
+          other.colorIndex == this.colorIndex &&
+          other.south == this.south &&
+          other.west == this.west &&
+          other.north == this.north &&
+          other.east == this.east &&
+          other.labelLat == this.labelLat &&
+          other.labelLng == this.labelLng &&
+          other.pointCount == this.pointCount &&
+          other.rings == this.rings &&
+          other.wayIds == this.wayIds &&
+          other.createdAt == this.createdAt);
+}
+
+class BorderAreasCompanion extends UpdateCompanion<BorderArea> {
+  final Value<String> id;
+  final Value<String> setId;
+  final Value<int> osmId;
+  final Value<String?> name;
+  final Value<int> colorIndex;
+  final Value<double> south;
+  final Value<double> west;
+  final Value<double> north;
+  final Value<double> east;
+  final Value<double> labelLat;
+  final Value<double> labelLng;
+  final Value<int> pointCount;
+  final Value<String> rings;
+  final Value<String> wayIds;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const BorderAreasCompanion({
+    this.id = const Value.absent(),
+    this.setId = const Value.absent(),
+    this.osmId = const Value.absent(),
+    this.name = const Value.absent(),
+    this.colorIndex = const Value.absent(),
+    this.south = const Value.absent(),
+    this.west = const Value.absent(),
+    this.north = const Value.absent(),
+    this.east = const Value.absent(),
+    this.labelLat = const Value.absent(),
+    this.labelLng = const Value.absent(),
+    this.pointCount = const Value.absent(),
+    this.rings = const Value.absent(),
+    this.wayIds = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  BorderAreasCompanion.insert({
+    required String id,
+    required String setId,
+    required int osmId,
+    this.name = const Value.absent(),
+    this.colorIndex = const Value.absent(),
+    required double south,
+    required double west,
+    required double north,
+    required double east,
+    required double labelLat,
+    required double labelLng,
+    required int pointCount,
+    required String rings,
+    required String wayIds,
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       setId = Value(setId),
+       osmId = Value(osmId),
+       south = Value(south),
+       west = Value(west),
+       north = Value(north),
+       east = Value(east),
+       labelLat = Value(labelLat),
+       labelLng = Value(labelLng),
+       pointCount = Value(pointCount),
+       rings = Value(rings),
+       wayIds = Value(wayIds);
+  static Insertable<BorderArea> custom({
+    Expression<String>? id,
+    Expression<String>? setId,
+    Expression<int>? osmId,
+    Expression<String>? name,
+    Expression<int>? colorIndex,
+    Expression<double>? south,
+    Expression<double>? west,
+    Expression<double>? north,
+    Expression<double>? east,
+    Expression<double>? labelLat,
+    Expression<double>? labelLng,
+    Expression<int>? pointCount,
+    Expression<String>? rings,
+    Expression<String>? wayIds,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (setId != null) 'set_id': setId,
+      if (osmId != null) 'osm_id': osmId,
+      if (name != null) 'name': name,
+      if (colorIndex != null) 'color_index': colorIndex,
+      if (south != null) 'south': south,
+      if (west != null) 'west': west,
+      if (north != null) 'north': north,
+      if (east != null) 'east': east,
+      if (labelLat != null) 'label_lat': labelLat,
+      if (labelLng != null) 'label_lng': labelLng,
+      if (pointCount != null) 'point_count': pointCount,
+      if (rings != null) 'rings': rings,
+      if (wayIds != null) 'way_ids': wayIds,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  BorderAreasCompanion copyWith({
+    Value<String>? id,
+    Value<String>? setId,
+    Value<int>? osmId,
+    Value<String?>? name,
+    Value<int>? colorIndex,
+    Value<double>? south,
+    Value<double>? west,
+    Value<double>? north,
+    Value<double>? east,
+    Value<double>? labelLat,
+    Value<double>? labelLng,
+    Value<int>? pointCount,
+    Value<String>? rings,
+    Value<String>? wayIds,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return BorderAreasCompanion(
+      id: id ?? this.id,
+      setId: setId ?? this.setId,
+      osmId: osmId ?? this.osmId,
+      name: name ?? this.name,
+      colorIndex: colorIndex ?? this.colorIndex,
+      south: south ?? this.south,
+      west: west ?? this.west,
+      north: north ?? this.north,
+      east: east ?? this.east,
+      labelLat: labelLat ?? this.labelLat,
+      labelLng: labelLng ?? this.labelLng,
+      pointCount: pointCount ?? this.pointCount,
+      rings: rings ?? this.rings,
+      wayIds: wayIds ?? this.wayIds,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (setId.present) {
+      map['set_id'] = Variable<String>(setId.value);
+    }
+    if (osmId.present) {
+      map['osm_id'] = Variable<int>(osmId.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (colorIndex.present) {
+      map['color_index'] = Variable<int>(colorIndex.value);
+    }
+    if (south.present) {
+      map['south'] = Variable<double>(south.value);
+    }
+    if (west.present) {
+      map['west'] = Variable<double>(west.value);
+    }
+    if (north.present) {
+      map['north'] = Variable<double>(north.value);
+    }
+    if (east.present) {
+      map['east'] = Variable<double>(east.value);
+    }
+    if (labelLat.present) {
+      map['label_lat'] = Variable<double>(labelLat.value);
+    }
+    if (labelLng.present) {
+      map['label_lng'] = Variable<double>(labelLng.value);
+    }
+    if (pointCount.present) {
+      map['point_count'] = Variable<int>(pointCount.value);
+    }
+    if (rings.present) {
+      map['rings'] = Variable<String>(rings.value);
+    }
+    if (wayIds.present) {
+      map['way_ids'] = Variable<String>(wayIds.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BorderAreasCompanion(')
+          ..write('id: $id, ')
+          ..write('setId: $setId, ')
+          ..write('osmId: $osmId, ')
+          ..write('name: $name, ')
+          ..write('colorIndex: $colorIndex, ')
+          ..write('south: $south, ')
+          ..write('west: $west, ')
+          ..write('north: $north, ')
+          ..write('east: $east, ')
+          ..write('labelLat: $labelLat, ')
+          ..write('labelLng: $labelLng, ')
+          ..write('pointCount: $pointCount, ')
+          ..write('rings: $rings, ')
+          ..write('wayIds: $wayIds, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $TileCacheTable extends TileCache
     with TableInfo<$TileCacheTable, TileCacheData> {
   @override
@@ -9668,6 +11402,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $PoiPointsTable poiPoints = $PoiPointsTable(this);
   late final $TransitSetsTable transitSets = $TransitSetsTable(this);
   late final $TransitStopsTable transitStops = $TransitStopsTable(this);
+  late final $BorderSetsTable borderSets = $BorderSetsTable(this);
+  late final $BorderAreasTable borderAreas = $BorderAreasTable(this);
   late final $TileCacheTable tileCache = $TileCacheTable(this);
   late final $OverpassCacheTable overpassCache = $OverpassCacheTable(this);
   @override
@@ -9692,6 +11428,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     poiPoints,
     transitSets,
     transitStops,
+    borderSets,
+    borderAreas,
     tileCache,
     overpassCache,
   ];
@@ -9802,6 +11540,20 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       ),
       result: [TableUpdate('transit_stops', kind: UpdateKind.delete)],
     ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'layers',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('border_sets', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'border_sets',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('border_areas', kind: UpdateKind.delete)],
+    ),
   ]);
 }
 
@@ -9815,6 +11567,9 @@ typedef $$LayersTableCreateCompanionBuilder =
       Value<String> type,
       Value<bool> isInverted,
       Value<double> opacity,
+      Value<String?> borderLevel,
+      Value<bool> borderFillAreas,
+      Value<bool> borderShowNames,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -9828,6 +11583,9 @@ typedef $$LayersTableUpdateCompanionBuilder =
       Value<String> type,
       Value<bool> isInverted,
       Value<double> opacity,
+      Value<String?> borderLevel,
+      Value<bool> borderFillAreas,
+      Value<bool> borderShowNames,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -9982,6 +11740,24 @@ final class $$LayersTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
+
+  static MultiTypedResultKey<$BorderSetsTable, List<BorderSet>>
+  _borderSetsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.borderSets,
+    aliasName: $_aliasNameGenerator(db.layers.id, db.borderSets.layerId),
+  );
+
+  $$BorderSetsTableProcessedTableManager get borderSetsRefs {
+    final manager = $$BorderSetsTableTableManager(
+      $_db,
+      $_db.borderSets,
+    ).filter((f) => f.layerId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_borderSetsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$LayersTableFilterComposer
@@ -10030,6 +11806,21 @@ class $$LayersTableFilterComposer
 
   ColumnFilters<double> get opacity => $composableBuilder(
     column: $table.opacity,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get borderLevel => $composableBuilder(
+    column: $table.borderLevel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get borderFillAreas => $composableBuilder(
+    column: $table.borderFillAreas,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get borderShowNames => $composableBuilder(
+    column: $table.borderShowNames,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -10237,6 +12028,31 @@ class $$LayersTableFilterComposer
     );
     return f(composer);
   }
+
+  Expression<bool> borderSetsRefs(
+    Expression<bool> Function($$BorderSetsTableFilterComposer f) f,
+  ) {
+    final $$BorderSetsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.borderSets,
+      getReferencedColumn: (t) => t.layerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BorderSetsTableFilterComposer(
+            $db: $db,
+            $table: $db.borderSets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LayersTableOrderingComposer
@@ -10288,6 +12104,21 @@ class $$LayersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get borderLevel => $composableBuilder(
+    column: $table.borderLevel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get borderFillAreas => $composableBuilder(
+    column: $table.borderFillAreas,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get borderShowNames => $composableBuilder(
+    column: $table.borderShowNames,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -10328,6 +12159,21 @@ class $$LayersTableAnnotationComposer
 
   GeneratedColumn<double> get opacity =>
       $composableBuilder(column: $table.opacity, builder: (column) => column);
+
+  GeneratedColumn<String> get borderLevel => $composableBuilder(
+    column: $table.borderLevel,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get borderFillAreas => $composableBuilder(
+    column: $table.borderFillAreas,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get borderShowNames => $composableBuilder(
+    column: $table.borderShowNames,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -10531,6 +12377,31 @@ class $$LayersTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> borderSetsRefs<T extends Object>(
+    Expression<T> Function($$BorderSetsTableAnnotationComposer a) f,
+  ) {
+    final $$BorderSetsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.borderSets,
+      getReferencedColumn: (t) => t.layerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BorderSetsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.borderSets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LayersTableTableManager
@@ -10555,6 +12426,7 @@ class $$LayersTableTableManager
             bool heightRegionsRefs,
             bool poiSetsRefs,
             bool transitSetsRefs,
+            bool borderSetsRefs,
           })
         > {
   $$LayersTableTableManager(_$AppDatabase db, $LayersTable table)
@@ -10578,6 +12450,9 @@ class $$LayersTableTableManager
                 Value<String> type = const Value.absent(),
                 Value<bool> isInverted = const Value.absent(),
                 Value<double> opacity = const Value.absent(),
+                Value<String?> borderLevel = const Value.absent(),
+                Value<bool> borderFillAreas = const Value.absent(),
+                Value<bool> borderShowNames = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LayersCompanion(
@@ -10589,6 +12464,9 @@ class $$LayersTableTableManager
                 type: type,
                 isInverted: isInverted,
                 opacity: opacity,
+                borderLevel: borderLevel,
+                borderFillAreas: borderFillAreas,
+                borderShowNames: borderShowNames,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -10602,6 +12480,9 @@ class $$LayersTableTableManager
                 Value<String> type = const Value.absent(),
                 Value<bool> isInverted = const Value.absent(),
                 Value<double> opacity = const Value.absent(),
+                Value<String?> borderLevel = const Value.absent(),
+                Value<bool> borderFillAreas = const Value.absent(),
+                Value<bool> borderShowNames = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LayersCompanion.insert(
@@ -10613,6 +12494,9 @@ class $$LayersTableTableManager
                 type: type,
                 isInverted: isInverted,
                 opacity: opacity,
+                borderLevel: borderLevel,
+                borderFillAreas: borderFillAreas,
+                borderShowNames: borderShowNames,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -10632,6 +12516,7 @@ class $$LayersTableTableManager
                 heightRegionsRefs = false,
                 poiSetsRefs = false,
                 transitSetsRefs = false,
+                borderSetsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -10644,6 +12529,7 @@ class $$LayersTableTableManager
                     if (heightRegionsRefs) db.heightRegions,
                     if (poiSetsRefs) db.poiSets,
                     if (transitSetsRefs) db.transitSets,
+                    if (borderSetsRefs) db.borderSets,
                   ],
                   addJoins: null,
                   getPrefetchedDataCallback: (items) async {
@@ -10800,6 +12686,27 @@ class $$LayersTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (borderSetsRefs)
+                        await $_getPrefetchedData<
+                          Layer,
+                          $LayersTable,
+                          BorderSet
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LayersTableReferences
+                              ._borderSetsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LayersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).borderSetsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.layerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -10829,6 +12736,7 @@ typedef $$LayersTableProcessedTableManager =
         bool heightRegionsRefs,
         bool poiSetsRefs,
         bool transitSetsRefs,
+        bool borderSetsRefs,
       })
     >;
 typedef $$CirclesTableCreateCompanionBuilder =
@@ -17420,6 +19328,1062 @@ typedef $$TransitStopsTableProcessedTableManager =
       TransitStop,
       PrefetchHooks Function({bool setId})
     >;
+typedef $$BorderSetsTableCreateCompanionBuilder =
+    BorderSetsCompanion Function({
+      required String id,
+      required String layerId,
+      required double south,
+      required double west,
+      required double north,
+      required double east,
+      required String adminLevel,
+      Value<String?> label,
+      required DateTime fetchedAt,
+      Value<int> areaCount,
+      Value<int> pointCount,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$BorderSetsTableUpdateCompanionBuilder =
+    BorderSetsCompanion Function({
+      Value<String> id,
+      Value<String> layerId,
+      Value<double> south,
+      Value<double> west,
+      Value<double> north,
+      Value<double> east,
+      Value<String> adminLevel,
+      Value<String?> label,
+      Value<DateTime> fetchedAt,
+      Value<int> areaCount,
+      Value<int> pointCount,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$BorderSetsTableReferences
+    extends BaseReferences<_$AppDatabase, $BorderSetsTable, BorderSet> {
+  $$BorderSetsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $LayersTable _layerIdTable(_$AppDatabase db) => db.layers.createAlias(
+    $_aliasNameGenerator(db.borderSets.layerId, db.layers.id),
+  );
+
+  $$LayersTableProcessedTableManager get layerId {
+    final $_column = $_itemColumn<String>('layer_id')!;
+
+    final manager = $$LayersTableTableManager(
+      $_db,
+      $_db.layers,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_layerIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$BorderAreasTable, List<BorderArea>>
+  _borderAreasRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.borderAreas,
+    aliasName: $_aliasNameGenerator(db.borderSets.id, db.borderAreas.setId),
+  );
+
+  $$BorderAreasTableProcessedTableManager get borderAreasRefs {
+    final manager = $$BorderAreasTableTableManager(
+      $_db,
+      $_db.borderAreas,
+    ).filter((f) => f.setId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_borderAreasRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$BorderSetsTableFilterComposer
+    extends Composer<_$AppDatabase, $BorderSetsTable> {
+  $$BorderSetsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get south => $composableBuilder(
+    column: $table.south,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get west => $composableBuilder(
+    column: $table.west,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get north => $composableBuilder(
+    column: $table.north,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get east => $composableBuilder(
+    column: $table.east,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get adminLevel => $composableBuilder(
+    column: $table.adminLevel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get fetchedAt => $composableBuilder(
+    column: $table.fetchedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get areaCount => $composableBuilder(
+    column: $table.areaCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get pointCount => $composableBuilder(
+    column: $table.pointCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$LayersTableFilterComposer get layerId {
+    final $$LayersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.layerId,
+      referencedTable: $db.layers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LayersTableFilterComposer(
+            $db: $db,
+            $table: $db.layers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> borderAreasRefs(
+    Expression<bool> Function($$BorderAreasTableFilterComposer f) f,
+  ) {
+    final $$BorderAreasTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.borderAreas,
+      getReferencedColumn: (t) => t.setId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BorderAreasTableFilterComposer(
+            $db: $db,
+            $table: $db.borderAreas,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$BorderSetsTableOrderingComposer
+    extends Composer<_$AppDatabase, $BorderSetsTable> {
+  $$BorderSetsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get south => $composableBuilder(
+    column: $table.south,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get west => $composableBuilder(
+    column: $table.west,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get north => $composableBuilder(
+    column: $table.north,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get east => $composableBuilder(
+    column: $table.east,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get adminLevel => $composableBuilder(
+    column: $table.adminLevel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get fetchedAt => $composableBuilder(
+    column: $table.fetchedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get areaCount => $composableBuilder(
+    column: $table.areaCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get pointCount => $composableBuilder(
+    column: $table.pointCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$LayersTableOrderingComposer get layerId {
+    final $$LayersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.layerId,
+      referencedTable: $db.layers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LayersTableOrderingComposer(
+            $db: $db,
+            $table: $db.layers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$BorderSetsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $BorderSetsTable> {
+  $$BorderSetsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<double> get south =>
+      $composableBuilder(column: $table.south, builder: (column) => column);
+
+  GeneratedColumn<double> get west =>
+      $composableBuilder(column: $table.west, builder: (column) => column);
+
+  GeneratedColumn<double> get north =>
+      $composableBuilder(column: $table.north, builder: (column) => column);
+
+  GeneratedColumn<double> get east =>
+      $composableBuilder(column: $table.east, builder: (column) => column);
+
+  GeneratedColumn<String> get adminLevel => $composableBuilder(
+    column: $table.adminLevel,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get label =>
+      $composableBuilder(column: $table.label, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get fetchedAt =>
+      $composableBuilder(column: $table.fetchedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get areaCount =>
+      $composableBuilder(column: $table.areaCount, builder: (column) => column);
+
+  GeneratedColumn<int> get pointCount => $composableBuilder(
+    column: $table.pointCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$LayersTableAnnotationComposer get layerId {
+    final $$LayersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.layerId,
+      referencedTable: $db.layers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LayersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.layers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> borderAreasRefs<T extends Object>(
+    Expression<T> Function($$BorderAreasTableAnnotationComposer a) f,
+  ) {
+    final $$BorderAreasTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.borderAreas,
+      getReferencedColumn: (t) => t.setId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BorderAreasTableAnnotationComposer(
+            $db: $db,
+            $table: $db.borderAreas,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$BorderSetsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $BorderSetsTable,
+          BorderSet,
+          $$BorderSetsTableFilterComposer,
+          $$BorderSetsTableOrderingComposer,
+          $$BorderSetsTableAnnotationComposer,
+          $$BorderSetsTableCreateCompanionBuilder,
+          $$BorderSetsTableUpdateCompanionBuilder,
+          (BorderSet, $$BorderSetsTableReferences),
+          BorderSet,
+          PrefetchHooks Function({bool layerId, bool borderAreasRefs})
+        > {
+  $$BorderSetsTableTableManager(_$AppDatabase db, $BorderSetsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$BorderSetsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$BorderSetsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$BorderSetsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> layerId = const Value.absent(),
+                Value<double> south = const Value.absent(),
+                Value<double> west = const Value.absent(),
+                Value<double> north = const Value.absent(),
+                Value<double> east = const Value.absent(),
+                Value<String> adminLevel = const Value.absent(),
+                Value<String?> label = const Value.absent(),
+                Value<DateTime> fetchedAt = const Value.absent(),
+                Value<int> areaCount = const Value.absent(),
+                Value<int> pointCount = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => BorderSetsCompanion(
+                id: id,
+                layerId: layerId,
+                south: south,
+                west: west,
+                north: north,
+                east: east,
+                adminLevel: adminLevel,
+                label: label,
+                fetchedAt: fetchedAt,
+                areaCount: areaCount,
+                pointCount: pointCount,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String layerId,
+                required double south,
+                required double west,
+                required double north,
+                required double east,
+                required String adminLevel,
+                Value<String?> label = const Value.absent(),
+                required DateTime fetchedAt,
+                Value<int> areaCount = const Value.absent(),
+                Value<int> pointCount = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => BorderSetsCompanion.insert(
+                id: id,
+                layerId: layerId,
+                south: south,
+                west: west,
+                north: north,
+                east: east,
+                adminLevel: adminLevel,
+                label: label,
+                fetchedAt: fetchedAt,
+                areaCount: areaCount,
+                pointCount: pointCount,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$BorderSetsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({layerId = false, borderAreasRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [if (borderAreasRefs) db.borderAreas],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (layerId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.layerId,
+                                referencedTable: $$BorderSetsTableReferences
+                                    ._layerIdTable(db),
+                                referencedColumn: $$BorderSetsTableReferences
+                                    ._layerIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (borderAreasRefs)
+                    await $_getPrefetchedData<
+                      BorderSet,
+                      $BorderSetsTable,
+                      BorderArea
+                    >(
+                      currentTable: table,
+                      referencedTable: $$BorderSetsTableReferences
+                          ._borderAreasRefsTable(db),
+                      managerFromTypedResult: (p0) =>
+                          $$BorderSetsTableReferences(
+                            db,
+                            table,
+                            p0,
+                          ).borderAreasRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where((e) => e.setId == item.id),
+                      typedResults: items,
+                    ),
+                ];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$BorderSetsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $BorderSetsTable,
+      BorderSet,
+      $$BorderSetsTableFilterComposer,
+      $$BorderSetsTableOrderingComposer,
+      $$BorderSetsTableAnnotationComposer,
+      $$BorderSetsTableCreateCompanionBuilder,
+      $$BorderSetsTableUpdateCompanionBuilder,
+      (BorderSet, $$BorderSetsTableReferences),
+      BorderSet,
+      PrefetchHooks Function({bool layerId, bool borderAreasRefs})
+    >;
+typedef $$BorderAreasTableCreateCompanionBuilder =
+    BorderAreasCompanion Function({
+      required String id,
+      required String setId,
+      required int osmId,
+      Value<String?> name,
+      Value<int> colorIndex,
+      required double south,
+      required double west,
+      required double north,
+      required double east,
+      required double labelLat,
+      required double labelLng,
+      required int pointCount,
+      required String rings,
+      required String wayIds,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$BorderAreasTableUpdateCompanionBuilder =
+    BorderAreasCompanion Function({
+      Value<String> id,
+      Value<String> setId,
+      Value<int> osmId,
+      Value<String?> name,
+      Value<int> colorIndex,
+      Value<double> south,
+      Value<double> west,
+      Value<double> north,
+      Value<double> east,
+      Value<double> labelLat,
+      Value<double> labelLng,
+      Value<int> pointCount,
+      Value<String> rings,
+      Value<String> wayIds,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$BorderAreasTableReferences
+    extends BaseReferences<_$AppDatabase, $BorderAreasTable, BorderArea> {
+  $$BorderAreasTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $BorderSetsTable _setIdTable(_$AppDatabase db) =>
+      db.borderSets.createAlias(
+        $_aliasNameGenerator(db.borderAreas.setId, db.borderSets.id),
+      );
+
+  $$BorderSetsTableProcessedTableManager get setId {
+    final $_column = $_itemColumn<String>('set_id')!;
+
+    final manager = $$BorderSetsTableTableManager(
+      $_db,
+      $_db.borderSets,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_setIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$BorderAreasTableFilterComposer
+    extends Composer<_$AppDatabase, $BorderAreasTable> {
+  $$BorderAreasTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get osmId => $composableBuilder(
+    column: $table.osmId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorIndex => $composableBuilder(
+    column: $table.colorIndex,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get south => $composableBuilder(
+    column: $table.south,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get west => $composableBuilder(
+    column: $table.west,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get north => $composableBuilder(
+    column: $table.north,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get east => $composableBuilder(
+    column: $table.east,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get labelLat => $composableBuilder(
+    column: $table.labelLat,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get labelLng => $composableBuilder(
+    column: $table.labelLng,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get pointCount => $composableBuilder(
+    column: $table.pointCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get rings => $composableBuilder(
+    column: $table.rings,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get wayIds => $composableBuilder(
+    column: $table.wayIds,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$BorderSetsTableFilterComposer get setId {
+    final $$BorderSetsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.setId,
+      referencedTable: $db.borderSets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BorderSetsTableFilterComposer(
+            $db: $db,
+            $table: $db.borderSets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$BorderAreasTableOrderingComposer
+    extends Composer<_$AppDatabase, $BorderAreasTable> {
+  $$BorderAreasTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get osmId => $composableBuilder(
+    column: $table.osmId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get colorIndex => $composableBuilder(
+    column: $table.colorIndex,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get south => $composableBuilder(
+    column: $table.south,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get west => $composableBuilder(
+    column: $table.west,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get north => $composableBuilder(
+    column: $table.north,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get east => $composableBuilder(
+    column: $table.east,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get labelLat => $composableBuilder(
+    column: $table.labelLat,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get labelLng => $composableBuilder(
+    column: $table.labelLng,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get pointCount => $composableBuilder(
+    column: $table.pointCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get rings => $composableBuilder(
+    column: $table.rings,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get wayIds => $composableBuilder(
+    column: $table.wayIds,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$BorderSetsTableOrderingComposer get setId {
+    final $$BorderSetsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.setId,
+      referencedTable: $db.borderSets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BorderSetsTableOrderingComposer(
+            $db: $db,
+            $table: $db.borderSets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$BorderAreasTableAnnotationComposer
+    extends Composer<_$AppDatabase, $BorderAreasTable> {
+  $$BorderAreasTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get osmId =>
+      $composableBuilder(column: $table.osmId, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<int> get colorIndex => $composableBuilder(
+    column: $table.colorIndex,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get south =>
+      $composableBuilder(column: $table.south, builder: (column) => column);
+
+  GeneratedColumn<double> get west =>
+      $composableBuilder(column: $table.west, builder: (column) => column);
+
+  GeneratedColumn<double> get north =>
+      $composableBuilder(column: $table.north, builder: (column) => column);
+
+  GeneratedColumn<double> get east =>
+      $composableBuilder(column: $table.east, builder: (column) => column);
+
+  GeneratedColumn<double> get labelLat =>
+      $composableBuilder(column: $table.labelLat, builder: (column) => column);
+
+  GeneratedColumn<double> get labelLng =>
+      $composableBuilder(column: $table.labelLng, builder: (column) => column);
+
+  GeneratedColumn<int> get pointCount => $composableBuilder(
+    column: $table.pointCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get rings =>
+      $composableBuilder(column: $table.rings, builder: (column) => column);
+
+  GeneratedColumn<String> get wayIds =>
+      $composableBuilder(column: $table.wayIds, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$BorderSetsTableAnnotationComposer get setId {
+    final $$BorderSetsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.setId,
+      referencedTable: $db.borderSets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BorderSetsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.borderSets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$BorderAreasTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $BorderAreasTable,
+          BorderArea,
+          $$BorderAreasTableFilterComposer,
+          $$BorderAreasTableOrderingComposer,
+          $$BorderAreasTableAnnotationComposer,
+          $$BorderAreasTableCreateCompanionBuilder,
+          $$BorderAreasTableUpdateCompanionBuilder,
+          (BorderArea, $$BorderAreasTableReferences),
+          BorderArea,
+          PrefetchHooks Function({bool setId})
+        > {
+  $$BorderAreasTableTableManager(_$AppDatabase db, $BorderAreasTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$BorderAreasTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$BorderAreasTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$BorderAreasTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> setId = const Value.absent(),
+                Value<int> osmId = const Value.absent(),
+                Value<String?> name = const Value.absent(),
+                Value<int> colorIndex = const Value.absent(),
+                Value<double> south = const Value.absent(),
+                Value<double> west = const Value.absent(),
+                Value<double> north = const Value.absent(),
+                Value<double> east = const Value.absent(),
+                Value<double> labelLat = const Value.absent(),
+                Value<double> labelLng = const Value.absent(),
+                Value<int> pointCount = const Value.absent(),
+                Value<String> rings = const Value.absent(),
+                Value<String> wayIds = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => BorderAreasCompanion(
+                id: id,
+                setId: setId,
+                osmId: osmId,
+                name: name,
+                colorIndex: colorIndex,
+                south: south,
+                west: west,
+                north: north,
+                east: east,
+                labelLat: labelLat,
+                labelLng: labelLng,
+                pointCount: pointCount,
+                rings: rings,
+                wayIds: wayIds,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String setId,
+                required int osmId,
+                Value<String?> name = const Value.absent(),
+                Value<int> colorIndex = const Value.absent(),
+                required double south,
+                required double west,
+                required double north,
+                required double east,
+                required double labelLat,
+                required double labelLng,
+                required int pointCount,
+                required String rings,
+                required String wayIds,
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => BorderAreasCompanion.insert(
+                id: id,
+                setId: setId,
+                osmId: osmId,
+                name: name,
+                colorIndex: colorIndex,
+                south: south,
+                west: west,
+                north: north,
+                east: east,
+                labelLat: labelLat,
+                labelLng: labelLng,
+                pointCount: pointCount,
+                rings: rings,
+                wayIds: wayIds,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$BorderAreasTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({setId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (setId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.setId,
+                                referencedTable: $$BorderAreasTableReferences
+                                    ._setIdTable(db),
+                                referencedColumn: $$BorderAreasTableReferences
+                                    ._setIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$BorderAreasTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $BorderAreasTable,
+      BorderArea,
+      $$BorderAreasTableFilterComposer,
+      $$BorderAreasTableOrderingComposer,
+      $$BorderAreasTableAnnotationComposer,
+      $$BorderAreasTableCreateCompanionBuilder,
+      $$BorderAreasTableUpdateCompanionBuilder,
+      (BorderArea, $$BorderAreasTableReferences),
+      BorderArea,
+      PrefetchHooks Function({bool setId})
+    >;
 typedef $$TileCacheTableCreateCompanionBuilder =
     TileCacheCompanion Function({
       required String url,
@@ -17940,6 +20904,10 @@ class $AppDatabaseManager {
       $$TransitSetsTableTableManager(_db, _db.transitSets);
   $$TransitStopsTableTableManager get transitStops =>
       $$TransitStopsTableTableManager(_db, _db.transitStops);
+  $$BorderSetsTableTableManager get borderSets =>
+      $$BorderSetsTableTableManager(_db, _db.borderSets);
+  $$BorderAreasTableTableManager get borderAreas =>
+      $$BorderAreasTableTableManager(_db, _db.borderAreas);
   $$TileCacheTableTableManager get tileCache =>
       $$TileCacheTableTableManager(_db, _db.tileCache);
   $$OverpassCacheTableTableManager get overpassCache =>

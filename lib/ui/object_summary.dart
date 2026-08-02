@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter/material.dart' show Icons;
 import 'package:latlong2/latlong.dart' hide Circle;
 
+import '../data/borders.dart';
 import '../data/database.dart';
 import '../data/transit.dart';
 import '../state/providers.dart';
@@ -76,6 +77,7 @@ IconData typeIcon(String layerType) => switch (layerType) {
       'height' => Icons.terrain,
       'poi' => Icons.travel_explore,
       'transit' => Icons.directions_transit,
+      'borders' => Icons.public,
       _ => Icons.circle_outlined,
     };
 
@@ -170,6 +172,7 @@ List<ObjectSummary> summariseLayer(
   List<PoiPoint> poiPoints = const [],
   List<TransitSet> transitSets = const [],
   List<TransitStop> transitStops = const [],
+  List<BorderSet> borderSets = const [],
 }) {
   switch (layer.type) {
     case 'circles':
@@ -227,6 +230,13 @@ List<ObjectSummary> summariseLayer(
       return [
         for (var i = 0; i < rows.length; i++)
           _transitSetSummary(rows[i], layer.id, i, transitStops),
+      ];
+    case 'borders':
+      final rows = _ordered(borderSets.where((s) => s.layerId == layer.id),
+          (s) => s.createdAt, (s) => s.id);
+      return [
+        for (var i = 0; i < rows.length; i++)
+          _borderSetSummary(rows[i], layer.id, i),
       ];
     default:
       return const [];
@@ -425,6 +435,33 @@ ObjectSummary _transitSetSummary(
     // exactly what was fetched.
     fitPoints: [LatLng(s.south, s.west), LatLng(s.north, s.east)],
     isPending: pending,
+  );
+}
+
+/// One administrative-border import. Like transit's, the Elements row frames
+/// the **imported box** — the thing that was chosen, and the thing the stored
+/// geometry was cut to.
+///
+/// There is no pending state here: a failed border import writes nothing, so
+/// every row in this list is data you have.
+ObjectSummary _borderSetSummary(BorderSet s, String layerId, int index) {
+  final center = LatLng((s.south + s.north) / 2, (s.west + s.east) / 2);
+  final width = geoDistance.as(
+      LengthUnit.Meter, LatLng(s.south, s.west), LatLng(s.south, s.east));
+  final height = geoDistance.as(
+      LengthUnit.Meter, LatLng(s.south, s.west), LatLng(s.north, s.west));
+  final level = borderLevelByAdminLevel(s.adminLevel);
+  return ObjectSummary(
+    ref: ObjectRef(kind: ObjectKind.borderSet, id: s.id, layerId: layerId),
+    title: _titleOr(s.label, 'Border import', index),
+    subtitle: [
+      _plural(s.areaCount, 'area'),
+      if (level != null) level.label,
+      '${formatMeters(width)} × ${formatMeters(height)}',
+      'imported ${_shortDate(s.fetchedAt)}',
+    ].join(' · '),
+    center: center,
+    fitPoints: [LatLng(s.south, s.west), LatLng(s.north, s.east)],
   );
 }
 

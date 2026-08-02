@@ -4,6 +4,8 @@ import 'dart:math' as math;
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
+import 'overpass_client.dart';
+
 /// Public-transport **stations**, fetched once from Overpass over a chosen
 /// bounding box and stored offline (the `transit` layer type).
 ///
@@ -336,26 +338,14 @@ class TransitStationData {
   final String? routeRef;
 }
 
-/// The outcome of an Overpass request: the value, or a **user-facing** reason it
-/// failed.
-///
-/// A bare `null` can't distinguish "you're offline" from "the instance is
-/// shedding load", and the public instances answer perfectly good queries with
-/// 504 often enough that blaming the connection would usually be a lie.
-class TransitOutcome<T> {
-  const TransitOutcome.ok(T this.value, {this.endpoint}) : message = null;
-  const TransitOutcome.failed(String this.message)
-      : value = null,
-        endpoint = null;
+/// The transport moved to `overpass_client.dart` when the borders layer needed
+/// the same failover; these names stay so transit's call sites and tests read
+/// as before.
+typedef TransitOutcome<T> = OverpassOutcome<T>;
 
-  final T? value;
-  final String? message;
-
-  /// Which endpoint served the request, so the caller can prefer it next time.
-  final String? endpoint;
-
-  bool get ok => message == null;
-}
+/// The shared endpoint list — `AppSettings.transitEndpoint` remembers whichever
+/// of these last answered, for *any* import (the column keeps its old name).
+const List<String> transitEndpoints = overpassEndpoints;
 
 // --- Caps -------------------------------------------------------------------
 
@@ -385,18 +375,6 @@ Duration transitRequestTimeout(double diagonalMeters) =>
 const double transitMergeMeters = 200;
 
 const Distance _distance = Distance(calculator: Haversine());
-
-/// Overpass instances, tried in order. Whichever one is busy is the variable —
-/// in testing the main instance refused in 8 s an area that kumi served, and
-/// later the roles reversed — so failing over is worth more than retrying.
-const List<String> transitEndpoints = [
-  'https://overpass-api.de/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter',
-  'https://overpass.private.coffee/api/interpreter',
-];
-
-const String _userAgent =
-    'ZoneCraft/1.0 (https://github.com/LeoStumpf/zonecraft)';
 
 // --- Query ------------------------------------------------------------------
 
@@ -738,7 +716,7 @@ Future<TransitOutcome<List<TransitStationData>>> fetchTransitStations({
   String? preferEndpoint,
 }) {
   final diagonal = _diagonalMeters(south, west, north, east);
-  return _post(
+  return overpassPost(
     buildTransitStopsQuery(
       south: south,
       west: west,
@@ -750,6 +728,8 @@ Future<TransitOutcome<List<TransitStationData>>> fetchTransitStations({
     client: client,
     timeout: transitRequestTimeout(diagonal),
     maxBytes: transitMaxResponseBytes,
+    oversizeMessage: 'That area returns too much data — pick a smaller box, or '
+        'import fewer types (bus stops are the bulk of it).',
     preferEndpoint: preferEndpoint,
     parse: (body) => parseTransitStations(body, keepModes: modeMask),
   );
@@ -760,75 +740,4 @@ double _diagonalMeters(
   final d = _distance.as(
       LengthUnit.Meter, LatLng(south, west), LatLng(north, east));
   return d.isFinite ? d : double.nan;
-}
-
-/// Statuses the public instances use for "I am overloaded", not "your query is
-/// wrong". These — and timeouts, and socket errors — fail **over** to the next
-/// endpoint; anything else is a query error and is reported as-is.
-const Set<int> _transientStatus = {429, 500, 502, 503, 504};
-
-/// POSTs [query] to each endpoint in turn until one answers.
-///
-/// [parse] returns null when the body is unintelligible, which is reported
-/// distinctly from "parsed fine, found nothing".
-Future<TransitOutcome<T>> _post<T>(
-  String query, {
-  required http.Client? client,
-  required Duration timeout,
-  required T? Function(String body) parse,
-  int? maxBytes,
-  String? preferEndpoint,
-}) async {
-  final owned = client == null;
-  final c = client ?? http.Client();
-  // Try the last endpoint that worked first, then the rest in order.
-  final endpoints = <String>[
-    if (preferEndpoint != null && transitEndpoints.contains(preferEndpoint))
-      preferEndpoint,
-    for (final e in transitEndpoints)
-      if (e != preferEndpoint) e,
-  ];
-  var lastTransient = 'Overpass is busy — try again in a moment.';
-  try {
-    for (final endpoint in endpoints) {
-      final http.Response resp;
-      try {
-        resp = await c
-            .post(
-              Uri.parse(endpoint),
-              headers: const {'User-Agent': _userAgent},
-              body: {'data': query},
-            )
-            .timeout(timeout);
-      } catch (_) {
-        // A timeout or socket error says nothing about the *query*, so try the
-        // next instance rather than blaming the user's connection.
-        lastTransient = 'Could not reach Overpass — check your connection, '
-            'or try again in a moment.';
-        continue;
-      }
-      if (resp.statusCode == 200) {
-        if (maxBytes != null && resp.bodyBytes.length > maxBytes) {
-          return const TransitOutcome.failed(
-              'That area returns too much data — pick a smaller box, or '
-              'import fewer types (bus stops are the bulk of it).');
-        }
-        final parsed = parse(resp.body);
-        if (parsed == null) {
-          return const TransitOutcome.failed(
-              'Overpass sent a response we could not read. Try again.');
-        }
-        return TransitOutcome.ok(parsed, endpoint: endpoint);
-      }
-      if (_transientStatus.contains(resp.statusCode)) {
-        lastTransient = 'Overpass is busy — try again in a moment.';
-        continue;
-      }
-      return TransitOutcome.failed(
-          'Overpass refused the request (HTTP ${resp.statusCode}).');
-    }
-    return TransitOutcome.failed(lastTransient);
-  } finally {
-    if (owned) c.close();
-  }
 }

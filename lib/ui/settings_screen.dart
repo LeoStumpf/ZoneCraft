@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../data/borders.dart';
 import '../data/database.dart';
 import '../data/repository.dart';
 import '../data/serialization.dart';
@@ -171,8 +170,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider).asData?.value;
     final uncertainty = settings?.uncertaintyMeters ?? 0;
-    final transportOverlay = settings?.transportOverlay ?? false;
-    final borderMask = settings?.borderLevels ?? 0;
 
     // Seed the text field once from the persisted value; afterwards the field
     // is the source of truth while editing (don't fight the user's cursor).
@@ -233,52 +230,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               _setUncertainty(v);
             },
           ),
-          const Divider(height: 48),
-          Text('Map overlays', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          Text(
-            'Show the public-transport network on top of the map: bus/tram '
-            'lines and stops (ÖPNVKarte) plus railways (OpenRailwayMap).',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Public transport'),
-            value: transportOverlay,
-            onChanged: settings == null
-                ? null
-                : (v) => _repo.updateTransportOverlay(v),
-          ),
-          const Divider(height: 48),
-          Text('Administrative borders',
-              style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          Text(
-            'Outline administrative boundaries from OpenStreetMap, each level '
-            'on its own. Coarser borders show when zoomed out; finer ones only '
-            'when zoomed in.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: 4),
-          for (final l in borderLevels)
-            CheckboxListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              secondary: Container(
-                width: 18,
-                height: 18,
-                decoration: BoxDecoration(
-                  color: Color(l.colorArgb),
-                  shape: BoxShape.circle,
-                ),
-              ),
-              title: Text(l.label),
-              value: borderMask & l.bit != 0,
-              onChanged: settings == null
-                  ? null
-                  : (v) => _repo.updateBorderLevels(
-                      borderMaskWith(borderMask, l, v ?? false)),
-            ),
           const Divider(height: 48),
           Text('Offline map cache',
               style: Theme.of(context).textTheme.titleMedium),

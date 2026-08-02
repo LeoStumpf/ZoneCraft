@@ -83,4 +83,65 @@ void main() {
     final out = clipRingToRect(ring, rect);
     expect(_area(out), closeTo(2 * 20 * 40 + 80 * 20, 1e-6));
   });
+
+  group('clipSegmentToRect', () {
+    test('a segment fully inside comes back unchanged', () {
+      final s = clipSegmentToRect(
+          const Offset(10, 10), const Offset(90, 90), rect);
+      expect(s, isNotNull);
+      expect(s!.$1, const Offset(10, 10));
+      expect(s.$2, const Offset(90, 90));
+    });
+
+    test('a crossing segment is trimmed to the rect', () {
+      // A border area at street zoom projects to ±10⁵ px; the whole point is
+      // that Skia never sees those coordinates.
+      final s = clipSegmentToRect(
+          const Offset(-100000, 50), const Offset(100000, 50), rect);
+      expect(s, isNotNull);
+      expect(s!.$1.dx, closeTo(0, 1e-6));
+      expect(s.$2.dx, closeTo(100, 1e-6));
+      expect(s.$1.dy, closeTo(50, 1e-6));
+    });
+
+    test('one endpoint outside trims only that end', () {
+      final s = clipSegmentToRect(
+          const Offset(50, 50), const Offset(50, 500), rect);
+      expect(s!.$1, const Offset(50, 50));
+      expect(s.$2.dy, closeTo(100, 1e-6));
+    });
+
+    test('a segment that misses the rect is dropped', () {
+      expect(
+          clipSegmentToRect(
+              const Offset(200, 200), const Offset(300, 300), rect),
+          isNull);
+      // Parallel to an edge, and outside it.
+      expect(
+          clipSegmentToRect(
+              const Offset(-10, 0), const Offset(-10, 100), rect),
+          isNull);
+    });
+
+    test('a degenerate segment inside survives, outside does not', () {
+      expect(
+          clipSegmentToRect(const Offset(50, 50), const Offset(50, 50), rect),
+          isNotNull);
+      expect(
+          clipSegmentToRect(
+              const Offset(500, 500), const Offset(500, 500), rect),
+          isNull);
+    });
+
+    test('a non-finite endpoint is dropped rather than propagated', () {
+      expect(
+          clipSegmentToRect(
+              const Offset(double.nan, 0), const Offset(50, 50), rect),
+          isNull);
+      expect(
+          clipSegmentToRect(
+              const Offset(0, 0), const Offset(double.infinity, 50), rect),
+          isNull);
+    });
+  });
 }

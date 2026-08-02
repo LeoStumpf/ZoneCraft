@@ -1,7 +1,10 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 import 'package:latlong2/latlong.dart' show LatLng;
 import 'package:uuid/uuid.dart';
 
+import '../geo/border_areas.dart';
 import '../geo/simplify.dart';
 import 'database.dart';
 import 'serialization.dart';
@@ -24,10 +27,15 @@ class Repository {
 
   /// Creates a layer placed on top of all existing ones. Returns its id.
   /// [type] is the object kind the layer holds ('circles' or 'planes').
+  ///
+  /// [borderLevel] is the OSM `admin_level` a `borders` layer holds — the one
+  /// creation-time sub-choice any type has, because one layer holds one level
+  /// (see [Layers.borderLevel]).
   Future<String> createLayer({
     required String name,
     required int colorArgb,
     String type = 'circles',
+    String? borderLevel,
   }) async {
     final maxOrder = await _maxSortOrder();
     final id = _uuid.v4();
@@ -41,6 +49,7 @@ class Repository {
             // Region layers default to a translucent fill (map shows through);
             // marker/line layers are crisp, so fully opaque.
             opacity: Value(defaultLayerOpacity(type)),
+            borderLevel: Value(borderLevel),
           ),
         );
     return id;
@@ -92,6 +101,12 @@ class Repository {
     if (src.type != tgt.type) {
       throw ArgumentError('Layers must be the same type');
     }
+    // One borders layer holds one admin level: the "no two neighbours share a
+    // colour" rule is only meaningful within a level, since areas of different
+    // levels nest rather than tile.
+    if (src.type == 'borders' && src.borderLevel != tgt.borderLevel) {
+      throw ArgumentError('Border layers must hold the same level');
+    }
     await _db.transaction(() async {
       // Only the table for this layer's type holds rows to re-point.
       switch (src.type) {
@@ -123,6 +138,10 @@ class Repository {
           await (_db.update(_db.transitSets)
                 ..where((t) => t.layerId.equals(sourceId)))
               .write(TransitSetsCompanion(layerId: Value(targetId)));
+        case 'borders':
+          await (_db.update(_db.borderSets)
+                ..where((t) => t.layerId.equals(sourceId)))
+              .write(BorderSetsCompanion(layerId: Value(targetId)));
         case 'circles':
         default:
           // WARNING: a new layer type that forgets its `case` above lands here,
@@ -136,6 +155,9 @@ class Repository {
       // re-pointed rows away.
       await (_db.delete(_db.layers)..where((l) => l.id.equals(sourceId))).go();
     });
+    // The target now holds areas from two imports that were coloured
+    // independently, so its seam has to be resolved.
+    if (src.type == 'borders') await recolourBorderLayer(targetId);
   }
 
   /// Persists a new ordering. [orderedIds] is bottom-to-top draw order.
@@ -1051,6 +1073,185 @@ class Repository {
     return (_db.delete(_db.transitSets)..where((s) => s.id.equals(id))).go();
   }
 
+  // --- Border sets ----------------------------------------------------------
+
+  Stream<List<BorderSet>> watchAllBorderSets() {
+    return _db.select(_db.borderSets).watch();
+  }
+
+  Stream<List<BorderArea>> watchAllBorderAreas() {
+    return _db.select(_db.borderAreas).watch();
+  }
+
+  /// Writes one finished border import: the set row plus its areas, then
+  /// recolours the whole layer.
+  ///
+  /// Unlike a transit import there is no pending row — a border import that
+  /// fails leaves nothing behind, because re-running it is two taps and a
+  /// half-written set would have to remember the query to be worth keeping.
+  ///
+  /// One transaction, one batch: a city import is 54 areas but a country one is
+  /// a handful of very large blobs, and either way this must not be a loop of
+  /// awaited inserts.
+  Future<String> addBorderSet({
+    required String layerId,
+    required double south,
+    required double west,
+    required double north,
+    required double east,
+    required String adminLevel,
+    required List<({
+      int osmId,
+      String? name,
+      double south,
+      double west,
+      double north,
+      double east,
+      double labelLat,
+      double labelLng,
+      int pointCount,
+      String rings,
+      List<int> wayIds,
+    })> areas,
+    String? label,
+  }) async {
+    final setId = _uuid.v4();
+    await _db.transaction(() async {
+      await _db.into(_db.borderSets).insert(
+            BorderSetsCompanion.insert(
+              id: setId,
+              layerId: layerId,
+              south: south,
+              west: west,
+              north: north,
+              east: east,
+              adminLevel: adminLevel,
+              fetchedAt: DateTime.now(),
+              areaCount: Value(areas.length),
+              pointCount:
+                  Value(areas.fold(0, (a, x) => a + x.pointCount)),
+              label: Value(label),
+            ),
+          );
+      await _db.batch((b) {
+        for (final a in areas) {
+          b.insert(
+            _db.borderAreas,
+            BorderAreasCompanion.insert(
+              id: _uuid.v4(),
+              setId: setId,
+              osmId: a.osmId,
+              name: Value(a.name),
+              south: a.south,
+              west: a.west,
+              north: a.north,
+              east: a.east,
+              labelLat: a.labelLat,
+              labelLng: a.labelLng,
+              pointCount: a.pointCount,
+              rings: a.rings,
+              wayIds: jsonEncode(a.wayIds),
+            ),
+          );
+        }
+      });
+    });
+    await recolourBorderLayer(layerId);
+    return setId;
+  }
+
+  /// Recomputes every area colour in [layerId] so no two areas sharing a border
+  /// match.
+  ///
+  /// Runs over the **whole layer**, not one import, which is what keeps two
+  /// overlapping imports from clashing along their seam — and why it has to run
+  /// again after a set is deleted, when a constraint has gone away.
+  Future<void> recolourBorderLayer(String layerId) async {
+    final setIds = await (_db.selectOnly(_db.borderSets)
+          ..addColumns([_db.borderSets.id])
+          ..where(_db.borderSets.layerId.equals(layerId)))
+        .map((r) => r.read(_db.borderSets.id)!)
+        .get();
+    if (setIds.isEmpty) return;
+    final areas = await (_db.select(_db.borderAreas)
+          ..where((a) => a.setId.isIn(setIds)))
+        .get();
+    if (areas.isEmpty) return;
+
+    final colors = assignAreaColors([
+      for (final a in areas)
+        AreaAdjacencyInput(osmId: a.osmId, wayIds: _decodeWayIds(a.wayIds)),
+    ]);
+    await _db.batch((b) {
+      for (final a in areas) {
+        final c = colors[a.osmId] ?? 0;
+        if (c == a.colorIndex) continue;
+        b.update(
+          _db.borderAreas,
+          BorderAreasCompanion(colorIndex: Value(c)),
+          where: (t) => t.id.equals(a.id),
+        );
+      }
+    });
+  }
+
+  /// The member way ids stored on an area. Never throws — a corrupt row simply
+  /// has no neighbours, which costs a colour, not the map.
+  static List<int> _decodeWayIds(String json) {
+    final dynamic decoded;
+    try {
+      decoded = jsonDecode(json);
+    } catch (_) {
+      return const [];
+    }
+    if (decoded is! List) return const [];
+    return [
+      for (final v in decoded)
+        if (v is num) v.toInt(),
+    ];
+  }
+
+  /// Renames an import (or moves it to another `borders` layer). The imported
+  /// area and level are immutable — a different area means a new import.
+  Future<void> updateBorderSet(
+    String id, {
+    String? layerId,
+    Value<String?> label = const Value.absent(),
+  }) async {
+    await (_db.update(_db.borderSets)..where((s) => s.id.equals(id))).write(
+      BorderSetsCompanion(
+        layerId: layerId == null ? const Value.absent() : Value(layerId),
+        label: label,
+      ),
+    );
+  }
+
+  /// Deletes an import and recolours what is left: removing a set removes
+  /// adjacency constraints, and leaving the old colours would keep an
+  /// unnecessary clash on screen.
+  Future<void> deleteBorderSet(String id) async {
+    final set = await (_db.select(_db.borderSets)..where((s) => s.id.equals(id)))
+        .getSingleOrNull();
+    await (_db.delete(_db.borderSets)..where((s) => s.id.equals(id))).go();
+    if (set != null) await recolourBorderLayer(set.layerId);
+  }
+
+  /// The per-layer borders display toggles (both default off).
+  Future<void> updateBorderLayerOptions(
+    String layerId, {
+    bool? fillAreas,
+    bool? showNames,
+  }) {
+    return (_db.update(_db.layers)..where((l) => l.id.equals(layerId))).write(
+      LayersCompanion(
+        borderFillAreas:
+            fillAreas == null ? const Value.absent() : Value(fillAreas),
+        borderShowNames:
+            showNames == null ? const Value.absent() : Value(showNames),
+      ),
+    );
+  }
+
   // --- Settings -------------------------------------------------------------
 
   /// Watches the single settings row, emitting defaults when it doesn't exist
@@ -1084,19 +1285,9 @@ class Repository {
         );
   }
 
-  /// Upserts the public-transport overlay toggle into the single settings row.
-  Future<void> updateTransportOverlay(bool enabled) {
-    return _db.into(_db.appSettings).insertOnConflictUpdate(
-          AppSettingsCompanion.insert(
-            id: const Value(1),
-            transportOverlay: Value(enabled),
-          ),
-        );
-  }
-
-  /// Remembers which Overpass instance last served a transit import, so the
-  /// next one starts with the one that was actually up rather than at whichever
-  /// is currently swamped.
+  /// Remembers which Overpass instance last served an import (transit or
+  /// borders), so the next one starts with the one that was actually up rather
+  /// than at whichever is currently swamped.
   Future<void> updateTransitEndpoint(String endpoint) {
     return _db.into(_db.appSettings).insertOnConflictUpdate(
           AppSettingsCompanion.insert(
@@ -1112,16 +1303,6 @@ class Repository {
           AppSettingsCompanion.insert(
             id: const Value(1),
             poiCategories: Value(mask),
-          ),
-        );
-  }
-
-  /// Upserts the enabled-border-levels bitmask into the single settings row.
-  Future<void> updateBorderLevels(int mask) {
-    return _db.into(_db.appSettings).insertOnConflictUpdate(
-          AppSettingsCompanion.insert(
-            id: const Value(1),
-            borderLevels: Value(mask),
           ),
         );
   }
@@ -1242,6 +1423,12 @@ class Repository {
   Future<void> clearTileCache() => _db.delete(_db.tileCache).go();
 
   // --- Overpass overlay cache ----------------------------------------------
+  //
+  // **Unused.** Both viewport-following overlays this cached are gone: map POIs
+  // became the `poi` layer type, administrative borders the `borders` one, and
+  // both store their imports in their own tables instead. The table and these
+  // accessors survive so a future overlay has somewhere to go; nothing writes
+  // to them today.
 
   /// Persists the last successful Overpass result for [kind] ('poi'|'border').
   Future<void> saveOverpassCache(
@@ -1424,6 +1611,13 @@ class Repository {
               label: t.label,
             ));
           }
+        case 'borders':
+          // Nothing. Border areas are derived OSM snapshots keyed to an
+          // imported box — the same call transit's stops make, taken further
+          // because the geometry is a blob, not points: exporting it would
+          // produce a file no other tool wants and this app would not re-read.
+          // Re-importing an area is one dialog away.
+          break;
       }
       out.add(ExportLayer(
         name: layer.name,

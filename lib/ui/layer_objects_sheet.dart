@@ -76,10 +76,11 @@ class _LayerObjectsList extends ConsumerWidget {
       poiPoints: ref.watch(poiPointsProvider).asData?.value ?? const [],
       transitSets: ref.watch(transitSetsProvider).asData?.value ?? const [],
       transitStops: ref.watch(transitStopsProvider).asData?.value ?? const [],
+      borderSets: ref.watch(borderSetsProvider).asData?.value ?? const [],
     );
-    // POI sets and transit imports have no editor sheet, so their row taps
+    // Imports (POI, transit, borders) have no editor sheet, so their row taps
     // frame the object instead of selecting it.
-    final canEdit = !const {'poi', 'transit'}.contains(layer.type);
+    final canEdit = !const {'poi', 'transit', 'borders'}.contains(layer.type);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -251,6 +252,8 @@ class _LayerObjectsList extends ConsumerWidget {
         await repo.updatePoiSet(s.ref.id, label: label);
       case ObjectKind.transitSet:
         await repo.updateTransitSet(s.ref.id, label: label);
+      case ObjectKind.borderSet:
+        await repo.updateBorderSet(s.ref.id, label: label);
     }
   }
 
@@ -292,6 +295,8 @@ class _LayerObjectsList extends ConsumerWidget {
         await repo.deletePoiSet(s.ref.id);
       case ObjectKind.transitSet:
         await repo.deleteTransitSet(s.ref.id);
+      case ObjectKind.borderSet:
+        await repo.deleteBorderSet(s.ref.id);
     }
     // The editor sheet resolves its row from the global list, so a deleted
     // selection would just vanish — clear it explicitly to keep the state tidy.
@@ -361,6 +366,8 @@ class _EmptyHint extends StatelessWidget {
       'poi' => 'No POI sets yet — use Import POIs to fetch some for an area.',
       'transit' =>
         'No imports yet — tap Import transit, then tap two corners of an area.',
+      'borders' =>
+        'No imports yet — tap Import borders, then tap two corners of an area.',
       _ => 'No elements yet — tap Add, then tap the map to place one.',
     };
     return Padding(

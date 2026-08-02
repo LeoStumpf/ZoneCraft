@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:drift/drift.dart' show Value;
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_dragmarker/flutter_map_dragmarker.dart';
@@ -16,6 +17,7 @@ import '../data/database.dart';
 import '../data/height_generator.dart';
 import '../data/overpass.dart';
 import '../data/transit.dart';
+import '../geo/border_areas.dart';
 import '../geo/coords.dart';
 import '../geo/geodesic.dart';
 import '../geo/tiles.dart';
@@ -33,6 +35,8 @@ import 'plane_editor.dart';
 import 'poi_import_dialog.dart';
 import 'poi_layer.dart';
 import 'area_geometry.dart';
+import 'border_import_dialog.dart';
+import 'border_layer.dart';
 import 'region_geometry.dart';
 import 'region_layer.dart';
 import 'subspace_editor.dart';
@@ -116,9 +120,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// Tile URL templates, shared by the [TileLayer]s and the offline prefetcher
   /// so the two never drift apart.
   static const _baseTileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-  static const _opnvTileUrl = 'https://tile.memomaps.de/tilegen/{z}/{x}/{y}.png';
-  static const _railTileUrl =
-      'https://tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png';
   static const _tileUserAgent =
       'ZoneCraft/1.0 (https://github.com/LeoStumpf/zonecraft)';
 
@@ -152,16 +153,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
   LatLng _lastGoodCenter = const LatLng(48.137, 11.575);
   double _lastGoodZoom = 5;
 
-  // --- Administrative borders (Overpass) ------------------------------------
-  List<BorderLine> _borders = const [];
-  Set<BorderLevel> _enabledBorders = const {};
-  int _borderMask = 0;
-  Timer? _bordersDebounce;
-  LatLngBounds? _bordersFetchedBounds;
-  // The set of levels (by bits) the current borders were fetched with. The
-  // active set depends on zoom (coarse levels show out, fine ones only in).
-  int _bordersFetchedActiveBits = -1;
-
   @override
   void initState() {
     super.initState();
@@ -172,25 +163,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
       _tileClient,
       headers: {'User-Agent': _tileUserAgent},
     );
-    _loadCachedOverlays();
-  }
-
-  /// Seeds the border overlay from its last-persisted result so it appears
-  /// instantly on launch — including offline — until a fresh fetch (if any)
-  /// replaces it. Mirrors the in-memory coverage state so a redundant refetch
-  /// is suppressed while the view stays inside the cached bounds.
-  Future<void> _loadCachedOverlays() async {
-    final repo = ref.read(repositoryProvider);
-    final border = await repo.loadOverpassCache('border');
-    if (!mounted) return;
-    setState(() {
-      if (border != null) {
-        _borders = decodeBorderLines(border.payload);
-        _bordersFetchedBounds = LatLngBounds(
-            LatLng(border.south, border.west), LatLng(border.north, border.east));
-        _bordersFetchedActiveBits = border.maskBits;
-      }
-    });
   }
 
   @override
@@ -206,91 +178,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
   @override
   void dispose() {
     _saveCamera();
-    _bordersDebounce?.cancel();
     _prefetchDebounce?.cancel();
     _tileClient.close();
     WidgetsBinding.instance.removeObserver(this);
     _mapController.dispose();
     super.dispose();
-  }
-
-  static bool _boundsContain(LatLngBounds outer, LatLngBounds inner) =>
-      inner.south >= outer.south &&
-      inner.north <= outer.north &&
-      inner.west >= outer.west &&
-      inner.east <= outer.east;
-
-  static LatLngBounds _inflateBounds(LatLngBounds b, double margin) {
-    final dLat = (b.north - b.south) * margin;
-    final dLng = (b.east - b.west) * margin;
-    return LatLngBounds(
-      LatLng(b.south - dLat, b.west - dLng),
-      LatLng(b.north + dLat, b.east + dLng),
-    );
-  }
-
-  /// Debounced administrative-borders refresh (same coalescing as POIs).
-  void _scheduleBordersRefresh() {
-    _bordersDebounce?.cancel();
-    _bordersDebounce = Timer(const Duration(milliseconds: 600), _refreshBorders);
-  }
-
-  /// Fetches border lines for the enabled levels that are visible at the
-  /// current zoom (coarse levels show when zoomed out, fine ones only when
-  /// zoomed in). Same view-coverage cache, inflated fetch, and keep-on-failure
-  /// behaviour as POIs.
-  Future<void> _refreshBorders() async {
-    if (!_mapReady || !mounted) return;
-    final cam = _mapController.camera;
-    if (!cam.center.latitude.isFinite ||
-        !cam.center.longitude.isFinite ||
-        !cam.zoom.isFinite) {
-      return;
-    }
-    final active = {
-      for (final l in _enabledBorders)
-        if (cam.zoom >= l.minZoom) l,
-    };
-    if (active.isEmpty) {
-      _bordersFetchedBounds = null;
-      if (_borders.isNotEmpty) setState(() => _borders = const []);
-      return;
-    }
-    final activeBits = active.fold<int>(0, (acc, l) => acc | l.bit);
-    final vp = cam.visibleBounds;
-    if (_bordersFetchedActiveBits == activeBits &&
-        _bordersFetchedBounds != null &&
-        _boundsContain(_bordersFetchedBounds!, vp)) {
-      return;
-    }
-
-    final q = _inflateBounds(vp, 0.3);
-    final results = await fetchBorders(
-      south: q.south,
-      west: q.west,
-      north: q.north,
-      east: q.east,
-      levels: active,
-    );
-    if (!mounted) return;
-    if (results == null) {
-      _bordersFetchedBounds = null;
-      _bordersDebounce?.cancel();
-      _bordersDebounce = Timer(const Duration(seconds: 4), _refreshBorders);
-      return;
-    }
-    _bordersFetchedBounds = q;
-    _bordersFetchedActiveBits = activeBits;
-    setState(() => _borders = results);
-    unawaited(ref.read(repositoryProvider).saveOverpassCache(
-          'border',
-          encodeBorderLines(results),
-          south: q.south,
-          west: q.west,
-          north: q.north,
-          east: q.east,
-          maskBits: activeBits,
-        ));
   }
 
   /// Debounced offline-tile prefetch (same coalescing as the overlays).
@@ -300,9 +192,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
   }
 
   /// Best-effort: caches the tiles covering the current viewport plus a one-tile
-  /// ring around it (and the transport overlays when enabled), so a short pan or
-  /// scroll while offline still has tiles. Capped, sequential, and failure-safe
-  /// so it never blocks the UI or hammers the tile servers.
+  /// ring around it, so a short pan or scroll while offline still has tiles.
+  /// Capped, sequential, and failure-safe so it never blocks the UI or hammers
+  /// the tile servers.
   Future<void> _prefetchTiles() async {
     if (!_mapReady || !mounted) return;
     final cam = _mapController.camera;
@@ -315,8 +207,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (z < _prefetchMinZoom) return;
 
     final vp = cam.visibleBounds;
-    final transport =
-        ref.read(settingsProvider).asData?.value.transportOverlay ?? false;
 
     // Visible tiles widened by a one-tile ring, capped by a budget.
     final tiles = tilesCovering(
@@ -330,10 +220,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
     var budget = _prefetchMaxTiles;
     for (final t in tiles) {
       await _tileProvider.prefetch(_fillTileUrl(_baseTileUrl, z, t.x, t.y));
-      if (transport) {
-        await _tileProvider.prefetch(_fillTileUrl(_opnvTileUrl, z, t.x, t.y));
-        await _tileProvider.prefetch(_fillTileUrl(_railTileUrl, z, t.x, t.y));
-      }
       if (--budget <= 0) break;
     }
     if (!mounted) return;
@@ -348,15 +234,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
       .replaceAll('{y}', '$y');
 
   /// The tile URLs to cache for an explicit "download this area": the current
-  /// viewport at the current zoom plus [_downloadExtraZoomLevels] deeper levels,
-  /// base map and (when enabled) the transport overlays. Shallower levels come
-  /// first, so when the [_downloadMaxTiles] ceiling trims the list it drops the
-  /// deepest detail rather than the view you're looking at.
+  /// viewport at the current zoom plus [_downloadExtraZoomLevels] deeper levels.
+  /// Shallower levels come first, so when the [_downloadMaxTiles] ceiling trims
+  /// the list it drops the deepest detail rather than the view you're looking at.
   List<String> _areaTileUrls(MapCamera cam) {
     final vp = cam.visibleBounds;
     final zBase = cam.zoom.round().clamp(0, 19);
-    final transport =
-        ref.read(settingsProvider).asData?.value.transportOverlay ?? false;
     final urls = <String>[];
     for (var dz = 0; dz <= _downloadExtraZoomLevels; dz++) {
       final z = zBase + dz;
@@ -369,10 +252,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
         z: z,
       )) {
         urls.add(_fillTileUrl(_baseTileUrl, z, t.x, t.y));
-        if (transport) {
-          urls.add(_fillTileUrl(_opnvTileUrl, z, t.x, t.y));
-          urls.add(_fillTileUrl(_railTileUrl, z, t.x, t.y));
-        }
         if (urls.length >= _downloadMaxTiles) return urls;
       }
     }
@@ -1335,6 +1214,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   static String _addFabLabel(String? type) => switch (type) {
         'poi' => 'Import POIs',
         'transit' => 'Import transit',
+        'borders' => 'Import borders',
         'subspace' => 'Add subspace',
         'freeline' => 'Add line',
         'freearea' => 'Add area',
@@ -1493,6 +1373,118 @@ class _MapScreenState extends ConsumerState<MapScreen>
     }
   }
 
+  /// Imports every administrative area of [layer]'s level intersecting [box],
+  /// once, offline.
+  ///
+  /// Whole relations come down — the only shape that yields a fillable
+  /// interior — and are assembled, clipped to the box, and thinned in an
+  /// isolate before anything is written. Nothing is written until that
+  /// succeeds: unlike a transit import there is no retry row, because
+  /// re-running this is two taps and a half-written set would carry no less
+  /// state than the query itself.
+  Future<void> _importBorders(Layer layer, {required LatLngBounds box}) async {
+    final level = borderLevelByAdminLevel(layer.borderLevel);
+    if (level == null) {
+      _hint('This layer has no border level set — make a new borders layer.');
+      return;
+    }
+    final config =
+        await showBorderImportDialog(context, initial: box, level: level);
+    if (config == null || !mounted) return;
+
+    final repo = ref.read(repositoryProvider);
+    final closeProgress = showTransitProgress(
+      context,
+      'Importing ${level.label.toLowerCase()} — whole boundaries have to '
+      'come down…',
+    );
+    try {
+      final settings = ref.read(settingsProvider).asData?.value;
+      final outcome = await fetchBorderAreas(
+        south: config.south,
+        west: config.west,
+        north: config.north,
+        east: config.east,
+        adminLevel: level.adminLevel,
+        client: _tileClient,
+        preferEndpoint: settings?.transitEndpoint,
+      );
+      if (!outcome.ok) {
+        closeProgress();
+        if (mounted) _hint(outcome.message!);
+        return;
+      }
+      // Remember the instance that actually answered, so the next import
+      // starts there rather than at whichever one is currently swamped.
+      if (outcome.endpoint != null &&
+          outcome.endpoint != settings?.transitEndpoint) {
+        unawaited(repo.updateTransitEndpoint(outcome.endpoint!));
+      }
+
+      // Assemble → clip → simplify off the UI thread: a state-level import is
+      // over 100 000 points through RDP.
+      final built = await compute(
+        buildBorderAreas,
+        BorderBuildRequest(
+          relations: outcome.value!,
+          box: LatLngBox(
+            south: config.south,
+            west: config.west,
+            north: config.north,
+            east: config.east,
+          ),
+        ),
+      );
+      if (built.isEmpty) {
+        closeProgress();
+        // Overpass matches a relation when one of its *members* is in the box,
+        // so a box sitting wholly inside one municipality matches nothing at
+        // all. That reads as a bug unless the message says what to do about it.
+        if (mounted) {
+          _hint('No ${level.label.toLowerCase()} found — the box has to reach '
+              'a boundary, not sit inside one. Try a wider area.');
+        }
+        return;
+      }
+
+      await repo.addBorderSet(
+        layerId: layer.id,
+        south: config.south,
+        west: config.west,
+        north: config.north,
+        east: config.east,
+        adminLevel: level.adminLevel,
+        areas: [
+          for (final a in built)
+            (
+              osmId: a.osmId,
+              name: a.name,
+              south: a.south,
+              west: a.west,
+              north: a.north,
+              east: a.east,
+              labelLat: a.labelLat,
+              labelLng: a.labelLng,
+              pointCount: a.pointCount,
+              rings: a.rings,
+              wayIds: a.wayIds,
+            ),
+        ],
+      );
+      closeProgress();
+      if (!mounted) return;
+      _hint(layer.borderFillAreas
+          ? 'Imported ${built.length} areas.'
+          : 'Imported ${built.length} areas · Colour areas in the layer menu '
+              'to fill them.');
+    } catch (e) {
+      closeProgress();
+      if (mounted) _hint('Could not save the import.');
+    } finally {
+      closeProgress(); // idempotent; guarantees the spinner never sticks
+    }
+  }
+
   Future<void> _addPlaneAt(LatLng center, Layer layer) async {
     // Seed A and B offset west/east of the map centre, so the new plane is
     // immediately visible with its dividing line through the centre.
@@ -1531,6 +1523,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
       case 'transit':
         // The no-aim analogue of two corner taps: import what you can see.
         _importTransit(layer, box: _mapController.camera.visibleBounds);
+      case 'borders':
+        _importBorders(layer, box: _mapController.camera.visibleBounds);
       case 'subspace':
         _addSubspaceAt(c, layer, subspaces);
       case 'freeline':
@@ -1561,13 +1555,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
     _hint(_addBannerText(layer.type, 0));
   }
 
-  /// What Done does. With a transit corner already buffered it **commits the
+  /// What Done does. With an import corner already buffered it **commits the
   /// box you can see** — the rubber band runs from that corner to the map
   /// centre, so discarding it on Done would throw away the thing being aimed.
   /// It is also the one path to an import that no gesture can swallow.
   Future<void> _finishAdd() async {
     final a = _pendingBoxA;
-    if (a != null && _placeType == 'transit') {
+    if (a != null && _isBoxImport(_placeType)) {
       final layerId = _placeLayerId;
       final layer = (ref.read(layersProvider).asData?.value ?? const <Layer>[])
           .where((l) => l.id == layerId)
@@ -1575,11 +1569,22 @@ class _MapScreenState extends ConsumerState<MapScreen>
       final b = _mapController.camera.center;
       setState(() => _pendingBoxA = null);
       _exitAddMode();
-      if (layer != null) await _importTransit(layer, box: LatLngBounds(a, b));
+      if (layer != null) await _importBox(layer, LatLngBounds(a, b));
       return;
     }
     _exitAddMode();
   }
+
+  /// The layer types whose Add mode marks two opposite corners of an import
+  /// box, rather than placing an object per tap.
+  static bool _isBoxImport(String? type) =>
+      type == 'transit' || type == 'borders';
+
+  /// Runs whichever box import [layer] is for.
+  Future<void> _importBox(Layer layer, LatLngBounds box) =>
+      layer.type == 'borders'
+          ? _importBorders(layer, box: box)
+          : _importTransit(layer, box: box);
 
   /// Leaves Add mode. For the point-set types the object just built is selected
   /// (so its editor and draggable handles appear) — the long-standing "Done ⇒
@@ -1657,7 +1662,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// and the prose ellipsises — the count is the part that changes.
   String _addBannerText(String? layerType, int placed) {
     if (layerType == 'poi') return 'Tap the search centre';
-    if (layerType == 'transit') {
+    if (_isBoxImport(layerType)) {
       // Once a corner is down the rubber band tracks the map centre, so Done is
       // a real second way to finish — say so, rather than leaving it looking
       // like "cancel".
@@ -1806,6 +1811,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
         _exitAddMode();
         await _importPois(layer, at: latlng);
       case 'transit':
+      case 'borders':
         // Two taps mark opposite corners of the import box (the plane pattern),
         // then the dialog takes over and Add mode is done — an import is a
         // heavyweight action, not something to stay armed for.
@@ -1816,7 +1822,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
         }
         setState(() => _pendingBoxA = null);
         _exitAddMode();
-        await _importTransit(layer, box: LatLngBounds(a, latlng));
+        await _importBox(layer, LatLngBounds(a, latlng));
     }
   }
 
@@ -2201,11 +2207,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
       items.add(_pointMenuItem('deselect', Icons.close, 'Deselect'));
     }
     if (items.isEmpty) {
-      // Transit routes aren't tap-selectable (they have no editor); point at
+      // Imported objects aren't tap-selectable (they have no editor); point at
       // the tool that does manage them instead of a dead "nothing here".
-      _hint(activeLayer.type == 'transit'
-          ? 'Use Lines… in the layer menu to manage this layer.'
-          : 'Nothing here in "${activeLayer.name}".');
+      _hint(switch (activeLayer.type) {
+        'transit' => 'Use Stations… in the layer menu to manage this layer.',
+        'borders' => 'Use Elements in the layer drawer to manage this layer.',
+        _ => 'Nothing here in "${activeLayer.name}".',
+      });
       return;
     }
 
@@ -2279,6 +2287,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       poiPoints: ref.read(poiPointsProvider).asData?.value ?? const [],
       transitSets: ref.read(transitSetsProvider).asData?.value ?? const [],
       transitStops: ref.read(transitStopsProvider).asData?.value ?? const [],
+      borderSets: ref.read(borderSetsProvider).asData?.value ?? const [],
     );
     return {for (final r in rows) r.ref: r};
   }
@@ -2417,17 +2426,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
         ref.watch(planePlacementProvider) != null;
     final settings = ref.watch(settingsProvider).asData?.value;
     final uncertainty = settings?.uncertaintyMeters ?? 0;
-    final transportOverlay = settings?.transportOverlay ?? false;
     final toolsExpanded = settings?.toolsExpanded ?? true;
     final basemapVisible = settings?.basemapVisible ?? true;
     final basemapOpacity = settings?.basemapOpacity ?? 1.0;
-    // React to border-level changes.
-    final borderMask = settings?.borderLevels ?? 0;
-    if (borderMask != _borderMask) {
-      _borderMask = borderMask;
-      _enabledBorders = borderLevelsFromMask(borderMask);
-      _scheduleBordersRefresh();
-    }
     final selectedCircle = circles
         .where((c) => c.id == ref.watch(selectedCircleProvider))
         .firstOrNull;
@@ -2547,7 +2548,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     interactionOptions: _interactionOptions(tapPlaces),
                     onMapReady: () {
                       _mapReady = true;
-                      _scheduleBordersRefresh();
                       _schedulePrefetch();
                     },
                     onPositionChanged: (camera, _) {
@@ -2568,12 +2568,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       if (camera.rotation != _rotation) {
                         setState(() => _rotation = camera.rotation);
                       }
-                      // The transit import box's live corner *is* the map
-                      // centre, so it has to follow the camera. Only runs
-                      // while a corner is buffered.
+                      // An import box's live corner *is* the map centre, so it
+                      // has to follow the camera. Only runs while a corner is
+                      // buffered.
                       if (_pendingBoxA != null) setState(() {});
-                      // Refresh overlays + prefetch tiles once the map settles.
-                      _scheduleBordersRefresh();
+                      // Prefetch tiles once the map settles.
                       _schedulePrefetch();
                     },
                     onTap: (_, latlng) => _handleTap(latlng),
@@ -2599,23 +2598,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           maxZoom: 19,
                         ),
                       ),
-                    // Optional transparent public-transport overlays, above the
-                    // base map but below the zone layers. ÖPNVKarte carries
-                    // buses/trams/stops; OpenRailwayMap the rail network.
-                    if (transportOverlay) ...[
-                      TileLayer(
-                        urlTemplate: _opnvTileUrl,
-                        userAgentPackageName: 'com.zonecraft.zonecraft',
-                        tileProvider: _tileProvider,
-                        maxZoom: 18,
-                      ),
-                      TileLayer(
-                        urlTemplate: _railTileUrl,
-                        userAgentPackageName: 'com.zonecraft.zonecraft',
-                        tileProvider: _tileProvider,
-                        maxZoom: 19,
-                      ),
-                    ],
                     // One composited region per visible layer, bottom-to-top.
                     // Region layers apply their opacity inside the painter (so
                     // it can push the fill all the way to fully opaque). POI
@@ -2657,6 +2639,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                   .clamp(2.0, 19.0),
                             ),
                           ),
+                        )
+                      else if (layer.isVisible && layer.type == 'borders')
+                        // Not wrapped in Opacity: the fill takes the layer's
+                        // opacity inside the painter, and the outline stays
+                        // crisp regardless (a half-visible border line is just
+                        // a worse border line).
+                        BorderAreasLayer(
+                          key: ValueKey(layer.id),
+                          layer: layer,
+                          shapes: ref.watch(borderShapesProvider(layer.id)),
                         )
                       else if (layer.isVisible)
                         RegionLayer(
@@ -2772,9 +2764,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           ),
                         ],
                       ),
-                    // Transit import: the rubber-band box between the two corner
-                    // taps. The live corner is the map centre, so panning
-                    // reshapes it (there is no hover on a phone).
+                    // Box import (transit / borders): the rubber-band box
+                    // between the two corner taps. The live corner is the map
+                    // centre, so panning reshapes it (no hover on a phone).
                     if (_pendingBoxA != null) ...[
                       PolygonLayer(
                         polygons: [
@@ -2816,19 +2808,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         ],
                       ),
                     ],
-                    // Administrative borders (Overpass), above the zones so the
-                    // lines stay crisp. Present only when enabled at this zoom.
-                    if (_borders.isNotEmpty)
-                      PolylineLayer(
-                        polylines: [
-                          for (final b in _borders)
-                            Polyline(
-                              points: b.points,
-                              color: Color(b.colorArgb),
-                              strokeWidth: 2.5,
-                            ),
-                        ],
-                      ),
                     if (_myPosition != null)
                       MarkerLayer(
                         markers: [
@@ -3095,15 +3074,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           ],
                         ],
                       ),
-                    RichAttributionWidget(
+                    const RichAttributionWidget(
                       attributions: [
-                        const TextSourceAttribution(
+                        TextSourceAttribution(
                             '© OpenStreetMap contributors'),
-                        if (transportOverlay) ...[
-                          const TextSourceAttribution('Transit: ÖPNVKarte'),
-                          const TextSourceAttribution(
-                              'Rail: OpenRailwayMap (CC-BY-SA)'),
-                        ],
                       ],
                     ),
                   ],

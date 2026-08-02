@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/borders.dart';
 import '../data/database.dart';
 import '../data/repository.dart';
 import '../state/providers.dart';
@@ -48,14 +49,28 @@ class LayersDrawer extends ConsumerWidget {
         ref.watch(transitSetsProvider).asData?.value ?? const <TransitSet>[];
     final transitStations =
         ref.watch(transitStopsProvider).asData?.value ?? const <TransitStop>[];
+    final borderSets =
+        ref.watch(borderSetsProvider).asData?.value ?? const <BorderSet>[];
+    final borderAreas =
+        ref.watch(borderAreasProvider).asData?.value ?? const <BorderArea>[];
     final selected = ref.watch(activeLayerProvider);
     final repo = ref.read(repositoryProvider);
 
     Future<void> addLayer(int count, String type) async {
+      // Borders is the one type with a creation-time sub-choice: a layer holds
+      // exactly one admin level, which is what makes its colouring well
+      // defined, so the level has to be settled before the layer exists.
+      String? level;
+      if (type == 'borders') {
+        final picked = await showBorderLevelPicker(context);
+        if (picked == null) return;
+        level = picked.adminLevel;
+      }
       final id = await repo.createLayer(
         name: 'Layer ${count + 1}',
         colorArgb: _palette[count % _palette.length].toARGB32(),
         type: type,
+        borderLevel: level,
       );
       ref.read(activeLayerProvider.notifier).select(id);
     }
@@ -167,6 +182,15 @@ class LayersDrawer extends ConsumerWidget {
                               title: Text('Transit layer'),
                             ),
                           ),
+                          const PopupMenuItem(
+                            value: 'borders',
+                            child: ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(Icons.public),
+                              title: Text('Borders layer'),
+                            ),
+                          ),
                         ],
                         child: const Padding(
                           padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -237,6 +261,16 @@ class LayersDrawer extends ConsumerWidget {
                         count = transitStations
                             .where((s) => ids.contains(s.setId))
                             .length;
+                      } else if (layer.type == 'borders') {
+                        // Areas are the unit you see, so count those rather
+                        // than imports (which would read 1).
+                        final ids = borderSets
+                            .where((s) => s.layerId == layer.id)
+                            .map((s) => s.id)
+                            .toSet();
+                        count = borderAreas
+                            .where((a) => ids.contains(a.setId))
+                            .length;
                       } else if (layer.type == 'poi') {
                         final ids = poiSets
                             .where((s) => s.layerId == layer.id)
@@ -254,8 +288,8 @@ class LayersDrawer extends ConsumerWidget {
                         layer: layer,
                         objectCount: count,
                         isActive: layer.id == activeId,
-                        canCombine: display.any(
-                            (l) => l.type == layer.type && l.id != layer.id),
+                        canCombine:
+                            display.any((l) => canCombineLayers(layer, l)),
                       );
                     },
                   ),
@@ -314,10 +348,17 @@ class _LayerTile extends ConsumerWidget {
       'height' => 'area',
       'poi' => 'POI',
       'transit' => 'station',
+      'borders' => 'area',
       _ => 'circle',
     };
     final subtitle =
         StringBuffer('$objectCount $noun${objectCount == 1 ? '' : 's'}');
+    // The level is what a borders layer *is* — two layers reading "12 areas"
+    // are otherwise indistinguishable.
+    if (layer.type == 'borders') {
+      final level = borderLevelByAdminLevel(layer.borderLevel);
+      if (level != null) subtitle.write(' · ${level.label.toLowerCase()}');
+    }
     if (layer.isInverted) subtitle.write(' · inverted');
     // Show the opacity only when it isn't this type's default (region layers
     // default to a translucent fill, so the default value isn't 100%).
@@ -407,6 +448,12 @@ class _LayerTile extends ConsumerWidget {
                       isInverted: !layer.isInverted);
                 case 'stations':
                   await _openStations(context, ref);
+                case 'fillAreas':
+                  await repo.updateBorderLayerOptions(layer.id,
+                      fillAreas: !layer.borderFillAreas);
+                case 'showNames':
+                  await repo.updateBorderLayerOptions(layer.id,
+                      showNames: !layer.borderShowNames);
                 case 'importTrack':
                   await importTrackIntoLayer(context, repo, layer);
                 case 'export':
@@ -414,9 +461,8 @@ class _LayerTile extends ConsumerWidget {
                 case 'combine':
                   final layers =
                       ref.read(layersProvider).asData?.value ?? const <Layer>[];
-                  final targets = layers
-                      .where((l) => l.type == layer.type && l.id != layer.id)
-                      .toList();
+                  final targets =
+                      layers.where((l) => canCombineLayers(layer, l)).toList();
                   final mergedInto =
                       await combineLayerFlow(context, repo, layer, targets);
                   // If the combined-away layer was active, follow to the target.
@@ -434,10 +480,13 @@ class _LayerTile extends ConsumerWidget {
               const PopupMenuItem(
                   value: 'opacity', child: Text('Transparency…')),
               // 'height' layers use an above/below toggle, not viewport
-              // invert; 'poi' layers are markers with nothing to invert.
+              // invert; 'poi'/'transit' are markers with nothing to invert;
+              // 'borders' draws many separate areas, so there is no single
+              // region to take the complement of.
               if (layer.type != 'height' &&
                   layer.type != 'poi' &&
-                  layer.type != 'transit')
+                  layer.type != 'transit' &&
+                  layer.type != 'borders')
                 PopupMenuItem(
                   value: 'inverse',
                   child: Text(layer.isInverted ? 'Un-invert' : 'Invert'),
@@ -445,6 +494,18 @@ class _LayerTile extends ConsumerWidget {
               if (layer.type == 'transit')
                 const PopupMenuItem(
                     value: 'stations', child: Text('Stations…')),
+              if (layer.type == 'borders') ...[
+                CheckedPopupMenuItem(
+                  value: 'fillAreas',
+                  checked: layer.borderFillAreas,
+                  child: const Text('Colour areas'),
+                ),
+                CheckedPopupMenuItem(
+                  value: 'showNames',
+                  checked: layer.borderShowNames,
+                  child: const Text('Show names'),
+                ),
+              ],
               if (layer.type == 'freeline' || layer.type == 'freearea')
                 const PopupMenuItem(
                   value: 'importTrack',
@@ -557,6 +618,42 @@ class _LayerTile extends ConsumerWidget {
           .updateLayer(layer.id, colorArgb: result.toARGB32());
     }
   }
+}
+
+/// Whether [source] may be merged into [target]: same type, different layer —
+/// and, for borders, the same admin level, since one layer holds one level.
+/// Mirrors the guard in [Repository.combineLayers], so the menu never offers a
+/// target the repository would refuse.
+bool canCombineLayers(Layer source, Layer target) =>
+    target.id != source.id &&
+    target.type == source.type &&
+    (source.type != 'borders' || target.borderLevel == source.borderLevel);
+
+/// Picks the admin level for a new borders layer.
+///
+/// This is the only creation-time sub-choice any layer type has, and it is
+/// deliberate: one layer holds one level, which is what makes "no two
+/// neighbours share a colour" mean anything (levels nest, they don't tile).
+Future<BorderLevel?> showBorderLevelPicker(BuildContext context) {
+  return showDialog<BorderLevel>(
+    context: context,
+    builder: (ctx) => SimpleDialog(
+      title: const Text('Which borders?'),
+      children: [
+        for (final l in borderLevels)
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, l),
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.public),
+              title: Text(l.label),
+              subtitle: Text(l.blurb),
+              isThreeLine: true,
+            ),
+          ),
+      ],
+    ),
+  );
 }
 
 /// The base map as a pinned bottom "layer": a hide toggle and a transparency
