@@ -117,7 +117,7 @@ const List<String> overpassEndpoints = [
 ];
 
 const String overpassUserAgent =
-    'ZoneCraft/1.0 (https://github.com/LeoStumpf/zonecraft)';
+    'ZoneCraft/1.0 (https://github.com/LeoStumpf/ZoneCraft)';
 
 /// Statuses the public instances use for "I am overloaded", not "your query is
 /// wrong". These are retried in place, then failed over; anything else is a

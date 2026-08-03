@@ -107,11 +107,15 @@ bbox, per-type visibility, retryable failed imports) and `borders` (offline area
 per admin level, neighbour-distinct colouring, name plates, per-area convert-to-freehand)
 — the layers drawer + per-type
 editors, settings (uncertainty, clear-all, offline cache, import/export), opt-in locate-me,
-persisted camera, offline resilience (cache-first tiles + prefetch), and import/export
+persisted camera, offline resilience (cache-first tiles; **no** prefetch on the community OSM
+servers — see `data/tile_source.dart`), and import/export
 (whole-DB + per-layer + external GeoJSON/KML/KMZ/GPX; freeline imports prompt for their
 inclusion-circle radius). Drift schema is **v20**.
 
 `planning/PLAN.md` has no open roadmap items; future polish ideas are listed there.
+`planning/PRODUCTION_AUDIT.md` records the production-readiness pass (what was found, what
+was fixed, what is deliberately left). `planning/RELEASE.md` is the Play Store checklist —
+release notes, store listing copy and the exact data-safety answers live there.
 
 ## Workflow rule (required)
 

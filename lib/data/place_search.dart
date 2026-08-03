@@ -149,7 +149,7 @@ Future<List<PlaceResult>?> searchPlaces(
       () => c.get(
         buildPlaceSearchUri(q),
         headers: const {
-          'User-Agent': 'ZoneCraft/1.0 (https://github.com/LeoStumpf/zonecraft)',
+          'User-Agent': 'ZoneCraft/1.0 (https://github.com/LeoStumpf/ZoneCraft)',
         },
       ).timeout(const Duration(seconds: 30)),
     );

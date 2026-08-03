@@ -96,7 +96,7 @@ class TileSource {
 /// > [Do not] masquerade as another app's User-Agent, or rely on a library's
 /// > default User-Agent.
 const String tileUserAgent =
-    'ZoneCraft/1.0 (https://github.com/LeoStumpf/zonecraft)';
+    'ZoneCraft/1.0 (https://github.com/LeoStumpf/ZoneCraft)';
 
 /// Substitutes `{z}`/`{x}`/`{y}` into a tile URL [template].
 String fillTileUrl(String template, int z, int x, int y) => template

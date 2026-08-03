@@ -35,7 +35,7 @@ class HeightEditorSheet extends ConsumerStatefulWidget {
 
 class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
   static const _userAgent =
-      'ZoneCraft/1.0 (https://github.com/LeoStumpf/zonecraft)';
+      'ZoneCraft/1.0 (https://github.com/LeoStumpf/ZoneCraft)';
 
   late final TextEditingController _center;
   late final TextEditingController _radius;
