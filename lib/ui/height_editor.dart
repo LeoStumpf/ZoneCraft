@@ -220,7 +220,7 @@ class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
                       keyboardType: const TextInputType.numberWithOptions(
                           decimal: true),
                       onChanged: (s) {
-                        final n = double.tryParse(s);
+                        final n = parseDecimal(s);
                         if (n != null && n.isFinite && n > 0) {
                           _repo.updateHeightRegion(id, radiusMeters: n);
                         }
@@ -237,7 +237,7 @@ class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
                       keyboardType: const TextInputType.numberWithOptions(
                           decimal: true, signed: true),
                       onChanged: (s) {
-                        final n = double.tryParse(s);
+                        final n = parseDecimal(s);
                         if (n != null && n.isFinite) {
                           _repo.updateHeightRegion(id, thresholdMeters: n);
                         }

@@ -1331,16 +1331,6 @@ class Repository {
         );
   }
 
-  /// Upserts the enabled-POI-category bitmask into the single settings row.
-  Future<void> updatePoiCategories(int mask) {
-    return _db.into(_db.appSettings).insertOnConflictUpdate(
-          AppSettingsCompanion.insert(
-            id: const Value(1),
-            poiCategories: Value(mask),
-          ),
-        );
-  }
-
   /// Upserts the utility-FAB expand/collapse choice into the settings row.
   Future<void> updateToolsExpanded(bool expanded) {
     return _db.into(_db.appSettings).insertOnConflictUpdate(
@@ -1458,41 +1448,13 @@ class Repository {
 
   // --- Overpass overlay cache ----------------------------------------------
   //
-  // **Unused.** Both viewport-following overlays this cached are gone: map POIs
+  // **Gone.** Both viewport-following overlays this cached are gone: map POIs
   // became the `poi` layer type, administrative borders the `borders` one, and
-  // both store their imports in their own tables instead. The table and these
-  // accessors survive so a future overlay has somewhere to go; nothing writes
-  // to them today.
-
-  /// Persists the last successful Overpass result for [kind] ('poi'|'border').
-  Future<void> saveOverpassCache(
-    String kind,
-    String payload, {
-    required double south,
-    required double west,
-    required double north,
-    required double east,
-    required int maskBits,
-  }) {
-    return _db.into(_db.overpassCache).insertOnConflictUpdate(
-          OverpassCacheCompanion.insert(
-            kind: kind,
-            payload: payload,
-            south: south,
-            west: west,
-            north: north,
-            east: east,
-            maskBits: maskBits,
-            fetchedAt: DateTime.now().millisecondsSinceEpoch,
-          ),
-        );
-  }
-
-  /// Loads the persisted Overpass result for [kind], or null if none.
-  Future<OverpassCacheData?> loadOverpassCache(String kind) {
-    return (_db.select(_db.overpassCache)..where((c) => c.kind.equals(kind)))
-        .getSingleOrNull();
-  }
+  // both store their imports in their own tables instead. The read/write
+  // accessors were deleted with them; the `OverpassCache` **table** stays,
+  // because migrations here are append-only and dropping it would mean a table
+  // rebuild for no benefit — the same treatment the dead `AppSettings` columns
+  // (`transportOverlay`, `borderLevels`, `poiCategories`) get.
 
   // --- Clear ----------------------------------------------------------------
 

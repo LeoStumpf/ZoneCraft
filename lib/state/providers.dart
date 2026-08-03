@@ -109,6 +109,70 @@ final borderAreasProvider = StreamProvider<List<BorderArea>>((ref) {
   return ref.watch(repositoryProvider).watchAllBorderAreas();
 });
 
+// --- Point lookups ----------------------------------------------------------
+//
+// The `watchAll*` point streams are flat lists across *every* object of *every*
+// layer, because that is the shape a single query returns. The renderer wants
+// "the points of this one object", and it asks once per object per frame:
+// `RegionLayer.build` reads `MapCamera.of(context)`, so it re-runs on every
+// camera tick of a pan, and a linear `.where(...)` scan inside a loop over the
+// layer's objects is O(objects x all points of that type). Small hand-drawn
+// layers never noticed; a borders-to-freehand conversion (97 areas, 13 629
+// points) is ~1.3M comparisons and a fresh list allocation *per frame*.
+//
+// So group once per stream emission instead — the same trick
+// [borderShapesProvider] uses to decode ring geometry once rather than per
+// frame. Lookups become O(1), the lists keep their identity between frames, and
+// the cost stops depending on layers you aren't looking at.
+
+/// Groups [rows] by [keyOf], preserving each group's incoming order (the
+/// queries already order by `sortOrder`, and the renderers depend on that).
+Map<String, List<T>> _groupBy<T>(
+  List<T> rows,
+  String Function(T row) keyOf,
+) {
+  final out = <String, List<T>>{};
+  for (final row in rows) {
+    (out[keyOf(row)] ??= <T>[]).add(row);
+  }
+  return out;
+}
+
+/// Subspace points keyed by their subspace id.
+final subspacePointsBySubspaceProvider =
+    Provider<Map<String, List<SubspacePoint>>>((ref) {
+  final rows = ref.watch(subspacePointsProvider).asData?.value ?? const [];
+  return _groupBy(rows, (p) => p.subspaceId);
+});
+
+/// Freehand-line vertices keyed by their line id.
+final freeLinePointsByLineProvider =
+    Provider<Map<String, List<FreeLinePoint>>>((ref) {
+  final rows = ref.watch(freeLinePointsProvider).asData?.value ?? const [];
+  return _groupBy(rows, (p) => p.freeLineId);
+});
+
+/// Freehand-area vertices keyed by their area id.
+final freeAreaPointsByAreaProvider =
+    Provider<Map<String, List<FreeAreaPoint>>>((ref) {
+  final rows = ref.watch(freeAreaPointsProvider).asData?.value ?? const [];
+  return _groupBy(rows, (p) => p.freeAreaId);
+});
+
+/// Generated height polygons keyed by their height-region id.
+final heightPolygonsByRegionProvider =
+    Provider<Map<String, List<HeightPolygon>>>((ref) {
+  final rows = ref.watch(heightPolygonsProvider).asData?.value ?? const [];
+  return _groupBy(rows, (p) => p.heightRegionId);
+});
+
+/// Height-polygon ring points keyed by their polygon id.
+final heightPolygonPointsByPolygonProvider =
+    Provider<Map<String, List<HeightPolygonPoint>>>((ref) {
+  final rows = ref.watch(heightPolygonPointsProvider).asData?.value ?? const [];
+  return _groupBy(rows, (p) => p.polygonId);
+});
+
 /// App-wide settings (currently the global uncertainty radius).
 final settingsProvider = StreamProvider<AppSetting>((ref) {
   return ref.watch(repositoryProvider).watchSettings();

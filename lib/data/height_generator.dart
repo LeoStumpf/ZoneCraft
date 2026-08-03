@@ -28,6 +28,21 @@ class HeightGenResult {
   final int missingTiles;
 }
 
+/// How long one terrain tile gets before it is treated as unavailable.
+///
+/// `package:http` has **no** default timeout, so a stalled connection (captive
+/// portal, a mobile handoff, a wedged CDN edge) never completes and never
+/// errors. Without this the elevation probe's spinner runs forever and the
+/// height "Generate" button can never be pressed again.
+const Duration kTerrainTileTimeout = Duration(seconds: 15);
+
+/// Overall budget for one [generateHeightRegion] run. Per-tile timeouts alone
+/// are not enough: [heightMaxTiles] is 80, so 80 slow-but-not-timing-out tiles
+/// could otherwise add up to twenty minutes behind a modal dialog. Once the
+/// budget is spent the remaining tiles count as missing, and the contouring
+/// runs on what did arrive.
+const Duration kHeightGenBudget = Duration(seconds: 90);
+
 /// Looks up the terrain elevation (metres) at [lat]/[lng] from the single
 /// Terrarium tile covering it (cache-first, then network). Returns null when the
 /// tile can't be fetched (offline) or decoded. Used by the map elevation probe
@@ -46,12 +61,16 @@ Future<double?> queryElevation({
   Uint8List? bytes = await repo.getTile(url);
   if (bytes == null) {
     try {
-      final resp = await client.get(Uri.parse(url), headers: headers);
+      final resp = await client
+          .get(Uri.parse(url), headers: headers)
+          .timeout(kTerrainTileTimeout);
       if (resp.statusCode == 200 && resp.bodyBytes.isNotEmpty) {
         bytes = resp.bodyBytes;
         await repo.putTile(url, bytes);
       }
     } catch (_) {
+      // Offline, server error, or the tile took longer than we're willing to
+      // make the caller's spinner wait.
       return null;
     }
   }
@@ -86,19 +105,25 @@ Future<HeightGenResult> generateHeightRegion({
   final tileY = <int>[];
   final tileBytes = <Uint8List>[];
   var missing = 0;
+  // Cached tiles stay free after the budget runs out — only the network is cut
+  // off — so an area you've generated before still regenerates fully offline.
+  final deadline = DateTime.now().add(kHeightGenBudget);
   for (var x = box.minX; x <= box.maxX; x++) {
     for (var y = box.minY; y <= box.maxY; y++) {
       final url = terrariumTileUrl(z, x, y);
       Uint8List? bytes = await repo.getTile(url);
-      if (bytes == null) {
+      if (bytes == null && DateTime.now().isBefore(deadline)) {
         try {
-          final resp = await client.get(Uri.parse(url), headers: headers);
+          final resp = await client
+              .get(Uri.parse(url), headers: headers)
+              .timeout(kTerrainTileTimeout);
           if (resp.statusCode == 200 && resp.bodyBytes.isNotEmpty) {
             bytes = resp.bodyBytes;
             await repo.putTile(url, bytes);
           }
         } catch (_) {
-          // Offline / server error: leave this tile missing (sea level).
+          // Offline / server error / too slow: leave this tile missing
+          // (sea level).
         }
       }
       if (bytes == null) {

@@ -186,12 +186,6 @@ void main() {
     expect((await repo.watchSettings().first).uncertaintyMeters, 250);
   });
 
-  test('POI category mask defaults to 0 and persists', () async {
-    expect((await repo.watchSettings().first).poiCategories, 0);
-    await repo.updatePoiCategories(0x05); // bench + drinking_water
-    expect((await repo.watchSettings().first).poiCategories, 0x05);
-  });
-
   test('layer opacity defaults per type and updates', () async {
     // Region layers default to a translucent fill; POI layers to fully opaque.
     final region = await repo.createLayer(name: 'L', colorArgb: 0xFF0000FF);
@@ -233,7 +227,6 @@ void main() {
       radiusMeters: 100,
     );
     await repo.updateUncertainty(0);
-    await repo.updatePoiCategories(0x0F);
     await repo.saveCamera(48.1, 11.5, 12);
 
     final seededId = await repo.clearAll();

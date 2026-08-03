@@ -252,7 +252,7 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
                       keyboardType: const TextInputType.numberWithOptions(
                           decimal: true),
                       onChanged: (s) {
-                        final n = double.tryParse(s);
+                        final n = parseDecimal(s);
                         if (n != null && n.isFinite && n > 0) _setRadius(n);
                       },
                     ),
@@ -270,7 +270,7 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
                       keyboardType: const TextInputType.numberWithOptions(
                           decimal: true, signed: true),
                       onChanged: (s) {
-                        final n = double.tryParse(s);
+                        final n = parseDecimal(s);
                         if (n != null && n.isFinite) {
                           _repo.updateFreeLine(id, offsetMeters: n);
                         }

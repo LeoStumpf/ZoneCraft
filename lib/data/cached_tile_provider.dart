@@ -29,6 +29,12 @@ class CachedTileProvider extends TileProvider {
   /// tiles are evicted after a write.
   static const int maxCacheBytes = 200 * 1024 * 1024;
 
+  /// How long one tile fetch gets. `package:http` has no default timeout, so
+  /// without this a stalled connection leaves the request (and the prefetch
+  /// loop driving it) hanging forever rather than failing over to the blank
+  /// tile the offline path already handles.
+  static const Duration fetchTimeout = Duration(seconds: 15);
+
   @override
   ImageProvider getImage(TileCoordinates coordinates, TileLayer options) {
     return _CachedTileImage(
@@ -44,7 +50,9 @@ class CachedTileProvider extends TileProvider {
   Future<bool> prefetch(String url) async {
     try {
       if (await _repo.hasTile(url)) return false;
-      final resp = await _client.get(Uri.parse(url), headers: headers);
+      final resp = await _client
+          .get(Uri.parse(url), headers: headers)
+          .timeout(fetchTimeout);
       if (resp.statusCode == 200 && resp.bodyBytes.isNotEmpty) {
         await _repo.putTile(url, resp.bodyBytes);
         return true;
@@ -101,7 +109,9 @@ class _CachedTileImage extends ImageProvider<_CachedTileImage> {
     // 2. Miss (or corrupt) -> fetch, store, decode. On any failure throw so
     //    flutter_map shows its blank/error tile (only ever for never-seen
     //    tiles; already-cached areas keep working offline).
-    final resp = await client.get(Uri.parse(url), headers: headers);
+    final resp = await client
+        .get(Uri.parse(url), headers: headers)
+        .timeout(CachedTileProvider.fetchTimeout);
     if (resp.statusCode != 200 || resp.bodyBytes.isEmpty) {
       throw NetworkImageLoadException(
         statusCode: resp.statusCode,

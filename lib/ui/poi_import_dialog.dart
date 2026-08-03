@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/overpass.dart';
+import '../geo/coords.dart';
 
 /// The user's choices from the POI import dialog.
 class PoiImportConfig {
@@ -74,7 +75,7 @@ class _PoiImportDialogState extends State<_PoiImportDialog> {
   }
 
   String? _validateMeters(String? v, {required double max}) {
-    final n = double.tryParse((v ?? '').trim());
+    final n = parseDecimal((v ?? '').trim());
     if (n == null || !n.isFinite || n <= 0) return 'Enter metres > 0';
     if (n > max) return 'Max ${max.round()} m';
     return null;

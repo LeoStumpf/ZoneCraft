@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../data/borders.dart';
+import '../geo/coords.dart';
 import 'hit_test.dart' show geoDistance;
 import 'object_summary.dart' show formatMeters;
 import 'transit_import_dialog.dart'
@@ -116,7 +117,7 @@ class _BorderImportDialogState extends State<_BorderImportDialog> {
     super.dispose();
   }
 
-  double? _v(TextEditingController c) => double.tryParse(c.text.trim());
+  double? _v(TextEditingController c) => parseDecimal(c.text.trim());
 
   BorderBboxVerdict get _verdict => checkBorderBbox(
       _v(_south), _v(_west), _v(_north), _v(_east),

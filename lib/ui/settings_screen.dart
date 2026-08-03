@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import '../data/database.dart';
 import '../data/repository.dart';
 import '../data/serialization.dart';
+import '../geo/coords.dart';
 import '../state/providers.dart';
 import 'import_actions.dart';
 
@@ -210,7 +211,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
                   onChanged: (s) {
-                    final n = double.tryParse(s);
+                    final n = parseDecimal(s);
                     if (n != null && n.isFinite && n >= 0) {
                       _setUncertainty(n);
                     }

@@ -13,6 +13,7 @@ import '../data/geo_import.dart';
 import '../data/repository.dart';
 import '../data/serialization.dart';
 import '../geo/border_areas.dart' show outerRings;
+import '../geo/coords.dart';
 import 'feature_search_dialog.dart';
 import 'region_geometry.dart';
 
@@ -131,7 +132,7 @@ Future<double?> askFreeLineRadius(
             ),
             FilledButton(
               onPressed: () {
-                final n = double.tryParse(controller.text.trim());
+                final n = parseDecimal(controller.text.trim());
                 if (n == null || !n.isFinite || n <= 0) {
                   setState(() => error = 'Enter metres > 0');
                   return;

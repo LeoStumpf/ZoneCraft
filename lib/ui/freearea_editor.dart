@@ -201,7 +201,7 @@ class _FreeAreaEditorSheetState extends ConsumerState<FreeAreaEditorSheet> {
                       keyboardType: const TextInputType.numberWithOptions(
                           decimal: true, signed: true),
                       onChanged: (s) {
-                        final n = double.tryParse(s);
+                        final n = parseDecimal(s);
                         if (n != null && n.isFinite) {
                           _repo.updateFreeArea(id, offsetMeters: n);
                         }

@@ -30,14 +30,14 @@ class RegionLayer extends StatelessWidget {
     this.circles = const <Circle>[],
     this.planes = const <Plane>[],
     this.subspaces = const <Subspace>[],
-    this.subspacePoints = const <SubspacePoint>[],
+    this.subspacePoints = const <String, List<SubspacePoint>>{},
     this.freeLines = const <FreeLine>[],
-    this.freeLinePoints = const <FreeLinePoint>[],
+    this.freeLinePoints = const <String, List<FreeLinePoint>>{},
     this.freeAreas = const <FreeArea>[],
-    this.freeAreaPoints = const <FreeAreaPoint>[],
+    this.freeAreaPoints = const <String, List<FreeAreaPoint>>{},
     this.heightRegions = const <HeightRegion>[],
-    this.heightPolygons = const <HeightPolygon>[],
-    this.heightPolygonPoints = const <HeightPolygonPoint>[],
+    this.heightPolygons = const <String, List<HeightPolygon>>{},
+    this.heightPolygonPoints = const <String, List<HeightPolygonPoint>>{},
     required this.uncertaintyMeters,
     this.opacity = 1.0,
   });
@@ -47,26 +47,31 @@ class RegionLayer extends StatelessWidget {
   final List<Plane> planes;
   final List<Subspace> subspaces;
 
-  /// Points belonging to [subspaces] (ordered); grouped per-subspace at paint.
-  final List<SubspacePoint> subspacePoints;
+  // The point collections arrive **pre-grouped by owner id** (see the grouping
+  // providers in `state/providers.dart`). They used to be flat lists that this
+  // widget re-scanned per object per frame, which made a pan cost
+  // O(objects x all points of that type) — see those providers' header.
+
+  /// Points keyed by subspace id (each list ordered).
+  final Map<String, List<SubspacePoint>> subspacePoints;
 
   final List<FreeLine> freeLines;
 
-  /// Points belonging to [freeLines] (ordered); grouped per-line at paint.
-  final List<FreeLinePoint> freeLinePoints;
+  /// Vertices keyed by freehand-line id (each list ordered).
+  final Map<String, List<FreeLinePoint>> freeLinePoints;
 
   final List<FreeArea> freeAreas;
 
-  /// Points belonging to [freeAreas] (ordered); grouped per-area at paint.
-  final List<FreeAreaPoint> freeAreaPoints;
+  /// Vertices keyed by freehand-area id (each list ordered).
+  final Map<String, List<FreeAreaPoint>> freeAreaPoints;
 
   final List<HeightRegion> heightRegions;
 
-  /// Generated fill polygons for [heightRegions] (ordered); grouped per-region.
-  final List<HeightPolygon> heightPolygons;
+  /// Generated fill polygons keyed by height-region id (each list ordered).
+  final Map<String, List<HeightPolygon>> heightPolygons;
 
-  /// Ring points of [heightPolygons] (ordered); grouped per-polygon at paint.
-  final List<HeightPolygonPoint> heightPolygonPoints;
+  /// Ring points keyed by height-polygon id (each list ordered).
+  final Map<String, List<HeightPolygonPoint>> heightPolygonPoints;
   final double uncertaintyMeters;
 
   /// The layer's fill opacity in [0, 1] (see [Layers.opacity]).
@@ -82,7 +87,7 @@ class RegionLayer extends StatelessWidget {
       for (final a in freeAreas)
         areaGeometryCache.resolve(
           a,
-          [for (final p in freeAreaPoints) if (p.freeAreaId == a.id) p],
+          freeAreaPoints[a.id] ?? const <FreeAreaPoint>[],
           bandMeters: uncertaintyMeters,
           inverted: layer.isInverted,
         ),
@@ -141,18 +146,18 @@ class _RegionPainter extends CustomPainter {
   final List<Circle> circles;
   final List<Plane> planes;
   final List<Subspace> subspaces;
-  final List<SubspacePoint> subspacePoints;
+  final Map<String, List<SubspacePoint>> subspacePoints;
   final List<FreeLine> freeLines;
-  final List<FreeLinePoint> freeLinePoints;
+  final Map<String, List<FreeLinePoint>> freeLinePoints;
   final List<FreeArea> freeAreas;
-  final List<FreeAreaPoint> freeAreaPoints;
+  final Map<String, List<FreeAreaPoint>> freeAreaPoints;
 
   /// Pre-resolved, camera-independent geometry for [freeAreas], one per object.
   final List<ResolvedArea> resolvedAreas;
 
   final List<HeightRegion> heightRegions;
-  final List<HeightPolygon> heightPolygons;
-  final List<HeightPolygonPoint> heightPolygonPoints;
+  final Map<String, List<HeightPolygon>> heightPolygons;
+  final Map<String, List<HeightPolygonPoint>> heightPolygonPoints;
   final double uncertaintyMeters;
 
   /// The layer's fill opacity in [0, 1]. It scales all three paint elements by
@@ -278,7 +283,7 @@ class _RegionPainter extends CustomPainter {
 
     if (subspaces.isNotEmpty && viewport != null) {
       for (final s in subspaces) {
-        final pts = subspacePoints.where((p) => p.subspaceId == s.id).toList();
+        final pts = subspacePoints[s.id] ?? const <SubspacePoint>[];
         final mainPt = pts.where((p) => p.isMain).firstOrNull;
         if (mainPt == null) continue; // no main point -> nothing to fill
         final main = LatLng(mainPt.lat, mainPt.lng);
@@ -452,7 +457,7 @@ class _RegionPainter extends CustomPainter {
     LatLng? bandRef; // a point to scale band metres → pixels
 
     for (final l in freeLines) {
-      final pts = freeLinePoints.where((p) => p.freeLineId == l.id).toList();
+      final pts = freeLinePoints[l.id] ?? const <FreeLinePoint>[];
       if (pts.length < 2) continue;
       final line = <LatLng>[for (final p in pts) LatLng(p.lat, p.lng)];
 
@@ -678,8 +683,7 @@ class _RegionPainter extends CustomPainter {
       ..color = color.withValues(alpha: _strokeAlpha);
 
     for (final r in heightRegions) {
-      final polys =
-          heightPolygons.where((p) => p.heightRegionId == r.id).toList();
+      final polys = heightPolygons[r.id] ?? const <HeightPolygon>[];
       if (polys.isEmpty) continue;
       final center = LatLng(r.centerLat, r.centerLng);
       final rMeters = r.radiusMeters;
@@ -689,7 +693,7 @@ class _RegionPainter extends CustomPainter {
       var hasFill = false;
       for (final poly in polys) {
         final pts =
-            heightPolygonPoints.where((p) => p.polygonId == poly.id).toList();
+            heightPolygonPoints[poly.id] ?? const <HeightPolygonPoint>[];
         if (pts.length < 3) continue;
         final offs = <Offset>[
           for (final p in pts)

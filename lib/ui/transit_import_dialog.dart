@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../data/transit.dart';
+import '../geo/coords.dart';
 import 'hit_test.dart' show geoDistance;
 import 'object_summary.dart' show formatMeters;
 
@@ -36,14 +37,14 @@ class TransitImportConfig {
 /// Bbox validation, pulled out of the widget so it is testable without a
 /// widget test.
 String? validateLat(String? v) {
-  final n = double.tryParse((v ?? '').trim());
+  final n = parseDecimal((v ?? '').trim());
   if (n == null || !n.isFinite) return 'Number';
   if (n < -90 || n > 90) return '−90…90';
   return null;
 }
 
 String? validateLng(String? v) {
-  final n = double.tryParse((v ?? '').trim());
+  final n = parseDecimal((v ?? '').trim());
   if (n == null || !n.isFinite) return 'Number';
   if (n < -180 || n > 180) return '−180…180';
   return null;
@@ -157,7 +158,7 @@ class _TransitImportDialogState extends State<_TransitImportDialog> {
     });
   }
 
-  double? _v(TextEditingController c) => double.tryParse(c.text.trim());
+  double? _v(TextEditingController c) => parseDecimal(c.text.trim());
 
   /// NaN while the box is unusable — every threshold comparison then reads
   /// false, so nothing is warned about until there is a box to warn about.

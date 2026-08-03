@@ -51,15 +51,31 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   `geo/tiles.dart`), so the map survives a few minutes with no reception. LRU eviction
   (200 MB cap) + a Settings size readout / "Clear cached map tiles" button.
 - **One Overpass client** (`data/overpass_client.dart`): endpoint failover, transient-vs-fatal
-  status handling and a size cap, shared by `transit.dart` and `borders.dart`. The endpoint
-  that last answered is remembered in `AppSettings.transitEndpoint` (old name, shared use).
+  status handling and a size cap, shared by `transit.dart`, `borders.dart` **and
+  `overpass.dart`** (POI imports) — all three return `OverpassOutcome` and drive the shared
+  `ui/import_progress.dart` dialog. The endpoint that last answered is remembered in
+  `AppSettings.transitEndpoint` (old name, shared use).
+- **Every outbound HTTP call is timed out.** `package:http` has no default timeout, so each
+  call site sets one explicitly (`kTerrainTileTimeout`, `CachedTileProvider.fetchTimeout`,
+  the Overpass per-request budgets), plus `kHeightGenBudget` as an overall deadline on a
+  height generation and a `timeLimit` on `getCurrentPosition`. Add one to any new call.
+- **Number entry goes through `parseDecimal`** (`geo/coords.dart`), never bare
+  `double.tryParse` — a comma-decimal locale would otherwise make the field silently no-op.
 - **Per-layer & external import/export:** besides whole-DB GeoJSON/KML, each layer can be
   exported alone and files imported as a new layer or **merged** into an existing same-type
   one (`ui/import_actions.dart`); generic **GeoJSON/KML/KMZ/GPX** tracks import into freehand
   layers (`data/geo_import.dart`).
 - **Drift schema is at v20**; migrations are append-only `if (from < N)` blocks. (v19 is the
   one exception: it *drops* the transit route tables, because route geometry was abandoned —
-  see `data/transit.dart`'s header for the measurements behind that.)
+  see `data/transit.dart`'s header for the measurements behind that.) v20 is snapshotted in
+  `drift_schemas/` and guarded by `test/migration_test.dart`. **Any schema change must dump a
+  new snapshot** (`dart run drift_dev schema dump lib/data/database.dart drift_schemas/`, then
+  `... schema generate drift_schemas/ test/generated_migrations/`) — a snapshot cannot be
+  reconstructed after the version ships, and the test fails until it exists.
+- **Point rows reach the renderer pre-grouped by owner** (`state/providers.dart`'s
+  `*By*Provider`s build `Map<ownerId, List<point>>` once per stream emission). `RegionLayer`
+  takes maps, not flat lists: it rebuilds on every camera tick, so a linear scan per object
+  there costs O(objects × all points) *per frame*.
 
 ## Current status
 

@@ -129,12 +129,14 @@ void main() {
         categories: [cat('bench')],
         client: client,
       );
-      expect(r, isNotNull);
-      expect(r!.single.categoryKey, 'bench');
+      expect(r.ok, isTrue);
+      expect(r.value!.single.categoryKey, 'bench');
     });
 
-    test('returns null (not empty) on a non-200, so markers are kept', () async {
-      final client = MockClient((_) async => http.Response('slow down', 429));
+    test('reports a query error as a message, not an empty result', () async {
+      // 400 is *not* transient, so this also pins that a query error is
+      // reported as-is rather than sent round the whole failover list.
+      final client = MockClient((_) async => http.Response('bad query', 400));
       final r = await fetchPois(
         south: 0,
         west: 0,
@@ -143,15 +145,40 @@ void main() {
         categories: [cat('bench')],
         client: client,
       );
-      expect(r, isNull);
+      expect(r.ok, isFalse);
+      expect(r.message, contains('400'));
     });
 
-    test('short-circuits to empty when no categories are enabled', () async {
-      expect(
-        await fetchPois(
-            south: 0, west: 0, north: 1, east: 1, categories: const []),
-        isEmpty,
+    test('failing over is the transport\'s job, not the caller\'s', () async {
+      // The first instance rejects fast (transient), the next answers — the POI
+      // import gets the same failover transit and borders have.
+      var call = 0;
+      final client = MockClient((_) async {
+        call++;
+        return call <= 2
+            ? http.Response('busy', 504)
+            : http.Response(
+                '{"elements":[{"type":"node","lat":1,"lon":2,'
+                '"tags":{"amenity":"bench"}}]}',
+                200);
+      });
+      final r = await fetchPois(
+        south: 0,
+        west: 0,
+        north: 1,
+        east: 1,
+        categories: [cat('bench')],
+        client: client,
       );
+      expect(r.ok, isTrue);
+      expect(r.value!.single.categoryKey, 'bench');
+    }, timeout: const Timeout(Duration(seconds: 30)));
+
+    test('short-circuits to empty when no categories are enabled', () async {
+      final r = await fetchPois(
+          south: 0, west: 0, north: 1, east: 1, categories: const []);
+      expect(r.ok, isTrue);
+      expect(r.value, isEmpty);
     });
   });
 

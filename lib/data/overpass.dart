@@ -3,6 +3,8 @@ import 'dart:math' as math;
 
 import 'package:http/http.dart' as http;
 
+import 'overpass_client.dart';
+
 /// A toggleable map-POI category (OSMAnd-style). Each maps to one OSM tag and
 /// occupies one [bit] in the packed `AppSettings.poiCategories` mask.
 class PoiCategory {
@@ -316,48 +318,53 @@ double _haversineMeters(
   return 2 * earthRadius * math.asin(math.min(1.0, math.sqrt(a)));
 }
 
+/// How long a POI import gets. Generous next to the 25 s `[timeout:25]` in the
+/// query itself, because the wait is mostly the instance's dispatcher queue,
+/// not the query — see `overpass_client.dart`'s header.
+const Duration poiRequestTimeout = Duration(seconds: 60);
+
+/// Ceiling on a POI answer. `out center $overpassResultCap` already caps the
+/// element count, so this only catches a pathological body; it exists so the
+/// stream can be abandoned mid-download rather than buffered in full.
+const int poiMaxResponseBytes = 8 * 1024 * 1024;
+
 /// Queries the Overpass API for the enabled [categories] within the bbox.
-/// Zoom-gating/debouncing are the caller's responsibility.
 ///
-/// Returns the POIs on success (an empty list means "none here"), or **null**
-/// on any network/HTTP/timeout error — so the caller can keep the previous
-/// markers instead of clearing them when a request is rate-limited or fails.
-/// Never throws.
-Future<List<PoiResult>?> fetchPois({
+/// Goes through the shared [overpassPost] transport, so a POI import gets the
+/// same endpoint failover, retry-vs-move-on split and streamed size cap that
+/// transit and border imports do. It used to POST a single hardcoded instance
+/// once — which is precisely the failure mode that made "city districts always
+/// fail" look like a query problem when it was a transport one.
+///
+/// Returns the POIs on success (an empty list means "none here"), or a failure
+/// carrying a user-facing message. Never throws.
+Future<OverpassOutcome<List<PoiResult>>> fetchPois({
   required double south,
   required double west,
   required double north,
   required double east,
   required Iterable<PoiCategory> categories,
   http.Client? client,
-}) async {
+  String? preferEndpoint,
+  OverpassProgressCallback? onProgress,
+}) {
   final cats = categories.toList();
-  if (cats.isEmpty) return const [];
-  final query = buildOverpassQuery(
-    south: south,
-    west: west,
-    north: north,
-    east: east,
-    categories: cats,
+  if (cats.isEmpty) return Future.value(const OverpassOutcome.ok(<PoiResult>[]));
+  return overpassPost(
+    buildOverpassQuery(
+      south: south,
+      west: west,
+      north: north,
+      east: east,
+      categories: cats,
+    ),
+    client: client,
+    timeout: poiRequestTimeout,
+    maxBytes: poiMaxResponseBytes,
+    oversizeMessage: 'That search returns too much data — pick a smaller '
+        'radius.',
+    preferEndpoint: preferEndpoint,
+    onProgress: onProgress,
+    parse: (body) => parseOverpassResponse(body, cats),
   );
-  final owned = client == null;
-  final c = client ?? http.Client();
-  try {
-    final resp = await c
-        .post(
-          Uri.parse('https://overpass-api.de/api/interpreter'),
-          headers: const {
-            'User-Agent':
-                'ZoneCraft/1.0 (https://github.com/LeoStumpf/zonecraft)',
-          },
-          body: {'data': query},
-        )
-        .timeout(const Duration(seconds: 30));
-    if (resp.statusCode != 200) return null; // rate-limited / server error
-    return parseOverpassResponse(resp.body, cats);
-  } catch (_) {
-    return null; // network/timeout
-  } finally {
-    if (owned) c.close();
-  }
 }

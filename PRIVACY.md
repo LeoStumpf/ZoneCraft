@@ -1,16 +1,18 @@
 # ZoneCraft — Privacy Policy
 
-_Last updated: 2026-06-11_
+_Last updated: 2026-08-02_
 
 ZoneCraft is an offline-first map tool. It has **no account system** and does **not** sell,
 rent, or share your personal data. This policy explains the limited data the app handles.
 
 ## Data stored on your device
 
-Everything you create — layers, circles, planes, subspaces, freehand lines/areas, settings,
+Everything you create — layers, circles, planes, subspaces, freehand lines/areas, height
+regions, imported points of interest, transit stations and administrative areas, settings,
 and the cached map tiles — is stored **only on your device** in a local database. It is never
 uploaded to us, and we have no server that receives it. Uninstalling the app, or using
-**Settings → Clear all data**, removes it.
+**Settings → Clear all data**, removes it. (Cached map tiles are not user data and survive
+that button; they have their own **Clear cached map tiles**.)
 
 ## Location
 
@@ -25,25 +27,36 @@ You can decline the permission and use every other feature normally.
 
 ## Network requests to third parties
 
-To display the map and optional overlays, the app fetches data directly from third-party
-services. Your device's IP address and the map area you are viewing are necessarily visible to
-those services when it requests their data:
+To display the map and to import data you ask for, the app fetches directly from third-party
+services. There is no ZoneCraft server in between. Your device's IP address — and whatever the
+request itself contains (the map area you are viewing, the coordinates you probe, the text you
+search for) — is necessarily visible to the service being asked:
 
-- **OpenStreetMap** tile servers (base map) — see the
+- **OpenStreetMap tile servers** (`tile.openstreetmap.org`) — the base map. Contacted as you
+  pan and zoom, and when you use **"Download this area"**. See the
   [OSMF Privacy Policy](https://wiki.osmfoundation.org/wiki/Privacy_Policy).
-- **Overpass API** (`overpass-api.de`) — points of interest and administrative borders.
-- **ÖPNVKarte** and **OpenRailwayMap** tile servers — only if you enable the public-transport
-  overlay.
+- **Overpass API** — used for the **points of interest**, **public-transport station** and
+  **administrative border** imports. Contacted only when you start an import, never in the
+  background. The app tries `overpass-api.de`, `overpass.kumi.systems` and
+  `overpass.private.coffee` in turn until one answers, and remembers which one did.
+- **Nominatim** (`nominatim.openstreetmap.org`) — OpenStreetMap's geocoder, used by
+  **"Import a feature by name"**. It receives the search text you type. Contacted only when
+  you run a search.
+- **AWS Terrain Tiles** (`s3.amazonaws.com/elevation-tiles-prod`) — public elevation data,
+  used by **height layers**, the **"Measure elevation"** probe, and the elevation readout
+  after **"Locate me"**. It receives the tile covering the point being measured.
 
 The app sends no identifying information with these requests beyond what any HTTP client sends
-(IP address, a descriptive `User-Agent`).
+(IP address, and a descriptive `User-Agent` naming the app). There is no advertising ID, no
+device identifier, and no analytics.
 
 ## Crash diagnostics (Sentry)
 
 To find and fix crashes on the variety of devices the app runs on, ZoneCraft sends **crash and
 error reports** to [Sentry](https://sentry.io/) (a third-party error-monitoring service). These
 reports contain technical diagnostics — error type, stack trace, app version, and device/OS
-model — and **do not include** your layers, locations, or any content you create. See
+model — and **do not include** your layers, locations, or any content you create. Performance
+tracing is switched off; only crashes and errors are sent. See
 [Sentry's Privacy Policy](https://sentry.io/privacy/).
 
 ## Children

@@ -16,7 +16,8 @@ import '../data/cached_tile_provider.dart';
 import '../data/database.dart';
 import '../data/height_generator.dart';
 import '../data/overpass.dart';
-import '../data/overpass_client.dart' show kOverpassPreferenceMaxElapsed;
+import '../data/overpass_client.dart'
+    show OverpassOutcome, kOverpassPreferenceMaxElapsed;
 import '../data/repository.dart' show Repository;
 import '../data/transit.dart';
 import '../geo/border_areas.dart';
@@ -139,6 +140,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
   static const int _prefetchMaxTiles = 60;
   Timer? _prefetchDebounce;
 
+  /// True while a prefetch run is in flight. The debounce timer only coalesces
+  /// *scheduling*; without this gate, panning during a slow run starts a second
+  /// 60-request run on top of the first, and so on.
+  bool _prefetching = false;
+
   /// "Download this area": how many zoom levels *deeper* than the current view to
   /// also cache (so you can still zoom in offline), the hard ceiling on tiles per
   /// download, and the rough per-tile size used only for the up-front estimate.
@@ -199,7 +205,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// Capped, sequential, and failure-safe so it never blocks the UI or hammers
   /// the tile servers.
   Future<void> _prefetchTiles() async {
-    if (!_mapReady || !mounted) return;
+    if (!_mapReady || !mounted || _prefetching) return;
     final cam = _mapController.camera;
     if (!cam.center.latitude.isFinite ||
         !cam.center.longitude.isFinite ||
@@ -220,15 +226,23 @@ class _MapScreenState extends ConsumerState<MapScreen>
       z: z,
       ring: 1,
     );
-    var budget = _prefetchMaxTiles;
-    for (final t in tiles) {
-      await _tileProvider.prefetch(_fillTileUrl(_baseTileUrl, z, t.x, t.y));
-      if (--budget <= 0) break;
+    _prefetching = true;
+    try {
+      var budget = _prefetchMaxTiles;
+      for (final t in tiles) {
+        // The screen can go away mid-run (a 60-tile ring on a slow link takes a
+        // while); stop rather than keep fetching for a dead widget.
+        if (!mounted) return;
+        await _tileProvider.prefetch(_fillTileUrl(_baseTileUrl, z, t.x, t.y));
+        if (--budget <= 0) break;
+      }
+      if (!mounted) return;
+      await ref
+          .read(repositoryProvider)
+          .evictTilesDownTo(CachedTileProvider.maxCacheBytes);
+    } finally {
+      _prefetching = false;
     }
-    if (!mounted) return;
-    await ref
-        .read(repositoryProvider)
-        .evictTilesDownTo(CachedTileProvider.maxCacheBytes);
   }
 
   static String _fillTileUrl(String template, int z, int x, int y) => template
@@ -417,7 +431,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
         return null;
       }
 
-      final pos = await Geolocator.getCurrentPosition();
+      // A time limit, because indoors or with a cold GPS `getCurrentPosition`
+      // simply never returns — and the caller's `_locating` flag would keep the
+      // button disabled for the rest of the session. The plugin throws
+      // TimeoutException, which the catch below turns into a hint.
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          timeLimit: Duration(seconds: 20),
+        ),
+      );
       // Guard against a non-finite fix: a NaN LatLng would corrupt the map
       // camera and crash every subsequent projection.
       if (!pos.latitude.isFinite || !pos.longitude.isFinite) {
@@ -1123,19 +1145,40 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final east = _hitTest.offset(center, r, 90).longitude;
     final west = _hitTest.offset(center, r, -90).longitude;
 
-    final fetched = await fetchPois(
-      south: south,
-      west: west,
-      north: north,
-      east: east,
-      categories: [config.category],
-      client: _tileClient,
+    // Same spinner transit and borders use: a public Overpass instance can sit
+    // on a request for a minute, and an unexplained frozen UI is what that
+    // looked like before.
+    final progress = showImportProgress(
+      context,
+      title: 'Importing ${config.category.label.toLowerCase()}',
+      message: 'Preparing the query…',
     );
+    final repoForEndpoint = ref.read(repositoryProvider);
+    final settings = ref.read(settingsProvider).asData?.value;
+    final elapsed = Stopwatch()..start();
+    final OverpassOutcome<List<PoiResult>> outcome;
+    try {
+      outcome = await fetchPois(
+        south: south,
+        west: west,
+        north: north,
+        east: east,
+        categories: [config.category],
+        client: _tileClient,
+        preferEndpoint: settings?.transitEndpoint,
+        onProgress: progress.report,
+      );
+    } finally {
+      progress.close(); // idempotent; guarantees the spinner never sticks
+    }
     if (!mounted) return;
-    if (fetched == null) {
-      _hint('Could not fetch POIs (offline or rate-limited).');
+    if (!outcome.ok) {
+      _hint(outcome.message!);
       return;
     }
+    _rememberEndpoint(repoForEndpoint, outcome.endpoint,
+        settings?.transitEndpoint, elapsed.elapsed);
+    final fetched = outcome.value!;
     // A POI layer stores everything the fetch returned (up to the Overpass
     // cap); circle/subspace seeding keeps the default tighter cap so the
     // created geometry stays manageable.
@@ -2388,28 +2431,21 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final planes = ref.watch(planesProvider).asData?.value ?? const <Plane>[];
     final subspaces =
         ref.watch(subspacesProvider).asData?.value ?? const <Subspace>[];
-    final subspacePoints =
-        ref.watch(subspacePointsProvider).asData?.value ??
-        const <SubspacePoint>[];
+    // Points arrive grouped by their owning object, built once per stream
+    // emission rather than re-scanned per object per frame — see the grouping
+    // providers in `state/providers.dart`.
+    final subspacePoints = ref.watch(subspacePointsBySubspaceProvider);
     final freeLines =
         ref.watch(freeLinesProvider).asData?.value ?? const <FreeLine>[];
-    final freeLinePoints =
-        ref.watch(freeLinePointsProvider).asData?.value ??
-        const <FreeLinePoint>[];
+    final freeLinePoints = ref.watch(freeLinePointsByLineProvider);
     final freeAreas =
         ref.watch(freeAreasProvider).asData?.value ?? const <FreeArea>[];
-    final freeAreaPoints =
-        ref.watch(freeAreaPointsProvider).asData?.value ??
-        const <FreeAreaPoint>[];
+    final freeAreaPoints = ref.watch(freeAreaPointsByAreaProvider);
     final heightRegions =
         ref.watch(heightRegionsProvider).asData?.value ??
         const <HeightRegion>[];
-    final heightPolygons =
-        ref.watch(heightPolygonsProvider).asData?.value ??
-        const <HeightPolygon>[];
-    final heightPolygonPoints =
-        ref.watch(heightPolygonPointsProvider).asData?.value ??
-        const <HeightPolygonPoint>[];
+    final heightPolygons = ref.watch(heightPolygonsByRegionProvider);
+    final heightPolygonPoints = ref.watch(heightPolygonPointsByPolygonProvider);
     final poiSets =
         ref.watch(poiSetsProvider).asData?.value ?? const <PoiSet>[];
     final poiPoints =
@@ -2452,17 +2488,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
         .firstOrNull;
     final selectedSubspacePoints = selectedSubspace == null
         ? const <SubspacePoint>[]
-        : subspacePoints
-            .where((p) => p.subspaceId == selectedSubspace.id)
-            .toList();
+        : subspacePoints[selectedSubspace.id] ?? const <SubspacePoint>[];
     final selectedFreeLine = freeLines
         .where((l) => l.id == ref.watch(selectedFreeLineProvider))
         .firstOrNull;
     final selectedFreeLinePoints = selectedFreeLine == null
         ? const <FreeLinePoint>[]
-        : freeLinePoints
-            .where((p) => p.freeLineId == selectedFreeLine.id)
-            .toList();
+        : freeLinePoints[selectedFreeLine.id] ?? const <FreeLinePoint>[];
     // The inclusion circle bounding the selected line, drawn as an edit guide
     // with a draggable-by-tap centre handle.
     final selectedFreeLineInclusion = selectedFreeLine == null
@@ -2482,9 +2514,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
         .firstOrNull;
     final selectedFreeAreaPoints = selectedFreeArea == null
         ? const <FreeAreaPoint>[]
-        : freeAreaPoints
-            .where((p) => p.freeAreaId == selectedFreeArea.id)
-            .toList();
+        : freeAreaPoints[selectedFreeArea.id] ?? const <FreeAreaPoint>[];
     final selectedHeightRegion = heightRegions
         .where((r) => r.id == ref.watch(selectedHeightRegionProvider))
         .firstOrNull;
@@ -2684,7 +2714,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               : const <Subspace>[],
                           subspacePoints: layer.type == 'subspace'
                               ? subspacePoints
-                              : const <SubspacePoint>[],
+                              : const <String, List<SubspacePoint>>{},
                           freeLines: layer.type == 'freeline'
                               ? freeLines
                                     .where((l) => l.layerId == layer.id)
@@ -2692,7 +2722,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               : const <FreeLine>[],
                           freeLinePoints: layer.type == 'freeline'
                               ? freeLinePoints
-                              : const <FreeLinePoint>[],
+                              : const <String, List<FreeLinePoint>>{},
                           freeAreas: layer.type == 'freearea'
                               ? freeAreas
                                     .where((a) => a.layerId == layer.id)
@@ -2700,7 +2730,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               : const <FreeArea>[],
                           freeAreaPoints: layer.type == 'freearea'
                               ? freeAreaPoints
-                              : const <FreeAreaPoint>[],
+                              : const <String, List<FreeAreaPoint>>{},
                           heightRegions: layer.type == 'height'
                               ? heightRegions
                                     .where((r) => r.layerId == layer.id)
@@ -2708,10 +2738,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               : const <HeightRegion>[],
                           heightPolygons: layer.type == 'height'
                               ? heightPolygons
-                              : const <HeightPolygon>[],
+                              : const <String, List<HeightPolygon>>{},
                           heightPolygonPoints: layer.type == 'height'
                               ? heightPolygonPoints
-                              : const <HeightPolygonPoint>[],
+                              : const <String, List<HeightPolygonPoint>>{},
                           uncertaintyMeters: uncertainty,
                         ),
                     // Outline of the selected line's inclusion circle, so the
@@ -3518,9 +3548,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
           ? HeightEditorSheet(
               key: ValueKey(selectedHeightRegion.id),
               region: selectedHeightRegion,
-              polygonCount: heightPolygons
-                  .where((p) => p.heightRegionId == selectedHeightRegion.id)
-                  .length,
+              polygonCount:
+                  heightPolygons[selectedHeightRegion.id]?.length ?? 0,
               layers: layers,
             )
           : const SizedBox.shrink(),
