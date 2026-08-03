@@ -72,17 +72,19 @@ Future<void> exportSingleLayer(
     final dir = await getTemporaryDirectory();
     final file = File('${dir.path}/zonecraft-$safeName-$stamp.$fmt');
     await file.writeAsString(content);
-    await SharePlus.instance.share(ShareParams(
-      subject: 'ZoneCraft layer: ${layer.name}',
-      files: [
-        XFile(
-          file.path,
-          mimeType: isKml
-              ? 'application/vnd.google-earth.kml+xml'
-              : 'application/geo+json',
-        ),
-      ],
-    ));
+    await SharePlus.instance.share(
+      ShareParams(
+        subject: 'ZoneCraft layer: ${layer.name}',
+        files: [
+          XFile(
+            file.path,
+            mimeType: isKml
+                ? 'application/vnd.google-earth.kml+xml'
+                : 'application/geo+json',
+          ),
+        ],
+      ),
+    );
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text('Export failed: $e')));
   }
@@ -96,8 +98,9 @@ Future<double?> askFreeLineRadius(
   BuildContext context, {
   required double defaultMeters,
 }) {
-  final controller =
-      TextEditingController(text: defaultMeters.round().toString());
+  final controller = TextEditingController(
+    text: defaultMeters.round().toString(),
+  );
   return showDialog<double>(
     context: context,
     builder: (ctx) {
@@ -171,11 +174,11 @@ ExportObject _withInclusion(ExportObject o, double radiusMeters) {
 /// The inclusion radius the renderer would derive for [coords] — used to
 /// prefill the radius prompt.
 double _derivedRadius(List<LatLng> coords) => effectiveInclusion(
-      lat: null,
-      lng: null,
-      radiusMeters: null,
-      points: coords,
-    ).radiusMeters;
+  lat: null,
+  lng: null,
+  radiusMeters: null,
+  points: coords,
+).radiusMeters;
 
 /// Imports an external track/area file (GeoJSON/KML/KMZ/GPX) into an existing
 /// freehand [layer], adding each line/area as a new object on it.
@@ -209,8 +212,10 @@ Future<void> importTrackIntoLayer(
     // its radius right at import (each line keeps its own derived centre).
     if (!wantArea) {
       if (!context.mounted) return;
-      final r = await askFreeLineRadius(context,
-          defaultMeters: _derivedRadius(objects.first.coords));
+      final r = await askFreeLineRadius(
+        context,
+        defaultMeters: _derivedRadius(objects.first.coords),
+      );
       if (r == null) return; // cancelled
       objects = [for (final o in objects) _withInclusion(o, r)];
     }
@@ -224,11 +229,15 @@ Future<void> importTrackIntoLayer(
         objects: objects,
       ),
     );
-    messenger.showSnackBar(SnackBar(
-      content: Text(n == 0
-          ? 'Nothing usable to import (need ${wantArea ? '3+' : '2+'} points)'
-          : 'Imported $n ${wantArea ? 'area' : 'track'}${n == 1 ? '' : 's'}'),
-    ));
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          n == 0
+              ? 'Nothing usable to import (need ${wantArea ? '3+' : '2+'} points)'
+              : 'Imported $n ${wantArea ? 'area' : 'track'}${n == 1 ? '' : 's'}',
+        ),
+      ),
+    );
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text('Import failed: $e')));
   }
@@ -268,8 +277,9 @@ Future<void> importFeatureFlow(
         ExportObject(
           kind: 'freearea',
           coords: rings[i],
-          label:
-              rings.length == 1 ? place.shortName : '${place.shortName} ${i + 1}',
+          label: rings.length == 1
+              ? place.shortName
+              : '${place.shortName} ${i + 1}',
         ),
     ];
   } else {
@@ -282,8 +292,10 @@ Future<void> importFeatureFlow(
     }
     // Pick the inclusion-circle radius right at import (a whole river spans
     // hundreds of km — the circle bounds it to the user's area of interest).
-    final r = await askFreeLineRadius(context,
-        defaultMeters: _derivedRadius(line));
+    final r = await askFreeLineRadius(
+      context,
+      defaultMeters: _derivedRadius(line),
+    );
     if (r == null || !context.mounted) return; // cancelled
     objects = [
       _withInclusion(
@@ -311,10 +323,14 @@ Future<void> importFeatureFlow(
     } else {
       count = await repo.importData(ExportData([layer]));
     }
-    messenger.showSnackBar(SnackBar(
-      content: Text('Imported ${place.shortName} '
-          '($count $noun${count == 1 ? '' : 's'})'),
-    ));
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          'Imported ${place.shortName} '
+          '($count $noun${count == 1 ? '' : 's'})',
+        ),
+      ),
+    );
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text('Import failed: $e')));
   }
@@ -336,13 +352,17 @@ Future<void> importLayerFlow(
     final bytes = await picked.readAsBytes();
 
     // 1. Prefer our own tagged GeoJSON (lossless, all object types).
-    ExportData? data = importFromGeoJson(utf8.decode(bytes, allowMalformed: true));
+    ExportData? data = importFromGeoJson(
+      utf8.decode(bytes, allowMalformed: true),
+    );
     final fromZonecraft = data != null;
     // 2. Fall back to generic geometry → synthesize freehand layers.
     data ??= _syntheticLayers(picked.name, bytes);
     if (data == null || data.layers.isEmpty || data.objectCount == 0) {
       messenger.showSnackBar(
-        const SnackBar(content: Text("Couldn't read any layers from that file")),
+        const SnackBar(
+          content: Text("Couldn't read any layers from that file"),
+        ),
       );
       return;
     }
@@ -351,14 +371,15 @@ Future<void> importLayerFlow(
     // Synthesized freehand lines get their inclusion-circle radius chosen at
     // import (ZoneCraft GeoJSON already carries each line's stored circle).
     if (!fromZonecraft &&
-        data.layers.any(
-            (l) => l.type == 'freeline' && l.objects.isNotEmpty)) {
+        data.layers.any((l) => l.type == 'freeline' && l.objects.isNotEmpty)) {
       final firstLine = data.layers
           .firstWhere((l) => l.type == 'freeline' && l.objects.isNotEmpty)
           .objects
           .first;
-      final r = await askFreeLineRadius(context,
-          defaultMeters: _derivedRadius(firstLine.coords));
+      final r = await askFreeLineRadius(
+        context,
+        defaultMeters: _derivedRadius(firstLine.coords),
+      );
       if (r == null) return; // cancelled
       data = ExportData([
         for (final l in data.layers)
@@ -368,9 +389,7 @@ Future<void> importLayerFlow(
                   colorArgb: l.colorArgb,
                   type: l.type,
                   isInverted: l.isInverted,
-                  objects: [
-                    for (final o in l.objects) _withInclusion(o, r),
-                  ],
+                  objects: [for (final o in l.objects) _withInclusion(o, r)],
                 )
               : l,
       ]);
@@ -385,16 +404,25 @@ Future<void> importLayerFlow(
 
     final int count;
     if (target.mergeLayerId != null) {
-      count = await repo.mergeIntoLayer(target.mergeLayerId!, data.layers.first);
+      count = await repo.mergeIntoLayer(
+        target.mergeLayerId!,
+        data.layers.first,
+      );
     } else {
       count = await repo.importData(data);
     }
-    messenger.showSnackBar(SnackBar(
-      content: Text('Imported ${data.layers.length} '
-          'layer${data.layers.length == 1 ? '' : 's'} ($count objects)'),
-    ));
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          'Imported ${data.layers.length} '
+          'layer${data.layers.length == 1 ? '' : 's'} ($count objects)',
+        ),
+      ),
+    );
   } on ArgumentError catch (e) {
-    messenger.showSnackBar(SnackBar(content: Text('Import failed: ${e.message}')));
+    messenger.showSnackBar(
+      SnackBar(content: Text('Import failed: ${e.message}')),
+    );
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text('Import failed: $e')));
   }
@@ -453,10 +481,14 @@ Future<void> convertBorderAreaFlow(
     final count = target.mergeLayerId != null
         ? await repo.mergeIntoLayer(target.mergeLayerId!, layer)
         : await repo.importData(ExportData([layer]));
-    messenger.showSnackBar(SnackBar(
-      content: Text('Converted $name to $count freehand '
-          'area${count == 1 ? '' : 's'}'),
-    ));
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          'Converted $name to $count freehand '
+          'area${count == 1 ? '' : 's'}',
+        ),
+      ),
+    );
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text('Convert failed: $e')));
   }
@@ -467,33 +499,43 @@ Future<void> convertBorderAreaFlow(
 ExportData? _syntheticLayers(String filename, Uint8List bytes) {
   final feats = parseExternalGeometry(filename, bytes);
   if (feats.isEmpty) return null;
-  final lines = [for (final f in feats) if (f.kind == GeometryKind.line) f];
-  final areas = [for (final f in feats) if (f.kind == GeometryKind.area) f];
+  final lines = [
+    for (final f in feats)
+      if (f.kind == GeometryKind.line) f,
+  ];
+  final areas = [
+    for (final f in feats)
+      if (f.kind == GeometryKind.area) f,
+  ];
   final layers = <ExportLayer>[];
   final base = filename.split('/').last.split('.').first;
   if (lines.isNotEmpty) {
-    layers.add(ExportLayer(
-      name: base.isEmpty ? 'Imported lines' : base,
-      colorArgb: 0xFF2196F3,
-      type: 'freeline',
-      isInverted: false,
-      objects: [
-        for (final f in lines)
-          ExportObject(kind: 'freeline', coords: f.coords, label: f.label),
-      ],
-    ));
+    layers.add(
+      ExportLayer(
+        name: base.isEmpty ? 'Imported lines' : base,
+        colorArgb: 0xFF2196F3,
+        type: 'freeline',
+        isInverted: false,
+        objects: [
+          for (final f in lines)
+            ExportObject(kind: 'freeline', coords: f.coords, label: f.label),
+        ],
+      ),
+    );
   }
   if (areas.isNotEmpty) {
-    layers.add(ExportLayer(
-      name: base.isEmpty ? 'Imported areas' : base,
-      colorArgb: 0xFF43A047,
-      type: 'freearea',
-      isInverted: false,
-      objects: [
-        for (final f in areas)
-          ExportObject(kind: 'freearea', coords: f.coords, label: f.label),
-      ],
-    ));
+    layers.add(
+      ExportLayer(
+        name: base.isEmpty ? 'Imported areas' : base,
+        colorArgb: 0xFF43A047,
+        type: 'freearea',
+        isInverted: false,
+        objects: [
+          for (final f in areas)
+            ExportObject(kind: 'freearea', coords: f.coords, label: f.label),
+        ],
+      ),
+    );
   }
   return layers.isEmpty ? null : ExportData(layers);
 }
@@ -546,11 +588,13 @@ Future<String?> combineLayerFlow(
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel')),
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Cancel'),
+        ),
         FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Combine')),
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Combine'),
+        ),
       ],
     ),
   );
@@ -559,7 +603,9 @@ Future<String?> combineLayerFlow(
   if (context.mounted) {
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
-      ..showSnackBar(SnackBar(content: Text('Combined into “${target.name}”.')));
+      ..showSnackBar(
+        SnackBar(content: Text('Combined into “${target.name}”.')),
+      );
   }
   return target.id;
 }

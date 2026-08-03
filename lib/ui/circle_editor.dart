@@ -8,6 +8,7 @@ import '../data/database.dart';
 import '../data/repository.dart';
 import '../geo/coords.dart';
 import '../state/providers.dart';
+import 'editor_sheet.dart';
 
 /// Docked bottom-sheet editor for a circle. Unlike a dialog, this sits below the
 /// map (which stays interactive) and applies every change live to the database,
@@ -43,8 +44,9 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
   void initState() {
     super.initState();
     final c = widget.circle;
-    _center =
-        TextEditingController(text: formatLatLng(c.centerLat, c.centerLng));
+    _center = TextEditingController(
+      text: formatLatLng(c.centerLat, c.centerLng),
+    );
     _label = TextEditingController(text: c.label ?? '');
     _radius = c.radiusMeters;
   }
@@ -89,128 +91,116 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
     _repo.updateCircle(widget.circle.id, radiusMeters: meters);
   }
 
-  String _radiusLabel(double m) =>
-      m >= 1000 ? '${(m / 1000).toStringAsFixed(m >= 10000 ? 0 : 1)} km' : '${m.round()} m';
+  String _radiusLabel(double m) => m >= 1000
+      ? '${(m / 1000).toStringAsFixed(m >= 10000 ? 0 : 1)} km'
+      : '${m.round()} m';
 
   @override
   Widget build(BuildContext context) {
     final armed = ref.watch(circlePlacementProvider);
     final sliderValue =
-        (math.log(_radius.clamp(_minRadius, _maxRadius)) / math.ln10)
-            .clamp(math.log(_minRadius) / math.ln10, math.log(_maxRadius) / math.ln10);
+        (math.log(_radius.clamp(_minRadius, _maxRadius)) / math.ln10).clamp(
+          math.log(_minRadius) / math.ln10,
+          math.log(_maxRadius) / math.ln10,
+        );
 
-    return Material(
-      elevation: 8,
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.circle_outlined, size: 18),
-                  const SizedBox(width: 8),
-                  Text('Edit circle',
-                      style: Theme.of(context).textTheme.titleMedium),
-                  const Spacer(),
-                  IconButton(
-                    tooltip: 'Delete',
-                    icon: const Icon(Icons.delete_outline),
-                    color: Colors.red,
-                    onPressed: () async {
-                      await _repo.deleteCircle(widget.circle.id);
-                      _close();
-                    },
-                  ),
-                  IconButton(
-                    tooltip: 'Close',
-                    icon: const Icon(Icons.close),
-                    onPressed: _close,
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  Expanded(child: Text('Radius: ${_radiusLabel(_radius)}')),
-                  // The layer picker takes the slack and ellipsises: a layer named
-                  // after an imported border ("Ludwigsvorstadt-Isarvorstadt") is
-                  // far longer than this row is wide.
-                  Flexible(
-                    child: DropdownButton<String>(
-                      isExpanded: true,
-                      value: widget.layers.any((l) => l.id == widget.circle.layerId)
-                          ? widget.circle.layerId
-                          : null,
-                      hint: const Text('Layer'),
-                      items: [
-                        for (final l in widget.layers)
-                          DropdownMenuItem(value: l.id, child: Text(l.name)),
-                      ],
-                      onChanged: (v) {
-                        if (v != null) {
-                          _repo.updateCircle(widget.circle.id, layerId: v);
-                        }
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              Slider(
-                min: math.log(_minRadius) / math.ln10,
-                max: math.log(_maxRadius) / math.ln10,
-                value: sliderValue.toDouble(),
-                onChanged: (v) => _setRadius(math.pow(10, v).toDouble()),
-              ),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _center,
-                      focusNode: _centerFocus,
-                      decoration: const InputDecoration(
-                        labelText: 'Centre (lat, lng)',
-                        hintText: '48.137154, 11.575382',
-                        isDense: true,
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true, signed: true),
-                      onChanged: (s) {
-                        final p = parseLatLng(s);
-                        if (p != null) {
-                          _repo.updateCircle(widget.circle.id,
-                              centerLat: p.latitude, centerLng: p.longitude);
-                        }
-                      },
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Move centre by tapping the map',
-                    icon: Icon(
-                        armed ? Icons.touch_app : Icons.touch_app_outlined),
-                    color:
-                        armed ? Theme.of(context).colorScheme.primary : null,
-                    onPressed: _armPlacement,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _label,
+    return EditorSheet(
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.circle_outlined, size: 18),
+            const SizedBox(width: 8),
+            Text('Edit circle', style: Theme.of(context).textTheme.titleMedium),
+            const Spacer(),
+            IconButton(
+              tooltip: 'Delete',
+              icon: const Icon(Icons.delete_outline),
+              color: Colors.red,
+              onPressed: () async {
+                await _repo.deleteCircle(widget.circle.id);
+                _close();
+              },
+            ),
+            IconButton(
+              tooltip: 'Close',
+              icon: const Icon(Icons.close),
+              onPressed: _close,
+            ),
+          ],
+        ),
+        Row(
+          children: [
+            Expanded(child: Text('Radius: ${_radiusLabel(_radius)}')),
+            // The layer picker takes the slack and ellipsises: a layer named
+            // after an imported border ("Ludwigsvorstadt-Isarvorstadt") is
+            // far longer than this row is wide.
+            // Not wrapped in a Flexible: EditorLayerPicker *is* one, and a
+            // Flexible must sit directly inside the Flex.
+            EditorLayerPicker(
+              layers: widget.layers,
+              selectedId: widget.circle.layerId,
+              onChanged: (v) =>
+                  _repo.updateCircle(widget.circle.id, layerId: v),
+            ),
+          ],
+        ),
+        Slider(
+          min: math.log(_minRadius) / math.ln10,
+          max: math.log(_maxRadius) / math.ln10,
+          value: sliderValue.toDouble(),
+          onChanged: (v) => _setRadius(math.pow(10, v).toDouble()),
+        ),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _center,
+                focusNode: _centerFocus,
                 decoration: const InputDecoration(
-                    labelText: 'Label (optional)', isDense: true),
+                  labelText: 'Centre (lat, lng)',
+                  hintText: '48.137154, 11.575382',
+                  isDense: true,
+                ),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                  signed: true,
+                ),
                 onChanged: (s) {
-                  final t = s.trim();
-                  _repo.updateCircle(widget.circle.id,
-                      label: Value(t.isEmpty ? null : t));
+                  final p = parseLatLng(s);
+                  if (p != null) {
+                    _repo.updateCircle(
+                      widget.circle.id,
+                      centerLat: p.latitude,
+                      centerLng: p.longitude,
+                    );
+                  }
                 },
               ),
-            ],
-          ),
+            ),
+            IconButton(
+              tooltip: 'Move centre by tapping the map',
+              icon: Icon(armed ? Icons.touch_app : Icons.touch_app_outlined),
+              color: armed ? Theme.of(context).colorScheme.primary : null,
+              onPressed: _armPlacement,
+            ),
+          ],
         ),
-      ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _label,
+          decoration: const InputDecoration(
+            labelText: 'Label (optional)',
+            isDense: true,
+          ),
+          onChanged: (s) {
+            final t = s.trim();
+            _repo.updateCircle(
+              widget.circle.id,
+              label: Value(t.isEmpty ? null : t),
+            );
+          },
+        ),
+      ],
     );
   }
 }

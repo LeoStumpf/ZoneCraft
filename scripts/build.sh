@@ -14,6 +14,15 @@
 #   DEVICE=<adb-serial>   target a specific device (default: Pixel 4a below)
 #   SENTRY_DSN=<dsn>      baked into release/bundle builds for crash reporting
 #                         (omit for debug; the app skips Sentry when it's empty)
+#   TILE_URL=<template>   base-map tile URL, e.g.
+#                         'https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=KEY'
+#   TILE_ATTRIBUTION=<s>  the attribution line shown for it
+#                         Setting TILE_URL also RE-ENABLES the offline features
+#                         (viewport prefetch + "download this area"), which are
+#                         off by default because OpenStreetMap's tile policy
+#                         forbids them on the community servers. Only set it for
+#                         a provider whose terms you have read.
+#                         See lib/data/tile_source.dart.
 #
 set -euo pipefail
 
@@ -42,7 +51,7 @@ for arg in "$@"; do
     --install)     INSTALL=1 ;;
     --run)         INSTALL=1; RUN=1 ;; # running implies installing first
     --skip-checks) SKIP_CHECKS=1 ;;
-    -h|--help)     sed -n '2,16p' "$0"; exit 0 ;;
+    -h|--help)     sed -n '2,25p' "$0"; exit 0 ;;
     *) echo "Unknown option: $arg (try --help)" >&2; exit 1 ;;
   esac
 done
@@ -51,6 +60,15 @@ done
 DART_DEFINES=()
 if [ "$MODE" = "release" ] && [ -n "${SENTRY_DSN:-}" ]; then
   DART_DEFINES+=(--dart-define=SENTRY_DSN="$SENTRY_DSN")
+fi
+# Tile source. Forwarded in every mode (unlike the DSN) so an offline-capable
+# debug build is one export away.
+if [ -n "${TILE_URL:-}" ]; then
+  DART_DEFINES+=(--dart-define=TILE_URL="$TILE_URL")
+  echo "==> tile source: $TILE_URL (prefetch + area download ENABLED)"
+fi
+if [ -n "${TILE_ATTRIBUTION:-}" ]; then
+  DART_DEFINES+=(--dart-define=TILE_ATTRIBUTION="$TILE_ATTRIBUTION")
 fi
 
 # --- checks ------------------------------------------------------------------

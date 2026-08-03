@@ -32,11 +32,14 @@ Attribution for these is also shown in-app (the attribution control on the map):
 - **OpenStreetMap** — base map tiles © OpenStreetMap contributors; map data licensed under the
   [Open Database License (ODbL)](https://www.openstreetmap.org/copyright). The public
   `tile.openstreetmap.org` server is used under the
-  [tile usage policy](https://operations.osmfoundation.org/policies/tiles/) (fair use; not for
-  heavy traffic). **Note:** the viewport prefetch and the "Download this area" button fetch
-  tiles in bulk, which that policy discourages. This is acceptable at the app's current
-  distribution (a private internal-testing group); wider distribution requires moving the base
-  map to a keyed provider or removing bulk download.
+  [tile usage policy](https://operations.osmfoundation.org/policies/tiles/). That policy
+  defines bulk downloading as "any pre-emptive fetching of tiles other than those a user is
+  actively viewing" and states that "offline use is not permitted on
+  `tile.openstreetmap.org`". The app therefore fetches **only the tiles being viewed** when
+  using this server: the viewport prefetch and the "Download this area" button are compiled
+  out unless the build is pointed at a different tile provider
+  (`--dart-define=TILE_URL=...`). Caching already-displayed tiles, which the policy requires,
+  is always on.
 - **Overpass API** — queried once per import for points of interest, public-transport stations
   and administrative areas; returns OpenStreetMap data (ODbL), used under its fair-use policy.
   Requests are user-initiated only (never on a timer or on map movement), size-capped, and

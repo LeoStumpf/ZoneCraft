@@ -46,10 +46,18 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   documented **dead columns** (the precedent `poiCategories` set), as does the now-unused
   `OverpassCache` table.
 - **Offline caching:** a Drift-backed `TileCache` + custom `CachedTileProvider`
-  (`data/cached_tile_provider.dart`) serve map tiles cache-first then network, plus a
-  one-tile-ring **viewport prefetch** (`map_screen._prefetchTiles`, slippy maths in
-  `geo/tiles.dart`), so the map survives a few minutes with no reception. LRU eviction
-  (200 MB cap) + a Settings size readout / "Clear cached map tiles" button.
+  (`data/cached_tile_provider.dart`) serve map tiles cache-first then network, with LRU
+  eviction (200 MB cap) + a Settings size readout / "Clear cached map tiles" button.
+  Caching what you *displayed* is required by OSM's policy and always on.
+- **Pre-emptive tile fetching is gated on the tile source** (`data/tile_source.dart`).
+  The one-tile-ring **viewport prefetch** (`map_screen._prefetchTiles`) and the
+  **"Download this area"** button are both "bulk downloading" under OSM's tile policy —
+  which defines it as *any* pre-emptive fetching, so there is no compliant ring size — and
+  are therefore **off by default**. They switch on only when the build sets
+  `--dart-define=TILE_URL=...` (a keyed provider or your own server); `scripts/build.sh`
+  forwards `TILE_URL`/`TILE_ATTRIBUTION` from the environment. Never flip
+  `TileSource.allowsPrefetch` for the community server — `test/tile_source_test.dart`
+  guards it.
 - **One Overpass client** (`data/overpass_client.dart`): endpoint failover, transient-vs-fatal
   status handling and a size cap, shared by `transit.dart`, `borders.dart` **and
   `overpass.dart`** (POI imports) — all three return `OverpassOutcome` and drive the shared
@@ -61,6 +69,11 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   height generation and a `timeLimit` on `getCurrentPosition`. Add one to any new call.
 - **Number entry goes through `parseDecimal`** (`geo/coords.dart`), never bare
   `double.tryParse` — a comma-decimal locale would otherwise make the field silently no-op.
+- **Editors use the shared shell** (`ui/editor_sheet.dart`): `EditorSheet` (capped at 60 %
+  of the viewport, scrolls the rest), `EditorLayerPicker` (one-line ellipsis) and
+  `scaledPx(context, px)` for any pixel size chosen against text. A bottom sheet clips
+  **silently** — no overflow stripes — so a plain `Column` of `Row`s loses its bottom rows
+  at a large system font. Prefer `Wrap` over `Row` for label+field pairs.
 - **Per-layer & external import/export:** besides whole-DB GeoJSON/KML, each layer can be
   exported alone and files imported as a new layer or **merged** into an existing same-type
   one (`ui/import_actions.dart`); generic **GeoJSON/KML/KMZ/GPX** tracks import into freehand

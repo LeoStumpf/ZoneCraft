@@ -30,8 +30,7 @@ class TransitImportConfig {
   /// Which modes to fetch (packed [TransitMode.bit]s).
   final int modeMask;
 
-  double get diagonalMeters =>
-      bboxDiagonalMeters(south, west, north, east);
+  double get diagonalMeters => bboxDiagonalMeters(south, west, north, east);
 }
 
 /// Bbox validation, pulled out of the widget so it is testable without a
@@ -52,7 +51,11 @@ String? validateLng(String? v) {
 
 /// The diagonal of a box, in metres.
 double bboxDiagonalMeters(
-    double south, double west, double north, double east) {
+  double south,
+  double west,
+  double north,
+  double east,
+) {
   return geoDistance.as(
     LengthUnit.Meter,
     LatLng(south, west),
@@ -80,8 +83,13 @@ enum BboxVerdict {
 
 /// The verdict for a box **given what is ticked**: a 500 km box is fine for
 /// trains and impossible for buses, so the size alone cannot decide.
-BboxVerdict checkBbox(double? south, double? west, double? north, double? east,
-    {int modeMask = -1}) {
+BboxVerdict checkBbox(
+  double? south,
+  double? west,
+  double? north,
+  double? east, {
+  int modeMask = -1,
+}) {
   if (south == null || west == null || north == null || east == null) {
     return BboxVerdict.malformed;
   }
@@ -92,7 +100,9 @@ BboxVerdict checkBbox(double? south, double? west, double? north, double? east,
   final d = bboxDiagonalMeters(south, west, north, east);
   if (!d.isFinite) return BboxVerdict.malformed;
   if (modeMask & transitAllModesMask == 0) return BboxVerdict.noModes;
-  if (transitModesOverLimit(modeMask, d).isNotEmpty) return BboxVerdict.tooLarge;
+  if (transitModesOverLimit(modeMask, d).isNotEmpty) {
+    return BboxVerdict.tooLarge;
+  }
   if (transitModesOverWarning(modeMask, d).isNotEmpty) return BboxVerdict.warn;
   return BboxVerdict.ok;
 }
@@ -172,34 +182,37 @@ class _TransitImportDialogState extends State<_TransitImportDialog> {
   int get _recommended => recommendedImportModes(_diagonal);
 
   BboxVerdict get _verdict =>
-      checkBbox(_v(_south), _v(_west), _v(_north), _v(_east),
-          modeMask: _modes);
+      checkBbox(_v(_south), _v(_west), _v(_north), _v(_east), modeMask: _modes);
 
   bool get _canImport =>
       _verdict == BboxVerdict.ok || _verdict == BboxVerdict.warn;
 
   void _setModes(int mask) => setState(() {
-        _chosen = true;
-        _modes = mask;
-      });
+    _chosen = true;
+    _modes = mask;
+  });
 
   void _submit() {
     if (!_canImport) return;
-    Navigator.of(context).pop(TransitImportConfig(
-      south: _v(_south)!,
-      west: _v(_west)!,
-      north: _v(_north)!,
-      east: _v(_east)!,
-      modeMask: _modes,
-    ));
+    Navigator.of(context).pop(
+      TransitImportConfig(
+        south: _v(_south)!,
+        west: _v(_west)!,
+        north: _v(_north)!,
+        east: _v(_east)!,
+        modeMask: _modes,
+      ),
+    );
   }
 
   Widget _coord(TextEditingController c, String label, bool isLat) {
     return Expanded(
       child: TextFormField(
         controller: c,
-        keyboardType:
-            const TextInputType.numberWithOptions(decimal: true, signed: true),
+        keyboardType: const TextInputType.numberWithOptions(
+          decimal: true,
+          signed: true,
+        ),
         decoration: InputDecoration(
           labelText: label,
           isDense: true,
@@ -223,25 +236,31 @@ class _TransitImportDialogState extends State<_TransitImportDialog> {
             children: [
               Text('Area', style: theme.textTheme.labelLarge),
               const SizedBox(height: 4),
-              Row(children: [
-                _coord(_south, 'South', true),
-                const SizedBox(width: 8),
-                _coord(_north, 'North', true),
-              ]),
+              Row(
+                children: [
+                  _coord(_south, 'South', true),
+                  const SizedBox(width: 8),
+                  _coord(_north, 'North', true),
+                ],
+              ),
               const SizedBox(height: 8),
-              Row(children: [
-                _coord(_west, 'West', false),
-                const SizedBox(width: 8),
-                _coord(_east, 'East', false),
-              ]),
+              Row(
+                children: [
+                  _coord(_west, 'West', false),
+                  const SizedBox(width: 8),
+                  _coord(_east, 'East', false),
+                ],
+              ),
               const SizedBox(height: 8),
               _sizeLine(theme),
               const SizedBox(height: 16),
               Row(
                 children: [
                   Expanded(
-                    child: Text('What to import',
-                        style: theme.textTheme.labelLarge),
+                    child: Text(
+                      'What to import',
+                      style: theme.textTheme.labelLarge,
+                    ),
                   ),
                   if (_chosen && _modes != _recommended)
                     TextButton(
@@ -299,9 +318,9 @@ class _TransitImportDialogState extends State<_TransitImportDialog> {
   }
 
   TextStyle? _errStyle(ThemeData theme) => theme.textTheme.bodySmall?.copyWith(
-        color: theme.colorScheme.error,
-        fontWeight: FontWeight.w500,
-      );
+    color: theme.colorScheme.error,
+    fontWeight: FontWeight.w500,
+  );
 
   TextStyle? _warnStyle(ThemeData theme) =>
       theme.textTheme.bodySmall?.copyWith(color: Colors.orange.shade800);
@@ -310,19 +329,28 @@ class _TransitImportDialogState extends State<_TransitImportDialog> {
   /// depends on the ticks, so it is said under them instead ([_modesLine]).
   Widget _sizeLine(ThemeData theme) {
     final s = _v(_south), w = _v(_west), n = _v(_north), e = _v(_east);
-    if (s == null || w == null || n == null || e == null ||
+    if (s == null ||
+        w == null ||
+        n == null ||
+        e == null ||
         ![s, w, n, e].every((v) => v.isFinite)) {
-      return Text('Enter four numbers to define the area.',
-          style: _errStyle(theme));
+      return Text(
+        'Enter four numbers to define the area.',
+        style: _errStyle(theme),
+      );
     }
     if (s >= n || w >= e) {
-      return Text('South must be below north, and west below east.',
-          style: _errStyle(theme));
+      return Text(
+        'South must be below north, and west below east.',
+        style: _errStyle(theme),
+      );
     }
     final width = geoDistance.as(LengthUnit.Meter, LatLng(s, w), LatLng(s, e));
     final height = geoDistance.as(LengthUnit.Meter, LatLng(s, w), LatLng(n, w));
-    return Text('${formatMeters(width)} × ${formatMeters(height)}',
-        style: theme.textTheme.bodySmall);
+    return Text(
+      '${formatMeters(width)} × ${formatMeters(height)}',
+      style: theme.textTheme.bodySmall,
+    );
   }
 
   /// One tick box per type, each carrying what this box size means for it —
@@ -336,7 +364,8 @@ class _TransitImportDialogState extends State<_TransitImportDialog> {
     final String note;
     TextStyle? noteStyle;
     if (over) {
-      note = 'Too many stops over an area this size — '
+      note =
+          'Too many stops over an area this size — '
           'max ${formatMeters(m.maxDiagonalMeters)} across';
       noteStyle = _errStyle(theme);
     } else if (warn) {
@@ -381,8 +410,10 @@ class _TransitImportDialogState extends State<_TransitImportDialog> {
     String names(List<TransitMode> ms) => ms.map((m) => m.label).join(', ');
     switch (_verdict) {
       case BboxVerdict.noModes:
-        return Text('Tick at least one type to import.',
-            style: _errStyle(theme));
+        return Text(
+          'Tick at least one type to import.',
+          style: _errStyle(theme),
+        );
       case BboxVerdict.tooLarge:
         final over = transitModesOverLimit(_modes, _diagonal);
         return Text(
@@ -403,8 +434,10 @@ class _TransitImportDialogState extends State<_TransitImportDialog> {
           style: _warnStyle(theme),
         );
       case BboxVerdict.ok:
-        return Text('Importing ${transitModeLabels(_modes)}.',
-            style: theme.textTheme.bodySmall);
+        return Text(
+          'Importing ${transitModeLabels(_modes)}.',
+          style: theme.textTheme.bodySmall,
+        );
       case BboxVerdict.malformed:
       case BboxVerdict.misordered:
         return const SizedBox.shrink();

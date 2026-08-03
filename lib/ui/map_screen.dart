@@ -19,6 +19,7 @@ import '../data/overpass.dart';
 import '../data/overpass_client.dart'
     show OverpassOutcome, kOverpassPreferenceMaxElapsed;
 import '../data/repository.dart' show Repository;
+import '../data/tile_source.dart';
 import '../data/transit.dart';
 import '../geo/border_areas.dart';
 import '../geo/coords.dart';
@@ -119,13 +120,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
   MapMode get _mode => ref.read(mapModeProvider);
 
-
   // --- Offline tile cache ---------------------------------------------------
-  /// Tile URL templates, shared by the [TileLayer]s and the offline prefetcher
-  /// so the two never drift apart.
-  static const _baseTileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-  static const _tileUserAgent =
-      'ZoneCraft/1.0 (https://github.com/LeoStumpf/zonecraft)';
+  /// The tile source in force, shared by the [TileLayer]s, the attribution
+  /// control and the offline prefetcher so the four never drift apart. It also
+  /// decides whether the offline features exist at all — see
+  /// `data/tile_source.dart`, which explains why they are off by default.
+  static const _tiles = TileSource.current;
+  static String get _baseTileUrl => _tiles.urlTemplate;
 
   /// HTTP client owned by this screen and shared by [_tileProvider] for both
   /// browse-caching and prefetching. Closed in [dispose].
@@ -170,7 +171,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     _tileProvider = CachedTileProvider(
       ref.read(repositoryProvider),
       _tileClient,
-      headers: {'User-Agent': _tileUserAgent},
+      headers: {'User-Agent': tileUserAgent},
     );
   }
 
@@ -196,15 +197,27 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
   /// Debounced offline-tile prefetch (same coalescing as the overlays).
   void _schedulePrefetch() {
+    if (!_tiles.allowsPrefetch) return; // see [_prefetchTiles]
     _prefetchDebounce?.cancel();
-    _prefetchDebounce = Timer(const Duration(milliseconds: 600), _prefetchTiles);
+    _prefetchDebounce = Timer(
+      const Duration(milliseconds: 600),
+      _prefetchTiles,
+    );
   }
 
   /// Best-effort: caches the tiles covering the current viewport plus a one-tile
   /// ring around it, so a short pan or scroll while offline still has tiles.
   /// Capped, sequential, and failure-safe so it never blocks the UI or hammers
   /// the tile servers.
+  ///
+  /// **Only runs when the tile source permits pre-emptive fetching.** The ring
+  /// is the whole point and the ring is exactly what OpenStreetMap's tile
+  /// policy calls bulk downloading — "any pre-emptive fetching of tiles other
+  /// than those a user is actively viewing" — so on the default community
+  /// server this never runs at all. Shrinking the ring would not help; there is
+  /// no compliant size. See `data/tile_source.dart`.
   Future<void> _prefetchTiles() async {
+    if (!_tiles.allowsPrefetch) return;
     if (!_mapReady || !mounted || _prefetching) return;
     final cam = _mapController.camera;
     if (!cam.center.latitude.isFinite ||
@@ -233,7 +246,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
         // The screen can go away mid-run (a 60-tile ring on a slow link takes a
         // while); stop rather than keep fetching for a dead widget.
         if (!mounted) return;
-        await _tileProvider.prefetch(_fillTileUrl(_baseTileUrl, z, t.x, t.y));
+        await _tileProvider.prefetch(fillTileUrl(_baseTileUrl, z, t.x, t.y));
         if (--budget <= 0) break;
       }
       if (!mounted) return;
@@ -244,11 +257,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
       _prefetching = false;
     }
   }
-
-  static String _fillTileUrl(String template, int z, int x, int y) => template
-      .replaceAll('{z}', '$z')
-      .replaceAll('{x}', '$x')
-      .replaceAll('{y}', '$y');
 
   /// The tile URLs to cache for an explicit "download this area": the current
   /// viewport at the current zoom plus [_downloadExtraZoomLevels] deeper levels.
@@ -268,7 +276,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
         south: vp.south,
         z: z,
       )) {
-        urls.add(_fillTileUrl(_baseTileUrl, z, t.x, t.y));
+        urls.add(fillTileUrl(_baseTileUrl, z, t.x, t.y));
         if (urls.length >= _downloadMaxTiles) return urls;
       }
     }
@@ -279,7 +287,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// with an estimate, then caches every tile with a cancellable progress
   /// dialog. Freshly written tiles are the most-recently-used, so the LRU cap
   /// evicts older areas first and keeps what you just downloaded.
+  ///
+  /// **Unreachable unless the tile source permits it** — its button is not
+  /// built otherwise. OpenStreetMap's policy says plainly that "offline use is
+  /// not permitted on `tile.openstreetmap.org`", so this is a feature you get
+  /// by pointing the app at your own provider, not one the community servers
+  /// can fund. Guarded here as well as at the button, so a future caller can't
+  /// reintroduce it by accident.
   Future<void> _downloadArea() async {
+    if (!_tiles.allowsPrefetch) return;
     if (!_mapReady || _downloading) return;
     final cam = _mapController.camera;
     if (!cam.center.latitude.isFinite ||
@@ -321,33 +337,37 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final total = urls.length;
     setState(() => _downloading = true);
 
-    unawaited(showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Downloading area…'),
-        content: ValueListenableBuilder<int>(
-          valueListenable: progress,
-          builder: (_, done, _) => Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              LinearProgressIndicator(value: total == 0 ? null : done / total),
-              const SizedBox(height: 12),
-              Text('$done / $total tiles'),
-            ],
+    unawaited(
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Downloading area…'),
+          content: ValueListenableBuilder<int>(
+            valueListenable: progress,
+            builder: (_, done, _) => Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                LinearProgressIndicator(
+                  value: total == 0 ? null : done / total,
+                ),
+                const SizedBox(height: 12),
+                Text('$done / $total tiles'),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                cancelled = true;
+                Navigator.pop(ctx);
+              },
+              child: const Text('Cancel'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              cancelled = true;
-              Navigator.pop(ctx);
-            },
-            child: const Text('Cancel'),
-          ),
-        ],
       ),
-    ));
+    );
 
     var downloaded = 0;
     for (var i = 0; i < urls.length; i++) {
@@ -366,9 +386,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
     await ref
         .read(repositoryProvider)
         .evictTilesDownTo(CachedTileProvider.maxCacheBytes);
-    _hint(cancelled
-        ? 'Download cancelled — $downloaded new tiles saved'
-        : 'Downloaded $downloaded new tiles for offline use');
+    _hint(
+      cancelled
+          ? 'Download cancelled — $downloaded new tiles saved'
+          : 'Downloaded $downloaded new tiles for offline use',
+    );
   }
 
   static String _formatBytes(int bytes) {
@@ -466,11 +488,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (!mounted) return;
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
-      ..showSnackBar(SnackBar(
-        content: Text('$what moved'),
-        duration: const Duration(seconds: 4),
-        action: SnackBarAction(label: 'Undo', onPressed: revert),
-      ));
+      ..showSnackBar(
+        SnackBar(
+          content: Text('$what moved'),
+          duration: const Duration(seconds: 4),
+          action: SnackBarAction(label: 'Undo', onPressed: revert),
+        ),
+      );
   }
 
   /// Toggles tap-to-measure-elevation mode. Modes are mutually exclusive by
@@ -509,7 +533,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
         _placeType = null;
       }
     });
-    if (mode == MapMode.add || mode == MapMode.elevation ||
+    if (mode == MapMode.add ||
+        mode == MapMode.elevation ||
         mode == MapMode.distance) {
       _clearSelection();
     }
@@ -555,7 +580,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       client: _tileClient,
       lat: p.latitude,
       lng: p.longitude,
-      headers: const {'User-Agent': _tileUserAgent},
+      headers: const {'User-Agent': tileUserAgent},
     );
     if (!mounted) return;
     setState(() {
@@ -572,7 +597,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       client: _tileClient,
       lat: p.latitude,
       lng: p.longitude,
-      headers: const {'User-Agent': _tileUserAgent},
+      headers: const {'User-Agent': tileUserAgent},
     );
     if (!mounted) return;
     setState(() => _myElevation = e);
@@ -654,8 +679,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
           _showMoveUndo(undoLabel, () => onMoved(origin));
         }
       },
-      onLongPress:
-          onMenu == null ? null : (latlng) => onMenu(_globalPosOf(latlng)),
+      onLongPress: onMenu == null
+          ? null
+          : (latlng) => onMenu(_globalPosOf(latlng)),
       builder: (context, pos, isDragging) {
         // Marked (for bulk delete): an accent ring around the dot.
         final core = marked
@@ -665,7 +691,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(
-                      color: Theme.of(context).colorScheme.primary, width: 3),
+                    color: Theme.of(context).colorScheme.primary,
+                    width: 3,
+                  ),
                 ),
                 child: Center(child: dot),
               )
@@ -675,7 +703,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
           children: [
             if (hasLabel) const SizedBox(height: pad),
             SizedBox(
-                width: coreSize, height: coreSize, child: Center(child: core)),
+              width: coreSize,
+              height: coreSize,
+              child: Center(child: core),
+            ),
             if (hasLabel) ...[
               const SizedBox(height: gap),
               SizedBox(height: labelHeight, child: _markerLabel(label)),
@@ -776,7 +807,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
           overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
           style: const TextStyle(
-              fontSize: 9, height: 1.0, color: Colors.black87),
+            fontSize: 9,
+            height: 1.0,
+            color: Colors.black87,
+          ),
         ),
       ),
     );
@@ -793,11 +827,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       value: value,
       enabled: enabled,
       child: Row(
-        children: [
-          Icon(icon, size: 18),
-          const SizedBox(width: 8),
-          Text(text),
-        ],
+        children: [Icon(icon, size: 18), const SizedBox(width: 8), Text(text)],
       ),
     );
   }
@@ -810,8 +840,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     List<PopupMenuEntry<String>> items, [
     String? subtitle,
   ]) {
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
     return showMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(
@@ -829,8 +858,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
             children: [
               Text(title, style: Theme.of(context).textTheme.labelMedium),
               if (subtitle != null)
-                Text(subtitle,
-                    style: Theme.of(context).textTheme.bodySmall),
+                Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
             ],
           ),
         ),
@@ -878,16 +906,27 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// remove (honouring the editor's invariants — keep ≥1 point and promote a new
   /// main when the current main is removed).
   Future<void> _showSubspacePointMenu(
-      SubspacePoint p, List<SubspacePoint> siblings, Offset pos) async {
-    final title =
-        (p.label != null && p.label!.isNotEmpty) ? p.label! : 'Subspace point';
+    SubspacePoint p,
+    List<SubspacePoint> siblings,
+    Offset pos,
+  ) async {
+    final title = (p.label != null && p.label!.isNotEmpty)
+        ? p.label!
+        : 'Subspace point';
     final selected = await _showPointMenu(title, pos, [
-      _pointMenuItem('main', p.isMain ? Icons.check_circle : Icons.radio_button_unchecked,
-          p.isMain ? 'Already the main point' : 'Set as main point',
-          enabled: !p.isMain),
+      _pointMenuItem(
+        'main',
+        p.isMain ? Icons.check_circle : Icons.radio_button_unchecked,
+        p.isMain ? 'Already the main point' : 'Set as main point',
+        enabled: !p.isMain,
+      ),
       _pointMenuItem('rename', Icons.label_outline, 'Rename…'),
-      _pointMenuItem('remove', Icons.remove_circle_outline, 'Remove point',
-          enabled: siblings.length > 1),
+      _pointMenuItem(
+        'remove',
+        Icons.remove_circle_outline,
+        'Remove point',
+        enabled: siblings.length > 1,
+      ),
     ]);
     if (selected == null || !mounted) return;
     final repo = ref.read(repositoryProvider);
@@ -898,8 +937,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
       case 'rename':
         final name = await _promptPointName('Name point', p.label);
         if (name == null || !mounted) return;
-        await repo.updateSubspacePoint(p.id,
-            label: Value(name.isEmpty ? null : name));
+        await repo.updateSubspacePoint(
+          p.id,
+          label: Value(name.isEmpty ? null : name),
+        );
       case 'remove':
         final wasMain = p.isMain;
         final remaining = siblings.where((q) => q.id != p.id).toList();
@@ -921,8 +962,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
     required Future<void> Function() onRemove,
   }) async {
     final selected = await _showPointMenu(title, pos, [
-      _pointMenuItem('remove', Icons.remove_circle_outline, 'Remove point',
-          enabled: canRemove),
+      _pointMenuItem(
+        'remove',
+        Icons.remove_circle_outline,
+        'Remove point',
+        enabled: canRemove,
+      ),
     ]);
     if (selected == 'remove' && mounted) {
       await onRemove();
@@ -932,8 +977,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
   /// Popup menu for a long-pressed circle centre: rename the circle or delete it.
   Future<void> _showCircleMenu(Circle c, Offset pos) async {
-    final title =
-        (c.label != null && c.label!.isNotEmpty) ? c.label! : 'Circle';
+    final title = (c.label != null && c.label!.isNotEmpty)
+        ? c.label!
+        : 'Circle';
     final selected = await _showPointMenu(title, pos, [
       _pointMenuItem('rename', Icons.label_outline, 'Rename…'),
       _pointMenuItem('delete', Icons.delete_outline, 'Delete circle'),
@@ -954,8 +1000,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// Popup menu for a long-pressed plane endpoint: rename the plane, swap which
   /// side is included, or delete it.
   Future<void> _showPlaneMenu(Plane pl, Offset pos) async {
-    final title =
-        (pl.label != null && pl.label!.isNotEmpty) ? pl.label! : 'Plane';
+    final title = (pl.label != null && pl.label!.isNotEmpty)
+        ? pl.label!
+        : 'Plane';
     final selected = await _showPointMenu(title, pos, [
       _pointMenuItem('rename', Icons.label_outline, 'Rename…'),
       _pointMenuItem('swap', Icons.swap_horiz, 'Swap included side'),
@@ -1035,8 +1082,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
         await repo.deleteSubspacePoint(p.id);
       }
       if (removingMain) {
-        final remaining =
-            pts.where((p) => !_markedPoints.contains(p.id)).toList();
+        final remaining = pts
+            .where((p) => !_markedPoints.contains(p.id))
+            .toList();
         if (remaining.isNotEmpty) {
           await repo.setMainPoint(subId, remaining.first.id);
         }
@@ -1097,7 +1145,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     Layer layer, {
     bool select = true,
   }) async {
-    final id = await ref.read(repositoryProvider).createHeightRegion(
+    final id = await ref
+        .read(repositoryProvider)
+        .createHeightRegion(
           layerId: layer.id,
           centerLat: center.latitude,
           centerLng: center.longitude,
@@ -1133,8 +1183,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
   Future<void> _importPois(Layer layer, {LatLng? at}) async {
     final isCircleLayer = layer.type == 'circles';
     final isPoiLayer = layer.type == 'poi';
-    final config = await showPoiImportDialog(context,
-        needsCircleRadius: isCircleLayer, allCategories: isPoiLayer);
+    final config = await showPoiImportDialog(
+      context,
+      needsCircleRadius: isCircleLayer,
+      allCategories: isPoiLayer,
+    );
     if (config == null || !mounted) return;
 
     final center = at ?? _mapController.camera.center;
@@ -1176,15 +1229,23 @@ class _MapScreenState extends ConsumerState<MapScreen>
       _hint(outcome.message!);
       return;
     }
-    _rememberEndpoint(repoForEndpoint, outcome.endpoint,
-        settings?.transitEndpoint, elapsed.elapsed);
+    _rememberEndpoint(
+      repoForEndpoint,
+      outcome.endpoint,
+      settings?.transitEndpoint,
+      elapsed.elapsed,
+    );
     final fetched = outcome.value!;
     // A POI layer stores everything the fetch returned (up to the Overpass
     // cap); circle/subspace seeding keeps the default tighter cap so the
     // created geometry stays manageable.
     final within = poisWithinRadius(
-        center.latitude, center.longitude, r, fetched,
-        cap: isPoiLayer ? overpassResultCap : 60);
+      center.latitude,
+      center.longitude,
+      r,
+      fetched,
+      cap: isPoiLayer ? overpassResultCap : 60,
+    );
     final label = config.category.label.toLowerCase();
     if (within.isEmpty) {
       _hint('No $label found within ${r.round()} m.');
@@ -1232,7 +1293,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
     // Subspace: append to the layer's existing object, or create one.
     final subspaces =
         ref.read(subspacesProvider).asData?.value ?? const <Subspace>[];
-    final points = ref.read(subspacePointsProvider).asData?.value ??
+    final points =
+        ref.read(subspacePointsProvider).asData?.value ??
         const <SubspacePoint>[];
     final existing = subspaces.where((s) => s.layerId == layer.id).firstOrNull;
     final subId = existing?.id ?? await repo.createSubspace(layerId: layer.id);
@@ -1251,23 +1313,25 @@ class _MapScreenState extends ConsumerState<MapScreen>
     }
     if (!mounted) return;
     _selectSubspace(subId);
-    _hint('Seeded ${within.length} $label '
-        '(tap ● to mark the nearest).');
+    _hint(
+      'Seeded ${within.length} $label '
+      '(tap ● to mark the nearest).',
+    );
   }
 
   /// The Add button's label for a layer type. A nested ternary got unreadable
   /// at seven types; this is the same mapping as a switch.
   static String _addFabLabel(String? type) => switch (type) {
-        'poi' => 'Import POIs',
-        'transit' => 'Import transit',
-        'borders' => 'Import borders',
-        'subspace' => 'Add subspace',
-        'freeline' => 'Add line',
-        'freearea' => 'Add area',
-        'height' => 'Add height area',
-        'planes' => 'Add plane',
-        _ => 'Add circle',
-      };
+    'poi' => 'Import POIs',
+    'transit' => 'Import transit',
+    'borders' => 'Import borders',
+    'subspace' => 'Add subspace',
+    'freeline' => 'Add line',
+    'freearea' => 'Add area',
+    'height' => 'Add height area',
+    'planes' => 'Add plane',
+    _ => 'Add circle',
+  };
 
   /// The four lat/lng-axis-aligned corners spanned by two opposite points.
   /// `Polygon` closes itself, so the first vertex is not repeated.
@@ -1309,8 +1373,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
       west: set.west,
       north: set.north,
       east: set.east,
-      diagonalMeters:
-          bboxDiagonalMeters(set.south, set.west, set.north, set.east),
+      diagonalMeters: bboxDiagonalMeters(
+        set.south,
+        set.west,
+        set.north,
+        set.east,
+      ),
       modeMask: set.modeMask,
       existingSetId: set.id,
     );
@@ -1327,7 +1395,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
     String? existingSetId,
   }) async {
     final repo = ref.read(repositoryProvider);
-    final setId = existingSetId ??
+    final setId =
+        existingSetId ??
         await repo.createPendingTransitSet(
           layerId: layerId,
           south: south,
@@ -1371,8 +1440,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
         _hint('${outcome.message!} It\'s saved — retry it from Elements.');
         return;
       }
-      _rememberEndpoint(repo, outcome.endpoint, settings?.transitEndpoint,
-          elapsed.elapsed);
+      _rememberEndpoint(
+        repo,
+        outcome.endpoint,
+        settings?.transitEndpoint,
+        elapsed.elapsed,
+      );
 
       final stations = outcome.value!;
       progress.update('Saving ${stations.length} stations…');
@@ -1391,23 +1464,28 @@ class _MapScreenState extends ConsumerState<MapScreen>
       progress.close();
       if (!mounted) return;
       if (stations.isEmpty) {
-        _hint(modeMask == transitAllModesMask
-            ? 'No transit stations found in that area.'
-            : 'No ${transitModeLabels(modeMask).toLowerCase()} stations found '
-                'in that area.');
+        _hint(
+          modeMask == transitAllModesMask
+              ? 'No transit stations found in that area.'
+              : 'No ${transitModeLabels(modeMask).toLowerCase()} stations found '
+                    'in that area.',
+        );
         return;
       }
       // Hidden *within what was imported* — saying "bus hidden" about buses
       // that were never fetched would send people to a filter that can't help.
-      final hidden = modeMask &
+      final hidden =
+          modeMask &
           ~(await repo.watchAllTransitSets().first)
               .firstWhere((t) => t.id == setId)
               .visibleModeMask;
-      _hint(hidden == 0
-          ? 'Imported ${stations.length} stations.'
-          : 'Imported ${stations.length} stations · '
-              '${transitModeLabels(hidden).toLowerCase()} hidden for now '
-              '(Stations… to show).');
+      _hint(
+        hidden == 0
+            ? 'Imported ${stations.length} stations.'
+            : 'Imported ${stations.length} stations · '
+                  '${transitModeLabels(hidden).toLowerCase()} hidden for now '
+                  '(Stations… to show).',
+      );
     } catch (e) {
       // A write failure used to become an unhandled async error with no
       // message at all. Say so, and leave the retry row behind.
@@ -1450,8 +1528,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
       _hint('This layer has no border level set — make a new borders layer.');
       return;
     }
-    final config =
-        await showBorderImportDialog(context, initial: box, level: level);
+    final config = await showBorderImportDialog(
+      context,
+      initial: box,
+      level: level,
+    );
     if (config == null || !mounted) return;
 
     final repo = ref.read(repositoryProvider);
@@ -1478,14 +1559,20 @@ class _MapScreenState extends ConsumerState<MapScreen>
         if (mounted) _hint(outcome.message!);
         return;
       }
-      _rememberEndpoint(repo, outcome.endpoint, settings?.transitEndpoint,
-          elapsed.elapsed);
+      _rememberEndpoint(
+        repo,
+        outcome.endpoint,
+        settings?.transitEndpoint,
+        elapsed.elapsed,
+      );
 
       // Assemble → clip → simplify off the UI thread: a state-level import is
       // over 100 000 points through RDP.
       final relations = outcome.value!;
-      progress.update('Building ${relations.length} '
-          'area${relations.length == 1 ? '' : 's'} — stitching and thinning…');
+      progress.update(
+        'Building ${relations.length} '
+        'area${relations.length == 1 ? '' : 's'} — stitching and thinning…',
+      );
       final built = await compute(buildBorderAreas, relations);
       if (built.isEmpty) {
         progress.close();
@@ -1493,14 +1580,18 @@ class _MapScreenState extends ConsumerState<MapScreen>
         // so a box sitting wholly inside one municipality matches nothing at
         // all. That reads as a bug unless the message says what to do about it.
         if (mounted) {
-          _hint('No ${level.label.toLowerCase()} found — the box has to reach '
-              'a boundary, not sit inside one. Try a wider area.');
+          _hint(
+            'No ${level.label.toLowerCase()} found — the box has to reach '
+            'a boundary, not sit inside one. Try a wider area.',
+          );
         }
         return;
       }
 
-      progress.update('Saving ${built.length} areas '
-          '(${totalPointCount(built)} points) and colouring them…');
+      progress.update(
+        'Saving ${built.length} areas '
+        '(${totalPointCount(built)} points) and colouring them…',
+      );
       await repo.addBorderSet(
         layerId: layer.id,
         south: config.south,
@@ -1527,10 +1618,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
       );
       progress.close();
       if (!mounted) return;
-      _hint(layer.borderFillAreas
-          ? 'Imported ${built.length} areas.'
-          : 'Imported ${built.length} areas · Colour areas in the layer menu '
-              'to fill them.');
+      _hint(
+        layer.borderFillAreas
+            ? 'Imported ${built.length} areas.'
+            : 'Imported ${built.length} areas · Colour areas in the layer menu '
+                  'to fill them.',
+      );
     } catch (e) {
       progress.close();
       if (mounted) _hint('Could not save the import.');
@@ -1637,8 +1730,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// Runs whichever box import [layer] is for.
   Future<void> _importBox(Layer layer, LatLngBounds box) =>
       layer.type == 'borders'
-          ? _importBorders(layer, box: box)
-          : _importTransit(layer, box: box);
+      ? _importBorders(layer, box: box)
+      : _importTransit(layer, box: box);
 
   /// Leaves Add mode. For the point-set types the object just built is selected
   /// (so its editor and draggable handles appear) — the long-standing "Done ⇒
@@ -1788,10 +1881,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
         if (existing == null) {
           final id = await repo.createSubspace(layerId: layerId);
           await repo.addSubspacePoint(
-              subspaceId: id,
-              lat: latlng.latitude,
-              lng: latlng.longitude,
-              isMain: true);
+            subspaceId: id,
+            lat: latlng.latitude,
+            lng: latlng.longitude,
+            isMain: true,
+          );
           // The first tap made the object too, so undoing it removes both.
           _pushAddStep(
             ObjectRef(kind: ObjectKind.subspace, id: id, layerId: layerId),
@@ -1799,12 +1893,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
           );
         } else {
           final pid = await repo.addSubspacePoint(
-              subspaceId: existing.id,
-              lat: latlng.latitude,
-              lng: latlng.longitude);
+            subspaceId: existing.id,
+            lat: latlng.latitude,
+            lng: latlng.longitude,
+          );
           _pushAddStep(
             ObjectRef(
-                kind: ObjectKind.subspace, id: existing.id, layerId: layerId),
+              kind: ObjectKind.subspace,
+              id: existing.id,
+              layerId: layerId,
+            ),
             () => repo.deleteSubspacePoint(pid),
           );
         }
@@ -1820,19 +1918,26 @@ class _MapScreenState extends ConsumerState<MapScreen>
             inclusionRadiusMeters: _defaultRadius() * 3,
           );
           await repo.addFreeLinePoint(
-              freeLineId: id, lat: latlng.latitude, lng: latlng.longitude);
+            freeLineId: id,
+            lat: latlng.latitude,
+            lng: latlng.longitude,
+          );
           _pushAddStep(
             ObjectRef(kind: ObjectKind.freeLine, id: id, layerId: layerId),
             () => repo.deleteFreeLine(id),
           );
         } else {
           final pid = await repo.addFreeLinePoint(
-              freeLineId: existing.id,
-              lat: latlng.latitude,
-              lng: latlng.longitude);
+            freeLineId: existing.id,
+            lat: latlng.latitude,
+            lng: latlng.longitude,
+          );
           _pushAddStep(
             ObjectRef(
-                kind: ObjectKind.freeLine, id: existing.id, layerId: layerId),
+              kind: ObjectKind.freeLine,
+              id: existing.id,
+              layerId: layerId,
+            ),
             () => repo.deleteFreeLinePoint(pid),
           );
         }
@@ -1843,19 +1948,26 @@ class _MapScreenState extends ConsumerState<MapScreen>
         if (existing == null) {
           final id = await repo.createFreeArea(layerId: layerId);
           await repo.addFreeAreaPoint(
-              freeAreaId: id, lat: latlng.latitude, lng: latlng.longitude);
+            freeAreaId: id,
+            lat: latlng.latitude,
+            lng: latlng.longitude,
+          );
           _pushAddStep(
             ObjectRef(kind: ObjectKind.freeArea, id: id, layerId: layerId),
             () => repo.deleteFreeArea(id),
           );
         } else {
           final pid = await repo.addFreeAreaPoint(
-              freeAreaId: existing.id,
-              lat: latlng.latitude,
-              lng: latlng.longitude);
+            freeAreaId: existing.id,
+            lat: latlng.latitude,
+            lng: latlng.longitude,
+          );
           _pushAddStep(
             ObjectRef(
-                kind: ObjectKind.freeArea, id: existing.id, layerId: layerId),
+              kind: ObjectKind.freeArea,
+              id: existing.id,
+              layerId: layerId,
+            ),
             () => repo.deleteFreeAreaPoint(pid),
           );
         }
@@ -1887,8 +1999,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   ) async {
     final repo = ref.read(repositoryProvider);
     final dist = _defaultRadius();
-    final existing =
-        subspaces.where((s) => s.layerId == layer.id).firstOrNull;
+    final existing = subspaces.where((s) => s.layerId == layer.id).firstOrNull;
     if (existing != null) {
       final p = _hitTest.offset(center, dist, 45); // north-east of centre
       await repo.addSubspacePoint(
@@ -1909,9 +2020,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final w = _hitTest.offset(center, dist, -90); // west
     final e = _hitTest.offset(center, dist, 90); // east
     await repo.addSubspacePoint(
-        subspaceId: id, lat: w.latitude, lng: w.longitude);
+      subspaceId: id,
+      lat: w.latitude,
+      lng: w.longitude,
+    );
     await repo.addSubspacePoint(
-        subspaceId: id, lat: e.latitude, lng: e.longitude);
+      subspaceId: id,
+      lat: e.latitude,
+      lng: e.longitude,
+    );
     _selectSubspace(id);
   }
 
@@ -1929,7 +2046,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (existing != null) {
       final p = _hitTest.offset(center, dist, 45); // north-east of centre
       await repo.addFreeLinePoint(
-          freeLineId: existing.id, lat: p.latitude, lng: p.longitude);
+        freeLineId: existing.id,
+        lat: p.latitude,
+        lng: p.longitude,
+      );
       _selectFreeLine(existing.id);
       return;
     }
@@ -1945,9 +2065,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final w = _hitTest.offset(center, dist, -90); // west
     final e = _hitTest.offset(center, dist, 90); // east
     await repo.addFreeLinePoint(
-        freeLineId: id, lat: w.latitude, lng: w.longitude);
+      freeLineId: id,
+      lat: w.latitude,
+      lng: w.longitude,
+    );
     await repo.addFreeLinePoint(
-        freeLineId: id, lat: e.latitude, lng: e.longitude);
+      freeLineId: id,
+      lat: e.latitude,
+      lng: e.longitude,
+    );
     _selectFreeLine(id);
   }
 
@@ -1965,7 +2091,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (existing != null) {
       final p = _hitTest.offset(center, dist, 0); // north of centre
       await repo.addFreeAreaPoint(
-          freeAreaId: existing.id, lat: p.latitude, lng: p.longitude);
+        freeAreaId: existing.id,
+        lat: p.latitude,
+        lng: p.longitude,
+      );
       _selectFreeArea(existing.id);
       return;
     }
@@ -1974,7 +2103,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
     for (final bearing in [0.0, 120.0, -120.0]) {
       final p = _hitTest.offset(center, dist, bearing);
       await repo.addFreeAreaPoint(
-          freeAreaId: id, lat: p.latitude, lng: p.longitude);
+        freeAreaId: id,
+        lat: p.latitude,
+        lng: p.longitude,
+      );
     }
     _selectFreeArea(id);
   }
@@ -1992,12 +2124,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// So while a tap means something the zoom gesture is off; pinch, the zoom
   /// buttons and plain view mode are untouched.
   InteractionOptions _interactionOptions(bool tapPlaces) => InteractionOptions(
-        flags: tapPlaces
-            ? InteractiveFlag.all &
-                ~InteractiveFlag.doubleTapZoom &
-                ~InteractiveFlag.doubleTapDragZoom
-            : InteractiveFlag.all,
-      );
+    flags: tapPlaces
+        ? InteractiveFlag.all &
+              ~InteractiveFlag.doubleTapZoom &
+              ~InteractiveFlag.doubleTapDragZoom
+        : InteractiveFlag.all,
+  );
 
   /// A map tap. Everything it can do is decided by exactly two things: whether
   /// an editor armed the next tap, and the current [MapMode]. In the default
@@ -2050,41 +2182,51 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// interact with the layer you meant to.
   List<HitCandidate> _hitsAt(LatLng latlng) {
     final layers = ref.read(layersProvider).asData?.value ?? const <Layer>[];
-    final activeId =
-        effectiveActiveLayerId(layers, ref.read(activeLayerProvider));
-    final layer =
-        layers.where((l) => l.id == activeId && l.isVisible).firstOrNull;
+    final activeId = effectiveActiveLayerId(
+      layers,
+      ref.read(activeLayerProvider),
+    );
+    final layer = layers
+        .where((l) => l.id == activeId && l.isVisible)
+        .firstOrNull;
     if (layer == null) return const [];
     final freeAreaPoints =
-        ref.read(freeAreaPointsProvider).asData?.value ?? const <FreeAreaPoint>[];
+        ref.read(freeAreaPointsProvider).asData?.value ??
+        const <FreeAreaPoint>[];
     final uncertainty =
         ref.read(settingsProvider).asData?.value.uncertaintyMeters ?? 0;
-    return rankCandidates(collectCandidates(
-      camera: _mapController.camera,
-      tap: latlng,
-      layer: layer,
-      circles: ref.read(circlesProvider).asData?.value ?? const [],
-      planes: ref.read(planesProvider).asData?.value ?? const [],
-      subspaces: ref.read(subspacesProvider).asData?.value ?? const [],
-      subspacePoints:
-          ref.read(subspacePointsProvider).asData?.value ?? const [],
-      freeLines: ref.read(freeLinesProvider).asData?.value ?? const [],
-      freeLinePoints:
-          ref.read(freeLinePointsProvider).asData?.value ?? const [],
-      freeAreas: ref.read(freeAreasProvider).asData?.value ?? const [],
-      freeAreaPoints: freeAreaPoints,
-      heightRegions: ref.read(heightRegionsProvider).asData?.value ?? const [],
-      // Same arguments the painter uses, so this is a cache hit and the hit
-      // area matches the outline actually drawn (offset included).
-      areaContours: (a) => areaGeometryCache
-          .resolve(
-            a,
-            [for (final p in freeAreaPoints) if (p.freeAreaId == a.id) p],
-            bandMeters: uncertainty,
-            inverted: layer.isInverted,
-          )
-          .core,
-    ));
+    return rankCandidates(
+      collectCandidates(
+        camera: _mapController.camera,
+        tap: latlng,
+        layer: layer,
+        circles: ref.read(circlesProvider).asData?.value ?? const [],
+        planes: ref.read(planesProvider).asData?.value ?? const [],
+        subspaces: ref.read(subspacesProvider).asData?.value ?? const [],
+        subspacePoints:
+            ref.read(subspacePointsProvider).asData?.value ?? const [],
+        freeLines: ref.read(freeLinesProvider).asData?.value ?? const [],
+        freeLinePoints:
+            ref.read(freeLinePointsProvider).asData?.value ?? const [],
+        freeAreas: ref.read(freeAreasProvider).asData?.value ?? const [],
+        freeAreaPoints: freeAreaPoints,
+        heightRegions:
+            ref.read(heightRegionsProvider).asData?.value ?? const [],
+        // Same arguments the painter uses, so this is a cache hit and the hit
+        // area matches the outline actually drawn (offset included).
+        areaContours: (a) => areaGeometryCache
+            .resolve(
+              a,
+              [
+                for (final p in freeAreaPoints)
+                  if (p.freeAreaId == a.id) p,
+              ],
+              bandMeters: uncertainty,
+              inverted: layer.isInverted,
+            )
+            .core,
+      ),
+    );
   }
 
   /// Consumes the tap if one of the editors has armed "the next map tap places
@@ -2095,7 +2237,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (ref.read(circlePlacementProvider)) {
       final selId = ref.read(selectedCircleProvider);
       if (selId != null) {
-        await ref.read(repositoryProvider).updateCircle(
+        await ref
+            .read(repositoryProvider)
+            .updateCircle(
               selId,
               centerLat: latlng.latitude,
               centerLng: latlng.longitude,
@@ -2109,7 +2253,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (ref.read(heightPlacementProvider)) {
       final selId = ref.read(selectedHeightRegionProvider);
       if (selId != null) {
-        await ref.read(repositoryProvider).updateHeightRegion(
+        await ref
+            .read(repositoryProvider)
+            .updateHeightRegion(
               selId,
               centerLat: latlng.latitude,
               centerLng: latlng.longitude,
@@ -2123,7 +2269,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (ref.read(freeLineCenterPlacementProvider)) {
       final selId = ref.read(selectedFreeLineProvider);
       if (selId != null) {
-        await ref.read(repositoryProvider).updateFreeLine(
+        await ref
+            .read(repositoryProvider)
+            .updateFreeLine(
               selId,
               inclusionLat: latlng.latitude,
               inclusionLng: latlng.longitude,
@@ -2137,7 +2285,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final armedLine = ref.read(freeLinePlacementProvider);
     final selLineId = ref.read(selectedFreeLineProvider);
     if (armedLine != null && selLineId != null) {
-      await ref.read(repositoryProvider).updateFreeLinePoint(
+      await ref
+          .read(repositoryProvider)
+          .updateFreeLinePoint(
             armedLine,
             lat: latlng.latitude,
             lng: latlng.longitude,
@@ -2150,7 +2300,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final armedArea = ref.read(freeAreaPlacementProvider);
     final selAreaId = ref.read(selectedFreeAreaProvider);
     if (armedArea != null && selAreaId != null) {
-      await ref.read(repositoryProvider).updateFreeAreaPoint(
+      await ref
+          .read(repositoryProvider)
+          .updateFreeAreaPoint(
             armedArea,
             lat: latlng.latitude,
             lng: latlng.longitude,
@@ -2163,7 +2315,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final armedSub = ref.read(subspacePlacementProvider);
     final selSubId = ref.read(selectedSubspaceProvider);
     if (armedSub != null && selSubId != null) {
-      await ref.read(repositoryProvider).updateSubspacePoint(
+      await ref
+          .read(repositoryProvider)
+          .updateSubspacePoint(
             armedSub,
             lat: latlng.latitude,
             lng: latlng.longitude,
@@ -2223,33 +2377,55 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final items = <PopupMenuEntry<String>>[];
     for (var i = 0; i < hits.length; i++) {
       final s = summaries[hits[i].ref];
-      items.add(_pointMenuItem(
-        'hit:$i',
-        typeIcon(activeLayer.type),
-        s == null ? 'Element ${i + 1}' : '${s.title} · ${s.subtitle}',
-      ));
+      items.add(
+        _pointMenuItem(
+          'hit:$i',
+          typeIcon(activeLayer.type),
+          s == null ? 'Element ${i + 1}' : '${s.title} · ${s.subtitle}',
+        ),
+      );
     }
 
     // Contextual add actions — a strict superset of what long-press used to do.
     final actions = <PopupMenuEntry<String>>[];
     switch (activeLayer.type) {
       case 'circles':
-        actions.add(_pointMenuItem(
-            'newCircle', Icons.add_circle_outline, 'New circle here'));
+        actions.add(
+          _pointMenuItem(
+            'newCircle',
+            Icons.add_circle_outline,
+            'New circle here',
+          ),
+        );
       case 'subspace':
         if (selectedSubspaceId != null) {
-          actions.add(_pointMenuItem(
-              'addPoint', Icons.add_location_alt_outlined, 'Add point here'));
+          actions.add(
+            _pointMenuItem(
+              'addPoint',
+              Icons.add_location_alt_outlined,
+              'Add point here',
+            ),
+          );
         }
       case 'freeline':
         if (selectedFreeLineId != null) {
-          actions.add(_pointMenuItem('insertLine',
-              Icons.add_location_alt_outlined, 'Insert point here'));
+          actions.add(
+            _pointMenuItem(
+              'insertLine',
+              Icons.add_location_alt_outlined,
+              'Insert point here',
+            ),
+          );
         }
       case 'freearea':
         if (selectedFreeAreaId != null) {
-          actions.add(_pointMenuItem('insertArea',
-              Icons.add_location_alt_outlined, 'Insert point here'));
+          actions.add(
+            _pointMenuItem(
+              'insertArea',
+              Icons.add_location_alt_outlined,
+              'Insert point here',
+            ),
+          );
         }
     }
     if (actions.isNotEmpty) {
@@ -2271,8 +2447,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
       return;
     }
 
-    final selected = await _showPointMenu(activeLayer.name, globalPosition,
-        items, formatLatLng(latlng.latitude, latlng.longitude));
+    final selected = await _showPointMenu(
+      activeLayer.name,
+      globalPosition,
+      items,
+      formatLatLng(latlng.latitude, latlng.longitude),
+    );
     if (selected == null || !mounted) return;
     final repo = ref.read(repositoryProvider);
     if (selected.startsWith('hit:')) {
@@ -2288,16 +2468,18 @@ class _MapScreenState extends ConsumerState<MapScreen>
         await _addCircleAt(latlng, activeLayer);
       case 'addPoint':
         await repo.addSubspacePoint(
-            subspaceId: selectedSubspaceId!,
-            lat: latlng.latitude,
-            lng: latlng.longitude);
+          subspaceId: selectedSubspaceId!,
+          lat: latlng.latitude,
+          lng: latlng.longitude,
+        );
       case 'insertLine':
-        final pts = (ref.read(freeLinePointsProvider).asData?.value ??
-                const <FreeLinePoint>[])
-            .where((p) => p.freeLineId == selectedFreeLineId)
-            .map((p) => (ll: LatLng(p.lat, p.lng), order: p.sortOrder))
-            .toList()
-          ..sort((a, b) => a.order.compareTo(b.order));
+        final pts =
+            (ref.read(freeLinePointsProvider).asData?.value ??
+                    const <FreeLinePoint>[])
+                .where((p) => p.freeLineId == selectedFreeLineId)
+                .map((p) => (ll: LatLng(p.lat, p.lng), order: p.sortOrder))
+                .toList()
+              ..sort((a, b) => a.order.compareTo(b.order));
         await repo.insertFreeLinePointAt(
           freeLineId: selectedFreeLineId!,
           sortOrder: _insertOrderFor(pts, latlng, closed: false),
@@ -2305,12 +2487,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
           lng: latlng.longitude,
         );
       case 'insertArea':
-        final pts = (ref.read(freeAreaPointsProvider).asData?.value ??
-                const <FreeAreaPoint>[])
-            .where((p) => p.freeAreaId == selectedFreeAreaId)
-            .map((p) => (ll: LatLng(p.lat, p.lng), order: p.sortOrder))
-            .toList()
-          ..sort((a, b) => a.order.compareTo(b.order));
+        final pts =
+            (ref.read(freeAreaPointsProvider).asData?.value ??
+                    const <FreeAreaPoint>[])
+                .where((p) => p.freeAreaId == selectedFreeAreaId)
+                .map((p) => (ll: LatLng(p.lat, p.lng), order: p.sortOrder))
+                .toList()
+              ..sort((a, b) => a.order.compareTo(b.order));
         await repo.insertFreeAreaPointAt(
           freeAreaId: selectedFreeAreaId!,
           sortOrder: _insertOrderFor(pts, latlng, closed: true),
@@ -2388,14 +2571,18 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (pts.isEmpty) return;
     if (pts.length < 2) {
       _mapController.move(
-          pts.first, math.max(_mapController.camera.zoom, 14.0).clamp(2.0, 19.0));
+        pts.first,
+        math.max(_mapController.camera.zoom, 14.0).clamp(2.0, 19.0),
+      );
       return;
     }
-    _mapController.fitCamera(CameraFit.coordinates(
-      coordinates: pts,
-      padding: const EdgeInsets.all(64),
-      maxZoom: 16,
-    ));
+    _mapController.fitCamera(
+      CameraFit.coordinates(
+        coordinates: pts,
+        padding: const EdgeInsets.all(64),
+        maxZoom: 16,
+      ),
+    );
   }
 
   @override
@@ -2464,7 +2651,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
     }
     final mode = ref.watch(mapModeProvider);
     // Whether a map tap currently *does* something — see [_interactionOptions].
-    final tapPlaces = mode != MapMode.view ||
+    final tapPlaces =
+        mode != MapMode.view ||
         ref.watch(circlePlacementProvider) ||
         ref.watch(heightPlacementProvider) ||
         ref.watch(freeLineCenterPlacementProvider) ||
@@ -2503,12 +2691,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
             lat: selectedFreeLine.inclusionLat,
             lng: selectedFreeLine.inclusionLng,
             radiusMeters: selectedFreeLine.inclusionRadiusMeters,
-            points: [for (final p in selectedFreeLinePoints) LatLng(p.lat, p.lng)],
+            points: [
+              for (final p in selectedFreeLinePoints) LatLng(p.lat, p.lng),
+            ],
           );
     final selectedFreeLineCircle = selectedFreeLineInclusion == null
         ? const <LatLng>[]
-        : geodesicCircle(selectedFreeLineInclusion.center,
-            selectedFreeLineInclusion.radiusMeters);
+        : geodesicCircle(
+            selectedFreeLineInclusion.center,
+            selectedFreeLineInclusion.radiusMeters,
+          );
     final selectedFreeArea = freeAreas
         .where((a) => a.id == ref.watch(selectedFreeAreaProvider))
         .firstOrNull;
@@ -2521,11 +2713,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final selectedHeightCircle = selectedHeightRegion == null
         ? const <LatLng>[]
         : geodesicCircle(
-            LatLng(selectedHeightRegion.centerLat,
-                selectedHeightRegion.centerLng),
+            LatLng(
+              selectedHeightRegion.centerLat,
+              selectedHeightRegion.centerLng,
+            ),
             selectedHeightRegion.radiusMeters,
           );
-    final hasSelection = selectedCircle != null ||
+    final hasSelection =
+        selectedCircle != null ||
         selectedPlane != null ||
         selectedSubspace != null ||
         selectedFreeLine != null ||
@@ -2537,8 +2732,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
       _editHintShown = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          _hint('Drag a point to move it · long-press it for options · '
-              'long-press the map to select or add');
+          _hint(
+            'Drag a point to move it · long-press it for options · '
+            'long-press the map to select or add',
+          );
         }
       });
     }
@@ -2618,11 +2815,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       _schedulePrefetch();
                     },
                     onTap: (_, latlng) => _handleTap(latlng),
-                    onLongPress: (tapPos, latlng) => _handleMapLongPress(
-                        tapPos.global, latlng, activeLayer),
+                    onLongPress: (tapPos, latlng) =>
+                        _handleMapLongPress(tapPos.global, latlng, activeLayer),
                     // Desktop right-click reaches the same context menu.
-                    onSecondaryTap: (tapPos, latlng) => _handleMapLongPress(
-                        tapPos.global, latlng, activeLayer),
+                    onSecondaryTap: (tapPos, latlng) =>
+                        _handleMapLongPress(tapPos.global, latlng, activeLayer),
                   ),
                   children: [
                     // Base OSM tiles — a pinned bottom "layer": hideable and
@@ -2635,7 +2832,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         opacity: basemapOpacity.clamp(0.0, 1.0),
                         child: TileLayer(
                           urlTemplate: _baseTileUrl,
-                          userAgentPackageName: 'com.zonecraft.zonecraft',
+                          // Must match the real application id: the policy
+                          // requires a User-Agent that identifies the app, and
+                          // forbids relying on a library default.
+                          userAgentPackageName: 'com.leostumpf.zonecraft',
                           tileProvider: _tileProvider,
                           maxZoom: 19,
                         ),
@@ -2658,8 +2858,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             points: poiPoints,
                             onClusterTap: (center) => _mapController.move(
                               center,
-                              (_mapController.camera.zoom + 1.5)
-                                  .clamp(2.0, 19.0),
+                              (_mapController.camera.zoom + 1.5).clamp(
+                                2.0,
+                                19.0,
+                              ),
                             ),
                           ),
                         )
@@ -2670,15 +2872,18 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             key: ValueKey(layer.id),
                             layer: layer,
                             stations: visibleTransitStations(
-                              transitStations.where((s) =>
-                                  (transitSetIds[layer.id] ?? const {})
-                                      .contains(s.setId)),
+                              transitStations.where(
+                                (s) => (transitSetIds[layer.id] ?? const {})
+                                    .contains(s.setId),
+                              ),
                               transitVisibleMask,
                             ),
                             onClusterTap: (center) => _mapController.move(
                               center,
-                              (_mapController.camera.zoom + 1.5)
-                                  .clamp(2.0, 19.0),
+                              (_mapController.camera.zoom + 1.5).clamp(
+                                2.0,
+                                19.0,
+                              ),
                             ),
                           ),
                         )
@@ -2783,8 +2988,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             points: [
                               for (final p in selectedFreeAreaPoints)
                                 LatLng(p.lat, p.lng),
-                              LatLng(selectedFreeAreaPoints.first.lat,
-                                  selectedFreeAreaPoints.first.lng),
+                              LatLng(
+                                selectedFreeAreaPoints.first.lat,
+                                selectedFreeAreaPoints.first.lng,
+                              ),
                             ],
                             color: Colors.black87,
                             strokeWidth: 1.5,
@@ -2814,11 +3021,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         polygons: [
                           Polygon(
                             points: _bboxRing(
-                                _pendingBoxA!, _mapController.camera.center),
-                            color: Theme.of(context)
-                                .colorScheme
-                                .primary
-                                .withValues(alpha: 0.12),
+                              _pendingBoxA!,
+                              _mapController.camera.center,
+                            ),
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.primary.withValues(alpha: 0.12),
                             borderColor: Theme.of(context).colorScheme.primary,
                             borderStrokeWidth: 2,
                           ),
@@ -2895,23 +3103,29 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(Icons.place,
-                                    color: Colors.black87, size: 28),
+                                const Icon(
+                                  Icons.place,
+                                  color: Colors.black87,
+                                  size: 28,
+                                ),
                                 Material(
                                   color: Colors.black87,
                                   borderRadius: BorderRadius.circular(4),
                                   child: Padding(
                                     padding: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 2),
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
                                     child: Text(
                                       _probing
                                           ? '…'
                                           : _probeElevation != null
-                                              ? _formatElevation(
-                                                  _probeElevation!)
-                                              : 'n/a',
+                                          ? _formatElevation(_probeElevation!)
+                                          : 'n/a',
                                       style: const TextStyle(
-                                          color: Colors.white, fontSize: 12),
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -2942,8 +3156,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                 width: 28,
                                 height: 28,
                                 alignment: Alignment.topCenter,
-                                child: const Icon(Icons.place,
-                                    color: Colors.black87, size: 28),
+                                child: const Icon(
+                                  Icons.place,
+                                  color: Colors.black87,
+                                  size: 28,
+                                ),
                               ),
                         ],
                       ),
@@ -2965,9 +3182,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               undoLabel: 'Circle',
                               onMoved: (ll) => ref
                                   .read(repositoryProvider)
-                                  .updateCircle(selectedCircle.id,
-                                      centerLat: ll.latitude,
-                                      centerLng: ll.longitude),
+                                  .updateCircle(
+                                    selectedCircle.id,
+                                    centerLat: ll.latitude,
+                                    centerLng: ll.longitude,
+                                  ),
                               onMenu: (pos) =>
                                   _showCircleMenu(selectedCircle, pos),
                             ),
@@ -2980,8 +3199,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               key: ValueKey('circle-r-${selectedCircle.id}'),
                               onResize: (m) => ref
                                   .read(repositoryProvider)
-                                  .updateCircle(selectedCircle.id,
-                                      radiusMeters: m),
+                                  .updateCircle(
+                                    selectedCircle.id,
+                                    radiusMeters: m,
+                                  ),
                             ),
                           ],
                           if (selectedPlane != null) ...[
@@ -2992,8 +3213,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               undoLabel: 'Point',
                               onMoved: (ll) => ref
                                   .read(repositoryProvider)
-                                  .updatePlane(selectedPlane.id,
-                                      aLat: ll.latitude, aLng: ll.longitude),
+                                  .updatePlane(
+                                    selectedPlane.id,
+                                    aLat: ll.latitude,
+                                    aLng: ll.longitude,
+                                  ),
                               onMenu: (pos) =>
                                   _showPlaneMenu(selectedPlane, pos),
                             ),
@@ -3003,8 +3227,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               undoLabel: 'Point',
                               onMoved: (ll) => ref
                                   .read(repositoryProvider)
-                                  .updatePlane(selectedPlane.id,
-                                      bLat: ll.latitude, bLng: ll.longitude),
+                                  .updatePlane(
+                                    selectedPlane.id,
+                                    bLat: ll.latitude,
+                                    bLng: ll.longitude,
+                                  ),
                               onMenu: (pos) =>
                                   _showPlaneMenu(selectedPlane, pos),
                             ),
@@ -3020,10 +3247,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               onTapToggle: () => _toggleMarked(p.id),
                               onMoved: (ll) => ref
                                   .read(repositoryProvider)
-                                  .updateSubspacePoint(p.id,
-                                      lat: ll.latitude, lng: ll.longitude),
+                                  .updateSubspacePoint(
+                                    p.id,
+                                    lat: ll.latitude,
+                                    lng: ll.longitude,
+                                  ),
                               onMenu: (pos) => _showSubspacePointMenu(
-                                  p, selectedSubspacePoints, pos),
+                                p,
+                                selectedSubspacePoints,
+                                pos,
+                              ),
                             ),
                           for (final p in selectedFreeLinePoints)
                             _dragHandle(
@@ -3034,8 +3267,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               onTapToggle: () => _toggleMarked(p.id),
                               onMoved: (ll) => ref
                                   .read(repositoryProvider)
-                                  .updateFreeLinePoint(p.id,
-                                      lat: ll.latitude, lng: ll.longitude),
+                                  .updateFreeLinePoint(
+                                    p.id,
+                                    lat: ll.latitude,
+                                    lng: ll.longitude,
+                                  ),
                               onMenu: (pos) => _showFreeVertexMenu(
                                 pos,
                                 title: 'Line point',
@@ -3049,14 +3285,17 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             _dragHandle(
                               selectedFreeLineInclusion.center,
                               key: ValueKey(
-                                  'fl-center-${selectedFreeLine!.id}'),
+                                'fl-center-${selectedFreeLine!.id}',
+                              ),
                               core: _crosshairCore(),
                               undoLabel: 'Centre',
                               onMoved: (ll) => ref
                                   .read(repositoryProvider)
-                                  .updateFreeLine(selectedFreeLine.id,
-                                      inclusionLat: ll.latitude,
-                                      inclusionLng: ll.longitude),
+                                  .updateFreeLine(
+                                    selectedFreeLine.id,
+                                    inclusionLat: ll.latitude,
+                                    inclusionLng: ll.longitude,
+                                  ),
                             ),
                             _radiusHandle(
                               selectedFreeLineInclusion.center,
@@ -3064,8 +3303,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               key: ValueKey('fl-r-${selectedFreeLine.id}'),
                               onResize: (m) => ref
                                   .read(repositoryProvider)
-                                  .updateFreeLine(selectedFreeLine.id,
-                                      inclusionRadiusMeters: m),
+                                  .updateFreeLine(
+                                    selectedFreeLine.id,
+                                    inclusionRadiusMeters: m,
+                                  ),
                             ),
                           ],
                           for (final p in selectedFreeAreaPoints)
@@ -3077,8 +3318,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               onTapToggle: () => _toggleMarked(p.id),
                               onMoved: (ll) => ref
                                   .read(repositoryProvider)
-                                  .updateFreeAreaPoint(p.id,
-                                      lat: ll.latitude, lng: ll.longitude),
+                                  .updateFreeAreaPoint(
+                                    p.id,
+                                    lat: ll.latitude,
+                                    lng: ll.longitude,
+                                  ),
                               onMenu: (pos) => _showFreeVertexMenu(
                                 pos,
                                 title: 'Area point',
@@ -3090,37 +3334,44 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             ),
                           if (selectedHeightRegion != null) ...[
                             _dragHandle(
-                              LatLng(selectedHeightRegion.centerLat,
-                                  selectedHeightRegion.centerLng),
+                              LatLng(
+                                selectedHeightRegion.centerLat,
+                                selectedHeightRegion.centerLng,
+                              ),
                               key: ValueKey(
-                                  'height-${selectedHeightRegion.id}'),
+                                'height-${selectedHeightRegion.id}',
+                              ),
                               core: _crosshairCore(),
                               undoLabel: 'Centre',
                               onMoved: (ll) => ref
                                   .read(repositoryProvider)
-                                  .updateHeightRegion(selectedHeightRegion.id,
-                                      centerLat: ll.latitude,
-                                      centerLng: ll.longitude),
+                                  .updateHeightRegion(
+                                    selectedHeightRegion.id,
+                                    centerLat: ll.latitude,
+                                    centerLng: ll.longitude,
+                                  ),
                             ),
                             _radiusHandle(
-                              LatLng(selectedHeightRegion.centerLat,
-                                  selectedHeightRegion.centerLng),
+                              LatLng(
+                                selectedHeightRegion.centerLat,
+                                selectedHeightRegion.centerLng,
+                              ),
                               selectedHeightRegion.radiusMeters,
                               key: ValueKey(
-                                  'height-r-${selectedHeightRegion.id}'),
+                                'height-r-${selectedHeightRegion.id}',
+                              ),
                               onResize: (m) => ref
                                   .read(repositoryProvider)
-                                  .updateHeightRegion(selectedHeightRegion.id,
-                                      radiusMeters: m),
+                                  .updateHeightRegion(
+                                    selectedHeightRegion.id,
+                                    radiusMeters: m,
+                                  ),
                             ),
                           ],
                         ],
                       ),
-                    const RichAttributionWidget(
-                      attributions: [
-                        TextSourceAttribution(
-                            '© OpenStreetMap contributors'),
-                      ],
+                    RichAttributionWidget(
+                      attributions: [TextSourceAttribution(_tiles.attribution)],
                     ),
                   ],
                 ),
@@ -3163,12 +3414,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                 Flexible(
                                   child: Text(
                                     _addBannerText(
-                                        _placeType, _addSteps.length),
+                                      _placeType,
+                                      _addSteps.length,
+                                    ),
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                                 TextButton(
-                                  onPressed: (_addSteps.isEmpty &&
+                                  onPressed:
+                                      (_addSteps.isEmpty &&
                                           _pendingPlaneA == null)
                                       ? null
                                       : _undoLastAdd,
@@ -3209,8 +3463,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                 Text('${_markedPoints.length} selected'),
                                 TextButton.icon(
                                   onPressed: _deleteMarked,
-                                  icon: const Icon(Icons.delete_outline,
-                                      size: 18),
+                                  icon: const Icon(
+                                    Icons.delete_outline,
+                                    size: 18,
+                                  ),
                                   label: const Text('Delete'),
                                 ),
                                 TextButton(
@@ -3242,27 +3498,33 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           borderRadius: BorderRadius.circular(8),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 8),
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                if (mode == MapMode.elevation || _probePoint != null)
+                                if (mode == MapMode.elevation ||
+                                    _probePoint != null)
                                   Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      const Icon(Icons.place_outlined, size: 16),
+                                      const Icon(
+                                        Icons.place_outlined,
+                                        size: 16,
+                                      ),
                                       const SizedBox(width: 6),
                                       Text(
                                         _probing
                                             ? 'Measuring…'
                                             : _probeElevation != null
-                                                ? 'Point: ${_formatElevation(_probeElevation!)}'
-                                                : _probePoint != null
-                                                    ? 'Point: n/a'
-                                                    : 'Tap the map to measure',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodyMedium,
+                                            ? 'Point: ${_formatElevation(_probeElevation!)}'
+                                            : _probePoint != null
+                                            ? 'Point: n/a'
+                                            : 'Tap the map to measure',
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.bodyMedium,
                                       ),
                                     ],
                                   ),
@@ -3274,9 +3536,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                       const SizedBox(width: 6),
                                       Text(
                                         'You: ${_formatElevation(_myElevation!)}',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodyMedium,
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.bodyMedium,
                                       ),
                                     ],
                                   ),
@@ -3289,24 +3551,27 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                       Text(
                                         _distA != null && _distB != null
                                             ? '${_formatDistance(_hitTest(_distA!, _distB!))} · '
-                                                '${_hitTest.bearing(_distA!, _distB!).round()}°'
+                                                  '${_hitTest.bearing(_distA!, _distB!).round()}°'
                                             : _distA != null
-                                                ? 'Tap the second point'
-                                                : 'Tap two points',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodyMedium,
+                                            ? 'Tap the second point'
+                                            : 'Tap two points',
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.bodyMedium,
                                       ),
                                       if (mode == MapMode.distance) ...[
                                         const SizedBox(width: 8),
                                         TextButton.icon(
                                           onPressed: _distanceFromMyLocation,
-                                          icon: const Icon(Icons.my_location,
-                                              size: 16),
+                                          icon: const Icon(
+                                            Icons.my_location,
+                                            size: 16,
+                                          ),
                                           label: const Text('My location'),
                                           style: TextButton.styleFrom(
                                             padding: const EdgeInsets.symmetric(
-                                                horizontal: 8),
+                                              horizontal: 8,
+                                            ),
                                             minimumSize: const Size(0, 32),
                                             tapTargetSize: MaterialTapTargetSize
                                                 .shrinkWrap,
@@ -3333,19 +3598,24 @@ class _MapScreenState extends ConsumerState<MapScreen>
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 if (toolsExpanded) ...[
-                  FloatingActionButton.small(
-                    heroTag: 'download',
-                    tooltip: 'Download this area for offline use',
-                    onPressed: _downloading ? null : _downloadArea,
-                    child: _downloading
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.download_for_offline_outlined),
-                  ),
-                  const SizedBox(height: 12),
+                  // Offline download exists only where the tile source allows
+                  // pre-emptive fetching — not on the community OSM servers.
+                  // See `data/tile_source.dart`.
+                  if (_tiles.allowsPrefetch) ...[
+                    FloatingActionButton.small(
+                      heroTag: 'download',
+                      tooltip: 'Download this area for offline use',
+                      onPressed: _downloading ? null : _downloadArea,
+                      child: _downloading
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.download_for_offline_outlined),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   FloatingActionButton.small(
                     heroTag: 'compass',
                     tooltip: 'Reset to north-up',
@@ -3429,12 +3699,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           : null,
                       onPressed: activeLayer == null
                           ? null
-                          : () => _enterMode(mode == MapMode.edit
-                              ? MapMode.view
-                              : MapMode.edit),
-                      child: Icon(mode == MapMode.edit
-                          ? Icons.edit
-                          : Icons.edit_outlined),
+                          : () => _enterMode(
+                              mode == MapMode.edit
+                                  ? MapMode.view
+                                  : MapMode.edit,
+                            ),
+                      child: Icon(
+                        mode == MapMode.edit ? Icons.edit : Icons.edit_outlined,
+                      ),
                     ),
                     if (isCircleLayer || isSubspaceLayer) ...[
                       const SizedBox(width: 12),
@@ -3456,34 +3728,39 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       onLongPress: activeLayer == null
                           ? null
                           : () => _addAtMapCentre(
-                                activeLayer,
-                                subspaces: subspaces,
-                                freeLines: freeLines,
-                                freeAreas: freeAreas,
-                              ),
+                              activeLayer,
+                              subspaces: subspaces,
+                              freeLines: freeLines,
+                              freeAreas: freeAreas,
+                            ),
                       child: FloatingActionButton.extended(
                         heroTag: 'add',
-                        tooltip: 'Tap the map to add · long-press for the '
+                        tooltip:
+                            'Tap the map to add · long-press for the '
                             'map centre',
                         onPressed: activeLayer == null
                             ? null
                             : () => mode == MapMode.add
-                                ? _finishAdd()
-                                : _enterAddMode(activeLayer),
+                                  ? _finishAdd()
+                                  : _enterAddMode(activeLayer),
                         backgroundColor: activeLayer == null
                             ? Theme.of(context).disabledColor
                             : mode == MapMode.add
-                                ? Theme.of(context).colorScheme.primary
-                                : null,
+                            ? Theme.of(context).colorScheme.primary
+                            : null,
                         foregroundColor: mode == MapMode.add
                             ? Theme.of(context).colorScheme.onPrimary
                             : null,
-                        icon: Icon(mode == MapMode.add
-                            ? Icons.check
-                            : typeIcon(activeLayer?.type ?? 'circles')),
-                        label: Text(mode == MapMode.add
-                            ? 'Done'
-                            : _addFabLabel(activeLayer?.type)),
+                        icon: Icon(
+                          mode == MapMode.add
+                              ? Icons.check
+                              : typeIcon(activeLayer?.type ?? 'circles'),
+                        ),
+                        label: Text(
+                          mode == MapMode.add
+                              ? 'Done'
+                              : _addFabLabel(activeLayer?.type),
+                        ),
                       ),
                     ),
                   ],
@@ -3494,65 +3771,73 @@ class _MapScreenState extends ConsumerState<MapScreen>
           ? null
           : CollapsibleSheet(
               // Reset to expanded whenever the selected object changes.
-              key: ValueKey('sheet-'
-                  '${selectedCircle?.id ?? selectedPlane?.id ?? selectedSubspace?.id ?? selectedFreeLine?.id ?? selectedFreeArea?.id ?? selectedHeightRegion?.id}'),
+              key: ValueKey(
+                'sheet-'
+                '${selectedCircle?.id ?? selectedPlane?.id ?? selectedSubspace?.id ?? selectedFreeLine?.id ?? selectedFreeArea?.id ?? selectedHeightRegion?.id}',
+              ),
               child: selectedCircle != null
-          ? CircleEditorSheet(
-              key: ValueKey(selectedCircle.id),
-              circle: selectedCircle,
-              layers: layers,
-            )
-          : selectedPlane != null
-          ? PlaneEditorSheet(
-              key: ValueKey(selectedPlane.id),
-              plane: selectedPlane,
-              layers: layers,
-            )
-          : selectedSubspace != null
-          ? SubspaceEditorSheet(
-              key: ValueKey(selectedSubspace.id),
-              subspace: selectedSubspace,
-              points: selectedSubspacePoints,
-              layers: layers,
-              onAddPoint: () => _addSubspaceAt(
-                _mapController.camera.center,
-                layers.firstWhere((l) => l.id == selectedSubspace.layerId),
-                subspaces,
-              ),
-            )
-          : selectedFreeLine != null
-          ? FreeLineEditorSheet(
-              key: ValueKey(selectedFreeLine.id),
-              freeLine: selectedFreeLine,
-              points: selectedFreeLinePoints,
-              layers: layers,
-              onAddPoint: () => _addFreeLineAt(
-                _mapController.camera.center,
-                layers.firstWhere((l) => l.id == selectedFreeLine.layerId),
-                freeLines,
-              ),
-            )
-          : selectedFreeArea != null
-          ? FreeAreaEditorSheet(
-              key: ValueKey(selectedFreeArea.id),
-              freeArea: selectedFreeArea,
-              points: selectedFreeAreaPoints,
-              layers: layers,
-              onAddPoint: () => _addFreeAreaAt(
-                _mapController.camera.center,
-                layers.firstWhere((l) => l.id == selectedFreeArea.layerId),
-                freeAreas,
-              ),
-            )
-          : selectedHeightRegion != null
-          ? HeightEditorSheet(
-              key: ValueKey(selectedHeightRegion.id),
-              region: selectedHeightRegion,
-              polygonCount:
-                  heightPolygons[selectedHeightRegion.id]?.length ?? 0,
-              layers: layers,
-            )
-          : const SizedBox.shrink(),
+                  ? CircleEditorSheet(
+                      key: ValueKey(selectedCircle.id),
+                      circle: selectedCircle,
+                      layers: layers,
+                    )
+                  : selectedPlane != null
+                  ? PlaneEditorSheet(
+                      key: ValueKey(selectedPlane.id),
+                      plane: selectedPlane,
+                      layers: layers,
+                    )
+                  : selectedSubspace != null
+                  ? SubspaceEditorSheet(
+                      key: ValueKey(selectedSubspace.id),
+                      subspace: selectedSubspace,
+                      points: selectedSubspacePoints,
+                      layers: layers,
+                      onAddPoint: () => _addSubspaceAt(
+                        _mapController.camera.center,
+                        layers.firstWhere(
+                          (l) => l.id == selectedSubspace.layerId,
+                        ),
+                        subspaces,
+                      ),
+                    )
+                  : selectedFreeLine != null
+                  ? FreeLineEditorSheet(
+                      key: ValueKey(selectedFreeLine.id),
+                      freeLine: selectedFreeLine,
+                      points: selectedFreeLinePoints,
+                      layers: layers,
+                      onAddPoint: () => _addFreeLineAt(
+                        _mapController.camera.center,
+                        layers.firstWhere(
+                          (l) => l.id == selectedFreeLine.layerId,
+                        ),
+                        freeLines,
+                      ),
+                    )
+                  : selectedFreeArea != null
+                  ? FreeAreaEditorSheet(
+                      key: ValueKey(selectedFreeArea.id),
+                      freeArea: selectedFreeArea,
+                      points: selectedFreeAreaPoints,
+                      layers: layers,
+                      onAddPoint: () => _addFreeAreaAt(
+                        _mapController.camera.center,
+                        layers.firstWhere(
+                          (l) => l.id == selectedFreeArea.layerId,
+                        ),
+                        freeAreas,
+                      ),
+                    )
+                  : selectedHeightRegion != null
+                  ? HeightEditorSheet(
+                      key: ValueKey(selectedHeightRegion.id),
+                      region: selectedHeightRegion,
+                      polygonCount:
+                          heightPolygons[selectedHeightRegion.id]?.length ?? 0,
+                      layers: layers,
+                    )
+                  : const SizedBox.shrink(),
             ),
     );
   }

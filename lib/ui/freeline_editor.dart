@@ -7,6 +7,7 @@ import '../data/database.dart';
 import '../data/repository.dart';
 import '../geo/coords.dart';
 import '../state/providers.dart';
+import 'editor_sheet.dart';
 import 'region_geometry.dart';
 
 /// Docked bottom-sheet editor for a freehand line (polyline). Lists the line's
@@ -48,20 +49,22 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
   /// The inclusion circle currently in effect (stored, or derived from the line
   /// when unset), for prefilling the radius field and persisting a stable centre.
   ({LatLng center, double radiusMeters}) get _inclusion => effectiveInclusion(
-        lat: widget.freeLine.inclusionLat,
-        lng: widget.freeLine.inclusionLng,
-        radiusMeters: widget.freeLine.inclusionRadiusMeters,
-        points: [for (final p in widget.points) LatLng(p.lat, p.lng)],
-      );
+    lat: widget.freeLine.inclusionLat,
+    lng: widget.freeLine.inclusionLng,
+    radiusMeters: widget.freeLine.inclusionRadiusMeters,
+    points: [for (final p in widget.points) LatLng(p.lat, p.lng)],
+  );
 
   @override
   void initState() {
     super.initState();
     _label = TextEditingController(text: widget.freeLine.label ?? '');
-    _offset =
-        TextEditingController(text: widget.freeLine.offsetMeters.round().toString());
-    _radius =
-        TextEditingController(text: _inclusion.radiusMeters.round().toString());
+    _offset = TextEditingController(
+      text: widget.freeLine.offsetMeters.round().toString(),
+    );
+    _radius = TextEditingController(
+      text: _inclusion.radiusMeters.round().toString(),
+    );
   }
 
   @override
@@ -98,9 +101,9 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
   }
 
   TextEditingController _ctlFor(FreeLinePoint p) => _ctl.putIfAbsent(
-        p.id,
-        () => TextEditingController(text: formatLatLng(p.lat, p.lng)),
-      );
+    p.id,
+    () => TextEditingController(text: formatLatLng(p.lat, p.lng)),
+  );
 
   FocusNode _focusFor(String id) => _focus.putIfAbsent(id, () => FocusNode());
 
@@ -109,7 +112,9 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
       ..showSnackBar(
-        SnackBar(content: Text('Tap the map to place point ${displayIndex + 1}')),
+        SnackBar(
+          content: Text('Tap the map to place point ${displayIndex + 1}'),
+        ),
       );
   }
 
@@ -117,8 +122,11 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
     ref.read(freeLineCenterPlacementProvider.notifier).arm(true);
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
-      ..showSnackBar(const SnackBar(
-          content: Text('Tap the map to place the inclusion circle’s centre')));
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('Tap the map to place the inclusion circle’s centre'),
+        ),
+      );
   }
 
   void _setRadius(double r) {
@@ -133,7 +141,6 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
     );
   }
 
-
   Future<void> _deletePoint(FreeLinePoint p) async {
     await _repo.deleteFreeLinePoint(p.id);
   }
@@ -143,155 +150,146 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
     final armed = ref.watch(freeLinePlacementProvider);
     final centerArmed = ref.watch(freeLineCenterPlacementProvider);
     final id = widget.freeLine.id;
-    final lineLayers = widget.layers.where((l) => l.type == 'freeline').toList();
+    final lineLayers = widget.layers
+        .where((l) => l.type == 'freeline')
+        .toList();
 
-    return Material(
-      elevation: 8,
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.polyline, size: 18),
-                  const SizedBox(width: 8),
-                  Text('Edit freehand line',
-                      style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(width: 12),
-                  // The layer picker takes the slack and ellipsises: a layer named
-                  // after an imported border ("Ludwigsvorstadt-Isarvorstadt") is
-                  // far longer than this row is wide.
-                  Flexible(
-                    child: DropdownButton<String>(
-                      isExpanded: true,
-                      value: lineLayers.any((l) => l.id == widget.freeLine.layerId)
-                          ? widget.freeLine.layerId
-                          : null,
-                      hint: const Text('Layer'),
-                      items: [
-                        for (final l in lineLayers)
-                          DropdownMenuItem(value: l.id, child: Text(l.name)),
-                      ],
-                      onChanged: (v) {
-                        if (v != null) _repo.updateFreeLine(id, layerId: v);
-                      },
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Delete line',
-                    icon: const Icon(Icons.delete_outline),
-                    color: Colors.red,
-                    onPressed: () async {
-                      await _repo.deleteFreeLine(id);
-                      _close();
-                    },
-                  ),
-                  IconButton(
-                    tooltip: 'Close',
-                    icon: const Icon(Icons.close),
-                    onPressed: _close,
-                  ),
-                ],
-              ),
-              Text(
-                'Fills one half of an inclusion circle, split by the drawn line. '
-                'Use the layer’s Invert to fill the other half. Set the circle’s '
-                'radius below and move its centre by tapping the map.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 8),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 220),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: widget.points.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 8),
-                  itemBuilder: (context, i) {
-                    final p = widget.points[i];
-                    return _pointRow(p, i, armed == p.id);
-                  },
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  TextButton.icon(
-                    onPressed: widget.onAddPoint,
-                    icon: const Icon(Icons.add_location_alt_outlined),
-                    label: const Text('Add point'),
-                  ),
-                  const Spacer(),
-                  TextButton.icon(
-                    onPressed: _armCenter,
-                    icon: Icon(centerArmed
-                        ? Icons.adjust
-                        : Icons.adjust_outlined),
-                    style: centerArmed
-                        ? TextButton.styleFrom(
-                            foregroundColor:
-                                Theme.of(context).colorScheme.primary)
-                        : null,
-                    label: const Text('Move centre'),
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _radius,
-                      decoration: const InputDecoration(
-                        labelText: 'Inclusion radius (m)',
-                        helperText: 'Circle the line splits in two',
-                        isDense: true,
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
-                      onChanged: (s) {
-                        final n = parseDecimal(s);
-                        if (n != null && n.isFinite && n > 0) _setRadius(n);
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width: 130,
-                    child: TextField(
-                      controller: _offset,
-                      decoration: const InputDecoration(
-                        labelText: 'Offset (m)',
-                        helperText: '+ away, − past',
-                        isDense: true,
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true, signed: true),
-                      onChanged: (s) {
-                        final n = parseDecimal(s);
-                        if (n != null && n.isFinite) {
-                          _repo.updateFreeLine(id, offsetMeters: n);
-                        }
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              TextField(
-                controller: _label,
-                decoration: const InputDecoration(
-                    labelText: 'Label (optional)', isDense: true),
-                onChanged: (s) {
-                  final t = s.trim();
-                  _repo.updateFreeLine(id, label: Value(t.isEmpty ? null : t));
-                },
-              ),
-            ],
+    return EditorSheet(
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.polyline, size: 18),
+            const SizedBox(width: 8),
+            Text(
+              'Edit freehand line',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(width: 12),
+            // The layer picker takes the slack and ellipsises: a layer named
+            // after an imported border ("Ludwigsvorstadt-Isarvorstadt") is
+            // far longer than this row is wide.
+            EditorLayerPicker(
+              layers: lineLayers,
+              selectedId: widget.freeLine.layerId,
+              onChanged: (v) =>
+                  _repo.updateFreeLine(widget.freeLine.id, layerId: v),
+            ),
+            IconButton(
+              tooltip: 'Delete line',
+              icon: const Icon(Icons.delete_outline),
+              color: Colors.red,
+              onPressed: () async {
+                await _repo.deleteFreeLine(id);
+                _close();
+              },
+            ),
+            IconButton(
+              tooltip: 'Close',
+              icon: const Icon(Icons.close),
+              onPressed: _close,
+            ),
+          ],
+        ),
+        Text(
+          'Fills one half of an inclusion circle, split by the drawn line. '
+          'Use the layer’s Invert to fill the other half. Set the circle’s '
+          'radius below and move its centre by tapping the map.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 8),
+        ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: scaledPx(context, 220)),
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: widget.points.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 8),
+            itemBuilder: (context, i) {
+              final p = widget.points[i];
+              return _pointRow(p, i, armed == p.id);
+            },
           ),
         ),
-      ),
+        const SizedBox(height: 8),
+        // Wrap rather than Row: two labelled buttons do not fit side by side
+        // at a large system font, and a Row would silently clip the second.
+        Wrap(
+          spacing: 12,
+          runSpacing: 4,
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            TextButton.icon(
+              onPressed: widget.onAddPoint,
+              icon: const Icon(Icons.add_location_alt_outlined),
+              label: const Text('Add point'),
+            ),
+            TextButton.icon(
+              onPressed: _armCenter,
+              icon: Icon(centerArmed ? Icons.adjust : Icons.adjust_outlined),
+              style: centerArmed
+                  ? TextButton.styleFrom(
+                      foregroundColor: Theme.of(context).colorScheme.primary,
+                    )
+                  : null,
+              label: const Text('Move centre'),
+            ),
+          ],
+        ),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _radius,
+                decoration: const InputDecoration(
+                  labelText: 'Inclusion radius (m)',
+                  helperText: 'Circle the line splits in two',
+                  isDense: true,
+                ),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                onChanged: (s) {
+                  final n = parseDecimal(s);
+                  if (n != null && n.isFinite && n > 0) _setRadius(n);
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: scaledPx(context, 130),
+              child: TextField(
+                controller: _offset,
+                decoration: const InputDecoration(
+                  labelText: 'Offset (m)',
+                  helperText: '+ away, − past',
+                  isDense: true,
+                ),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                  signed: true,
+                ),
+                onChanged: (s) {
+                  final n = parseDecimal(s);
+                  if (n != null && n.isFinite) {
+                    _repo.updateFreeLine(id, offsetMeters: n);
+                  }
+                },
+              ),
+            ),
+          ],
+        ),
+        TextField(
+          controller: _label,
+          decoration: const InputDecoration(
+            labelText: 'Label (optional)',
+            isDense: true,
+          ),
+          onChanged: (s) {
+            final t = s.trim();
+            _repo.updateFreeLine(id, label: Value(t.isEmpty ? null : t));
+          },
+        ),
+      ],
     );
   }
 
@@ -308,12 +306,17 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
               isDense: true,
             ),
             keyboardType: const TextInputType.numberWithOptions(
-                decimal: true, signed: true),
+              decimal: true,
+              signed: true,
+            ),
             onChanged: (s) {
               final ll = parseLatLng(s);
               if (ll != null) {
-                _repo.updateFreeLinePoint(p.id,
-                    lat: ll.latitude, lng: ll.longitude);
+                _repo.updateFreeLinePoint(
+                  p.id,
+                  lat: ll.latitude,
+                  lng: ll.longitude,
+                );
               }
             },
           ),
@@ -331,40 +334,44 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
             PopupMenuItem(
               value: 'up',
               enabled: index > 0,
-              child: const Row(children: [
-                Icon(Icons.arrow_upward, size: 18),
-                SizedBox(width: 8),
-                Text('Move up'),
-              ]),
+              child: const Row(
+                children: [
+                  Icon(Icons.arrow_upward, size: 18),
+                  SizedBox(width: 8),
+                  Text('Move up'),
+                ],
+              ),
             ),
             PopupMenuItem(
               value: 'down',
               enabled: index < widget.points.length - 1,
-              child: const Row(children: [
-                Icon(Icons.arrow_downward, size: 18),
-                SizedBox(width: 8),
-                Text('Move down'),
-              ]),
+              child: const Row(
+                children: [
+                  Icon(Icons.arrow_downward, size: 18),
+                  SizedBox(width: 8),
+                  Text('Move down'),
+                ],
+              ),
             ),
             PopupMenuItem(
               value: 'remove',
               // Keep at least two points so the line still divides the view.
               enabled: widget.points.length > 2,
-              child: const Row(children: [
-                Icon(Icons.remove_circle_outline, size: 18),
-                SizedBox(width: 8),
-                Text('Remove'),
-              ]),
+              child: const Row(
+                children: [
+                  Icon(Icons.remove_circle_outline, size: 18),
+                  SizedBox(width: 8),
+                  Text('Remove'),
+                ],
+              ),
             ),
           ],
           onSelected: (v) {
             switch (v) {
               case 'up':
-                _repo.swapFreeLinePointOrder(
-                    p.id, widget.points[index - 1].id);
+                _repo.swapFreeLinePointOrder(p.id, widget.points[index - 1].id);
               case 'down':
-                _repo.swapFreeLinePointOrder(
-                    p.id, widget.points[index + 1].id);
+                _repo.swapFreeLinePointOrder(p.id, widget.points[index + 1].id);
               case 'remove':
                 _deletePoint(p);
             }

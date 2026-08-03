@@ -7,6 +7,7 @@ import '../data/database.dart';
 import '../data/repository.dart';
 import '../geo/coords.dart';
 import '../state/providers.dart';
+import 'editor_sheet.dart';
 
 /// Docked bottom-sheet editor for a plane ("closer to one of two points").
 /// Like the circle editor it sits below the interactive map and writes every
@@ -54,7 +55,11 @@ class _PlaneEditorSheetState extends ConsumerState<PlaneEditorSheet> {
   }
 
   void _syncIfUnfocused(
-      TextEditingController c, FocusNode f, double lat, double lng) {
+    TextEditingController c,
+    FocusNode f,
+    double lat,
+    double lng,
+  ) {
     if (f.hasFocus) return;
     final target = formatLatLng(lat, lng);
     if (c.text != target) c.text = target;
@@ -84,95 +89,85 @@ class _PlaneEditorSheetState extends ConsumerState<PlaneEditorSheet> {
     final armed = ref.watch(planePlacementProvider);
     final id = widget.plane.id;
 
-    return Material(
-      elevation: 8,
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.change_history, size: 18),
-                  const SizedBox(width: 8),
-                  Text('Edit plane',
-                      style: Theme.of(context).textTheme.titleMedium),
-                  const Spacer(),
-                  IconButton(
-                    tooltip: 'Delete',
-                    icon: const Icon(Icons.delete_outline),
-                    color: Colors.red,
-                    onPressed: () async {
-                      await _repo.deletePlane(id);
-                      _close();
-                    },
-                  ),
-                  IconButton(
-                    tooltip: 'Close',
-                    icon: const Icon(Icons.close),
-                    onPressed: _close,
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text('Nearer side:',
-                        style: Theme.of(context).textTheme.bodyMedium),
-                  ),
-                  SegmentedButton<bool>(
-                    segments: const [
-                      ButtonSegment(value: true, label: Text('A')),
-                      ButtonSegment(value: false, label: Text('B')),
-                    ],
-                    selected: {widget.plane.nearA},
-                    onSelectionChanged: (s) =>
-                        _repo.updatePlane(id, nearA: s.first),
-                  ),
-                  const SizedBox(width: 8),
-                  // The layer picker takes the slack and ellipsises: a layer named
-                  // after an imported border ("Ludwigsvorstadt-Isarvorstadt") is
-                  // far longer than this row is wide.
-                  Flexible(
-                    child: DropdownButton<String>(
-                      isExpanded: true,
-                      value: widget.layers.any((l) => l.id == widget.plane.layerId)
-                          ? widget.plane.layerId
-                          : null,
-                      hint: const Text('Layer'),
-                      items: [
-                        for (final l in widget.layers)
-                          DropdownMenuItem(value: l.id, child: Text(l.name)),
-                      ],
-                      onChanged: (v) {
-                        if (v != null) _repo.updatePlane(id, layerId: v);
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              _pointRow('A', _a, _aFocus, armed == 'A',
-                  (p) => _repo.updatePlane(id, aLat: p.latitude, aLng: p.longitude)),
-              const SizedBox(height: 8),
-              _pointRow('B', _b, _bFocus, armed == 'B',
-                  (p) => _repo.updatePlane(id, bLat: p.latitude, bLng: p.longitude)),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _label,
-                decoration: const InputDecoration(
-                    labelText: 'Label (optional)', isDense: true),
-                onChanged: (s) {
-                  final t = s.trim();
-                  _repo.updatePlane(id, label: Value(t.isEmpty ? null : t));
-                },
-              ),
-            ],
-          ),
+    return EditorSheet(
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.change_history, size: 18),
+            const SizedBox(width: 8),
+            Text('Edit plane', style: Theme.of(context).textTheme.titleMedium),
+            const Spacer(),
+            IconButton(
+              tooltip: 'Delete',
+              icon: const Icon(Icons.delete_outline),
+              color: Colors.red,
+              onPressed: () async {
+                await _repo.deletePlane(id);
+                _close();
+              },
+            ),
+            IconButton(
+              tooltip: 'Close',
+              icon: const Icon(Icons.close),
+              onPressed: _close,
+            ),
+          ],
         ),
-      ),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Nearer side:',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: true, label: Text('A')),
+                ButtonSegment(value: false, label: Text('B')),
+              ],
+              selected: {widget.plane.nearA},
+              onSelectionChanged: (s) => _repo.updatePlane(id, nearA: s.first),
+            ),
+            const SizedBox(width: 8),
+            // The layer picker takes the slack and ellipsises: a layer named
+            // after an imported border ("Ludwigsvorstadt-Isarvorstadt") is
+            // far longer than this row is wide.
+            EditorLayerPicker(
+              layers: widget.layers,
+              selectedId: widget.plane.layerId,
+              onChanged: (v) => _repo.updatePlane(widget.plane.id, layerId: v),
+            ),
+          ],
+        ),
+        _pointRow(
+          'A',
+          _a,
+          _aFocus,
+          armed == 'A',
+          (p) => _repo.updatePlane(id, aLat: p.latitude, aLng: p.longitude),
+        ),
+        const SizedBox(height: 8),
+        _pointRow(
+          'B',
+          _b,
+          _bFocus,
+          armed == 'B',
+          (p) => _repo.updatePlane(id, bLat: p.latitude, bLng: p.longitude),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _label,
+          decoration: const InputDecoration(
+            labelText: 'Label (optional)',
+            isDense: true,
+          ),
+          onChanged: (s) {
+            final t = s.trim();
+            _repo.updatePlane(id, label: Value(t.isEmpty ? null : t));
+          },
+        ),
+      ],
     );
   }
 
@@ -196,7 +191,9 @@ class _PlaneEditorSheetState extends ConsumerState<PlaneEditorSheet> {
               isDense: true,
             ),
             keyboardType: const TextInputType.numberWithOptions(
-                decimal: true, signed: true),
+              decimal: true,
+              signed: true,
+            ),
             onChanged: (s) {
               final p = parseLatLng(s);
               if (p != null) onChanged(p);

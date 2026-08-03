@@ -32,9 +32,9 @@ services. There is no ZoneCraft server in between. Your device's IP address — 
 request itself contains (the map area you are viewing, the coordinates you probe, the text you
 search for) — is necessarily visible to the service being asked:
 
-- **OpenStreetMap tile servers** (`tile.openstreetmap.org`) — the base map. Contacted as you
-  pan and zoom, and when you use **"Download this area"**. See the
-  [OSMF Privacy Policy](https://wiki.osmfoundation.org/wiki/Privacy_Policy).
+- **OpenStreetMap tile servers** (`tile.openstreetmap.org`) — the base map. Contacted only
+  for the tiles you are actually looking at; tiles you have already viewed are re-served from
+  the device. See the [OSMF Privacy Policy](https://wiki.osmfoundation.org/wiki/Privacy_Policy).
 - **Overpass API** — used for the **points of interest**, **public-transport station** and
   **administrative border** imports. Contacted only when you start an import, never in the
   background. The app tries `overpass-api.de`, `overpass.kumi.systems` and

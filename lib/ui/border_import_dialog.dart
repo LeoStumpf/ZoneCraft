@@ -120,28 +120,36 @@ class _BorderImportDialogState extends State<_BorderImportDialog> {
   double? _v(TextEditingController c) => parseDecimal(c.text.trim());
 
   BorderBboxVerdict get _verdict => checkBorderBbox(
-      _v(_south), _v(_west), _v(_north), _v(_east),
-      level: widget.level);
+    _v(_south),
+    _v(_west),
+    _v(_north),
+    _v(_east),
+    level: widget.level,
+  );
 
   bool get _canImport =>
       _verdict == BorderBboxVerdict.ok || _verdict == BorderBboxVerdict.warn;
 
   void _submit() {
     if (!_canImport) return;
-    Navigator.of(context).pop(BorderImportConfig(
-      south: _v(_south)!,
-      west: _v(_west)!,
-      north: _v(_north)!,
-      east: _v(_east)!,
-    ));
+    Navigator.of(context).pop(
+      BorderImportConfig(
+        south: _v(_south)!,
+        west: _v(_west)!,
+        north: _v(_north)!,
+        east: _v(_east)!,
+      ),
+    );
   }
 
   Widget _coord(TextEditingController c, String label, bool isLat) {
     return Expanded(
       child: TextFormField(
         controller: c,
-        keyboardType:
-            const TextInputType.numberWithOptions(decimal: true, signed: true),
+        keyboardType: const TextInputType.numberWithOptions(
+          decimal: true,
+          signed: true,
+        ),
         decoration: InputDecoration(
           labelText: label,
           isDense: true,
@@ -166,17 +174,21 @@ class _BorderImportDialogState extends State<_BorderImportDialog> {
             children: [
               Text('Area', style: theme.textTheme.labelLarge),
               const SizedBox(height: 4),
-              Row(children: [
-                _coord(_south, 'South', true),
-                const SizedBox(width: 8),
-                _coord(_north, 'North', true),
-              ]),
+              Row(
+                children: [
+                  _coord(_south, 'South', true),
+                  const SizedBox(width: 8),
+                  _coord(_north, 'North', true),
+                ],
+              ),
               const SizedBox(height: 8),
-              Row(children: [
-                _coord(_west, 'West', false),
-                const SizedBox(width: 8),
-                _coord(_east, 'East', false),
-              ]),
+              Row(
+                children: [
+                  _coord(_west, 'West', false),
+                  const SizedBox(width: 8),
+                  _coord(_east, 'East', false),
+                ],
+              ),
               const SizedBox(height: 8),
               _sizeLine(theme),
               const SizedBox(height: 16),
@@ -216,9 +228,9 @@ class _BorderImportDialogState extends State<_BorderImportDialog> {
   }
 
   TextStyle? _errStyle(ThemeData theme) => theme.textTheme.bodySmall?.copyWith(
-        color: theme.colorScheme.error,
-        fontWeight: FontWeight.w500,
-      );
+    color: theme.colorScheme.error,
+    fontWeight: FontWeight.w500,
+  );
 
   TextStyle? _warnStyle(ThemeData theme) =>
       theme.textTheme.bodySmall?.copyWith(color: Colors.orange.shade800);
@@ -231,17 +243,23 @@ class _BorderImportDialogState extends State<_BorderImportDialog> {
         n == null ||
         e == null ||
         ![s, w, n, e].every((v) => v.isFinite)) {
-      return Text('Enter four numbers to define the area.',
-          style: _errStyle(theme));
+      return Text(
+        'Enter four numbers to define the area.',
+        style: _errStyle(theme),
+      );
     }
     if (s >= n || w >= e) {
-      return Text('South must be below north, and west below east.',
-          style: _errStyle(theme));
+      return Text(
+        'South must be below north, and west below east.',
+        style: _errStyle(theme),
+      );
     }
     final width = geoDistance.as(LengthUnit.Meter, LatLng(s, w), LatLng(s, e));
     final height = geoDistance.as(LengthUnit.Meter, LatLng(s, w), LatLng(n, w));
-    return Text('${formatMeters(width)} × ${formatMeters(height)}',
-        style: theme.textTheme.bodySmall);
+    return Text(
+      '${formatMeters(width)} × ${formatMeters(height)}',
+      style: theme.textTheme.bodySmall,
+    );
   }
 
   /// One honest line about what this box costs at this level — always naming
@@ -263,8 +281,10 @@ class _BorderImportDialogState extends State<_BorderImportDialog> {
           style: _warnStyle(theme),
         );
       case BorderBboxVerdict.ok:
-        return Text('Importing ${level.label.toLowerCase()}.',
-            style: theme.textTheme.bodySmall);
+        return Text(
+          'Importing ${level.label.toLowerCase()}.',
+          style: theme.textTheme.bodySmall,
+        );
       case BorderBboxVerdict.malformed:
       case BorderBboxVerdict.misordered:
         return const SizedBox.shrink();

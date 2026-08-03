@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import '../data/database.dart';
 import '../data/repository.dart';
 import '../data/serialization.dart';
+import '../data/tile_source.dart';
 import '../geo/coords.dart';
 import '../state/providers.dart';
 import 'import_actions.dart';
@@ -79,15 +80,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (!mounted) return;
     // Resync the local field with the reset (default) uncertainty.
     _initialised = false;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('All data cleared')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('All data cleared')));
   }
 
   void _snack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   /// Exports every layer + object to a file and opens the system share sheet.
@@ -128,17 +130,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/zonecraft-$stamp.$fmt');
       await file.writeAsString(content);
-      await SharePlus.instance.share(ShareParams(
-        subject: 'ZoneCraft export',
-        files: [
-          XFile(
-            file.path,
-            mimeType: isKml
-                ? 'application/vnd.google-earth.kml+xml'
-                : 'application/geo+json',
-          ),
-        ],
-      ));
+      await SharePlus.instance.share(
+        ShareParams(
+          subject: 'ZoneCraft export',
+          files: [
+            XFile(
+              file.path,
+              mimeType: isKml
+                  ? 'application/vnd.google-earth.kml+xml'
+                  : 'application/geo+json',
+            ),
+          ],
+        ),
+      );
     } catch (e) {
       _snack('Export failed: $e');
     }
@@ -156,9 +160,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     await _repo.clearTileCache();
     if (!mounted) return;
     setState(() => _cacheTick++); // refresh the size readout
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Cached map tiles cleared')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Cached map tiles cleared')));
   }
 
   static String _formatBytes(int bytes) {
@@ -208,8 +212,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     labelText: 'Metres',
                     isDense: true,
                   ),
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   onChanged: (s) {
                     final n = parseDecimal(s);
                     if (n != null && n.isFinite && n >= 0) {
@@ -232,13 +237,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             },
           ),
           const Divider(height: 48),
-          Text('Offline map cache',
-              style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            'Offline map cache',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: 4),
           Text(
-            'Map tiles you view (and a ring around them) are stored on the '
-            'device so the map keeps working briefly with no reception, and '
-            "doesn't re-download areas you revisit.",
+            TileSource.current.allowsPrefetch
+                ? 'Map tiles you view (and a ring around them) are stored on '
+                      'the device so the map keeps working briefly with no '
+                      "reception, and doesn't re-download areas you revisit."
+                : 'Map tiles you view are stored on the device, so revisiting '
+                      'an area works without re-downloading it — including with '
+                      'no reception. Tiles are never fetched ahead of what you '
+                      "are looking at: OpenStreetMap's tile policy does not "
+                      'permit it.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 8),
@@ -261,8 +274,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           const Divider(height: 48),
-          Text('Import & export',
-              style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            'Import & export',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: 4),
           Text(
             'Save all layers and objects to a file to share or back up. GeoJSON '

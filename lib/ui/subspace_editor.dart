@@ -6,6 +6,7 @@ import '../data/database.dart';
 import '../data/repository.dart';
 import '../geo/coords.dart';
 import '../state/providers.dart';
+import 'editor_sheet.dart';
 
 /// Docked bottom-sheet editor for a "closest subspace" object. Lists the
 /// object's points — each a single "lat, lng" field with a "main" radio, a
@@ -82,19 +83,20 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
   }
 
   TextEditingController _ctlFor(SubspacePoint p) => _ctl.putIfAbsent(
-        p.id,
-        () => TextEditingController(text: formatLatLng(p.lat, p.lng)),
-      );
+    p.id,
+    () => TextEditingController(text: formatLatLng(p.lat, p.lng)),
+  );
 
-  FocusNode _focusFor(String id) =>
-      _focus.putIfAbsent(id, () => FocusNode());
+  FocusNode _focusFor(String id) => _focus.putIfAbsent(id, () => FocusNode());
 
   void _armPlacement(String pointId, int displayIndex) {
     ref.read(subspacePlacementProvider.notifier).arm(pointId);
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
       ..showSnackBar(
-        SnackBar(content: Text('Tap the map to place point ${displayIndex + 1}')),
+        SnackBar(
+          content: Text('Tap the map to place point ${displayIndex + 1}'),
+        ),
       );
   }
 
@@ -113,116 +115,100 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
     final armed = ref.watch(subspacePlacementProvider);
     final id = widget.subspace.id;
     final mainId = widget.points.where((p) => p.isMain).firstOrNull?.id;
-    final subspaceLayers =
-        widget.layers.where((l) => l.type == 'subspace').toList();
+    final subspaceLayers = widget.layers
+        .where((l) => l.type == 'subspace')
+        .toList();
 
-    return Material(
-      elevation: 8,
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.scatter_plot_outlined, size: 18),
-                  const SizedBox(width: 8),
-                  Text('Edit subspace',
-                      style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(width: 12),
-                  // The layer picker takes the slack and ellipsises: a layer named
-                  // after an imported border ("Ludwigsvorstadt-Isarvorstadt") is
-                  // far longer than this row is wide.
-                  Flexible(
-                    child: DropdownButton<String>(
-                      isExpanded: true,
-                      value: subspaceLayers.any((l) => l.id == widget.subspace.layerId)
-                          ? widget.subspace.layerId
-                          : null,
-                      hint: const Text('Layer'),
-                      items: [
-                        for (final l in subspaceLayers)
-                          DropdownMenuItem(value: l.id, child: Text(l.name)),
-                      ],
-                      onChanged: (v) {
-                        if (v != null) _repo.updateSubspace(id, layerId: v);
-                      },
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Delete subspace',
-                    icon: const Icon(Icons.delete_outline),
-                    color: Colors.red,
-                    onPressed: () async {
-                      await _repo.deleteSubspace(id);
-                      _close();
-                    },
-                  ),
-                  IconButton(
-                    tooltip: 'Close',
-                    icon: const Icon(Icons.close),
-                    onPressed: _close,
-                  ),
-                ],
+    return EditorSheet(
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.scatter_plot_outlined, size: 18),
+            const SizedBox(width: 8),
+            Text(
+              'Edit subspace',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(width: 12),
+            // The layer picker takes the slack and ellipsises: a layer named
+            // after an imported border ("Ludwigsvorstadt-Isarvorstadt") is
+            // far longer than this row is wide.
+            EditorLayerPicker(
+              layers: subspaceLayers,
+              selectedId: widget.subspace.layerId,
+              onChanged: (v) =>
+                  _repo.updateSubspace(widget.subspace.id, layerId: v),
+            ),
+            IconButton(
+              tooltip: 'Delete subspace',
+              icon: const Icon(Icons.delete_outline),
+              color: Colors.red,
+              onPressed: () async {
+                await _repo.deleteSubspace(id);
+                _close();
+              },
+            ),
+            IconButton(
+              tooltip: 'Close',
+              icon: const Icon(Icons.close),
+              onPressed: _close,
+            ),
+          ],
+        ),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'The filled region is everywhere closer to the main '
+                'point (●) than to any other point.',
+                style: Theme.of(context).textTheme.bodySmall,
               ),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'The filled region is everywhere closer to the main '
-                      'point (●) than to any other point.',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              // The point list can grow; keep the sheet from eating the screen.
-              // RadioGroup carries the "main point" selection for the rows.
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 240),
-                child: RadioGroup<String>(
-                  groupValue: mainId,
-                  onChanged: (v) {
-                    if (v != null) _repo.setMainPoint(widget.subspace.id, v);
-                  },
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: widget.points.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 8),
-                    itemBuilder: (context, i) {
-                      final p = widget.points[i];
-                      return _pointRow(p, i, armed == p.id);
-                    },
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  TextButton.icon(
-                    onPressed: widget.onAddPoint,
-                    icon: const Icon(Icons.add_location_alt_outlined),
-                    label: const Text('Add point'),
-                  ),
-                ],
-              ),
-              TextField(
-                controller: _label,
-                decoration: const InputDecoration(
-                    labelText: 'Label (optional)', isDense: true),
-                onChanged: (s) {
-                  final t = s.trim();
-                  _repo.updateSubspace(id, label: Value(t.isEmpty ? null : t));
-                },
-              ),
-            ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        // The point list can grow; keep the sheet from eating the screen.
+        // RadioGroup carries the "main point" selection for the rows.
+        ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: scaledPx(context, 240)),
+          child: RadioGroup<String>(
+            groupValue: mainId,
+            onChanged: (v) {
+              if (v != null) _repo.setMainPoint(widget.subspace.id, v);
+            },
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: widget.points.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 8),
+              itemBuilder: (context, i) {
+                final p = widget.points[i];
+                return _pointRow(p, i, armed == p.id);
+              },
+            ),
           ),
         ),
-      ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            TextButton.icon(
+              onPressed: widget.onAddPoint,
+              icon: const Icon(Icons.add_location_alt_outlined),
+              label: const Text('Add point'),
+            ),
+          ],
+        ),
+        TextField(
+          controller: _label,
+          decoration: const InputDecoration(
+            labelText: 'Label (optional)',
+            isDense: true,
+          ),
+          onChanged: (s) {
+            final t = s.trim();
+            _repo.updateSubspace(id, label: Value(t.isEmpty ? null : t));
+          },
+        ),
+      ],
     );
   }
 
@@ -259,8 +245,10 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
     );
     controller.dispose();
     if (name == null || !mounted) return;
-    await _repo.updateSubspacePoint(p.id,
-        label: Value(name.isEmpty ? null : name));
+    await _repo.updateSubspacePoint(
+      p.id,
+      label: Value(name.isEmpty ? null : name),
+    );
   }
 
   Widget _pointRow(SubspacePoint p, int index, bool armed) {
@@ -279,12 +267,17 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
               isDense: true,
             ),
             keyboardType: const TextInputType.numberWithOptions(
-                decimal: true, signed: true),
+              decimal: true,
+              signed: true,
+            ),
             onChanged: (s) {
               final ll = parseLatLng(s);
               if (ll != null) {
-                _repo.updateSubspacePoint(p.id,
-                    lat: ll.latitude, lng: ll.longitude);
+                _repo.updateSubspacePoint(
+                  p.id,
+                  lat: ll.latitude,
+                  lng: ll.longitude,
+                );
               }
             },
           ),
@@ -304,8 +297,7 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
           tooltip: 'Delete point ${index + 1}',
           icon: const Icon(Icons.remove_circle_outline),
           // Keep at least one point so the object isn't left empty.
-          onPressed:
-              widget.points.length <= 1 ? null : () => _deletePoint(p),
+          onPressed: widget.points.length <= 1 ? null : () => _deletePoint(p),
         ),
       ],
     );

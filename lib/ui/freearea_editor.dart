@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/database.dart';
 import '../data/repository.dart';
 import '../geo/coords.dart';
+import 'editor_sheet.dart';
 import '../state/providers.dart';
 
 /// Docked bottom-sheet editor for a freehand area (closed polygon). Lists the
@@ -47,8 +48,9 @@ class _FreeAreaEditorSheetState extends ConsumerState<FreeAreaEditorSheet> {
   void initState() {
     super.initState();
     _label = TextEditingController(text: widget.freeArea.label ?? '');
-    _offset =
-        TextEditingController(text: widget.freeArea.offsetMeters.round().toString());
+    _offset = TextEditingController(
+      text: widget.freeArea.offsetMeters.round().toString(),
+    );
   }
 
   @override
@@ -84,9 +86,9 @@ class _FreeAreaEditorSheetState extends ConsumerState<FreeAreaEditorSheet> {
   }
 
   TextEditingController _ctlFor(FreeAreaPoint p) => _ctl.putIfAbsent(
-        p.id,
-        () => TextEditingController(text: formatLatLng(p.lat, p.lng)),
-      );
+    p.id,
+    () => TextEditingController(text: formatLatLng(p.lat, p.lng)),
+  );
 
   FocusNode _focusFor(String id) => _focus.putIfAbsent(id, () => FocusNode());
 
@@ -95,10 +97,11 @@ class _FreeAreaEditorSheetState extends ConsumerState<FreeAreaEditorSheet> {
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
       ..showSnackBar(
-        SnackBar(content: Text('Tap the map to place point ${displayIndex + 1}')),
+        SnackBar(
+          content: Text('Tap the map to place point ${displayIndex + 1}'),
+        ),
       );
   }
-
 
   Future<void> _deletePoint(FreeAreaPoint p) async {
     await _repo.deleteFreeAreaPoint(p.id);
@@ -108,121 +111,115 @@ class _FreeAreaEditorSheetState extends ConsumerState<FreeAreaEditorSheet> {
   Widget build(BuildContext context) {
     final armed = ref.watch(freeAreaPlacementProvider);
     final id = widget.freeArea.id;
-    final areaLayers = widget.layers.where((l) => l.type == 'freearea').toList();
+    final areaLayers = widget.layers
+        .where((l) => l.type == 'freearea')
+        .toList();
 
-    return Material(
-      elevation: 8,
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.hexagon_outlined, size: 18),
-                  const SizedBox(width: 8),
-                  Text('Edit freehand area',
-                      style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(width: 12),
-                  // The layer picker takes the slack and ellipsises: a layer named
-                  // after an imported border ("Ludwigsvorstadt-Isarvorstadt") is
-                  // far longer than this row is wide.
-                  Flexible(
-                    child: DropdownButton<String>(
-                      isExpanded: true,
-                      value: areaLayers.any((l) => l.id == widget.freeArea.layerId)
-                          ? widget.freeArea.layerId
-                          : null,
-                      hint: const Text('Layer'),
-                      items: [
-                        for (final l in areaLayers)
-                          DropdownMenuItem(value: l.id, child: Text(l.name)),
-                      ],
-                      onChanged: (v) {
-                        if (v != null) _repo.updateFreeArea(id, layerId: v);
-                      },
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Delete area',
-                    icon: const Icon(Icons.delete_outline),
-                    color: Colors.red,
-                    onPressed: () async {
-                      await _repo.deleteFreeArea(id);
-                      _close();
-                    },
-                  ),
-                  IconButton(
-                    tooltip: 'Close',
-                    icon: const Icon(Icons.close),
-                    onPressed: _close,
-                  ),
-                ],
+    return EditorSheet(
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.hexagon_outlined, size: 18),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                'Edit freehand area',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium,
               ),
-              Text(
-                'Fills the inside of the drawn shape. Use the layer’s Invert to '
-                'fill the outside instead.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 8),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 220),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: widget.points.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 8),
-                  itemBuilder: (context, i) {
-                    final p = widget.points[i];
-                    return _pointRow(p, i, armed == p.id);
-                  },
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  TextButton.icon(
-                    onPressed: widget.onAddPoint,
-                    icon: const Icon(Icons.add_location_alt_outlined),
-                    label: const Text('Add point'),
-                  ),
-                  const Spacer(),
-                  SizedBox(
-                    width: 130,
-                    child: TextField(
-                      controller: _offset,
-                      decoration: const InputDecoration(
-                        labelText: 'Offset (m)',
-                        helperText: '+ inward, − outward',
-                        isDense: true,
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true, signed: true),
-                      onChanged: (s) {
-                        final n = parseDecimal(s);
-                        if (n != null && n.isFinite) {
-                          _repo.updateFreeArea(id, offsetMeters: n);
-                        }
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              TextField(
-                controller: _label,
-                decoration: const InputDecoration(
-                    labelText: 'Label (optional)', isDense: true),
-                onChanged: (s) {
-                  final t = s.trim();
-                  _repo.updateFreeArea(id, label: Value(t.isEmpty ? null : t));
-                },
-              ),
-            ],
+            ),
+            const SizedBox(width: 12),
+            EditorLayerPicker(
+              layers: areaLayers,
+              selectedId: widget.freeArea.layerId,
+              onChanged: (v) => _repo.updateFreeArea(id, layerId: v),
+            ),
+            IconButton(
+              tooltip: 'Delete area',
+              icon: const Icon(Icons.delete_outline),
+              color: Colors.red,
+              onPressed: () async {
+                await _repo.deleteFreeArea(id);
+                _close();
+              },
+            ),
+            IconButton(
+              tooltip: 'Close',
+              icon: const Icon(Icons.close),
+              onPressed: _close,
+            ),
+          ],
+        ),
+        Text(
+          'Fills the inside of the drawn shape. Use the layer’s Invert to '
+          'fill the outside instead.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 8),
+        ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: scaledPx(context, 220)),
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: widget.points.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 8),
+            itemBuilder: (context, i) {
+              final p = widget.points[i];
+              return _pointRow(p, i, armed == p.id);
+            },
           ),
         ),
-      ),
+        const SizedBox(height: 8),
+        // A Wrap, not a Row: at a large system font the button label and the
+        // offset field cannot both fit on one line, and squeezing them turned
+        // "Add point" into "Add po…" and ate the helper text. Wrapping puts the
+        // field on its own line instead of truncating either.
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            TextButton.icon(
+              onPressed: widget.onAddPoint,
+              icon: const Icon(Icons.add_location_alt_outlined),
+              label: const Text('Add point'),
+            ),
+            SizedBox(
+              width: scaledPx(context, 130),
+              child: TextField(
+                controller: _offset,
+                decoration: const InputDecoration(
+                  labelText: 'Offset (m)',
+                  helperText: '+ inward, − outward',
+                  isDense: true,
+                ),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                  signed: true,
+                ),
+                onChanged: (s) {
+                  final n = parseDecimal(s);
+                  if (n != null && n.isFinite) {
+                    _repo.updateFreeArea(id, offsetMeters: n);
+                  }
+                },
+              ),
+            ),
+          ],
+        ),
+        TextField(
+          controller: _label,
+          decoration: const InputDecoration(
+            labelText: 'Label (optional)',
+            isDense: true,
+          ),
+          onChanged: (s) {
+            final t = s.trim();
+            _repo.updateFreeArea(id, label: Value(t.isEmpty ? null : t));
+          },
+        ),
+      ],
     );
   }
 
@@ -239,12 +236,17 @@ class _FreeAreaEditorSheetState extends ConsumerState<FreeAreaEditorSheet> {
               isDense: true,
             ),
             keyboardType: const TextInputType.numberWithOptions(
-                decimal: true, signed: true),
+              decimal: true,
+              signed: true,
+            ),
             onChanged: (s) {
               final ll = parseLatLng(s);
               if (ll != null) {
-                _repo.updateFreeAreaPoint(p.id,
-                    lat: ll.latitude, lng: ll.longitude);
+                _repo.updateFreeAreaPoint(
+                  p.id,
+                  lat: ll.latitude,
+                  lng: ll.longitude,
+                );
               }
             },
           ),
@@ -262,40 +264,44 @@ class _FreeAreaEditorSheetState extends ConsumerState<FreeAreaEditorSheet> {
             PopupMenuItem(
               value: 'up',
               enabled: index > 0,
-              child: const Row(children: [
-                Icon(Icons.arrow_upward, size: 18),
-                SizedBox(width: 8),
-                Text('Move up'),
-              ]),
+              child: const Row(
+                children: [
+                  Icon(Icons.arrow_upward, size: 18),
+                  SizedBox(width: 8),
+                  Text('Move up'),
+                ],
+              ),
             ),
             PopupMenuItem(
               value: 'down',
               enabled: index < widget.points.length - 1,
-              child: const Row(children: [
-                Icon(Icons.arrow_downward, size: 18),
-                SizedBox(width: 8),
-                Text('Move down'),
-              ]),
+              child: const Row(
+                children: [
+                  Icon(Icons.arrow_downward, size: 18),
+                  SizedBox(width: 8),
+                  Text('Move down'),
+                ],
+              ),
             ),
             PopupMenuItem(
               value: 'remove',
               // Keep at least three points so the ring stays a polygon.
               enabled: widget.points.length > 3,
-              child: const Row(children: [
-                Icon(Icons.remove_circle_outline, size: 18),
-                SizedBox(width: 8),
-                Text('Remove'),
-              ]),
+              child: const Row(
+                children: [
+                  Icon(Icons.remove_circle_outline, size: 18),
+                  SizedBox(width: 8),
+                  Text('Remove'),
+                ],
+              ),
             ),
           ],
           onSelected: (v) {
             switch (v) {
               case 'up':
-                _repo.swapFreeAreaPointOrder(
-                    p.id, widget.points[index - 1].id);
+                _repo.swapFreeAreaPointOrder(p.id, widget.points[index - 1].id);
               case 'down':
-                _repo.swapFreeAreaPointOrder(
-                    p.id, widget.points[index + 1].id);
+                _repo.swapFreeAreaPointOrder(p.id, widget.points[index + 1].id);
               case 'remove':
                 _deletePoint(p);
             }

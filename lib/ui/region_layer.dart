@@ -247,9 +247,13 @@ class _RegionPainter extends CustomPainter {
       final outerRadius = inverted ? c.radiusMeters + band : c.radiusMeters;
       final coreRadius = inverted ? c.radiusMeters : c.radiusMeters - band;
       if (outerRadius <= 0) continue; // invalid geometry -> skip
-      addOuter(regionGeometryCache.circleRing(center, outerRadius, _ringPoints));
+      addOuter(
+        regionGeometryCache.circleRing(center, outerRadius, _ringPoints),
+      );
       if (coreRadius > 0) {
-        addCore(regionGeometryCache.circleRing(center, coreRadius, _ringPoints));
+        addCore(
+          regionGeometryCache.circleRing(center, coreRadius, _ringPoints),
+        );
       }
     }
     // Plane/subspace clip to the viewport as a spherical quad; unproject its
@@ -262,10 +266,12 @@ class _RegionPainter extends CustomPainter {
 
     if (planes.isNotEmpty && viewport != null) {
       for (final p in planes) {
-        final sig = '${p.aLat}|${p.aLng}|${p.bLat}|${p.bLng}|'
+        final sig =
+            '${p.aLat}|${p.aLng}|${p.bLat}|${p.bLng}|'
             '${p.nearA}|$band|$inverted';
-        final region = regionGeometryCache.boundRegion(p.id, sig, viewport,
-            (bound) {
+        final region = regionGeometryCache.boundRegion(p.id, sig, viewport, (
+          bound,
+        ) {
           final r = planeRegion(
             a: LatLng(p.aLat, p.aLng),
             b: LatLng(p.bLat, p.bLng),
@@ -292,8 +298,9 @@ class _RegionPainter extends CustomPainter {
             if (p.id != mainPt.id) LatLng(p.lat, p.lng),
         ];
         final sig = '${hashPoints([main, ...others])}|$band|$inverted';
-        final region = regionGeometryCache.boundRegion(s.id, sig, viewport,
-            (bound) {
+        final region = regionGeometryCache.boundRegion(s.id, sig, viewport, (
+          bound,
+        ) {
           final r = subspaceRegion(
             main: main,
             others: others,
@@ -390,9 +397,11 @@ class _RegionPainter extends CustomPainter {
       if (r.isEmpty) continue;
       final cp = _contoursToPath(r.core);
       cores.add(cp);
-      edges.add(uncertaintyMeters <= 0
-          ? cp
-          : (r.bandEdge.isEmpty ? Path() : _contoursToPath(r.bandEdge)));
+      edges.add(
+        uncertaintyMeters <= 0
+            ? cp
+            : (r.bandEdge.isEmpty ? Path() : _contoursToPath(r.bandEdge)),
+      );
     }
     if (cores.isEmpty) return;
 
@@ -453,7 +462,8 @@ class _RegionPainter extends CustomPainter {
 
     Path? coreUnion; // the right-hand filled side, ∩ disk
     Path? diskUnion;
-    final boundary = Path(); // the (offset-free) dividing line(s), for outline+band
+    final boundary =
+        Path(); // the (offset-free) dividing line(s), for outline+band
     LatLng? bandRef; // a point to scale band metres → pixels
 
     for (final l in freeLines) {
@@ -467,8 +477,11 @@ class _RegionPainter extends CustomPainter {
         radiusMeters: l.inclusionRadiusMeters,
         points: line,
       );
-      final ring =
-          regionGeometryCache.circleRing(inc.center, inc.radiusMeters, _ringPoints);
+      final ring = regionGeometryCache.circleRing(
+        inc.center,
+        inc.radiusMeters,
+        _ringPoints,
+      );
       if (ring.length < 3) continue;
       final diskPath = _ringToPath(ring);
       bandRef ??= inc.center;
@@ -479,16 +492,18 @@ class _RegionPainter extends CustomPainter {
       // only when its inputs change.
       // Offset-free cut geometry (the offset is a render-time buffer below), so
       // it is memoised independent of the offset.
-      final sig = '${hashPoints(line)}|${inc.center.latitude}|'
+      final sig =
+          '${hashPoints(line)}|${inc.center.latitude}|'
           '${inc.center.longitude}|${inc.radiusMeters}';
       final r = regionGeometryCache.halfDisk(
-          l.id,
-          sig,
-          () => freeLineDiskRegion(
-                points: line,
-                center: inc.center,
-                radiusMeters: inc.radiusMeters,
-              ));
+        l.id,
+        sig,
+        () => freeLineDiskRegion(
+          points: line,
+          center: inc.center,
+          radiusMeters: inc.radiusMeters,
+        ),
+      );
 
       Path? corePath;
       if (r.missesDisk) {
@@ -497,9 +512,13 @@ class _RegionPainter extends CustomPainter {
         for (final fr in r.fillRings) {
           if (fr.length < 3) continue;
           final rp = Path.combine(
-              PathOperation.intersect, _ringToPathEvenOdd(fr), diskPath);
-          corePath =
-              corePath == null ? rp : Path.combine(PathOperation.xor, corePath, rp);
+            PathOperation.intersect,
+            _ringToPathEvenOdd(fr),
+            diskPath,
+          );
+          corePath = corePath == null
+              ? rp
+              : Path.combine(PathOperation.xor, corePath, rp);
         }
       }
 
@@ -511,13 +530,17 @@ class _RegionPainter extends CustomPainter {
         final dPx = _metersToPixels(inc.center, l.offsetMeters.abs());
         if (dPx > 0.5) {
           final ribbon = Path.combine(
-              PathOperation.intersect, _ribbon(r.boundaries, dPx), diskPath);
+            PathOperation.intersect,
+            _ribbon(r.boundaries, dPx),
+            diskPath,
+          );
           corePath = l.offsetMeters > 0
               ? Path.combine(PathOperation.difference, corePath, ribbon)
               : Path.combine(
                   PathOperation.intersect,
                   Path.combine(PathOperation.union, corePath, ribbon),
-                  diskPath);
+                  diskPath,
+                );
         }
       }
 
@@ -544,8 +567,9 @@ class _RegionPainter extends CustomPainter {
     final core = coreUnion ?? Path();
 
     // The coloured side within the disk (the other side stays empty).
-    final coloured =
-        inverted ? Path.combine(PathOperation.difference, disk, core) : core;
+    final coloured = inverted
+        ? Path.combine(PathOperation.difference, disk, core)
+        : core;
 
     final solidPaint = Paint()
       ..style = PaintingStyle.fill
@@ -582,10 +606,11 @@ class _RegionPainter extends CustomPainter {
       canvas.save();
       canvas.clipPath(coloredArea);
       canvas.drawPath(
-          boundary,
-          bandPaint
-            ..strokeWidth = 2 * bandPx
-            ..blendMode = BlendMode.src);
+        boundary,
+        bandPaint
+          ..strokeWidth = 2 * bandPx
+          ..blendMode = BlendMode.src,
+      );
       canvas.restore();
       canvas.restore();
     }
@@ -648,8 +673,9 @@ class _RegionPainter extends CustomPainter {
     final path = Path()..fillType = PathFillType.evenOdd;
     for (final ring in contours) {
       if (ring.length < 3) continue;
-      final pts = clipRingToRect(
-          [for (final p in ring) camera.latLngToScreenOffset(p)], _clip);
+      final pts = clipRingToRect([
+        for (final p in ring) camera.latLngToScreenOffset(p),
+      ], _clip);
       if (pts.length < 3) continue;
       path.moveTo(pts[0].dx, pts[0].dy);
       for (var i = 1; i < pts.length; i++) {
@@ -710,8 +736,16 @@ class _RegionPainter extends CustomPainter {
         for (var i = 0; i < pts.length; i++) {
           final a = pts[i];
           final b = pts[(i + 1) % pts.length];
-          final dA = _distance.as(LengthUnit.Meter, center, LatLng(a.lat, a.lng));
-          final dB = _distance.as(LengthUnit.Meter, center, LatLng(b.lat, b.lng));
+          final dA = _distance.as(
+            LengthUnit.Meter,
+            center,
+            LatLng(a.lat, a.lng),
+          );
+          final dB = _distance.as(
+            LengthUnit.Meter,
+            center,
+            LatLng(b.lat, b.lng),
+          );
           if (dA > rMeters * 0.97 && dB > rMeters * 0.97) continue;
           final bo = offs[(i + 1) % offs.length];
           contour.moveTo(offs[i].dx, offs[i].dy);
@@ -720,8 +754,9 @@ class _RegionPainter extends CustomPainter {
       }
       if (!hasFill) continue;
 
-      final bandPx =
-          uncertaintyMeters > 0 ? _metersToPixels(center, uncertaintyMeters) : 0.0;
+      final bandPx = uncertaintyMeters > 0
+          ? _metersToPixels(center, uncertaintyMeters)
+          : 0.0;
       if (bandPx <= 0) {
         canvas.drawPath(fill, solidPaint);
       } else {
@@ -739,10 +774,11 @@ class _RegionPainter extends CustomPainter {
         canvas.save();
         canvas.clipPath(fill);
         canvas.drawPath(
-            contour,
-            bandPaint
-              ..strokeWidth = 2 * bandPx
-              ..blendMode = BlendMode.src);
+          contour,
+          bandPaint
+            ..strokeWidth = 2 * bandPx
+            ..blendMode = BlendMode.src,
+        );
         canvas.restore();
         canvas.restore();
       }
@@ -776,8 +812,9 @@ class _RegionPainter extends CustomPainter {
   /// building the closed path, so Skia never sees far-off-screen vertices.
   /// Returns an empty path when nothing of the ring is in view.
   Path _ringToPath(List<LatLng> ring) {
-    final pts = clipRingToRect(
-        [for (final p in ring) camera.latLngToScreenOffset(p)], _clip);
+    final pts = clipRingToRect([
+      for (final p in ring) camera.latLngToScreenOffset(p),
+    ], _clip);
     final path = Path();
     if (pts.length < 3) return path;
     path.moveTo(pts[0].dx, pts[0].dy);
