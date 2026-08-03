@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
 import 'geo_import.dart';
+import 'request_pacer.dart';
 
 /// Looks up named OSM features (places, rivers, roads, parks, boundaries…) by
 /// name via OpenStreetMap's Nominatim geocoder, returning their geometry so a
@@ -111,26 +112,51 @@ List<PlaceResult> parsePlaceSearchResponse(String body) {
   return out;
 }
 
+/// Results already fetched this session, so a repeated search costs nothing.
+///
+/// Nominatim's usage policy requires it — "Results must be cached on your
+/// side" — and warns that "clients sending repeatedly the same query may be
+/// classified as faulty and blocked". Searching the same name twice is
+/// ordinary (type it, look, cancel, reopen, type it again), so this is the
+/// difference between normal use and the pattern that gets clients blocked.
+///
+/// Only successful lookups are stored: a failure is about the network, not
+/// about the query, and must not be remembered as an answer.
+final QueryCache<List<PlaceResult>> placeSearchCache =
+    QueryCache<List<PlaceResult>>();
+
 /// Searches Nominatim for [query]. Returns the geometry-bearing matches on
 /// success (possibly empty), or **null** on any network/HTTP/timeout error.
 /// Never throws.
+///
+/// Answers from [placeSearchCache] when it can, and otherwise queues behind
+/// [nominatimPacer] so the app cannot exceed the published one-request-per-
+/// second ceiling however fast the user taps Search.
 Future<List<PlaceResult>?> searchPlaces(
   String query, {
   http.Client? client,
 }) async {
   final q = query.trim();
   if (q.isEmpty) return const [];
+
+  final cached = placeSearchCache.get(q);
+  if (cached != null) return cached;
+
   final owned = client == null;
   final c = client ?? http.Client();
   try {
-    final resp = await c.get(
-      buildPlaceSearchUri(q),
-      headers: const {
-        'User-Agent': 'ZoneCraft/1.0 (https://github.com/LeoStumpf/zonecraft)',
-      },
-    ).timeout(const Duration(seconds: 30));
+    final resp = await nominatimPacer.run(
+      () => c.get(
+        buildPlaceSearchUri(q),
+        headers: const {
+          'User-Agent': 'ZoneCraft/1.0 (https://github.com/LeoStumpf/zonecraft)',
+        },
+      ).timeout(const Duration(seconds: 30)),
+    );
     if (resp.statusCode != 200) return null;
-    return parsePlaceSearchResponse(resp.body);
+    final parsed = parsePlaceSearchResponse(resp.body);
+    placeSearchCache.put(q, parsed);
+    return parsed;
   } catch (_) {
     return null;
   } finally {

@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:zonecraft/data/geo_import.dart';
 import 'package:zonecraft/data/place_search.dart';
 
@@ -138,6 +140,78 @@ void main() {
     test('returns empty on malformed JSON rather than throwing', () {
       expect(parsePlaceSearchResponse('not json'), isEmpty);
       expect(parsePlaceSearchResponse('{"oops":true}'), isEmpty);
+    });
+  });
+
+  group('searchPlaces caching', () {
+    // Nominatim's policy: "Results must be cached on your side", and "clients
+    // sending repeatedly the same query may be classified as faulty and
+    // blocked". Repeating a search is ordinary behaviour, so this is the
+    // difference between normal use and the pattern that gets clients blocked.
+    const body = '''
+      [{"display_name": "Isar, Bayern",
+        "category": "waterway", "type": "river",
+        "geojson": {"type": "LineString", "coordinates": [[11.5,48.1],[11.6,48.2]]}}]''';
+
+    setUp(placeSearchCache.clear);
+
+    test('a repeated query is answered without a second request', () async {
+      var calls = 0;
+      final client = MockClient((_) async {
+        calls++;
+        return http.Response(body, 200);
+      });
+
+      final first = await searchPlaces('Isar', client: client);
+      final second = await searchPlaces('Isar', client: client);
+
+      expect(calls, 1, reason: 'the second search must not reach the network');
+      expect(first, isNotNull);
+      expect(second, same(first));
+    });
+
+    test('normalised variants share the cached entry', () async {
+      var calls = 0;
+      final client = MockClient((_) async {
+        calls++;
+        return http.Response(body, 200);
+      });
+
+      await searchPlaces('Isar', client: client);
+      await searchPlaces('  isar  ', client: client);
+
+      expect(calls, 1);
+    });
+
+    test('a failure is not cached as though it were an answer', () async {
+      var calls = 0;
+      final client = MockClient((_) async {
+        calls++;
+        return calls == 1
+            ? http.Response('nope', 500)
+            : http.Response(body, 200);
+      });
+
+      expect(await searchPlaces('Isar', client: client), isNull);
+      // A 500 says nothing about the query, so the retry must go out again.
+      final retry = await searchPlaces('Isar', client: client);
+      expect(calls, 2);
+      expect(retry, isNotNull);
+      expect(retry, hasLength(1));
+    });
+
+    test('an empty result still counts as an answer worth caching', () async {
+      var calls = 0;
+      final client = MockClient((_) async {
+        calls++;
+        return http.Response('[]', 200);
+      });
+
+      expect(await searchPlaces('Nowhere', client: client), isEmpty);
+      expect(await searchPlaces('Nowhere', client: client), isEmpty);
+      // "Found nothing" is a real answer — asking again would be exactly the
+      // repeated-identical-query pattern the policy warns about.
+      expect(calls, 1);
     });
   });
 }

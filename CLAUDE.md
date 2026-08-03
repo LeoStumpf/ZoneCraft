@@ -67,6 +67,13 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   call site sets one explicitly (`kTerrainTileTimeout`, `CachedTileProvider.fetchTimeout`,
   the Overpass per-request budgets), plus `kHeightGenBudget` as an overall deadline on a
   height generation and a `timeLimit` on `getCurrentPosition`. Add one to any new call.
+- **Requests to the donated OSM services are paced** (`data/request_pacer.dart`).
+  `nominatimPacer` (1.1 s — the policy's ceiling is 1 req/s) and `overpassPacer` (1 s) queue
+  and space calls; they are **pacers, not debouncers** — these are explicit user actions, so
+  a late request is right and a dropped one would look like a dead button. Nominatim results
+  additionally go through `placeSearchCache` (a `QueryCache`), because its policy *requires*
+  client-side caching and blocks clients that repeat identical queries. **Never add
+  autocomplete/per-keystroke geocoding** — the policy forbids it outright.
 - **Number entry goes through `parseDecimal`** (`geo/coords.dart`), never bare
   `double.tryParse` — a comma-decimal locale would otherwise make the field silently no-op.
 - **Editors use the shared shell** (`ui/editor_sheet.dart`): `EditorSheet` (capped at 60 %

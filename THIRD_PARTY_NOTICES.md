@@ -42,13 +42,16 @@ Attribution for these is also shown in-app (the attribution control on the map):
   is always on.
 - **Overpass API** — queried once per import for points of interest, public-transport stations
   and administrative areas; returns OpenStreetMap data (ODbL), used under its fair-use policy.
-  Requests are user-initiated only (never on a timer or on map movement), size-capped, and
-  spread across three community instances
+  Requests are user-initiated only (never on a timer or on map movement), size-capped, paced to
+  at most one per second, and spread across three community instances
   ([overpass-api.de](https://overpass-api.de/), `overpass.kumi.systems`,
   `overpass.private.coffee`).
 - **Nominatim** ([nominatim.openstreetmap.org](https://nominatim.openstreetmap.org/)) —
   geocoding for "import a feature by name"; returns OpenStreetMap data (ODbL), used under its
-  [usage policy](https://operations.osmfoundation.org/policies/nominatim/).
+  [usage policy](https://operations.osmfoundation.org/policies/nominatim/). That policy sets an
+  absolute ceiling of one request per second and requires results to be cached client-side; the
+  app enforces both, and deliberately implements **no** autocomplete — a search happens only
+  when you submit one, never per keystroke, which the policy forbids.
 - **AWS Terrain Tiles** (`s3.amazonaws.com/elevation-tiles-prod`) — elevation data for height
   layers and the elevation probe. Public dataset on the
   [AWS Open Data registry](https://registry.opendata.aws/terrain-tiles/), aggregated from

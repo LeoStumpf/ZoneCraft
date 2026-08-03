@@ -3,6 +3,8 @@ import 'dart:convert' show Utf8Decoder;
 
 import 'package:http/http.dart' as http;
 
+import 'request_pacer.dart';
+
 /// The shared Overpass transport: endpoint failover, transient-vs-fatal status
 /// handling, a streamed size cap, and progress reporting — one implementation
 /// for every import that talks to the public API (`transit.dart`,
@@ -194,15 +196,20 @@ Future<OverpassOutcome<T>> overpassPost<T>(
 
         final _Response resp;
         try {
-          resp = await _send(
-            c,
-            endpoint,
-            query,
-            timeout: timeout,
-            maxBytes: maxBytes,
-            onBytes: (bytes, total) => onProgress
-                ?.call(progress(OverpassStage.downloading,
-                    bytes: bytes, totalBytes: total)),
+          // Paced, so a double-tapped import (or a failover landing straight on
+          // the next instance) can't put two requests on the wire back to back.
+          // Costs a user-initiated import nothing; the wait is already seconds.
+          resp = await overpassPacer.run(
+            () => _send(
+              c,
+              endpoint,
+              query,
+              timeout: timeout,
+              maxBytes: maxBytes,
+              onBytes: (bytes, total) => onProgress
+                  ?.call(progress(OverpassStage.downloading,
+                      bytes: bytes, totalBytes: total)),
+            ),
           );
         } on _OversizeException {
           // Caught mid-stream, so an answer far too big to use is abandoned

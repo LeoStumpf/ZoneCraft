@@ -40,8 +40,9 @@ search for) — is necessarily visible to the service being asked:
   background. The app tries `overpass-api.de`, `overpass.kumi.systems` and
   `overpass.private.coffee` in turn until one answers, and remembers which one did.
 - **Nominatim** (`nominatim.openstreetmap.org`) — OpenStreetMap's geocoder, used by
-  **"Import a feature by name"**. It receives the search text you type. Contacted only when
-  you run a search.
+  **"Import a feature by name"**. It receives the search text you submit. Contacted only when
+  you run a search — never as you type — and repeated searches are answered from memory
+  without contacting it again.
 - **AWS Terrain Tiles** (`s3.amazonaws.com/elevation-tiles-prod`) — public elevation data,
   used by **height layers**, the **"Measure elevation"** probe, and the elevation readout
   after **"Locate me"**. It receives the tile covering the point being measured.

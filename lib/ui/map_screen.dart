@@ -569,7 +569,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
   /// Measures the terrain elevation at [p] (cache-first terrain tile) and shows
   /// it. Shares the screen's tile client.
+  ///
+  /// One at a time: tapping again while a probe is in flight used to start a
+  /// second overlapping fetch whose result raced the first into `_probeElevation`
+  /// — so an impatient double-tap could leave the *earlier* point's height on
+  /// screen under the later point's marker.
   Future<void> _probeAt(LatLng p) async {
+    if (_probing) return;
     setState(() {
       _probing = true;
       _probePoint = p;
