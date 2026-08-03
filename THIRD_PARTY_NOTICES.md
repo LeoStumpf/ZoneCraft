@@ -17,7 +17,7 @@ All dependencies are permissive. The direct runtime dependencies:
 |---|---|
 | `flutter`, `flutter_map`, `flutter_map_dragmarker`, `http`, `share_plus`, `path_provider`, `file_selector` | BSD-3-Clause |
 | `latlong2` | Apache-2.0 |
-| `drift`, `drift_flutter`, `flutter_riverpod`, `uuid`, `flutter_colorpicker`, `geolocator`, `sqlite3_flutter_libs`, `cupertino_icons`, `sentry_flutter`, `xml`, `archive`, `image` | MIT |
+| `drift`, `drift_flutter`, `flutter_riverpod`, `uuid`, `flutter_colorpicker`, `geolocator`, `sqlite3_flutter_libs`, `cupertino_icons`, `xml`, `archive`, `image` | MIT |
 
 Build/dev-only tools (`build_runner`, `drift_dev`, `flutter_lints`, `flutter_launcher_icons`,
 `flutter_native_splash`) and all transitive dependencies are likewise permissive — MIT,

@@ -1,27 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'ui/map_screen.dart';
 
-/// Sentry DSN, baked in at build time via `--dart-define=SENTRY_DSN=...`. Empty
-/// for local/debug builds, in which case crash reporting is skipped entirely.
-const String _sentryDsn = String.fromEnvironment('SENTRY_DSN');
-
+/// ZoneCraft sends **no** telemetry of any kind: no crash reporting, no
+/// analytics, no advertising identifier. Nothing leaves the device except the
+/// map, import and geocoding requests the user's own actions trigger, which are
+/// listed in `PRIVACY.md`.
+///
+/// Crash reporting (Sentry) was wired in here and removed deliberately. Anything
+/// added back has to be reflected in `PRIVACY.md` and in the Play Data safety
+/// form, which are currently able to say "none" — the simplest true answer there
+/// is worth more than the diagnostics were.
 void main() {
-  if (_sentryDsn.isEmpty) {
-    // No DSN (dev build): start normally, no telemetry.
-    runApp(const ProviderScope(child: ZoneCraftApp()));
-    return;
-  }
-  SentryFlutter.init(
-    (options) {
-      options.dsn = _sentryDsn;
-      // Crash/error reporting only — no performance tracing.
-      options.tracesSampleRate = 0;
-    },
-    appRunner: () => runApp(const ProviderScope(child: ZoneCraftApp())),
-  );
+  runApp(const ProviderScope(child: ZoneCraftApp()));
 }
 
 class ZoneCraftApp extends StatelessWidget {

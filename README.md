@@ -131,7 +131,6 @@ by overpainting inside a layer rather than by boolean operations.
 | Network | [`http`](https://pub.dev/packages/http) — Overpass (POIs, transit, borders), Nominatim, terrain tiles |
 | Files | [`share_plus`](https://pub.dev/packages/share_plus), [`file_selector`](https://pub.dev/packages/file_selector), [`path_provider`](https://pub.dev/packages/path_provider), [`xml`](https://pub.dev/packages/xml), [`archive`](https://pub.dev/packages/archive) |
 | Location | [`geolocator`](https://pub.dev/packages/geolocator) (opt-in) |
-| Crash reports | [`sentry_flutter`](https://pub.dev/packages/sentry_flutter) (release builds with a DSN only) |
 | Colour picker | [`flutter_colorpicker`](https://pub.dev/packages/flutter_colorpicker) |
 | Icon / splash | `flutter_launcher_icons`, `flutter_native_splash` (dev) |
 
@@ -221,10 +220,10 @@ dart run drift_dev schema generate drift_schemas/ test/generated_migrations/
 
 ## Privacy
 
-No account, no analytics, no advertising identifier. Everything you create stays on the device.
-The app talks to OpenStreetMap tile servers, Overpass, Nominatim and a public elevation dataset
-only to draw the map and to run imports you ask for, and (in release builds configured with a
-DSN) sends crash reports to Sentry. Full detail in [`PRIVACY.md`](PRIVACY.md).
+No account, no analytics, no crash reporting, no advertising identifier — the app sends no
+telemetry at all. Everything you create stays on the device. It talks to OpenStreetMap tile
+servers, Overpass, Nominatim and a public elevation dataset only to draw the map and to run the
+imports you ask for. Full detail in [`PRIVACY.md`](PRIVACY.md).
 
 ## License
 

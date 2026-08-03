@@ -51,3 +51,6 @@ app.*.map.json
 
 # Local planning / scratch notes — never committed
 planning/
+
+# scripts/screenshots.sh runtime state (which profile was last set up)
+.screenshot-profile

@@ -12,8 +12,6 @@
 #
 # Env overrides:
 #   DEVICE=<adb-serial>   target a specific device (default: Pixel 4a below)
-#   SENTRY_DSN=<dsn>      baked into release/bundle builds for crash reporting
-#                         (omit for debug; the app skips Sentry when it's empty)
 #   TILE_URL=<template>   base-map tile URL, e.g.
 #                         'https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=KEY'
 #   TILE_ATTRIBUTION=<s>  the attribution line shown for it
@@ -56,11 +54,7 @@ for arg in "$@"; do
   esac
 done
 
-# Bake the Sentry DSN into release artifacts when one is provided.
 DART_DEFINES=()
-if [ "$MODE" = "release" ] && [ -n "${SENTRY_DSN:-}" ]; then
-  DART_DEFINES+=(--dart-define=SENTRY_DSN="$SENTRY_DSN")
-fi
 # Tile source. Forwarded in every mode (unlike the DSN) so an offline-capable
 # debug build is one export away.
 if [ -n "${TILE_URL:-}" ]; then

@@ -63,6 +63,10 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   `overpass.dart`** (POI imports) — all three return `OverpassOutcome` and drive the shared
   `ui/import_progress.dart` dialog. The endpoint that last answered is remembered in
   `AppSettings.transitEndpoint` (old name, shared use).
+- **No telemetry, ever.** No crash reporting, no analytics, no advertising id. Sentry was
+  wired in and deliberately removed: `PRIVACY.md` and the Play Data safety form can now
+  answer "none", which is worth more than the diagnostics were. Anything added back has to
+  be reflected in both.
 - **Every outbound HTTP call is timed out.** `package:http` has no default timeout, so each
   call site sets one explicitly (`kTerrainTileTimeout`, `CachedTileProvider.fetchTimeout`,
   the Overpass per-request budgets), plus `kHeightGenBudget` as an overall deadline on a

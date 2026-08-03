@@ -1,6 +1,6 @@
 # ZoneCraft — Privacy Policy
 
-_Last updated: 2026-08-03_
+_Last updated: 2026-08-04_
 
 ZoneCraft is an offline-first map tool. It has **no account system**, shows **no advertising**,
 and does **not** sell, rent or share your personal data. There is no ZoneCraft server: nothing
@@ -17,11 +17,11 @@ skimmed past.
 | | |
 |---|---|
 | Account required | No |
-| Data collected about you | None, except crash diagnostics (below) |
+| Data collected about you | None |
 | Data sold or shared for advertising | Never |
 | Where your content lives | On your device only |
 | Advertising ID / device identifier | Not used |
-| Analytics or usage tracking | None |
+| Analytics, crash reporting or usage tracking | None |
 
 ## Data stored on your device
 
@@ -76,21 +76,6 @@ The app sends nothing identifying with these requests beyond what any HTTP clien
 IP address, and a `User-Agent` naming the application. No advertising ID, no device identifier,
 no cookies, no analytics.
 
-## Crash diagnostics (Sentry)
-
-Store releases send **crash and error reports** to [Sentry](https://sentry.io/), a third-party
-error-monitoring service, so that faults on the wide range of Android devices out there can be
-found and fixed.
-
-These reports contain technical diagnostics only: the error type, a stack trace, the app
-version, and the device and OS model. They **do not include** your layers, your objects, your
-location, your searches, or any other content you create. Performance tracing is switched off —
-only crashes and errors are sent. Sentry acts as a data processor on our behalf; see
-[Sentry's Privacy Policy](https://sentry.io/privacy/).
-
-Builds compiled without a Sentry key — including every build you make yourself from source —
-send nothing at all.
-
 ## Exporting and sharing your data
 
 **Export** writes your layers to a GeoJSON or KML file and hands it to Android's share sheet.
@@ -108,20 +93,15 @@ nothing:
   cache rather than your data).
 - **Uninstalling the app** removes everything, both together.
 
-Crash reports held by Sentry are retained according to Sentry's own retention schedule (90 days
-by default) and contain no information identifying you.
-
 ## Your rights
 
 Because the app collects no personal data about you and holds nothing on a server, there is in
 practice nothing for us to disclose, correct or erase — your content is already exclusively in
-your hands. If you are in the EU/EEA or UK and believe otherwise, or you want the crash
-diagnostics associated with your device removed, email <leo.m.stumpf@gmail.com> and it will be
-handled.
+your hands. If you are in the EU/EEA or UK and believe otherwise, email
+<leo.m.stumpf@gmail.com> and it will be handled.
 
-Where any processing does occur, the legal basis is legitimate interest (Art. 6(1)(f) GDPR) in
-delivering a working, debuggable application; for location, it is your consent, given by
-granting the permission and revocable at any time in Android's settings.
+For location, the legal basis is your consent (Art. 6(1)(a) GDPR), given by granting the
+permission and revocable at any time in Android's settings. No other processing takes place.
 
 ## Children
 
