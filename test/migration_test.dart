@@ -14,27 +14,23 @@ import 'generated_migrations/schema.dart';
 /// any of that was `scripts/build.sh --install` re-installing over the one
 /// development phone, i.e. exactly one upgrade path on exactly one database.
 ///
-/// What this can and cannot do **today** matters, so be precise about it. With
-/// a single snapshot (v20) there is no earlier version to migrate *from*, so
-/// this does not yet prove that any `if (from < N)` block is correct. What it
-/// does prove is that the schema the table classes describe still matches the
-/// snapshot on disk, and that the snapshot exists for the version the app
-/// claims to be at. That is the tripwire: the next schema change fails these
-/// tests until a new snapshot is dumped, and dumping it is the step that makes
-/// a real step-verification possible.
+/// With **two** snapshots (v20, v21) this now does what one snapshot could not:
+/// it opens a real v20 database, runs the app's own `onUpgrade` against it, and
+/// compares the result to v21's independently-dumped shape. That is what
+/// catches a column added to a table class without the matching
+/// `if (from < N)` block — the failure mode that only ever showed up on a
+/// user's phone, since a fresh install creates the newest schema directly and
+/// never runs a migration at all.
 ///
-/// So when the schema next changes:
+/// When the schema next changes:
 ///
 /// ```sh
 /// dart run drift_dev schema dump lib/data/database.dart drift_schemas/
 /// dart run drift_dev schema generate drift_schemas/ test/generated_migrations/
 /// ```
 ///
-/// then add `verifier.migrateAndValidate(db, 21)` here — with two snapshots it
-/// genuinely walks v20 → v21 and compares the result against v21's own shape,
-/// which is what catches a column added to a table class without the matching
-/// migration block. A snapshot must be taken *before* that version ships; it
-/// cannot be reconstructed afterwards.
+/// then add the v21 → v22 step below. A snapshot must be taken *before* that
+/// version ships; it cannot be reconstructed afterwards.
 void main() {
   late SchemaVerifier verifier;
 
@@ -42,13 +38,45 @@ void main() {
     verifier = SchemaVerifier(GeneratedHelper());
   });
 
-  test('the schema the table classes build matches the v20 snapshot', () async {
+  test('the schema the table classes build matches the v21 snapshot', () async {
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 20);
+    await verifier.migrateAndValidate(db, 21);
   });
 
-  test('a v20 database opens, writes and reads back', () async {
+  test('v20 → v21 upgrades a real database, and keeps its rows', () async {
+    // The v21 change adds POI OSM identity. The thing worth proving is not that
+    // the columns appear — `migrateAndValidate` covers the shape — but that a
+    // POI stored before v21 survives the upgrade with a *null* identity, since
+    // there is nothing to backfill it from and a wrong guess would make dedup
+    // silently drop a real POI later.
+    final old = await verifier.schemaAt(20);
+    old.rawDatabase.execute(
+      "INSERT INTO layers (id, name, color_argb, sort_order, type) "
+      "VALUES ('l1', 'POIs', 1, 0, 'poi')",
+    );
+    old.rawDatabase.execute(
+      "INSERT INTO poi_sets (id, layer_id, category_key, center_lat, "
+      "center_lng, radius_meters) "
+      "VALUES ('s1', 'l1', 'cafe', 48.1, 11.5, 800)",
+    );
+    old.rawDatabase.execute(
+      "INSERT INTO poi_points (id, poi_set_id, lat, lng, name, sort_order) "
+      "VALUES ('p1', 's1', 48.11, 11.51, 'Café A', 0)",
+    );
+
+    final db = AppDatabase.forTesting(old.newConnection());
+    addTearDown(db.close);
+    await verifier.migrateAndValidate(db, 21);
+
+    final rows = await db.select(db.poiPoints).get();
+    expect(rows, hasLength(1), reason: 'the upgrade must not drop POIs');
+    expect(rows.single.name, 'Café A');
+    expect(rows.single.osmType, isNull);
+    expect(rows.single.osmId, isNull);
+  });
+
+  test('a v21 database opens, writes and reads back', () async {
     // `migrateAndValidate` proves the *shape*; this proves the thing opens and
     // the foreign keys the cascade deletes depend on are actually on.
     final db = AppDatabase.forTesting(NativeDatabase.memory());

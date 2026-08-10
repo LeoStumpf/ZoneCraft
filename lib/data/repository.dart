@@ -7,7 +7,44 @@ import 'package:uuid/uuid.dart';
 import '../geo/border_areas.dart';
 import '../geo/simplify.dart';
 import 'database.dart';
+import 'overpass.dart' show PoiResult;
 import 'serialization.dart';
+
+/// What an import actually wrote, against what the layer already held.
+///
+/// [skipped] exists so the result can be *reported*. Silently importing 12 of
+/// 49 areas looks like a broken import; "12 imported, 37 already here" looks
+/// like the feature it is.
+class ImportTally {
+  const ImportTally({required this.added, required this.skipped});
+
+  static const ImportTally none = ImportTally(added: 0, skipped: 0);
+
+  final int added;
+  final int skipped;
+
+  int get total => added + skipped;
+
+  /// Everything on offer was already stored — worth saying out loud, because
+  /// the map does not visibly change.
+  bool get allSkipped => added == 0 && skipped > 0;
+}
+
+/// `type/id` — the only safe identity for an OSM element, because ids are
+/// unique only *within* a type: node 240109189 and way 240109189 are different
+/// things. Null when either half is missing.
+String? osmKey(String? type, int? id) =>
+    (type == null || id == null) ? null : '$type/$id';
+
+/// Whether an element is new here, recording it in [seen] as a side effect —
+/// so duplicates *within one response* are caught as well as duplicates against
+/// what is already stored.
+///
+/// A null key means the element carries no OSM identity (rows written before
+/// v21, or an answer that omitted it). Those are always kept: the alternative
+/// is inferring identity from coordinates, which would silently merge two
+/// genuinely different POIs sharing a doorway.
+bool _isNew(Set<String> seen, String? key) => key == null || seen.add(key);
 
 /// Thin CRUD/stream API over [AppDatabase] used by the Riverpod providers.
 class Repository {
@@ -898,27 +935,73 @@ class Repository {
     return id;
   }
 
-  /// Appends the fetched POIs to [poiSetId] in one batch.
-  Future<void> addPoiPoints(
+  /// Appends the fetched POIs to [poiSetId] in one batch, **skipping any this
+  /// layer already holds** (see [ImportTally]).
+  ///
+  /// Scoped to the layer, not the set: overlapping imports land in *different*
+  /// sets, which is exactly the case that used to draw the same café twice.
+  /// Two layers deliberately holding the same POIs is a legitimate thing to
+  /// want, so it stays possible.
+  /// Takes [PoiResult]s rather than a bare record: it is exactly what the
+  /// importer already holds, and it keeps the OSM identity from having to be
+  /// spelled out (as two explicit nulls) at every seed and test call site.
+  Future<ImportTally> addPoiPoints(
     String poiSetId,
-    List<({double lat, double lng, String? name})> pts,
+    List<PoiResult> pts,
   ) async {
-    if (pts.isEmpty) return;
-    await _db.batch((b) {
-      for (var i = 0; i < pts.length; i++) {
-        b.insert(
-          _db.poiPoints,
-          PoiPointsCompanion.insert(
-            id: _uuid.v4(),
-            poiSetId: poiSetId,
-            lat: pts[i].lat,
-            lng: pts[i].lng,
-            name: Value(pts[i].name),
-            sortOrder: i,
-          ),
-        );
-      }
+    if (pts.isEmpty) return ImportTally.none;
+    return _db.transaction(() async {
+      final seen = await _poiOsmKeysInLayerOf(poiSetId);
+      final keep = [
+        for (final p in pts)
+          if (_isNew(seen, osmKey(p.osmType, p.osmId))) p,
+      ];
+      // Sort order restarts per set, so it indexes `keep`, not `pts` — a gap
+      // would put the markers in a different order than the list.
+      await _db.batch((b) {
+        for (var i = 0; i < keep.length; i++) {
+          b.insert(
+            _db.poiPoints,
+            PoiPointsCompanion.insert(
+              id: _uuid.v4(),
+              poiSetId: poiSetId,
+              lat: keep[i].lat,
+              lng: keep[i].lng,
+              name: Value(keep[i].name),
+              sortOrder: i,
+              osmType: Value(keep[i].osmType),
+              osmId: Value(keep[i].osmId),
+            ),
+          );
+        }
+      });
+      return ImportTally(added: keep.length, skipped: pts.length - keep.length);
     });
+  }
+
+  /// Every `type/id` already stored on the layer that owns [poiSetId].
+  Future<Set<String>> _poiOsmKeysInLayerOf(String poiSetId) async {
+    final layerId = await (_db.selectOnly(_db.poiSets)
+          ..addColumns([_db.poiSets.layerId])
+          ..where(_db.poiSets.id.equals(poiSetId)))
+        .map((r) => r.read(_db.poiSets.layerId))
+        .getSingleOrNull();
+    if (layerId == null) return <String>{};
+    final rows = await (_db.selectOnly(_db.poiPoints)
+          ..addColumns([_db.poiPoints.osmType, _db.poiPoints.osmId])
+          ..join([
+            innerJoin(
+              _db.poiSets,
+              _db.poiSets.id.equalsExp(_db.poiPoints.poiSetId),
+            ),
+          ])
+          ..where(_db.poiSets.layerId.equals(layerId) &
+              _db.poiPoints.osmId.isNotNull()))
+        .get();
+    return {
+      for (final r in rows)
+        ?osmKey(r.read(_db.poiPoints.osmType), r.read(_db.poiPoints.osmId)),
+    };
   }
 
   /// Renames a POI set (or moves it to another `poi` layer). The set's search
@@ -986,7 +1069,7 @@ class Repository {
   /// Replaces whatever was there, so a retry after a partial failure is
   /// idempotent. One transaction, one batch — a city import is thousands of
   /// rows and must not be a loop of awaited inserts.
-  Future<void> fillTransitSet(
+  Future<ImportTally> fillTransitSet(
     String setId,
     List<({
       int osmId,
@@ -998,12 +1081,19 @@ class Repository {
       String? routeRef,
     })> stations,
   ) async {
-    await _db.transaction(() async {
+    return _db.transaction(() async {
       await (_db.delete(_db.transitStops)
             ..where((s) => s.setId.equals(setId)))
           .go();
+      // Stations this layer's *other* sets already hold. Two boxes that overlap
+      // put the same station in two sets, which is what drew Pasing twice.
+      final seen = await _transitOsmIdsInLayerOf(setId);
+      final keep = [
+        for (final s in stations)
+          if (_isNew(seen, osmKey('node', s.osmId))) s,
+      ];
       await _db.batch((b) {
-        for (final s in stations) {
+        for (final s in keep) {
           b.insert(
             _db.transitStops,
             TransitStopsCompanion.insert(
@@ -1024,10 +1114,42 @@ class Repository {
           .write(TransitSetsCompanion(
         fetchedAt: Value(DateTime.now()),
         lastError: const Value(null),
-        stationCount: Value(stations.length),
-        nodeCount: Value(stations.fold(0, (a, s) => a + s.nodeCount)),
+        // The counts describe what is *stored*, so they keep matching the rows
+        // and the "N stations" the layer tile shows.
+        stationCount: Value(keep.length),
+        nodeCount: Value(keep.fold(0, (a, s) => a + s.nodeCount)),
       ));
+      return ImportTally(
+          added: keep.length, skipped: stations.length - keep.length);
     });
+  }
+
+  /// Station ids held by the *other* sets of the layer owning [setId].
+  ///
+  /// Excludes [setId] itself so a retry of the same box doesn't dedup against
+  /// its own previous attempt — which would make every retry import nothing.
+  Future<Set<String>> _transitOsmIdsInLayerOf(String setId) async {
+    final layerId = await (_db.selectOnly(_db.transitSets)
+          ..addColumns([_db.transitSets.layerId])
+          ..where(_db.transitSets.id.equals(setId)))
+        .map((r) => r.read(_db.transitSets.layerId))
+        .getSingleOrNull();
+    if (layerId == null) return <String>{};
+    final rows = await (_db.selectOnly(_db.transitStops)
+          ..addColumns([_db.transitStops.osmId])
+          ..join([
+            innerJoin(
+              _db.transitSets,
+              _db.transitSets.id.equalsExp(_db.transitStops.setId),
+            ),
+          ])
+          ..where(_db.transitSets.layerId.equals(layerId) &
+              _db.transitSets.id.equals(setId).not()))
+        .get();
+    return {
+      for (final r in rows)
+        ?osmKey('node', r.read(_db.transitStops.osmId)),
+    };
   }
 
   /// Records why an import didn't finish. The set stays, so the layer can offer
@@ -1093,7 +1215,7 @@ class Repository {
   /// One transaction, one batch: a city import is 54 areas but a country one is
   /// a handful of very large blobs, and either way this must not be a loop of
   /// awaited inserts.
-  Future<String> addBorderSet({
+  Future<({String setId, ImportTally tally})> addBorderSet({
     required String layerId,
     required double south,
     required double west,
@@ -1116,7 +1238,20 @@ class Repository {
     String? label,
   }) async {
     final setId = _uuid.v4();
+    late final ImportTally tally;
     await _db.transaction(() async {
+      // Areas this layer already holds. Overpass returns whole relations, so an
+      // overlapping box re-delivers every municipality it touched last time —
+      // the case that drew each suburb twice, at full point cost.
+      final seen = await _borderOsmIdsInLayer(layerId);
+      final keep = [
+        for (final a in areas)
+          if (_isNew(seen, osmKey('relation', a.osmId))) a,
+      ];
+      tally =
+          ImportTally(added: keep.length, skipped: areas.length - keep.length);
+      // The set is written even when nothing survived: it records the box that
+      // was fetched, and an empty one is invisible (Elements lists *areas*).
       await _db.into(_db.borderSets).insert(
             BorderSetsCompanion.insert(
               id: setId,
@@ -1127,14 +1262,13 @@ class Repository {
               east: east,
               adminLevel: adminLevel,
               fetchedAt: DateTime.now(),
-              areaCount: Value(areas.length),
-              pointCount:
-                  Value(areas.fold(0, (a, x) => a + x.pointCount)),
+              areaCount: Value(keep.length),
+              pointCount: Value(keep.fold(0, (a, x) => a + x.pointCount)),
               label: Value(label),
             ),
           );
       await _db.batch((b) {
-        for (final a in areas) {
+        for (final a in keep) {
           b.insert(
             _db.borderAreas,
             BorderAreasCompanion.insert(
@@ -1157,7 +1291,25 @@ class Repository {
       });
     });
     await recolourBorderLayer(layerId);
-    return setId;
+    return (setId: setId, tally: tally);
+  }
+
+  /// Relation ids already stored on [layerId].
+  Future<Set<String>> _borderOsmIdsInLayer(String layerId) async {
+    final rows = await (_db.selectOnly(_db.borderAreas)
+          ..addColumns([_db.borderAreas.osmId])
+          ..join([
+            innerJoin(
+              _db.borderSets,
+              _db.borderSets.id.equalsExp(_db.borderAreas.setId),
+            ),
+          ])
+          ..where(_db.borderSets.layerId.equals(layerId)))
+        .get();
+    return {
+      for (final r in rows)
+        ?osmKey('relation', r.read(_db.borderAreas.osmId)),
+    };
   }
 
   /// Recomputes every area colour in [layerId] so no two areas sharing a border
@@ -1763,11 +1915,15 @@ class Repository {
           label: o.label,
         );
         final labels = o.pointLabels ?? const <String?>[];
+        // No OSM identity: the export format doesn't carry it, so an imported
+        // file's POIs stay outside the dedup check rather than being given a
+        // made-up one.
         await addPoiPoints(sid, [
           for (var i = 1; i < o.coords.length; i++)
-            (
+            PoiResult(
               lat: o.coords[i].latitude,
               lng: o.coords[i].longitude,
+              categoryKey: o.categoryKey ?? 'place',
               name: i - 1 < labels.length ? labels[i - 1] : null,
             ),
         ]);

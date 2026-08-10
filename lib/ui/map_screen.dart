@@ -1277,10 +1277,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
         radiusMeters: r,
         label: config.category.label,
       );
-      await repo.addPoiPoints(sid, [
-        for (final p in within) (lat: p.lat, lng: p.lng, name: p.name),
-      ]);
-      if (mounted) _hint('Imported ${within.length} $label.');
+      final tally = await repo.addPoiPoints(sid, within);
+      // Everything was already here, so the set would be an empty row that
+      // draws nothing — drop it rather than leave litter behind.
+      if (tally.added == 0) await repo.deletePoiSet(sid);
+      if (mounted) _hint(describeImportTally(tally, label));
       return;
     }
 
@@ -1475,7 +1476,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
       final stations = outcome.value!;
       progress.update('Saving ${stations.length} stations…');
-      await repo.fillTransitSet(setId, [
+      final tally = await repo.fillTransitSet(setId, [
         for (final s in stations)
           (
             osmId: s.osmId,
@@ -1498,6 +1499,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
         );
         return;
       }
+      // Everything this box holds is already on the layer from an earlier,
+      // overlapping import. Say so plainly — the map does not change, so
+      // silence would read as a failed import.
+      if (tally.allSkipped) {
+        _hint(describeImportTally(tally, 'stations'));
+        return;
+      }
       // Hidden *within what was imported* — saying "bus hidden" about buses
       // that were never fetched would send people to a filter that can't help.
       final hidden =
@@ -1507,8 +1515,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
               .visibleModeMask;
       _hint(
         hidden == 0
-            ? 'Imported ${stations.length} stations.'
-            : 'Imported ${stations.length} stations · '
+            ? describeImportTally(tally, 'stations')
+            : '${describeImportTally(tally, 'stations')} '
                   '${transitModeLabels(hidden).toLowerCase()} hidden for now '
                   '(Stations… to show).',
       );
@@ -1634,7 +1642,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
         'Saving ${built.length} areas '
         '(${totalPointCount(built)} points) and colouring them…',
       );
-      await repo.addBorderSet(
+      final result = await repo.addBorderSet(
         layerId: layer.id,
         south: config.south,
         west: config.west,
@@ -1660,11 +1668,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
       );
       progress.close();
       if (!mounted) return;
+      final tally = result.tally;
       _hint(
-        layer.borderFillAreas
-            ? 'Imported ${built.length} areas.'
-            : 'Imported ${built.length} areas · Colour areas in the layer menu '
-                  'to fill them.',
+        layer.borderFillAreas || tally.allSkipped
+            ? describeImportTally(tally, 'areas')
+            : '${describeImportTally(tally, 'areas')} Colour areas in the '
+                  'layer menu to fill them.',
       );
     } catch (e) {
       progress.close();

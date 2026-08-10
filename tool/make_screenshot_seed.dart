@@ -19,6 +19,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:zonecraft/data/database.dart';
+import 'package:zonecraft/data/overpass.dart' show PoiResult;
 import 'package:zonecraft/data/repository.dart';
 
 /// Munich. Chosen because it is dense enough that every layer type has
@@ -70,12 +71,12 @@ void main() {
       label: 'Cafés',
     );
     await repo.addPoiPoints(poiSet, const [
-      (lat: 48.1385, lng: 11.5745, name: 'Café am Dom'),
-      (lat: 48.1401, lng: 11.5772, name: 'Rösterei'),
-      (lat: 48.1359, lng: 11.5719, name: 'Kaffeehaus'),
-      (lat: 48.1344, lng: 11.5798, name: 'Espressobar'),
-      (lat: 48.1418, lng: 11.5688, name: 'Stadtcafé'),
-      (lat: 48.1367, lng: 11.5831, name: 'Bohne & Blatt'),
+      PoiResult(lat: 48.1385, lng: 11.5745, categoryKey: 'cafe', name: 'Café am Dom'),
+      PoiResult(lat: 48.1401, lng: 11.5772, categoryKey: 'cafe', name: 'Rösterei'),
+      PoiResult(lat: 48.1359, lng: 11.5719, categoryKey: 'cafe', name: 'Kaffeehaus'),
+      PoiResult(lat: 48.1344, lng: 11.5798, categoryKey: 'cafe', name: 'Espressobar'),
+      PoiResult(lat: 48.1418, lng: 11.5688, categoryKey: 'cafe', name: 'Stadtcafé'),
+      PoiResult(lat: 48.1367, lng: 11.5831, categoryKey: 'cafe', name: 'Bohne & Blatt'),
     ]);
 
     // --- "Within 3 km" (circle) --------------------------------------------

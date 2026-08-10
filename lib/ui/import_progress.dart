@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../data/overpass_client.dart';
+import '../data/repository.dart' show ImportTally;
 
 /// The progress dialog shared by the Overpass-backed imports (transit, borders).
 ///
@@ -67,6 +68,22 @@ String describeOverpassProgress(OverpassProgress p) {
     case OverpassStage.processing:
       return 'Reading ${formatBytes(p.bytes)} from ${p.host}…';
   }
+}
+
+/// What to say after an import that may have skipped elements the layer already
+/// held. [noun] is plural ("areas", "stations", "cafés"), matching how the
+/// category labels already read.
+///
+/// The skipped count is never left silent: importing 12 of 49 and reporting
+/// only the 12 reads as a broken import, which is precisely the confusion
+/// duplicate-skipping is meant to remove.
+String describeImportTally(ImportTally tally, String noun) {
+  if (tally.allSkipped) {
+    return 'Nothing new — all ${tally.skipped} $noun were already imported.';
+  }
+  if (tally.skipped == 0) return 'Imported ${tally.added} $noun.';
+  return 'Imported ${tally.added} $noun · '
+      '${tally.skipped} already here.';
 }
 
 String formatBytes(int bytes) {

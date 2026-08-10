@@ -88,6 +88,31 @@ void main() {
       expect(res[1].name, isNull);
       expect(res[2].name, isNull);
     });
+
+    test('captures type + id, which is what re-import dedup keys on', () {
+      // Ids repeat across element types, so neither half is enough alone.
+      const body = '''
+      {"elements":[
+        {"type":"node","id":240109189,"lat":1,"lon":2,"tags":{"amenity":"cafe"}},
+        {"type":"way","id":240109189,"center":{"lat":3,"lon":4},"tags":{"amenity":"cafe"}}
+      ]}''';
+      final res = parseOverpassResponse(body, [cat('cafe')]);
+      expect(res.map((p) => p.osmType), ['node', 'way']);
+      expect(res.map((p) => p.osmId), [240109189, 240109189]);
+    });
+
+    test('an element with no id is kept, just unidentified', () {
+      // Half a key would collide across types, so it is not invented. The POI
+      // still imports; it simply sits outside the dedup check.
+      const body = '''
+      {"elements":[
+        {"type":"node","lat":1,"lon":2,"tags":{"amenity":"cafe"}}
+      ]}''';
+      final res = parseOverpassResponse(body, [cat('cafe')]);
+      expect(res, hasLength(1));
+      expect(res.single.osmId, isNull);
+      expect(res.single.osmType, 'node');
+    });
   });
 
   group('poisWithinRadius', () {
@@ -196,6 +221,28 @@ void main() {
       expect(back[0].name, 'Tati');
       expect(back[1].categoryKey, 'bench');
       expect(back[1].name, isNull);
+    });
+
+    test('round-trips the OSM identity, and tolerates it being absent', () {
+      const pois = [
+        PoiResult(
+            lat: 1, lng: 2, categoryKey: 'cafe', osmType: 'way', osmId: 42),
+        PoiResult(lat: 3, lng: 4, categoryKey: 'cafe'),
+      ];
+      final back = decodePoiResults(encodePoiResults(pois));
+      expect(back[0].osmType, 'way');
+      expect(back[0].osmId, 42);
+      expect(back[1].osmType, isNull);
+      expect(back[1].osmId, isNull);
+    });
+
+    test('a cache entry written before v21 still decodes', () {
+      // The identity keys are simply absent from older payloads.
+      final back = decodePoiResults(
+          '[{"lat":48.1,"lng":11.5,"k":"cafe","n":"Tati"}]');
+      expect(back, hasLength(1));
+      expect(back.single.name, 'Tati');
+      expect(back.single.osmId, isNull);
     });
 
     test('decode returns empty on garbage rather than throwing', () {

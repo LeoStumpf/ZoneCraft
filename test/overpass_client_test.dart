@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:zonecraft/data/overpass_client.dart';
+import 'package:zonecraft/data/repository.dart' show ImportTally;
 import 'package:zonecraft/ui/import_progress.dart';
 
 /// A MockClient that answers `send` (which is what the streaming path uses).
@@ -364,6 +365,35 @@ void main() {
       expect(formatBytes(512), '512 B');
       expect(formatBytes(2048), '2 KB');
       expect(formatBytes(3 * 1024 * 1024), '3.0 MB');
+    });
+  });
+
+  group('describeImportTally', () {
+    test('a clean import just states the count', () {
+      expect(
+        describeImportTally(const ImportTally(added: 12, skipped: 0), 'areas'),
+        'Imported 12 areas.',
+      );
+    });
+
+    test('skipped duplicates are never left silent', () {
+      // "Imported 12" after asking for 49 reads as a broken import, which is
+      // the confusion dedup exists to remove.
+      expect(
+        describeImportTally(const ImportTally(added: 12, skipped: 37), 'areas'),
+        contains('12 areas'),
+      );
+      expect(
+        describeImportTally(const ImportTally(added: 12, skipped: 37), 'areas'),
+        contains('37 already here'),
+      );
+    });
+
+    test('an all-duplicate import says so — the map does not change', () {
+      expect(
+        describeImportTally(const ImportTally(added: 0, skipped: 8), 'stations'),
+        'Nothing new — all 8 stations were already imported.',
+      );
     });
   });
 }

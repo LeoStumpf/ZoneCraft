@@ -306,6 +306,18 @@ class PoiPoints extends Table {
   IntColumn get sortOrder => integer()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 
+  /// The OSM element this POI came from, so a second import over overlapping
+  /// ground can recognise it (v21). **Both** parts are needed: ids are only
+  /// unique *within* a type, so node 240109189 and way 240109189 are different
+  /// things.
+  ///
+  /// Nullable because rows imported before v21 never recorded it, and a
+  /// backfill is impossible — the id was not merely unstored, it was never
+  /// fetched. An unidentified row simply doesn't participate in dedup; see
+  /// [Repository.addPoiPoints].
+  TextColumn get osmType => text().nullable()();
+  IntColumn get osmId => integer().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -627,7 +639,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 20;
+  int get schemaVersion => 21;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -754,6 +766,20 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(layers, layers.borderShowNames);
             await m.createTable(borderSets);
             await m.createTable(borderAreas);
+          }
+          if (from < 21) {
+            // POIs gain the OSM identity they never stored, so re-importing
+            // overlapping ground stops duplicating them. Transit and borders
+            // already had `osm_id` — they just weren't consulting it.
+            //
+            // Existing rows stay null: the id wasn't dropped on the way in, it
+            // was never requested from Overpass, so there is nothing to
+            // backfill from. They keep working and are simply invisible to
+            // dedup, which is the honest outcome — guessing identity from
+            // coordinates would silently merge two genuinely different POIs
+            // that share a doorway.
+            await m.addColumn(poiPoints, poiPoints.osmType);
+            await m.addColumn(poiPoints, poiPoints.osmId);
           }
         },
         beforeOpen: (details) async {

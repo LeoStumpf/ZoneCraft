@@ -3,6 +3,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:zonecraft/data/database.dart';
+import 'package:zonecraft/data/overpass.dart' show PoiResult;
 import 'package:zonecraft/data/repository.dart';
 import 'package:zonecraft/data/transit.dart';
 import 'package:zonecraft/state/providers.dart';
@@ -195,8 +196,8 @@ void main() {
       label: 'Benches',
     );
     await repo.addPoiPoints(id, [
-      (lat: 48.001, lng: 11.001, name: 'A'),
-      (lat: 48.002, lng: 11.002, name: null),
+      PoiResult(lat: 48.001, lng: 11.001, categoryKey: 'bench', name: 'A'),
+      PoiResult(lat: 48.002, lng: 11.002, categoryKey: 'bench', name: null),
     ]);
 
     final rows = summariseLayer(

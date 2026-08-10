@@ -7087,6 +7087,26 @@ class $PoiPointsTable extends PoiPoints
     requiredDuringInsert: false,
     defaultValue: currentDateAndTime,
   );
+  static const VerificationMeta _osmTypeMeta = const VerificationMeta(
+    'osmType',
+  );
+  @override
+  late final GeneratedColumn<String> osmType = GeneratedColumn<String>(
+    'osm_type',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _osmIdMeta = const VerificationMeta('osmId');
+  @override
+  late final GeneratedColumn<int> osmId = GeneratedColumn<int>(
+    'osm_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -7096,6 +7116,8 @@ class $PoiPointsTable extends PoiPoints
     name,
     sortOrder,
     createdAt,
+    osmType,
+    osmId,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -7158,6 +7180,18 @@ class $PoiPointsTable extends PoiPoints
         createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
       );
     }
+    if (data.containsKey('osm_type')) {
+      context.handle(
+        _osmTypeMeta,
+        osmType.isAcceptableOrUnknown(data['osm_type']!, _osmTypeMeta),
+      );
+    }
+    if (data.containsKey('osm_id')) {
+      context.handle(
+        _osmIdMeta,
+        osmId.isAcceptableOrUnknown(data['osm_id']!, _osmIdMeta),
+      );
+    }
     return context;
   }
 
@@ -7195,6 +7229,14 @@ class $PoiPointsTable extends PoiPoints
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      osmType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}osm_type'],
+      ),
+      osmId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}osm_id'],
+      ),
     );
   }
 
@@ -7212,6 +7254,18 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
   final String? name;
   final int sortOrder;
   final DateTime createdAt;
+
+  /// The OSM element this POI came from, so a second import over overlapping
+  /// ground can recognise it (v21). **Both** parts are needed: ids are only
+  /// unique *within* a type, so node 240109189 and way 240109189 are different
+  /// things.
+  ///
+  /// Nullable because rows imported before v21 never recorded it, and a
+  /// backfill is impossible — the id was not merely unstored, it was never
+  /// fetched. An unidentified row simply doesn't participate in dedup; see
+  /// [Repository.addPoiPoints].
+  final String? osmType;
+  final int? osmId;
   const PoiPoint({
     required this.id,
     required this.poiSetId,
@@ -7220,6 +7274,8 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
     this.name,
     required this.sortOrder,
     required this.createdAt,
+    this.osmType,
+    this.osmId,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -7233,6 +7289,12 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
     }
     map['sort_order'] = Variable<int>(sortOrder);
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || osmType != null) {
+      map['osm_type'] = Variable<String>(osmType);
+    }
+    if (!nullToAbsent || osmId != null) {
+      map['osm_id'] = Variable<int>(osmId);
+    }
     return map;
   }
 
@@ -7245,6 +7307,12 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
       name: name == null && nullToAbsent ? const Value.absent() : Value(name),
       sortOrder: Value(sortOrder),
       createdAt: Value(createdAt),
+      osmType: osmType == null && nullToAbsent
+          ? const Value.absent()
+          : Value(osmType),
+      osmId: osmId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(osmId),
     );
   }
 
@@ -7261,6 +7329,8 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
       name: serializer.fromJson<String?>(json['name']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      osmType: serializer.fromJson<String?>(json['osmType']),
+      osmId: serializer.fromJson<int?>(json['osmId']),
     );
   }
   @override
@@ -7274,6 +7344,8 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
       'name': serializer.toJson<String?>(name),
       'sortOrder': serializer.toJson<int>(sortOrder),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'osmType': serializer.toJson<String?>(osmType),
+      'osmId': serializer.toJson<int?>(osmId),
     };
   }
 
@@ -7285,6 +7357,8 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
     Value<String?> name = const Value.absent(),
     int? sortOrder,
     DateTime? createdAt,
+    Value<String?> osmType = const Value.absent(),
+    Value<int?> osmId = const Value.absent(),
   }) => PoiPoint(
     id: id ?? this.id,
     poiSetId: poiSetId ?? this.poiSetId,
@@ -7293,6 +7367,8 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
     name: name.present ? name.value : this.name,
     sortOrder: sortOrder ?? this.sortOrder,
     createdAt: createdAt ?? this.createdAt,
+    osmType: osmType.present ? osmType.value : this.osmType,
+    osmId: osmId.present ? osmId.value : this.osmId,
   );
   PoiPoint copyWithCompanion(PoiPointsCompanion data) {
     return PoiPoint(
@@ -7303,6 +7379,8 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
       name: data.name.present ? data.name.value : this.name,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      osmType: data.osmType.present ? data.osmType.value : this.osmType,
+      osmId: data.osmId.present ? data.osmId.value : this.osmId,
     );
   }
 
@@ -7315,14 +7393,25 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
           ..write('lng: $lng, ')
           ..write('name: $name, ')
           ..write('sortOrder: $sortOrder, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('osmType: $osmType, ')
+          ..write('osmId: $osmId')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, poiSetId, lat, lng, name, sortOrder, createdAt);
+  int get hashCode => Object.hash(
+    id,
+    poiSetId,
+    lat,
+    lng,
+    name,
+    sortOrder,
+    createdAt,
+    osmType,
+    osmId,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -7333,7 +7422,9 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
           other.lng == this.lng &&
           other.name == this.name &&
           other.sortOrder == this.sortOrder &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.osmType == this.osmType &&
+          other.osmId == this.osmId);
 }
 
 class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
@@ -7344,6 +7435,8 @@ class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
   final Value<String?> name;
   final Value<int> sortOrder;
   final Value<DateTime> createdAt;
+  final Value<String?> osmType;
+  final Value<int?> osmId;
   final Value<int> rowid;
   const PoiPointsCompanion({
     this.id = const Value.absent(),
@@ -7353,6 +7446,8 @@ class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
     this.name = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.osmType = const Value.absent(),
+    this.osmId = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   PoiPointsCompanion.insert({
@@ -7363,6 +7458,8 @@ class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
     this.name = const Value.absent(),
     required int sortOrder,
     this.createdAt = const Value.absent(),
+    this.osmType = const Value.absent(),
+    this.osmId = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        poiSetId = Value(poiSetId),
@@ -7377,6 +7474,8 @@ class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
     Expression<String>? name,
     Expression<int>? sortOrder,
     Expression<DateTime>? createdAt,
+    Expression<String>? osmType,
+    Expression<int>? osmId,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -7387,6 +7486,8 @@ class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
       if (name != null) 'name': name,
       if (sortOrder != null) 'sort_order': sortOrder,
       if (createdAt != null) 'created_at': createdAt,
+      if (osmType != null) 'osm_type': osmType,
+      if (osmId != null) 'osm_id': osmId,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -7399,6 +7500,8 @@ class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
     Value<String?>? name,
     Value<int>? sortOrder,
     Value<DateTime>? createdAt,
+    Value<String?>? osmType,
+    Value<int?>? osmId,
     Value<int>? rowid,
   }) {
     return PoiPointsCompanion(
@@ -7409,6 +7512,8 @@ class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
       name: name ?? this.name,
       sortOrder: sortOrder ?? this.sortOrder,
       createdAt: createdAt ?? this.createdAt,
+      osmType: osmType ?? this.osmType,
+      osmId: osmId ?? this.osmId,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -7437,6 +7542,12 @@ class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (osmType.present) {
+      map['osm_type'] = Variable<String>(osmType.value);
+    }
+    if (osmId.present) {
+      map['osm_id'] = Variable<int>(osmId.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -7453,6 +7564,8 @@ class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
           ..write('name: $name, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('createdAt: $createdAt, ')
+          ..write('osmType: $osmType, ')
+          ..write('osmId: $osmId, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -17987,6 +18100,8 @@ typedef $$PoiPointsTableCreateCompanionBuilder =
       Value<String?> name,
       required int sortOrder,
       Value<DateTime> createdAt,
+      Value<String?> osmType,
+      Value<int?> osmId,
       Value<int> rowid,
     });
 typedef $$PoiPointsTableUpdateCompanionBuilder =
@@ -17998,6 +18113,8 @@ typedef $$PoiPointsTableUpdateCompanionBuilder =
       Value<String?> name,
       Value<int> sortOrder,
       Value<DateTime> createdAt,
+      Value<String?> osmType,
+      Value<int?> osmId,
       Value<int> rowid,
     });
 
@@ -18059,6 +18176,16 @@ class $$PoiPointsTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get osmType => $composableBuilder(
+    column: $table.osmType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get osmId => $composableBuilder(
+    column: $table.osmId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -18125,6 +18252,16 @@ class $$PoiPointsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get osmType => $composableBuilder(
+    column: $table.osmType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get osmId => $composableBuilder(
+    column: $table.osmId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$PoiSetsTableOrderingComposer get poiSetId {
     final $$PoiSetsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -18175,6 +18312,12 @@ class $$PoiPointsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<String> get osmType =>
+      $composableBuilder(column: $table.osmType, builder: (column) => column);
+
+  GeneratedColumn<int> get osmId =>
+      $composableBuilder(column: $table.osmId, builder: (column) => column);
 
   $$PoiSetsTableAnnotationComposer get poiSetId {
     final $$PoiSetsTableAnnotationComposer composer = $composerBuilder(
@@ -18235,6 +18378,8 @@ class $$PoiPointsTableTableManager
                 Value<String?> name = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<String?> osmType = const Value.absent(),
+                Value<int?> osmId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PoiPointsCompanion(
                 id: id,
@@ -18244,6 +18389,8 @@ class $$PoiPointsTableTableManager
                 name: name,
                 sortOrder: sortOrder,
                 createdAt: createdAt,
+                osmType: osmType,
+                osmId: osmId,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -18255,6 +18402,8 @@ class $$PoiPointsTableTableManager
                 Value<String?> name = const Value.absent(),
                 required int sortOrder,
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<String?> osmType = const Value.absent(),
+                Value<int?> osmId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PoiPointsCompanion.insert(
                 id: id,
@@ -18264,6 +18413,8 @@ class $$PoiPointsTableTableManager
                 name: name,
                 sortOrder: sortOrder,
                 createdAt: createdAt,
+                osmType: osmType,
+                osmId: osmId,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

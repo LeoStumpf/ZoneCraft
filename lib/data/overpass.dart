@@ -165,12 +165,23 @@ class PoiResult {
     required this.lng,
     required this.categoryKey,
     this.name,
+    this.osmType,
+    this.osmId,
   });
 
   final double lat;
   final double lng;
   final String categoryKey;
   final String? name;
+
+  /// Which OSM element this came from — `node` / `way` / `relation` plus the
+  /// id. Kept so a later import over the same ground can tell it is the same
+  /// thing; **both** parts matter, because ids are only unique within a type.
+  ///
+  /// Null when Overpass didn't say (and on anything decoded from the old cache
+  /// format), which costs that POI nothing except a place in the dedup check.
+  final String? osmType;
+  final int? osmId;
 }
 
 /// Encodes [pois] to a compact JSON string for the persistent overlay cache.
@@ -181,6 +192,8 @@ String encodePoiResults(Iterable<PoiResult> pois) => jsonEncode([
           'lng': p.lng,
           'k': p.categoryKey,
           if (p.name != null) 'n': p.name,
+          if (p.osmType != null) 't': p.osmType,
+          if (p.osmId != null) 'i': p.osmId,
         },
     ]);
 
@@ -201,6 +214,8 @@ List<PoiResult> decodePoiResults(String json) {
     final lng = (e['lng'] as num?)?.toDouble();
     final k = e['k'];
     final n = e['n'];
+    final t = e['t'];
+    final i = e['i'];
     if (lat == null || lng == null || k is! String) continue;
     if (!lat.isFinite || !lng.isFinite) continue;
     out.add(PoiResult(
@@ -208,6 +223,9 @@ List<PoiResult> decodePoiResults(String json) {
       lng: lng,
       categoryKey: k,
       name: n is String ? n : null,
+      // Absent in anything written before v21; the POI still decodes.
+      osmType: t is String ? t : null,
+      osmId: i is num ? i.toInt() : null,
     ));
   }
   return out;
@@ -278,8 +296,19 @@ List<PoiResult> parseOverpassResponse(
       if (n is String && n.trim().isNotEmpty) name = n.trim();
     }
     if (matched == null) continue; // unknown element -> skip
+    // `type` + `id` identify the element for re-import dedup. Overpass always
+    // sends both; treat either being missing as "unidentified" rather than
+    // inventing half a key, since a half key would collide across types.
+    final type = e['type'];
+    final id = e['id'];
     out.add(PoiResult(
-        lat: lat, lng: lng, categoryKey: matched.key, name: name));
+      lat: lat,
+      lng: lng,
+      categoryKey: matched.key,
+      name: name,
+      osmType: type is String ? type : null,
+      osmId: id is num ? id.toInt() : null,
+    ));
   }
   return out;
 }

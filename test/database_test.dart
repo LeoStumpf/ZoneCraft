@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 
 import 'package:zonecraft/data/database.dart';
+import 'package:zonecraft/data/overpass.dart' show PoiResult;
 import 'package:zonecraft/data/repository.dart';
 import 'package:zonecraft/data/serialization.dart';
 import 'package:zonecraft/data/transit.dart';
@@ -274,8 +275,8 @@ void main() {
       label: 'Cafés',
     );
     await repo.addPoiPoints(sid, [
-      (lat: 48.11, lng: 11.51, name: 'Café A'),
-      (lat: 48.09, lng: 11.49, name: null),
+      PoiResult(lat: 48.11, lng: 11.51, categoryKey: 'cafe', name: 'Café A'),
+      PoiResult(lat: 48.09, lng: 11.49, categoryKey: 'cafe', name: null),
     ]);
     expect((await repo.watchAllPoiSets().first).length, 1);
     expect((await repo.watchAllPoiPoints().first).length, 2);
@@ -304,8 +305,8 @@ void main() {
       label: 'Benches',
     );
     await repo.addPoiPoints(sid, [
-      (lat: 48.001, lng: 11.001, name: 'Park bench'),
-      (lat: 47.999, lng: 10.999, name: null),
+      PoiResult(lat: 48.001, lng: 11.001, categoryKey: 'bench', name: 'Park bench'),
+      PoiResult(lat: 47.999, lng: 10.999, categoryKey: 'bench', name: null),
     ]);
 
     final data = await repo.exportData(onlyLayerId: layerId);
@@ -548,49 +549,59 @@ void main() {
 
   // --- borders (schema v20) ---------------------------------------------------
 
+  /// One area of the shape `addBorderSet` takes, with a 4-point square ring.
+  ({
+    int osmId,
+    String? name,
+    double south,
+    double west,
+    double north,
+    double east,
+    double labelLat,
+    double labelLng,
+    int pointCount,
+    String rings,
+    List<int> wayIds,
+  }) borderArea(int id, String name, [List<int> wayIds = const []]) => (
+        osmId: id,
+        name: name,
+        south: 48.0,
+        west: 11.0,
+        north: 48.1,
+        east: 11.1,
+        labelLat: 48.05,
+        labelLng: 11.05,
+        pointCount: 4,
+        rings: '[[[48.0,11.0],[48.0,11.1],[48.1,11.1],[48.1,11.0]]]',
+        wayIds: wayIds,
+      );
+
   /// Two municipalities sharing way 100, plus a detached third — enough for the
   /// colouring to have something to say.
-  Future<String> seedBorders(String layerId, {String? label}) {
-    ({
-      int osmId,
-      String? name,
-      double south,
-      double west,
-      double north,
-      double east,
-      double labelLat,
-      double labelLng,
-      int pointCount,
-      String rings,
-      List<int> wayIds,
-    }) area(int id, String name, List<int> wayIds) => (
-          osmId: id,
-          name: name,
-          south: 48.0,
-          west: 11.0,
-          north: 48.1,
-          east: 11.1,
-          labelLat: 48.05,
-          labelLng: 11.05,
-          pointCount: 4,
-          rings: '[[[48.0,11.0],[48.0,11.1],[48.1,11.1],[48.1,11.0]]]',
-          wayIds: wayIds,
-        );
-    return repo.addBorderSet(
-      layerId: layerId,
-      south: 48.0,
-      west: 11.0,
-      north: 48.2,
-      east: 11.3,
-      adminLevel: '8',
-      label: label,
-      areas: [
-        area(1, 'München', [100, 101]),
-        area(2, 'Germering', [100, 102]),
-        area(3, 'Far away', [900]),
-      ],
-    );
-  }
+  Future<({String setId, ImportTally tally})> seedBordersResult(
+    String layerId, {
+    String? label,
+  }) =>
+      repo.addBorderSet(
+        layerId: layerId,
+        south: 48.0,
+        west: 11.0,
+        north: 48.2,
+        east: 11.3,
+        adminLevel: '8',
+        label: label,
+        areas: [
+          borderArea(1, 'München', [100, 101]),
+          borderArea(2, 'Germering', [100, 102]),
+          borderArea(3, 'Far away', [900]),
+        ],
+      );
+
+  Future<String> seedBorders(String layerId, {String? label}) async =>
+      (await seedBordersResult(layerId, label: label)).setId;
+
+  Future<ImportTally> seedBordersTally(String layerId) async =>
+      (await seedBordersResult(layerId)).tally;
 
   test('an import stores areas with their geometry and counts', () async {
     final layerId = await repo.createLayer(
@@ -828,5 +839,246 @@ void main() {
 
     // Re-importing yields an empty borders layer, not a broken one.
     expect(await repo.importData(data), 0);
+  });
+
+  // --- re-import dedup (schema v21) -------------------------------------------
+
+  /// Overlapping imports used to store the same element twice, so it was drawn
+  /// twice: the reported symptom was a suburb rendering doubled where two
+  /// border boxes met. Identity is `type/id`, scoped to the **layer**, and the
+  /// first copy wins.
+
+  group('borders dedup', () {
+    Future<String> layer() => repo.createLayer(
+        name: 'B', colorArgb: 0xFF123456, type: 'borders', borderLevel: '8');
+
+    test('an overlapping second import stores only what is new', () async {
+      final layerId = await layer();
+      await seedBorders(layerId);
+      // The same three relations plus one genuinely new one — exactly what an
+      // overlapping box returns, since whole relations come down each time.
+      final second = await repo.addBorderSet(
+        layerId: layerId,
+        south: 48.0,
+        west: 11.0,
+        north: 48.2,
+        east: 11.3,
+        adminLevel: '8',
+        areas: [
+          borderArea(1, 'München'),
+          borderArea(2, 'Germering'),
+          borderArea(3, 'Far away'),
+          borderArea(4, 'Dachau'),
+        ],
+      );
+
+      expect(second.tally.added, 1);
+      expect(second.tally.skipped, 3);
+      final areas = await repo.watchAllBorderAreas().first;
+      expect(areas.map((a) => a.osmId).toList()..sort(), [1, 2, 3, 4]);
+      expect(areas.where((a) => a.osmId == 1), hasLength(1),
+          reason: 'München must not be stored twice');
+    });
+
+    test('the set records only the areas it actually kept', () async {
+      final layerId = await layer();
+      await seedBorders(layerId);
+      final second = await repo.addBorderSet(
+        layerId: layerId,
+        south: 48.0,
+        west: 11.0,
+        north: 48.2,
+        east: 11.3,
+        adminLevel: '8',
+        areas: [borderArea(1, 'München'), borderArea(9, 'New')],
+      );
+      final set = (await repo.watchAllBorderSets().first)
+          .firstWhere((s) => s.id == second.setId);
+      expect(set.areaCount, 1);
+      expect(set.pointCount, 4, reason: 'points follow the kept areas');
+    });
+
+    test('another layer may deliberately hold the same areas', () async {
+      final a = await layer();
+      final b = await layer();
+      await seedBorders(a);
+      final second = await seedBordersTally(b);
+      expect(second.skipped, 0,
+          reason: 'dedup is per layer — two layers holding Munich is a '
+              'legitimate thing to want');
+    });
+
+    test('an import of nothing but duplicates is reported, not silent',
+        () async {
+      final layerId = await layer();
+      await seedBorders(layerId);
+      final second = await seedBordersTally(layerId);
+      expect(second.added, 0);
+      expect(second.skipped, 3);
+      expect(second.allSkipped, isTrue);
+    });
+  });
+
+  group('transit dedup', () {
+    ({
+      int osmId,
+      double lat,
+      double lng,
+      String? name,
+      int modeMask,
+      int nodeCount,
+      String? routeRef,
+    }) stop(int id, String name) => (
+          osmId: id,
+          lat: 48.1,
+          lng: 11.5,
+          name: name,
+          modeMask: 1,
+          nodeCount: 1,
+          routeRef: null,
+        );
+
+    Future<String> pendingSet(String layerId) => repo.createPendingTransitSet(
+          layerId: layerId,
+          south: 48.0,
+          west: 11.0,
+          north: 48.2,
+          east: 11.3,
+          modeMask: -1,
+          visibleModeMask: -1,
+        );
+
+    test('a station already on the layer is not stored again', () async {
+      final layerId =
+          await repo.createLayer(name: 'T', colorArgb: 1, type: 'transit');
+      final first = await pendingSet(layerId);
+      await repo.fillTransitSet(first, [stop(1, 'Pasing'), stop(2, 'Laim')]);
+
+      final second = await pendingSet(layerId);
+      final tally = await repo
+          .fillTransitSet(second, [stop(2, 'Laim'), stop(3, 'Hbf')]);
+
+      expect(tally.added, 1);
+      expect(tally.skipped, 1);
+      final stops = await repo.watchAllTransitStops().first;
+      expect(stops.map((s) => s.osmId).toList()..sort(), [1, 2, 3]);
+    });
+
+    test('a retry of the same set does not dedup against itself', () async {
+      // The set is refilled in place, so its own previous rows must not count
+      // as "already here" — otherwise every retry would import nothing.
+      final layerId =
+          await repo.createLayer(name: 'T', colorArgb: 1, type: 'transit');
+      final setId = await pendingSet(layerId);
+      await repo.fillTransitSet(setId, [stop(1, 'Pasing'), stop(2, 'Laim')]);
+
+      final again = await repo
+          .fillTransitSet(setId, [stop(1, 'Pasing'), stop(2, 'Laim')]);
+
+      expect(again.added, 2);
+      expect(again.skipped, 0);
+      expect(await repo.watchAllTransitStops().first, hasLength(2));
+    });
+
+    test('the stored counts follow what was kept', () async {
+      final layerId =
+          await repo.createLayer(name: 'T', colorArgb: 1, type: 'transit');
+      await repo.fillTransitSet(await pendingSet(layerId), [stop(1, 'Pasing')]);
+      final second = await pendingSet(layerId);
+      await repo.fillTransitSet(second, [stop(1, 'Pasing'), stop(2, 'Laim')]);
+
+      final set = (await repo.watchAllTransitSets().first)
+          .firstWhere((s) => s.id == second);
+      expect(set.stationCount, 1);
+      expect(set.nodeCount, 1);
+    });
+  });
+
+  group('poi dedup', () {
+    Future<String> setOn(String layerId) => repo.createPoiSet(
+          layerId: layerId,
+          categoryKey: 'cafe',
+          centerLat: 48.1,
+          centerLng: 11.5,
+          radiusMeters: 1500,
+        );
+
+    PoiResult poi(String type, int id, String name) => PoiResult(
+          lat: 48.1,
+          lng: 11.5,
+          categoryKey: 'cafe',
+          name: name,
+          osmType: type,
+          osmId: id,
+        );
+
+    test('the same OSM element is stored once per layer', () async {
+      final layerId =
+          await repo.createLayer(name: 'P', colorArgb: 1, type: 'poi');
+      await repo.addPoiPoints(
+          await setOn(layerId), [poi('node', 1, 'A'), poi('node', 2, 'B')]);
+
+      final tally = await repo.addPoiPoints(
+          await setOn(layerId), [poi('node', 2, 'B'), poi('node', 3, 'C')]);
+
+      expect(tally.added, 1);
+      expect(tally.skipped, 1);
+      expect(await repo.watchAllPoiPoints().first, hasLength(3));
+    });
+
+    test('a node and a way sharing an id are different things', () async {
+      // Ids repeat across element types, so identity has to be type + id.
+      // Keying on the id alone would silently drop the way.
+      final layerId =
+          await repo.createLayer(name: 'P', colorArgb: 1, type: 'poi');
+      final tally = await repo.addPoiPoints(await setOn(layerId), [
+        poi('node', 240109189, 'A café'),
+        poi('way', 240109189, 'A café building'),
+      ]);
+
+      expect(tally.added, 2);
+      expect(tally.skipped, 0);
+    });
+
+    test('POIs with no OSM identity are always kept', () async {
+      // Rows written before v21, and anything imported from a file, carry no
+      // id. Guessing one from coordinates would merge two genuinely different
+      // POIs that share a doorway, so they simply sit outside the check.
+      final layerId =
+          await repo.createLayer(name: 'P', colorArgb: 1, type: 'poi');
+      const anonymous = PoiResult(lat: 48.1, lng: 11.5, categoryKey: 'cafe');
+      final tally =
+          await repo.addPoiPoints(await setOn(layerId), [anonymous, anonymous]);
+
+      expect(tally.added, 2);
+      expect(tally.skipped, 0);
+    });
+
+    test('duplicates inside one response are collapsed too', () async {
+      final layerId =
+          await repo.createLayer(name: 'P', colorArgb: 1, type: 'poi');
+      final tally = await repo.addPoiPoints(
+          await setOn(layerId), [poi('node', 7, 'A'), poi('node', 7, 'A')]);
+
+      expect(tally.added, 1);
+      expect(tally.skipped, 1);
+    });
+
+    test('sort order stays contiguous after a skip', () async {
+      // It indexes what was kept, not what was offered — a gap would reorder
+      // the markers against the list.
+      final layerId =
+          await repo.createLayer(name: 'P', colorArgb: 1, type: 'poi');
+      await repo.addPoiPoints(await setOn(layerId), [poi('node', 1, 'A')]);
+      await repo.addPoiPoints(await setOn(layerId),
+          [poi('node', 1, 'A'), poi('node', 2, 'B'), poi('node', 3, 'C')]);
+
+      final second = (await repo.watchAllPoiSets().first).last;
+      final pts = (await repo.watchAllPoiPoints().first)
+          .where((p) => p.poiSetId == second.id)
+          .toList()
+        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+      expect(pts.map((p) => p.sortOrder), [0, 1]);
+    });
   });
 }
