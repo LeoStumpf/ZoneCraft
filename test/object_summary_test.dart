@@ -407,4 +407,36 @@ void main() {
       expect(rows.single.fitPoints.last.longitude, 11.6);
     });
   });
+
+  group('layerHasEditor', () {
+    // One definition, because the Elements list and the map's Edit mode both
+    // consult it — and when each had its own, Edit mode stayed armed over types
+    // that can never be selected.
+
+    test('the region types are editable', () {
+      for (final type in [
+        'circles',
+        'planes',
+        'subspace',
+        'freeline',
+        'freearea',
+        'height',
+      ]) {
+        expect(layerHasEditor(type), isTrue, reason: type);
+      }
+    });
+
+    test('the imported snapshots are not', () {
+      for (final type in ['poi', 'transit', 'borders']) {
+        expect(layerHasEditor(type), isFalse, reason: type);
+      }
+    });
+
+    test('an unknown type falls back to editable, like typeIcon does', () {
+      // Both default to the circle case, so a type added to the schema but not
+      // here behaves like a normal region layer rather than silently losing its
+      // editor.
+      expect(layerHasEditor('something-new'), isTrue);
+    });
+  });
 }

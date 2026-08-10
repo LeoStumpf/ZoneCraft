@@ -82,10 +82,15 @@ String formatBytes(int bytes) {
 /// caller's untargeted `Navigator.pop()` popped the map screen itself. The
 /// `PopScope` closes that hole, and the caller pops via the returned handle
 /// rather than the ambient context.
+///
+/// [onCancel] adds a Cancel button and points the back gesture at it. The route
+/// still never pops itself — cancelling asks the *import* to stop, and the
+/// caller closes this dialog when it has, so the two can't get out of step.
 ImportProgress showImportProgress(
   BuildContext context, {
   required String title,
   required String message,
+  VoidCallback? onCancel,
 }) {
   final navigator = Navigator.of(context, rootNavigator: true);
   final notifier = ValueNotifier<String>(message);
@@ -95,17 +100,29 @@ ImportProgress showImportProgress(
     useRootNavigator: true,
     builder: (_) => PopScope(
       canPop: false,
-      child: _ImportProgressDialog(title: title, message: notifier),
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) onCancel?.call();
+      },
+      child: _ImportProgressDialog(
+        title: title,
+        message: notifier,
+        onCancel: onCancel,
+      ),
     ),
   );
   return ImportProgress._(notifier, navigator.pop);
 }
 
 class _ImportProgressDialog extends StatefulWidget {
-  const _ImportProgressDialog({required this.title, required this.message});
+  const _ImportProgressDialog({
+    required this.title,
+    required this.message,
+    this.onCancel,
+  });
 
   final String title;
   final ValueNotifier<String> message;
+  final VoidCallback? onCancel;
 
   @override
   State<_ImportProgressDialog> createState() => _ImportProgressDialogState();
@@ -114,6 +131,11 @@ class _ImportProgressDialog extends StatefulWidget {
 class _ImportProgressDialogState extends State<_ImportProgressDialog> {
   final _elapsed = Stopwatch()..start();
   Timer? _tick;
+
+  /// Cancelling isn't instant — a request already on the wire has to be let go
+  /// of, and a `compute()` isolate has to finish. Saying so beats a button that
+  /// stays live and looks ignored.
+  var _cancelRequested = false;
 
   @override
   void initState() {
@@ -169,6 +191,19 @@ class _ImportProgressDialogState extends State<_ImportProgressDialog> {
           ),
         ],
       ),
+      actions: widget.onCancel == null
+          ? null
+          : [
+              TextButton(
+                onPressed: _cancelRequested
+                    ? null
+                    : () {
+                        setState(() => _cancelRequested = true);
+                        widget.onCancel!.call();
+                      },
+                child: Text(_cancelRequested ? 'Cancelling…' : 'Cancel'),
+              ),
+            ],
     );
   }
 }

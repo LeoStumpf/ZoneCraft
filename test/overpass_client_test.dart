@@ -31,6 +31,7 @@ void main() {
     int? maxBytes,
     Duration timeout = const Duration(seconds: 30),
     OverpassProgressCallback? onProgress,
+    OverpassCancel? cancel,
   }) =>
       overpassPost<String>(
         'query',
@@ -39,6 +40,7 @@ void main() {
         maxBytes: maxBytes,
         preferEndpoint: prefer,
         onProgress: onProgress,
+        cancel: cancel,
         parse: (body) => body.contains('elements') ? body : null,
       );
 
@@ -197,6 +199,109 @@ void main() {
       final out = await post(mock((_) async => http.Response('nope', 200)));
       expect(out.ok, isFalse);
       expect(out.message, contains('could not read'));
+    });
+  });
+
+  group('cancellation', () {
+    // The button exists because a public instance can sit on a request for a
+    // minute. So what matters is not that cancelling *eventually* works, but
+    // that it works at each point the request waits — miss one and Cancel is
+    // indistinguishable from a dead button for as long as that wait lasts.
+
+    test('a cancelled request is not a failed one', () async {
+      final cancel = OverpassCancel()..cancel();
+      var calls = 0;
+      final out = await post(
+        mock((_) async {
+          calls++;
+          return http.Response(ok, 200);
+        }),
+        cancel: cancel,
+      );
+      expect(out.cancelled, isTrue);
+      expect(out.ok, isFalse);
+      expect(out.message, isNull,
+          reason: 'callers must read `cancelled` before `message!`');
+      expect(calls, 0, reason: 'cancelled before the wire, so nothing was sent');
+    });
+
+    test('cancelling while an instance is silent gives up immediately',
+        () async {
+      final cancel = OverpassCancel();
+      // Cancelling has to be tested *on the wire*, not while queued behind the
+      // shared pacer — which is a different (also covered) code path.
+      final onTheWire = Completer<void>();
+      var calls = 0;
+      final future = post(
+        mock((_) async {
+          calls++;
+          if (!onTheWire.isCompleted) onTheWire.complete();
+          // Longer than the test could tolerate: only the cancel can end this.
+          await Future<void>.delayed(const Duration(seconds: 30));
+          return http.Response(ok, 200);
+        }),
+        cancel: cancel,
+      );
+      await onTheWire.future;
+      final elapsed = Stopwatch()..start();
+      cancel.cancel();
+      final out = await future.timeout(const Duration(seconds: 5));
+      elapsed.stop();
+      expect(out.cancelled, isTrue);
+      expect(calls, 1, reason: 'it must not fail over to the next instance');
+      expect(elapsed.elapsed, lessThan(const Duration(seconds: 1)),
+          reason: 'waiting out the 30 s silence is exactly what Cancel is for');
+    });
+
+    test('cancelling mid-download stops reading the body', () async {
+      final cancel = OverpassCancel();
+      final chunks = StreamController<List<int>>();
+      var delivered = 0;
+      final client = MockClient.streaming((request, _) async {
+        return http.StreamedResponse(chunks.stream, 200, request: request);
+      });
+      final future = post(client, cancel: cancel, onProgress: (p) {
+        if (p.stage == OverpassStage.downloading) {
+          delivered = p.bytes;
+          cancel.cancel();
+        }
+      });
+      chunks.add(utf8.encode('x' * 1024));
+      final out = await future.timeout(const Duration(seconds: 5));
+      expect(out.cancelled, isTrue);
+      expect(delivered, 1024, reason: 'it got that far, then stopped');
+      await chunks.close();
+    });
+
+    test('cancelling during the retry pause does not wait it out', () async {
+      final cancel = OverpassCancel();
+      final rejected = Completer<void>();
+      var calls = 0;
+      final future = post(
+        mock((_) async {
+          calls++;
+          if (!rejected.isCompleted) rejected.complete();
+          // A fast rejection, which normally means "retry this same instance
+          // after _retryDelay".
+          return http.Response('busy', 504);
+        }),
+        cancel: cancel,
+      );
+      await rejected.future;
+      final elapsed = Stopwatch()..start();
+      cancel.cancel();
+      final out = await future.timeout(const Duration(seconds: 5));
+      elapsed.stop();
+      expect(out.cancelled, isTrue);
+      expect(calls, 1, reason: 'the queued retry must not go out');
+      expect(elapsed.elapsed, lessThan(const Duration(seconds: 2)),
+          reason: 'the 2 s retry pause has to be interruptible');
+    });
+
+    test('without a token the transport behaves exactly as before', () async {
+      final out = await post(mock((_) async => http.Response(ok, 200)));
+      expect(out.ok, isTrue);
+      expect(out.cancelled, isFalse);
     });
   });
 

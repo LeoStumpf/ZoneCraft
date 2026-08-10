@@ -316,6 +316,7 @@ Future<OverpassOutcome<List<BorderRelationData>>> fetchBorderAreas({
   http.Client? client,
   String? preferEndpoint,
   OverpassProgressCallback? onProgress,
+  OverpassCancel? cancel,
 }) {
   return overpassPost(
     buildBorderAreasQuery(
@@ -333,6 +334,7 @@ Future<OverpassOutcome<List<BorderRelationData>>> fetchBorderAreas({
         'level.',
     preferEndpoint: preferEndpoint,
     onProgress: onProgress,
+    cancel: cancel,
     parse: parseBorderRelations,
   );
 }

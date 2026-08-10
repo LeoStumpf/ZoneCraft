@@ -11,6 +11,7 @@ import '../data/serialization.dart';
 import '../data/tile_source.dart';
 import '../geo/coords.dart';
 import '../state/providers.dart';
+import 'about_screen.dart';
 import 'import_actions.dart';
 
 /// App-wide settings. Currently just the global uncertainty radius, applied as
@@ -322,6 +323,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               style: OutlinedButton.styleFrom(
                 foregroundColor: Theme.of(context).colorScheme.error,
               ),
+            ),
+          ),
+          const Divider(height: 48),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.info_outline),
+            title: const Text('About ZoneCraft'),
+            subtitle: const Text(
+              'Version, the services it contacts, and what it deliberately '
+              'will not do',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const AboutScreen()),
             ),
           ),
         ],

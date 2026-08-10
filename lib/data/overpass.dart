@@ -347,6 +347,7 @@ Future<OverpassOutcome<List<PoiResult>>> fetchPois({
   http.Client? client,
   String? preferEndpoint,
   OverpassProgressCallback? onProgress,
+  OverpassCancel? cancel,
 }) {
   final cats = categories.toList();
   if (cats.isEmpty) return Future.value(const OverpassOutcome.ok(<PoiResult>[]));
@@ -365,6 +366,7 @@ Future<OverpassOutcome<List<PoiResult>>> fetchPois({
         'radius.',
     preferEndpoint: preferEndpoint,
     onProgress: onProgress,
+    cancel: cancel,
     parse: (body) => parseOverpassResponse(body, cats),
   );
 }

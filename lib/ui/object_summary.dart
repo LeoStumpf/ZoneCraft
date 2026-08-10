@@ -80,6 +80,17 @@ IconData typeIcon(String layerType) => switch (layerType) {
       _ => Icons.circle_outlined,
     };
 
+/// Whether a `Layers.type` has an editor at all.
+///
+/// The three import types are offline OSM snapshots: they have no editor sheet
+/// (`state/providers.dart` refuses to select them) and a tap on one can only
+/// ever frame it. One definition, because the Elements list and the map's Edit
+/// mode both have to agree — when they didn't, Edit mode armed tap-to-select
+/// against types nothing could select, which is a button that visibly does
+/// nothing.
+bool layerHasEditor(String layerType) =>
+    !const {'poi', 'transit', 'borders'}.contains(layerType);
+
 /// Formats a ground distance for display: metres below 1 km, then kilometres.
 String formatMeters(double meters) {
   if (!meters.isFinite) return '—';

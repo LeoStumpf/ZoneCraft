@@ -82,7 +82,7 @@ class _LayerObjectsList extends ConsumerWidget {
     );
     // Imports (POI, transit, borders) have no editor sheet, so their row taps
     // frame the object instead of selecting it.
-    final canEdit = !const {'poi', 'transit', 'borders'}.contains(layer.type);
+    final canEdit = layerHasEditor(layer.type);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

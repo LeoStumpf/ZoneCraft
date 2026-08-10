@@ -17,7 +17,7 @@ import '../data/database.dart';
 import '../data/height_generator.dart';
 import '../data/overpass.dart';
 import '../data/overpass_client.dart'
-    show OverpassOutcome, kOverpassPreferenceMaxElapsed;
+    show OverpassCancel, OverpassOutcome, kOverpassPreferenceMaxElapsed;
 import '../data/repository.dart' show Repository;
 import '../data/tile_source.dart';
 import '../data/transit.dart';
@@ -1207,10 +1207,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
     // Same spinner transit and borders use: a public Overpass instance can sit
     // on a request for a minute, and an unexplained frozen UI is what that
     // looked like before.
+    final cancel = OverpassCancel();
     final progress = showImportProgress(
       context,
       title: 'Importing ${config.category.label.toLowerCase()}',
       message: 'Preparing the query…',
+      onCancel: cancel.cancel,
     );
     final repoForEndpoint = ref.read(repositoryProvider);
     final settings = ref.read(settingsProvider).asData?.value;
@@ -1226,11 +1228,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
         client: _tileClient,
         preferEndpoint: settings?.transitEndpoint,
         onProgress: progress.report,
+        cancel: cancel,
       );
     } finally {
       progress.close(); // idempotent; guarantees the spinner never sticks
     }
     if (!mounted) return;
+    if (outcome.cancelled) {
+      _hint('Import cancelled.');
+      return;
+    }
     if (!outcome.ok) {
       _hint(outcome.message!);
       return;
@@ -1418,12 +1425,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
     // The handle is captured, so the spinner is dismissed by identity rather
     // than by popping whatever happens to be on top of the ambient navigator.
+    final cancel = OverpassCancel();
     final progress = showImportProgress(
       context,
       title: 'Importing transit stations',
       message: diagonalMeters > kTransitRegionalMaxMeters
           ? 'A large area can take a minute…'
           : 'Preparing the query…',
+      onCancel: cancel.cancel,
     );
     final elapsed = Stopwatch()..start();
     try {
@@ -1437,8 +1446,19 @@ class _MapScreenState extends ConsumerState<MapScreen>
         client: _tileClient,
         preferEndpoint: settings?.transitEndpoint,
         onProgress: progress.report,
+        cancel: cancel,
       );
 
+      if (outcome.cancelled) {
+        // Nothing went wrong, so nothing may be recorded as having gone wrong:
+        // a set this import created is removed, while a retry of an existing
+        // row leaves that row exactly as it found it.
+        if (existingSetId == null) await repo.deleteTransitSet(setId);
+        progress.close();
+        if (!mounted) return;
+        _hint('Import cancelled.');
+        return;
+      }
       if (!outcome.ok) {
         await repo.markTransitImportFailed(setId, outcome.message!);
         progress.close();
@@ -1542,10 +1562,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (config == null || !mounted) return;
 
     final repo = ref.read(repositoryProvider);
+    final cancel = OverpassCancel();
     final progress = showImportProgress(
       context,
       title: 'Importing ${level.label.toLowerCase()}',
       message: 'Preparing the query…',
+      onCancel: cancel.cancel,
     );
     final elapsed = Stopwatch()..start();
     try {
@@ -1559,7 +1581,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
         client: _tileClient,
         preferEndpoint: settings?.transitEndpoint,
         onProgress: progress.report,
+        cancel: cancel,
       );
+      if (outcome.cancelled) {
+        progress.close();
+        if (mounted) _hint('Import cancelled.');
+        return;
+      }
       if (!outcome.ok) {
         progress.close();
         if (mounted) _hint(outcome.message!);
@@ -1580,6 +1608,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
         'area${relations.length == 1 ? '' : 's'} — stitching and thinning…',
       );
       final built = await compute(buildBorderAreas, relations);
+      // The isolate can't be interrupted, so Cancel pressed during the stitch
+      // is honoured the moment it returns: the work is thrown away rather than
+      // written. Nothing has touched the database yet at this point.
+      if (cancel.isCancelled) {
+        progress.close();
+        if (mounted) _hint('Import cancelled.');
+        return;
+      }
       if (built.isEmpty) {
         progress.close();
         // Overpass matches a relation when one of its *members* is in the box,
@@ -1745,6 +1781,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   void _exitAddMode() {
     final layerId = _placeLayerId;
     final type = _placeType;
+    final lastPlaced = _addSteps.lastOrNull?.object;
     setState(() {
       _placeLayerId = null;
       _placeType = null;
@@ -1770,6 +1807,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
             .where((a) => a.layerId == layerId)
             .firstOrNull;
         if (o != null) _selectFreeArea(o.id);
+      case 'height':
+        // A height area is inert until Generate has run, so a Done that closed
+        // everything left a bare circle drawn on the map with nothing to say
+        // what was missing — which is what "Add and Edit seem swapped" meant.
+        // Unlike the point-set types a layer holds several, so this is the one
+        // just placed, not the layer's first.
+        if (lastPlaced != null) _selectHeightRegion(lastPlaced.id);
     }
   }
 
@@ -2403,6 +2447,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
             'New circle here',
           ),
         );
+      case 'height':
+        // The other single-object-per-tap type. Its absence here was the reason
+        // a height layer felt like it could only be added to from the FAB.
+        actions.add(
+          _pointMenuItem(
+            'newHeight',
+            Icons.terrain,
+            'New height area here',
+          ),
+        );
       case 'subspace':
         if (selectedSubspaceId != null) {
           actions.add(
@@ -2472,6 +2526,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
         setState(() {});
       case 'newCircle':
         await _addCircleAt(latlng, activeLayer);
+      case 'newHeight':
+        // Selected on creation (unlike a circle), because the region is empty
+        // until the editor's Generate has run.
+        await _addHeightRegionAt(latlng, activeLayer);
       case 'addPoint':
         await repo.addSubspacePoint(
           subspaceId: selectedSubspaceId!,
@@ -2754,6 +2812,35 @@ class _MapScreenState extends ConsumerState<MapScreen>
     // per-type wording now lives in _addFabLabel.
     final isSubspaceLayer = activeLayer?.type == 'subspace';
     final isCircleLayer = activeLayer?.type == 'circles';
+
+    // Edit mode arms tap-to-select, so it is meaningful only when the active
+    // layer has an editor *and* holds something to select. Left always-on it
+    // was a button that visibly did nothing on an import layer or an empty one.
+    // `any` rather than a count: the answer is a boolean and this runs on every
+    // camera tick.
+    final activeHasEditor =
+        activeLayer != null && layerHasEditor(activeLayer.type);
+    final activeHasElements = activeLayer == null
+        ? false
+        : switch (activeLayer.type) {
+            'circles' => circles.any((c) => c.layerId == activeLayer.id),
+            'planes' => planes.any((p) => p.layerId == activeLayer.id),
+            'subspace' => subspaces.any((s) => s.layerId == activeLayer.id),
+            'freeline' => freeLines.any((l) => l.layerId == activeLayer.id),
+            'freearea' => freeAreas.any((a) => a.layerId == activeLayer.id),
+            'height' => heightRegions.any((r) => r.layerId == activeLayer.id),
+            _ => false,
+          };
+    final canEditByTap = activeHasEditor && activeHasElements;
+    // Switching to an import layer (or emptying the current one) while Edit is
+    // armed would otherwise leave a lit button that no longer does anything.
+    if (mode == MapMode.edit && !canEditByTap) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && ref.read(mapModeProvider) == MapMode.edit) {
+          ref.read(mapModeProvider.notifier).set(MapMode.view);
+        }
+      });
+    }
 
     // Restore the last camera; fall back to Munich on first launch. Resolved
     // once, when settings first load — FlutterMap ignores these after creation.
@@ -3694,16 +3781,30 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     // by tap must always be one press away.
                     FloatingActionButton.small(
                       heroTag: 'editMode',
-                      tooltip: mode == MapMode.edit
-                          ? 'Stop selecting by tap'
-                          : 'Select by tapping the map',
-                      backgroundColor: mode == MapMode.edit
+                      // Disabled states say *why*, so a grey button reads as an
+                      // answer rather than as breakage.
+                      tooltip: activeLayer == null
+                          ? 'No layer to edit'
+                          : !activeHasEditor
+                                ? 'Imported layers have no editor — use '
+                                      'Elements to find an item'
+                                : !activeHasElements
+                                      ? 'Nothing to edit yet — add something '
+                                            'first'
+                                      : mode == MapMode.edit
+                                      ? 'Stop selecting by tap'
+                                      : 'Select by tapping the map',
+                      // A FAB does not grey itself when onPressed is null, so
+                      // the disabled colour is explicit — same as the Add FAB.
+                      backgroundColor: !canEditByTap
+                          ? Theme.of(context).disabledColor
+                          : mode == MapMode.edit
                           ? Theme.of(context).colorScheme.primary
                           : null,
                       foregroundColor: mode == MapMode.edit
                           ? Theme.of(context).colorScheme.onPrimary
                           : null,
-                      onPressed: activeLayer == null
+                      onPressed: !canEditByTap
                           ? null
                           : () => _enterMode(
                               mode == MapMode.edit

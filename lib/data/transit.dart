@@ -715,6 +715,7 @@ Future<TransitOutcome<List<TransitStationData>>> fetchTransitStations({
   http.Client? client,
   String? preferEndpoint,
   OverpassProgressCallback? onProgress,
+  OverpassCancel? cancel,
 }) {
   final diagonal = _diagonalMeters(south, west, north, east);
   return overpassPost(
@@ -733,6 +734,7 @@ Future<TransitOutcome<List<TransitStationData>>> fetchTransitStations({
         'import fewer types (bus stops are the bulk of it).',
     preferEndpoint: preferEndpoint,
     onProgress: onProgress,
+    cancel: cancel,
     parse: (body) => parseTransitStations(body, keepModes: modeMask),
   );
 }

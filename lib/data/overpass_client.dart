@@ -93,18 +93,75 @@ typedef OverpassProgressCallback = void Function(OverpassProgress progress);
 /// shedding load", and the public instances answer perfectly good queries with
 /// 504 often enough that blaming the connection would usually be a lie.
 class OverpassOutcome<T> {
-  const OverpassOutcome.ok(T this.value, {this.endpoint}) : message = null;
+  const OverpassOutcome.ok(T this.value, {this.endpoint})
+      : message = null,
+        cancelled = false;
   const OverpassOutcome.failed(String this.message)
       : value = null,
-        endpoint = null;
+        endpoint = null,
+        cancelled = false;
+
+  /// The user pressed Cancel. Deliberately **not** a failure: nothing is worth
+  /// reporting as an error, and nothing must be written — a cancelled transit
+  /// import that recorded itself as failed would leave a retry row for
+  /// something that never went wrong.
+  const OverpassOutcome.cancelled()
+      : value = null,
+        message = null,
+        endpoint = null,
+        cancelled = true;
 
   final T? value;
+
+  /// Null on both success *and* cancellation, so read [cancelled] before
+  /// reaching for this.
   final String? message;
 
   /// Which endpoint served the request, so the caller can prefer it next time.
   final String? endpoint;
 
-  bool get ok => message == null;
+  /// Abandoned on request rather than finished or failed.
+  final bool cancelled;
+
+  bool get ok => message == null && !cancelled;
+}
+
+/// Lets a caller abandon an in-flight [overpassPost].
+///
+/// A token rather than closing the client, because every import shares the map
+/// screen's long-lived `http.Client` with tile loading and place search —
+/// closing it would take those down too.
+///
+/// The contract is that **every point where the request waits observes this**:
+/// the pacer queue, the endpoint/attempt loops, the retry pause, the connect
+/// and the body stream. Miss one and Cancel appears ignored for as long as that
+/// wait lasts, which on a busy instance is a minute — the exact complaint the
+/// button exists to answer.
+class OverpassCancel {
+  final Completer<void> _completer = Completer<void>();
+
+  bool get isCancelled => _completer.isCompleted;
+
+  /// Completes when [cancel] is called, and never otherwise — only ever await
+  /// it as one arm of a race.
+  Future<void> get future => _completer.future;
+
+  void cancel() {
+    if (!_completer.isCompleted) _completer.complete();
+  }
+}
+
+/// Thrown internally once [OverpassCancel.cancel] fires; converted to
+/// [OverpassOutcome.cancelled] before it reaches a caller.
+class _CancelledException implements Exception {
+  const _CancelledException();
+}
+
+/// Completes after [delay], or early if cancelled.
+Future<void> _delayOrCancel(Duration delay, OverpassCancel? cancel) {
+  final delayed = Future<void>.delayed(delay);
+  if (cancel == null) return delayed;
+  return Future.any<void>([delayed, cancel.future]);
 }
 
 /// Overpass instances, tried in order. Whichever one is busy is the variable, so
@@ -153,6 +210,7 @@ const Duration kOverpassPreferenceMaxElapsed = Duration(seconds: 20);
 /// types vs. a smaller box), so the caller owns the wording.
 ///
 /// [onProgress] fires as the request moves between stages and as bytes arrive.
+/// [cancel] abandons the whole exchange — see [OverpassCancel].
 ///
 /// Never throws.
 Future<OverpassOutcome<T>> overpassPost<T>(
@@ -164,6 +222,7 @@ Future<OverpassOutcome<T>> overpassPost<T>(
   String? oversizeMessage,
   String? preferEndpoint,
   OverpassProgressCallback? onProgress,
+  OverpassCancel? cancel,
 }) async {
   final owned = client == null;
   final c = client ?? http.Client();
@@ -179,6 +238,11 @@ Future<OverpassOutcome<T>> overpassPost<T>(
     for (var i = 0; i < endpoints.length; i++) {
       final endpoint = endpoints[i];
       for (var attempt = 1; attempt <= _attemptsPerEndpoint; attempt++) {
+        // Checked per attempt, not just once: failing over to a third instance
+        // after the user gave up is exactly the wait Cancel exists to end.
+        if (cancel != null && cancel.isCancelled) {
+          return const OverpassOutcome.cancelled();
+        }
         OverpassProgress progress(OverpassStage stage,
                 {int bytes = 0, int? totalBytes}) =>
             OverpassProgress(
@@ -200,17 +264,27 @@ Future<OverpassOutcome<T>> overpassPost<T>(
           // the next instance) can't put two requests on the wire back to back.
           // Costs a user-initiated import nothing; the wait is already seconds.
           resp = await overpassPacer.run(
-            () => _send(
-              c,
-              endpoint,
-              query,
-              timeout: timeout,
-              maxBytes: maxBytes,
-              onBytes: (bytes, total) => onProgress
-                  ?.call(progress(OverpassStage.downloading,
-                      bytes: bytes, totalBytes: total)),
-            ),
+            () {
+              // Cancelling while queued behind another request must not put a
+              // dead request on the wire a second later.
+              if (cancel != null && cancel.isCancelled) {
+                throw const _CancelledException();
+              }
+              return _send(
+                c,
+                endpoint,
+                query,
+                timeout: timeout,
+                maxBytes: maxBytes,
+                cancel: cancel,
+                onBytes: (bytes, total) => onProgress
+                    ?.call(progress(OverpassStage.downloading,
+                        bytes: bytes, totalBytes: total)),
+              );
+            },
           );
+        } on _CancelledException {
+          return const OverpassOutcome.cancelled();
         } on _OversizeException {
           // Caught mid-stream, so an answer far too big to use is abandoned
           // rather than downloaded in full and then refused.
@@ -240,7 +314,7 @@ Future<OverpassOutcome<T>> overpassPost<T>(
           // A quick rejection is the dispatcher queueing, not a verdict on the
           // query: ask the same instance again before giving up on it.
           if (attempt < _attemptsPerEndpoint) {
-            await Future<void>.delayed(_retryDelay);
+            await _delayOrCancel(_retryDelay, cancel);
             continue;
           }
           break;
@@ -279,6 +353,7 @@ Future<_Response> _send(
   required Duration timeout,
   int? maxBytes,
   required void Function(int bytes, int? total) onBytes,
+  OverpassCancel? cancel,
 }) async {
   final deadline = DateTime.now().add(timeout);
   Duration remaining() {
@@ -290,7 +365,30 @@ Future<_Response> _send(
     ..headers['User-Agent'] = overpassUserAgent
     ..bodyFields = {'data': query};
 
-  final streamed = await client.send(request).timeout(remaining());
+  final sending = client.send(request).timeout(remaining());
+  final http.StreamedResponse streamed;
+  if (cancel == null) {
+    streamed = await sending;
+  } else {
+    try {
+      // This is the wait that dominates a slow import — the instance sits on
+      // the request before sending a single byte — so it has to lose the race
+      // to Cancel, not merely be checked around.
+      streamed = await Future.any<http.StreamedResponse>([
+        sending,
+        cancel.future
+            .then<http.StreamedResponse>((_) => throw const _CancelledException()),
+      ]);
+    } on _CancelledException {
+      // The socket is still in flight and nothing will read it. Drain it in the
+      // background so the connection is released now instead of being held to
+      // the deadline.
+      unawaited(sending
+          .then((r) => r.stream.drain<void>())
+          .catchError((Object _) {}));
+      rethrow;
+    }
+  }
   final total = streamed.contentLength;
 
   final chunks = <List<int>>[];
@@ -317,11 +415,21 @@ Future<_Response> _send(
     cancelOnError: true,
   );
 
+  // A large body legitimately takes a while; Cancel has to interrupt that too,
+  // not only the connect.
+  final StreamSubscription<void>? cancelSub =
+      cancel?.future.asStream().listen((_) {
+    sub.cancel();
+    if (!done.isCompleted) done.completeError(const _CancelledException());
+  });
+
   try {
     await done.future.timeout(remaining());
   } catch (_) {
     await sub.cancel();
     rethrow;
+  } finally {
+    await cancelSub?.cancel();
   }
 
   final bytes = <int>[for (final chunk in chunks) ...chunk];
