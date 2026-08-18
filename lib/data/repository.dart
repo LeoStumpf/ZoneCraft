@@ -1756,6 +1756,19 @@ class Repository {
     final poiPoints = await (_db.select(_db.poiPoints)
           ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
         .get();
+    // Border geometry is scoped to the layers being exported, unlike every
+    // table above: one state boundary is a ~3 MB ring blob, so pulling every
+    // area in the database to export one layer would be the biggest read the
+    // app makes, for nothing.
+    final layerIds = [for (final l in layers) l.id];
+    final borderSets = await (_db.select(_db.borderSets)
+          ..where((s) => s.layerId.isIn(layerIds)))
+        .get();
+    final borderAreas = borderSets.isEmpty
+        ? <BorderArea>[]
+        : await (_db.select(_db.borderAreas)
+              ..where((a) => a.setId.isIn([for (final s in borderSets) s.id])))
+            .get();
 
     final out = <ExportLayer>[];
     for (final layer in layers) {
@@ -1852,9 +1865,11 @@ class Repository {
             ));
           }
         case 'transit':
-          // Stations export as named points for other tools, but do **not**
-          // re-import: this is derived, re-fetchable OSM data keyed to a
-          // snapshot, and re-importing an area is one dialog away.
+          // One object per *import*: its stations as named points (which is
+          // what another tool can read) plus the box and the per-station OSM
+          // attributes, which is what lets this app put the import back
+          // together. A pending or failed import has no stations and exports
+          // nothing — a retry row describes a query, not data.
           for (final t in transitSets.where((t) => t.layerId == layer.id)) {
             final stops =
                 transitStops.where((x) => x.setId == t.id).toList();
@@ -1863,23 +1878,56 @@ class Repository {
               kind: 'transitstop',
               coords: [for (final x in stops) LatLng(x.lat, x.lng)],
               pointLabels: [for (final x in stops) x.name],
+              pointOsmIds: [for (final x in stops) x.osmId],
+              pointModeMasks: [for (final x in stops) x.modeMask],
+              pointNodeCounts: [for (final x in stops) x.nodeCount],
+              pointRouteRefs: [for (final x in stops) x.routeRef],
+              bbox: [t.south, t.west, t.north, t.east],
+              modeMask: t.modeMask,
+              visibleModeMask: t.visibleModeMask,
               label: t.label,
               colorArgb: t.colorArgb,
             ));
           }
         case 'borders':
-          // Nothing. Border areas are derived OSM snapshots keyed to an
-          // imported box — the same call transit's stops make, taken further
-          // because the geometry is a blob, not points: exporting it would
-          // produce a file no other tool wants and this app would not re-read.
-          // Re-importing an area is one dialog away.
-          break;
+          // One object per **area**, which is what the Elements list names and
+          // what a person would say they are handing over. The import it came
+          // from rides along as `adminLevel` + `bbox`, so the areas regroup
+          // into the same sets on the far side instead of collapsing into one.
+          for (final s in borderSets.where((s) => s.layerId == layer.id)) {
+            for (final a in borderAreas.where((a) => a.setId == s.id)) {
+              final rings = decodeRings(a.rings);
+              if (rings.isEmpty) continue;
+              objects.add(ExportObject(
+                kind: 'borderarea',
+                coords: rings.first,
+                rings: rings,
+                label: a.name,
+                osmId: a.osmId,
+                adminLevel: s.adminLevel,
+                bbox: [s.south, s.west, s.north, s.east],
+                colorIndex: a.colorIndex,
+                labelLat: a.labelLat,
+                labelLng: a.labelLng,
+                wayIds: _decodeWayIds(a.wayIds),
+                colorArgb: a.colorArgb,
+              ));
+            }
+          }
       }
       out.add(ExportLayer(
         name: layer.name,
         colorArgb: layer.colorArgb,
         type: layer.type,
         isInverted: layer.isInverted,
+        opacity: layer.opacity,
+        // Only a borders layer has these; every other type carries the column
+        // defaults, and writing them would put meaningless keys in the file.
+        borderLevel: layer.borderLevel,
+        borderFillAreas:
+            layer.type == 'borders' ? layer.borderFillAreas : null,
+        borderShowNames:
+            layer.type == 'borders' ? layer.borderShowNames : null,
         objects: objects,
       ));
     }
@@ -1897,12 +1945,26 @@ class Repository {
         name: layer.name,
         colorArgb: layer.colorArgb,
         type: layer.type,
+        // A borders layer's admin level is fixed at creation, so it has to be
+        // known before any area is written.
+        borderLevel: layer.type == 'borders' ? layer.borderLevel : null,
       );
-      if (layer.isInverted) await updateLayer(layerId, isInverted: true);
-
-      for (final o in layer.objects) {
-        if (await _insertObject(layerId, o)) imported++;
+      if (layer.isInverted || layer.opacity != null) {
+        await updateLayer(
+          layerId,
+          isInverted: layer.isInverted ? true : null,
+          opacity: layer.opacity,
+        );
       }
+      if (layer.type == 'borders' &&
+          (layer.borderFillAreas != null || layer.borderShowNames != null)) {
+        await updateBorderLayerOptions(
+          layerId,
+          fillAreas: layer.borderFillAreas,
+          showNames: layer.borderShowNames,
+        );
+      }
+      imported += await _insertObjects(layerId, layer.objects);
     }
     return imported;
   }
@@ -1921,10 +1983,35 @@ class Repository {
           'That file holds ${layer.type} objects, but the layer is '
           '${target.type}');
     }
-    var imported = 0;
-    for (final o in layer.objects) {
-      if (await _insertObject(layerId, o)) imported++;
+    // Same rule [combineLayers] enforces: one borders layer holds one admin
+    // level, because "no two neighbours share a colour" is only meaningful
+    // within a level — areas of different levels nest rather than tile.
+    if (target.type == 'borders' &&
+        layer.borderLevel != null &&
+        layer.borderLevel != target.borderLevel) {
+      throw ArgumentError(
+          'That file holds admin level ${layer.borderLevel} areas, but '
+          '“${target.name}” holds level ${target.borderLevel}');
     }
+    return _insertObjects(layerId, layer.objects);
+  }
+
+  /// Inserts [objects] into [layerId], returning how many were created.
+  ///
+  /// Border areas are pulled out and written as one batch rather than one at a
+  /// time: each area otherwise costs a dedup scan of every area already in the
+  /// layer, which is quadratic — and a country-level file is thousands of them.
+  Future<int> _insertObjects(String layerId, List<ExportObject> objects) async {
+    var imported = 0;
+    final areas = <ExportObject>[];
+    for (final o in objects) {
+      if (o.kind == 'borderarea') {
+        areas.add(o);
+      } else if (await _insertObject(layerId, o)) {
+        imported++;
+      }
+    }
+    if (areas.isNotEmpty) imported += await _insertBorderAreas(layerId, areas);
     return imported;
   }
 
@@ -2051,14 +2138,196 @@ class Repository {
         ]);
         await _applyImportedColor(ColoredElement.poiSet, sid, o.colorArgb);
       case 'transitstop':
-        // Derived, re-fetchable OSM data — see the 'transit' case in
-        // exportData. Re-import an area by fetching it again, not from a file.
+        // Stations are keyed on their OSM node id — it is the row's identity
+        // *and* what re-import dedup matches on — so a file that doesn't carry
+        // one can't be restored: inventing ids would let two genuinely
+        // different stations collide. That is every transit export written
+        // before this feature, which is exactly the set that used to refuse.
+        final ids = o.pointOsmIds;
+        if (o.coords.isEmpty || ids == null || ids.isEmpty) return false;
+        final n = ids.length < o.coords.length ? ids.length : o.coords.length;
+        final masks = o.pointModeMasks ?? const <int>[];
+        final nodes = o.pointNodeCounts ?? const <int>[];
+        final refs = o.pointRouteRefs ?? const <String?>[];
+        final names = o.pointLabels ?? const <String?>[];
+        final box = o.bbox ?? _extent(o.coords.take(n));
+        final tid = await createPendingTransitSet(
+          layerId: layerId,
+          south: box[0],
+          west: box[1],
+          north: box[2],
+          east: box[3],
+          modeMask: o.modeMask ?? 0,
+          visibleModeMask: o.visibleModeMask ?? -1,
+          label: o.label,
+        );
+        await fillTransitSet(tid, [
+          for (var i = 0; i < n; i++)
+            (
+              osmId: ids[i],
+              lat: o.coords[i].latitude,
+              lng: o.coords[i].longitude,
+              name: i < names.length ? names[i] : null,
+              modeMask: i < masks.length ? masks[i] : 0,
+              nodeCount: i < nodes.length ? nodes[i] : 1,
+              routeRef: i < refs.length ? refs[i] : null,
+            ),
+        ]);
+        await _applyImportedColor(ColoredElement.transitSet, tid, o.colorArgb);
+      case 'borderarea':
+        // Never reached: [_insertObjects] batches these — see the comment
+        // there. Refused rather than half-handled, so a new call site that
+        // bypasses the batch fails loudly instead of writing quadratically.
         return false;
       default:
         return false;
     }
     return true;
   }
+
+  /// `[south, west, north, east]` of [points] — the fallback box for a transit
+  /// import whose file didn't record the one it was fetched over.
+  List<double> _extent(Iterable<LatLng> points) {
+    var s = 90.0, w = 180.0, n = -90.0, e = -180.0;
+    for (final p in points) {
+      if (p.latitude < s) s = p.latitude;
+      if (p.latitude > n) n = p.latitude;
+      if (p.longitude < w) w = p.longitude;
+      if (p.longitude > e) e = p.longitude;
+    }
+    return s > n ? [0, 0, 0, 0] : [s, w, n, e];
+  }
+
+  /// Writes exported border areas into [layerId], regrouping them into the
+  /// imports they came from, and recolours the layer once at the end.
+  ///
+  /// The set an area belongs to is recovered from the `adminLevel` + `bbox` it
+  /// carries: areas fetched together share both, so the elements-to-imports
+  /// structure survives the trip. An import whose box is already on the layer
+  /// (the file came from here, or was imported once already) reuses that set
+  /// rather than adding an identical second one.
+  ///
+  /// Areas already on the layer are skipped by relation id, the same check a
+  /// re-fetch makes — so merging two overlapping files doesn't draw the shared
+  /// municipalities twice.
+  Future<int> _insertBorderAreas(
+    String layerId,
+    List<ExportObject> areas,
+  ) async {
+    final layer = await (_db.select(_db.layers)
+          ..where((l) => l.id.equals(layerId)))
+        .getSingleOrNull();
+    if (layer == null) return 0;
+    var added = 0;
+    await _db.transaction(() async {
+      final seen = await _borderOsmIdsInLayer(layerId);
+      final existing = await (_db.select(_db.borderSets)
+            ..where((x) => x.layerId.equals(layerId)))
+          .get();
+      // Set key -> (id, areas so far, points so far). The counts are
+      // denormalised onto the set row, so a reused set has to be topped up
+      // rather than overwritten.
+      final sets = <String, ({String id, int areas, int points})>{
+        for (final x in existing)
+          _borderSetKey(x.adminLevel, x.south, x.west, x.north, x.east): (
+            id: x.id,
+            areas: x.areaCount,
+            points: x.pointCount,
+          ),
+      };
+      final rows = <BorderAreasCompanion>[];
+      final overrides = <String, int>{}; // area id -> colour override
+      for (final o in areas) {
+        final rings = [
+          for (final r in o.rings ?? [o.coords])
+            if (r.length >= 3) r,
+        ];
+        if (rings.isEmpty) continue;
+        final osmId = o.osmId;
+        if (!_isNew(seen, osmKey('relation', osmId))) continue;
+        final level = o.adminLevel ?? layer.borderLevel ?? '';
+        final box = o.bbox ?? _extent(rings.expand((r) => r));
+        final key = _borderSetKey(level, box[0], box[1], box[2], box[3]);
+        var set = sets[key];
+        if (set == null) {
+          set = (id: _uuid.v4(), areas: 0, points: 0);
+          await _db.into(_db.borderSets).insert(
+                BorderSetsCompanion.insert(
+                  id: set.id,
+                  layerId: layerId,
+                  south: box[0],
+                  west: box[1],
+                  north: box[2],
+                  east: box[3],
+                  adminLevel: level,
+                  fetchedAt: DateTime.now(),
+                ),
+              );
+        }
+        final points = rings.fold(0, (a, r) => a + r.length);
+        final id = _uuid.v4();
+        final extent = _extent(rings.expand((r) => r));
+        rows.add(BorderAreasCompanion.insert(
+          id: id,
+          setId: set.id,
+          // A file without a relation id still imports; it simply sits outside
+          // the dedup check, exactly as an unidentified POI does.
+          osmId: osmId ?? 0,
+          name: Value(o.label),
+          colorIndex: Value(o.colorIndex ?? 0),
+          south: extent[0],
+          west: extent[1],
+          north: extent[2],
+          east: extent[3],
+          labelLat: o.labelLat ?? (extent[0] + extent[2]) / 2,
+          labelLng: o.labelLng ?? (extent[1] + extent[3]) / 2,
+          pointCount: points,
+          rings: encodeRings(rings),
+          wayIds: jsonEncode(o.wayIds ?? const <int>[]),
+        ));
+        if (o.colorArgb != null) overrides[id] = o.colorArgb!;
+        sets[key] =
+            (id: set.id, areas: set.areas + 1, points: set.points + points);
+        added++;
+      }
+      await _db.batch((b) {
+        for (final r in rows) {
+          b.insert(_db.borderAreas, r);
+        }
+        for (final e in sets.entries) {
+          b.update(
+            _db.borderSets,
+            BorderSetsCompanion(
+              areaCount: Value(e.value.areas),
+              pointCount: Value(e.value.points),
+            ),
+            where: (t) => t.id.equals(e.value.id),
+          );
+        }
+        for (final e in overrides.entries) {
+          b.update(
+            _db.borderAreas,
+            BorderAreasCompanion(colorArgb: Value(e.value)),
+            where: (t) => t.id.equals(e.key),
+          );
+        }
+      });
+    });
+    // The layer now holds areas that were coloured in another database (or in
+    // two files), so its seams have to be resolved — the same step every
+    // fetch, delete and combine ends with. Deterministic, so a whole layer
+    // imported at once comes out looking exactly as it did on the sender's.
+    if (added > 0) await recolourBorderLayer(layerId);
+    return added;
+  }
+
+  /// Identity of the import an area belongs to: its admin level plus the box it
+  /// was fetched over, rounded so a float round-trip through JSON still
+  /// matches.
+  String _borderSetKey(
+          String level, double s, double w, double n, double e) =>
+      '$level/${s.toStringAsFixed(6)}/${w.toStringAsFixed(6)}/'
+      '${n.toStringAsFixed(6)}/${e.toStringAsFixed(6)}';
 
   // --- Seed -----------------------------------------------------------------
 

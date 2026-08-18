@@ -23,10 +23,82 @@ import 'region_geometry.dart';
 /// is reusable and testable-ish.
 
 /// File types we accept for any geometry import.
+///
+/// The MIME types are spelled out as well as the extensions, and
+/// `application/octet-stream` is among them, because Android's picker filters
+/// on MIME: it resolves an extension through the system map, which has no entry
+/// for `.geojson`, so it types our **own exports** as octet-stream and greys
+/// them out. A picker that cannot open the file the app just wrote is worse
+/// than a loose filter — and a file that isn't geometry is rejected with a
+/// message either way.
 const _importGroup = XTypeGroup(
   label: 'Map geometry',
   extensions: ['geojson', 'json', 'kml', 'kmz', 'gpx'],
+  mimeTypes: [
+    'application/geo+json',
+    'application/json',
+    'application/vnd.google-earth.kml+xml',
+    'application/vnd.google-earth.kmz',
+    'application/gpx+xml',
+    'application/xml',
+    'text/xml',
+    'text/plain',
+    'application/octet-stream',
+  ],
 );
+
+/// Above this many vertices an export is worth warning about before it is
+/// written. Administrative borders are the only thing that reaches it in
+/// practice — a single state boundary is ~119 000 points on its own, and the
+/// file is shared, not just saved.
+const int kLargeExportPoints = 50000;
+
+/// Rough bytes per vertex of pretty-printed GeoJSON: two 7-decimal numbers on
+/// their own indented lines, plus the brackets. Only used to put a number on
+/// the warning, so being a little over is the safe direction.
+const int _bytesPerPoint = 45;
+
+/// Warns before writing a very large export, since the result is meant to be
+/// shared and a 40 MB attachment is a surprise worth having in advance.
+/// Returns true to go ahead. Silent (and true) below [kLargeExportPoints].
+Future<bool> confirmLargeExport(BuildContext context, ExportData data) async {
+  final points = data.pointCount;
+  if (points < kLargeExportPoints) return true;
+  final mb = (points * _bytesPerPoint) / (1024 * 1024);
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Large export'),
+      content: Text(
+        'This holds ${_thousands(points)} points and will make a file of '
+        'roughly ${mb.toStringAsFixed(mb >= 10 ? 0 : 1)} MB — administrative '
+        'borders are detailed. It exports at full detail, so the map looks '
+        'the same on the other side.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Export'),
+        ),
+      ],
+    ),
+  );
+  return ok == true;
+}
+
+String _thousands(int n) {
+  final s = n.toString();
+  final b = StringBuffer();
+  for (var i = 0; i < s.length; i++) {
+    if (i > 0 && (s.length - i) % 3 == 0) b.write('\u202F');
+    b.write(s[i]);
+  }
+  return b.toString();
+}
 
 /// Exports a single [layer] to GeoJSON or KML and opens the share sheet.
 Future<void> exportSingleLayer(
@@ -43,6 +115,8 @@ Future<void> exportSingleLayer(
     );
     return;
   }
+  if (!await confirmLargeExport(context, data)) return;
+  if (!context.mounted) return;
   final fmt = await showDialog<String>(
     context: context,
     builder: (ctx) => SimpleDialog(
@@ -418,7 +492,12 @@ Future<void> importLayerFlow(
     if (!context.mounted) return;
     // Merge is only offered for a single imported layer (unambiguous target).
     final target = data.layers.length == 1
-        ? await _askNewOrMerge(context, layers, data.layers.first.type)
+        ? await _askNewOrMerge(
+            context,
+            layers,
+            data.layers.first.type,
+            borderLevel: data.layers.first.borderLevel,
+          )
         : const _ImportChoice.newLayer();
     if (target == null) return; // cancelled
 
@@ -639,8 +718,17 @@ Future<_ImportChoice?> _askNewOrMerge(
   List<Layer> layers,
   String type, {
   String? note,
+  String? borderLevel,
 }) {
-  final mergeable = layers.where((l) => l.type == type).toList();
+  // One borders layer holds one admin level, so a level-8 file can only merge
+  // into a level-8 layer — offering the others would be offering an error.
+  final mergeable = layers
+      .where((l) =>
+          l.type == type &&
+          (type != 'borders' ||
+              borderLevel == null ||
+              l.borderLevel == borderLevel))
+      .toList();
   return showDialog<_ImportChoice>(
     context: context,
     builder: (ctx) => SimpleDialog(

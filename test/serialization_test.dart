@@ -160,6 +160,87 @@ void main() {
       expect(kml, isNot(contains('11.5,48.1,0'))); // the search centre
     });
 
+    test('a borders layer keeps its level and toggles through GeoJSON', () {
+      final data = ExportData([
+        const ExportLayer(
+          name: 'Districts',
+          colorArgb: 0xFF00FF00,
+          type: 'borders',
+          isInverted: false,
+          opacity: 0.7,
+          borderLevel: '9',
+          borderFillAreas: true,
+          borderShowNames: false,
+          objects: [
+            ExportObject(
+              kind: 'borderarea',
+              coords: [LatLng(0, 0), LatLng(0, 1), LatLng(1, 1)],
+              rings: [
+                [LatLng(0, 0), LatLng(0, 1), LatLng(1, 1)],
+              ],
+              label: 'Maxvorstadt',
+              osmId: 42,
+              adminLevel: '9',
+              bbox: [0, 0, 1, 1],
+              colorIndex: 3,
+              labelLat: 0.4,
+              labelLng: 0.4,
+              wayIds: [7, 8],
+            ),
+          ],
+        ),
+      ]);
+      final back = importFromGeoJson(exportToGeoJson(data))!;
+      final l = back.layers.single;
+      expect(l.type, 'borders');
+      expect(l.opacity, 0.7);
+      expect(l.borderLevel, '9');
+      expect(l.borderFillAreas, isTrue);
+      expect(l.borderShowNames, isFalse);
+      final o = l.objects.single;
+      expect(o.kind, 'borderarea');
+      expect(o.osmId, 42);
+      expect(o.adminLevel, '9');
+      expect(o.bbox, [0.0, 0.0, 1.0, 1.0]);
+      expect(o.colorIndex, 3);
+      expect(o.labelLat, 0.4);
+      expect(o.wayIds, [7, 8]);
+      expect(o.rings, hasLength(1));
+      expect(o.rings!.single, hasLength(3), reason: 'the closing vertex is dropped');
+    });
+
+    test('a hole and an exclave survive as separate rings', () {
+      const outer = [LatLng(0, 0), LatLng(0, 10), LatLng(10, 10), LatLng(10, 0)];
+      const hole = [LatLng(2, 2), LatLng(2, 4), LatLng(4, 4), LatLng(4, 2)];
+      const exclave =
+          [LatLng(20, 20), LatLng(20, 21), LatLng(21, 21), LatLng(21, 20)];
+      final data = ExportData([
+        const ExportLayer(
+          name: 'B',
+          colorArgb: 0xFF000000,
+          type: 'borders',
+          isInverted: false,
+          borderLevel: '8',
+          objects: [
+            ExportObject(
+              kind: 'borderarea',
+              coords: outer,
+              rings: [outer, hole, exclave],
+              osmId: 1,
+            ),
+          ],
+        ),
+      ]);
+      final json = exportToGeoJson(data);
+      // GeoJSON has to say which ring is a hole; the stored form does not.
+      expect(json, contains('MultiPolygon'));
+      final rings = importFromGeoJson(json)!.layers.single.objects.single.rings!;
+      expect(rings, hasLength(3));
+      expect(rings[0], outer);
+      expect(rings[1], hole);
+      expect(rings[2], exclave);
+    });
+
     test('escapes XML-special characters in names', () {
       final data = ExportData([
         const ExportLayer(

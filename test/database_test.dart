@@ -513,7 +513,7 @@ void main() {
     expect(defaultLayerOpacity('circles'), kDefaultRegionLayerOpacity);
   });
 
-  test('transit exports as named points and does not re-import', () async {
+  test('a transit layer survives an export/import round-trip', () async {
     final layerId = await repo.createLayer(
         name: 'T', colorArgb: 0xFF123456, type: 'transit');
     await seedTransit(layerId);
@@ -521,12 +521,21 @@ void main() {
     final data = await repo.exportData(onlyLayerId: layerId);
     final objects = data.layers.single.objects;
     expect(objects, hasLength(1));
-    expect(objects.single.kind, 'transitstop');
-    expect(objects.single.coords, hasLength(3));
-    expect(objects.single.pointLabels, contains('Pasing Bahnhof'));
+    final o = objects.single;
+    expect(o.kind, 'transitstop');
+    expect(o.coords, hasLength(3));
+    expect(o.pointLabels, contains('Pasing Bahnhof'));
+    // The station attributes the painter and the filter sheet need.
+    expect(o.pointOsmIds, hasLength(3));
+    expect(o.bbox, [48.00, 11.30, 48.30, 11.80]);
+    expect(o.modeMask, isNotNull);
+    // Borders-only layer options don't ride along on a transit layer.
+    expect(data.layers.single.borderFillAreas, isNull);
+    expect(data.layers.single.borderShowNames, isNull);
     // No line geometry exists any more.
-    expect(objects.where((o) => o.kind == 'transitline'), isEmpty);
+    expect(objects.where((x) => x.kind == 'transitline'), isEmpty);
 
+    // Still readable as plain named points by any other tool.
     final gj = jsonDecode(exportToGeoJson(data)) as Map<String, dynamic>;
     final kinds = {
       for (final f in gj['features'] as List)
@@ -535,16 +544,55 @@ void main() {
     expect(kinds, {'MultiPoint'});
     expect(exportToKml(data), contains('Pasing Bahnhof'));
 
-    // Re-importing yields an empty transit layer — derived data is re-fetched.
-    expect(await repo.importData(data), 0);
+    // Re-importing rebuilds the import, its box and its stations.
+    expect(await repo.importData(data), 1);
     final fresh = (await repo.watchLayers().first)
-        .where((l) => l.type == 'transit' && l.id != layerId);
-    expect(fresh, hasLength(1));
+        .firstWhere((l) => l.type == 'transit' && l.id != layerId);
+    final set = (await repo.watchAllTransitSets().first)
+        .firstWhere((t) => t.layerId == fresh.id);
+    expect(set.south, 48.00);
+    expect(set.east, 11.80);
+    expect(set.modeMask, o.modeMask);
+    expect(set.visibleModeMask, o.visibleModeMask);
+    expect(set.stationCount, 3);
+    final stops = (await repo.watchAllTransitStops().first)
+        .where((x) => x.setId == set.id)
+        .toList();
+    expect(stops, hasLength(3));
+    final pasing = stops.firstWhere((x) => x.name == 'Pasing Bahnhof');
+    expect(pasing.nodeCount, 31);
+    expect(pasing.modeMask, isNot(0));
     expect(
-      (await repo.watchAllTransitSets().first)
-          .where((t) => t.layerId == fresh.single.id),
-      isEmpty,
+      stops.firstWhere((x) => x.name == 'Marienplatz').routeRef,
+      'U3;U6',
     );
+  });
+
+  test('a transit export without station ids still refuses to re-import',
+      () async {
+    // Every export written before the round-trip landed is this file: the
+    // station id is the row's identity, and there is nothing to invent it from.
+    final layerId = await repo.createLayer(
+        name: 'T', colorArgb: 0xFF123456, type: 'transit');
+    await seedTransit(layerId);
+    final data = await repo.exportData(onlyLayerId: layerId);
+    final o = data.layers.single.objects.single;
+    final stripped = ExportData([
+      ExportLayer(
+        name: 'Old file',
+        colorArgb: 0xFF123456,
+        type: 'transit',
+        isInverted: false,
+        objects: [
+          ExportObject(
+            kind: 'transitstop',
+            coords: o.coords,
+            pointLabels: o.pointLabels,
+          ),
+        ],
+      ),
+    ]);
+    expect(await repo.importData(stripped), 0);
   });
 
   // --- borders (schema v20) ---------------------------------------------------
@@ -827,18 +875,158 @@ void main() {
     expect(after.map((a) => a.colorIndex), everyElement(0));
   });
 
-  test('borders export nothing — derived data is re-fetched, not restored',
-      () async {
+  test('a borders layer survives an export/import round-trip', () async {
+    final layerId = await repo.createLayer(
+        name: 'B', colorArgb: 0xFF123456, type: 'borders', borderLevel: '8');
+    await seedBorders(layerId, label: 'Around Munich');
+    await repo.updateBorderLayerOptions(layerId,
+        fillAreas: true, showNames: true);
+
+    final data = await repo.exportData(onlyLayerId: layerId);
+    final exported = data.layers.single;
+    expect(exported.type, 'borders');
+    // The Elements list names areas, so the export does too.
+    expect(exported.objects, hasLength(3));
+    expect(exported.borderLevel, '8');
+    expect(exported.borderFillAreas, isTrue);
+    expect(exported.borderShowNames, isTrue);
+    final munich = exported.objects.firstWhere((o) => o.label == 'München');
+    expect(munich.kind, 'borderarea');
+    expect(munich.osmId, 1);
+    expect(munich.adminLevel, '8');
+    expect(munich.wayIds, [100, 101]);
+    expect(munich.rings, hasLength(1));
+    expect(munich.rings!.single, hasLength(4));
+    expect(munich.bbox, [48.0, 11.0, 48.2, 11.3]); // the set's box, not the area's
+
+    // Multi-ring geometry needs a MultiPolygon; nothing else in the format has
+    // one.
+    final gj = jsonDecode(exportToGeoJson(data)) as Map<String, dynamic>;
+    final kinds = {
+      for (final f in gj['features'] as List)
+        (f as Map)['geometry']['type'] as String,
+    };
+    expect(kinds, {'MultiPolygon'});
+    expect(exportToKml(data), contains('München'));
+
+    // Round-trip through the file format, not just the in-memory model.
+    final reread = importFromGeoJson(exportToGeoJson(data))!;
+    expect(await repo.importData(reread), 3);
+    final fresh = (await repo.watchLayers().first)
+        .firstWhere((l) => l.type == 'borders' && l.id != layerId);
+    expect(fresh.borderLevel, '8');
+    expect(fresh.borderFillAreas, isTrue);
+    expect(fresh.borderShowNames, isTrue);
+    // The three areas regrouped into the one import they were fetched in.
+    final sets = (await repo.watchAllBorderSets().first)
+        .where((x) => x.layerId == fresh.id)
+        .toList();
+    expect(sets, hasLength(1));
+    expect(sets.single.adminLevel, '8');
+    expect(sets.single.south, 48.0);
+    expect(sets.single.east, 11.3);
+    expect(sets.single.areaCount, 3);
+    expect(sets.single.pointCount, 12);
+    final areas = (await repo.watchAllBorderAreas().first)
+        .where((a) => a.setId == sets.single.id)
+        .toList();
+    expect(areas, hasLength(3));
+    expect(areas.map((a) => a.name).toSet(), {'München', 'Germering', 'Far away'});
+    final m = areas.firstWhere((a) => a.name == 'München');
+    expect(m.osmId, 1);
+    expect(m.pointCount, 4);
+    expect(m.labelLat, 48.05);
+    expect(await repo.borderAreaRings(m.id), hasLength(1));
+    // Neighbours still differ: München and Germering share way 100.
+    final g = areas.firstWhere((a) => a.name == 'Germering');
+    expect(m.colorIndex, isNot(g.colorIndex));
+  });
+
+  test('re-importing a borders file into its own layer adds nothing', () async {
     final layerId = await repo.createLayer(
         name: 'B', colorArgb: 0xFF123456, type: 'borders', borderLevel: '8');
     await seedBorders(layerId);
+    final data = await repo.exportData(onlyLayerId: layerId);
+    // Same relation ids, same layer — the dedup a re-fetch makes applies to a
+    // file just as much.
+    expect(await repo.mergeIntoLayer(layerId, data.layers.single), 0);
+    expect(await repo.watchAllBorderAreas().first, hasLength(3));
+    expect(await repo.watchAllBorderSets().first, hasLength(1));
+  });
+
+  test('a borders file refuses to merge into another admin level', () async {
+    final eight = await repo.createLayer(
+        name: 'B8', colorArgb: 0xFF123456, type: 'borders', borderLevel: '8');
+    await seedBorders(eight);
+    final four = await repo.createLayer(
+        name: 'B4', colorArgb: 0xFF123456, type: 'borders', borderLevel: '4');
+    final data = await repo.exportData(onlyLayerId: eight);
+    await expectLater(
+      repo.mergeIntoLayer(four, data.layers.single),
+      throwsArgumentError,
+    );
+  });
+
+  test('exported multi-ring areas come back with every ring', () async {
+    // An area with a hole and an exclave: the GeoJSON encoder has to split it
+    // into two polygons, and flattening has to give the rings back unchanged.
+    final layerId = await repo.createLayer(
+        name: 'B', colorArgb: 0xFF123456, type: 'borders', borderLevel: '8');
+    await repo.addBorderSet(
+      layerId: layerId,
+      south: 48.0,
+      west: 11.0,
+      north: 49.0,
+      east: 12.0,
+      adminLevel: '8',
+      areas: [
+        (
+          osmId: 7,
+          name: 'Holey',
+          south: 48.0,
+          west: 11.0,
+          north: 49.0,
+          east: 12.0,
+          labelLat: 48.5,
+          labelLng: 11.5,
+          pointCount: 12,
+          rings: encodeRings([
+            // Outer.
+            [LatLng(48.0, 11.0), LatLng(48.0, 11.6), LatLng(48.6, 11.6),
+             LatLng(48.6, 11.0)],
+            // Hole inside it.
+            [LatLng(48.2, 11.2), LatLng(48.2, 11.4), LatLng(48.4, 11.4),
+             LatLng(48.4, 11.2)],
+            // Detached exclave.
+            [LatLng(48.8, 11.8), LatLng(48.8, 11.9), LatLng(48.9, 11.9),
+             LatLng(48.9, 11.8)],
+          ]),
+          wayIds: <int>[1],
+        ),
+      ],
+    );
 
     final data = await repo.exportData(onlyLayerId: layerId);
-    expect(data.layers.single.type, 'borders');
-    expect(data.layers.single.objects, isEmpty);
+    final gj = jsonDecode(exportToGeoJson(data)) as Map<String, dynamic>;
+    final geom = ((gj['features'] as List).single as Map)['geometry'] as Map;
+    expect(geom['type'], 'MultiPolygon');
+    final polys = geom['coordinates'] as List;
+    expect(polys, hasLength(2), reason: 'the exclave is its own polygon');
+    expect((polys.first as List), hasLength(2), reason: 'outer + its hole');
 
-    // Re-importing yields an empty borders layer, not a broken one.
-    expect(await repo.importData(data), 0);
+    final reread = importFromGeoJson(exportToGeoJson(data))!;
+    expect(await repo.importData(reread), 1);
+    final fresh = (await repo.watchLayers().first)
+        .firstWhere((l) => l.type == 'borders' && l.id != layerId);
+    final sets = (await repo.watchAllBorderSets().first)
+        .where((x) => x.layerId == fresh.id)
+        .toList();
+    final area = (await repo.watchAllBorderAreas().first)
+        .firstWhere((a) => a.setId == sets.single.id);
+    final rings = await repo.borderAreaRings(area.id);
+    expect(rings, hasLength(3), reason: 'outer, hole and exclave all survive');
+    expect(rings.expand((r) => r).length, 12);
+    expect(area.pointCount, 12);
   });
 
   // --- re-import dedup (schema v21) -------------------------------------------

@@ -388,6 +388,49 @@ List<BuiltBorderArea> buildBorderAreas(List<BorderRelationData> relations) {
   return out;
 }
 
+/// Groups a flat ring list into GeoJSON-shaped polygons: each entry is one
+/// outer ring followed by the rings that fall inside it.
+///
+/// Stored rings carry **no** outer/hole flag, and don't need one — the painter
+/// fills even-odd (see `BorderAreas.rings`). GeoJSON does need one: a
+/// `Polygon`'s first ring is its outside and the rest are its holes, so an area
+/// with two exclaves has to become a `MultiPolygon` or the second island reads
+/// as a hole punched in the first.
+///
+/// A hole nested two deep (an island inside a lake inside an island) is
+/// attached to the outer ring that encloses it, which even-odd draws correctly
+/// either way. Flattening the result back gives exactly the input ring list, so
+/// an export/import round-trip is lossless regardless.
+List<List<List<LatLng>>> groupRings(List<List<LatLng>> rings) {
+  final usable = [
+    for (final r in rings)
+      if (r.length >= 3) r,
+  ];
+  if (usable.length < 2) return [for (final r in usable) [r]];
+  final polys = <List<List<LatLng>>>[];
+  final outerAt = <int, int>{}; // ring index -> polygon index
+  for (var i = 0; i < usable.length; i++) {
+    if (_isEnclosed(usable[i], usable, i)) continue;
+    outerAt[i] = polys.length;
+    polys.add([usable[i]]);
+  }
+  // Every ring was enclosed by another (rings crossing, or a corrupt row):
+  // fall back to one polygon per ring rather than losing geometry.
+  if (polys.isEmpty) return [for (final r in usable) [r]];
+  for (var i = 0; i < usable.length; i++) {
+    if (outerAt.containsKey(i)) continue;
+    var target = 0;
+    for (final e in outerAt.entries) {
+      if (_containsPoint(usable[e.key], usable[i].first)) {
+        target = e.value;
+        break;
+      }
+    }
+    polys[target].add(usable[i]);
+  }
+  return polys;
+}
+
 /// The rings of an area that are **not** holes: those not enclosed by another
 /// ring of the same area.
 ///

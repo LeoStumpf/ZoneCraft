@@ -438,6 +438,45 @@ void main() {
       expect(a.labelLng, lessThan(a.east));
     });
   });
+
+  group('groupRings', () {
+    const outer = [LatLng(0, 0), LatLng(0, 10), LatLng(10, 10), LatLng(10, 0)];
+    const hole = [LatLng(2, 2), LatLng(2, 4), LatLng(4, 4), LatLng(4, 2)];
+    const exclave =
+        [LatLng(20, 20), LatLng(20, 21), LatLng(21, 21), LatLng(21, 20)];
+
+    test('one ring is one polygon', () {
+      expect(groupRings([outer]), [
+        [outer],
+      ]);
+    });
+
+    test('a hole joins the ring that encloses it', () {
+      expect(groupRings([outer, hole]), [
+        [outer, hole],
+      ]);
+    });
+
+    test('an exclave becomes its own polygon, not a hole', () {
+      final polys = groupRings([outer, hole, exclave]);
+      expect(polys, hasLength(2));
+      expect(polys.first, [outer, hole]);
+      expect(polys.last, [exclave]);
+    });
+
+    test('flattening gives the input back, whatever the grouping decided', () {
+      final flat = groupRings([outer, hole, exclave]).expand((p) => p).toList();
+      expect(flat.toSet(), {outer, hole, exclave});
+      expect(flat, hasLength(3));
+    });
+
+    test('degenerate rings are dropped rather than grouped', () {
+      expect(groupRings([outer, const [LatLng(0, 0), LatLng(1, 1)]]), [
+        [outer],
+      ]);
+      expect(groupRings(const []), isEmpty);
+    });
+  });
 }
 
 /// Even-odd point-in-ring, for asserting a label landed inside its own area.

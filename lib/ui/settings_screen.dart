@@ -102,6 +102,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _snack('Nothing to export yet');
       return;
     }
+    if (!await confirmLargeExport(context, data)) return;
+    if (!mounted) return;
     final fmt = await showDialog<String>(
       context: context,
       builder: (ctx) => SimpleDialog(
