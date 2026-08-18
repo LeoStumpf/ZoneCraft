@@ -624,11 +624,133 @@ class _LayerTile extends ConsumerWidget {
         ],
       ),
     );
-    if (result != null) {
-      await ref
-          .read(repositoryProvider)
-          .updateLayer(layer.id, colorArgb: result.toARGB32());
+    if (result == null) return;
+    final repo = ref.read(repositoryProvider);
+    // Elements that follow the layer re-shade themselves the moment it changes
+    // — that is the point of deriving the shade rather than storing it. The
+    // ones that were given their own colour are the only open question, and
+    // silently overwriting them would throw away deliberate work.
+    final overridden = await repo.elementsWithColorOverride(
+      layer.id,
+      layer.type,
+    );
+    await repo.updateLayer(layer.id, colorArgb: result.toARGB32());
+    if (overridden.isEmpty || !context.mounted) return;
+    await _askAboutOverrides(context, ref, overridden);
+  }
+
+  /// After a layer recolour: what to do with the elements that carry their own
+  /// colour and therefore did *not* follow it.
+  Future<void> _askAboutOverrides(
+    BuildContext context,
+    WidgetRef ref,
+    List<String> overridden,
+  ) async {
+    final kind = ColoredElement.forLayerType(layer.type);
+    if (kind == null) return;
+    final n = overridden.length;
+    final answer = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Elements with their own colour'),
+        content: Text(
+          n == 1
+              ? '1 element has a colour of its own, so it kept it. '
+                    'Everything else followed the layer.'
+              : '$n elements have colours of their own, so they kept them. '
+                    'Everything else followed the layer.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'keep'),
+            child: const Text('Keep them'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'some'),
+            child: const Text('Choose…'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, 'all'),
+            child: Text(n == 1 ? 'Reset it' : 'Reset all'),
+          ),
+        ],
+      ),
+    );
+    if (answer == null || answer == 'keep') return;
+    final repo = ref.read(repositoryProvider);
+    if (answer == 'all') {
+      await repo.clearElementColors(kind, overridden);
+      return;
     }
+    if (!context.mounted) return;
+    final chosen = await _chooseOverrides(context, ref, overridden);
+    if (chosen != null && chosen.isNotEmpty) {
+      await repo.clearElementColors(kind, chosen);
+    }
+  }
+
+  /// Ticks off which of the overridden elements should go back to following the
+  /// layer. Named from the Elements-list summaries, because "3 elements" is not
+  /// something anyone can act on.
+  Future<List<String>?> _chooseOverrides(
+    BuildContext context,
+    WidgetRef ref,
+    List<String> overridden,
+  ) {
+    final ids = overridden.toSet();
+    final rows = [
+      for (final s in ref.read(layerSummariesProvider(layer.id)))
+        if (ids.contains(s.ref.id)) s,
+    ];
+    final picked = <String>{};
+    return showDialog<List<String>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('Follow the layer again'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                for (final s in rows)
+                  CheckboxListTile(
+                    dense: true,
+                    value: picked.contains(s.ref.id),
+                    secondary: Container(
+                      width: 22,
+                      height: 22,
+                      decoration: BoxDecoration(
+                        color: Color(s.colorArgb ?? layer.colorArgb),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.black26),
+                      ),
+                    ),
+                    title: Text(s.title, overflow: TextOverflow.ellipsis),
+                    onChanged: (on) => setState(() {
+                      if (on ?? false) {
+                        picked.add(s.ref.id);
+                      } else {
+                        picked.remove(s.ref.id);
+                      }
+                    }),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, picked.toList()),
+              child: const Text('Reset'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter/material.dart' show Icons;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart' hide Circle;
 
 import '../data/database.dart';
@@ -44,9 +45,17 @@ class ObjectSummary {
     required this.center,
     required this.fitPoints,
     this.isPending = false,
+    this.colorArgb,
+    this.colorShade = 0,
   });
 
   final ObjectRef ref;
+
+  /// The element's colour override, null when it follows the layer, and which
+  /// auto shade of the layer colour it takes while it does (see
+  /// `ui/element_color.dart`).
+  final int? colorArgb;
+  final int colorShade;
 
   /// The object's label, or a derived positional name ("Circle 3").
   final String title;
@@ -163,6 +172,39 @@ List<T> _ordered<T>(
   return list;
 }
 
+/// One layer's elements as display rows, from the global row providers.
+///
+/// Shared by the Elements list and the layer-recolour dialog: both have to name
+/// the same elements the same way, and neither should be rebuilding this list
+/// from fifteen providers by hand.
+final layerSummariesProvider = Provider.family<List<ObjectSummary>, String>((
+  ref,
+  layerId,
+) {
+  final layer = (ref.watch(layersProvider).asData?.value ?? const <Layer>[])
+      .where((l) => l.id == layerId)
+      .firstOrNull;
+  if (layer == null) return const [];
+  return summariseLayer(
+    layer,
+    circles: ref.watch(circlesProvider).asData?.value ?? const [],
+    planes: ref.watch(planesProvider).asData?.value ?? const [],
+    subspaces: ref.watch(subspacesProvider).asData?.value ?? const [],
+    subspacePoints: ref.watch(subspacePointsProvider).asData?.value ?? const [],
+    freeLines: ref.watch(freeLinesProvider).asData?.value ?? const [],
+    freeLinePoints: ref.watch(freeLinePointsProvider).asData?.value ?? const [],
+    freeAreas: ref.watch(freeAreasProvider).asData?.value ?? const [],
+    freeAreaPoints: ref.watch(freeAreaPointsProvider).asData?.value ?? const [],
+    heightRegions: ref.watch(heightRegionsProvider).asData?.value ?? const [],
+    poiSets: ref.watch(poiSetsProvider).asData?.value ?? const [],
+    poiPoints: ref.watch(poiPointsProvider).asData?.value ?? const [],
+    transitSets: ref.watch(transitSetsProvider).asData?.value ?? const [],
+    transitStops: ref.watch(transitStopsProvider).asData?.value ?? const [],
+    borderSets: ref.watch(borderSetsProvider).asData?.value ?? const [],
+    borderAreas: ref.watch(borderAreasProvider).asData?.value ?? const [],
+  );
+});
+
 /// Every object in [layer], as display rows in stable order.
 ///
 /// Callers pass the *global* row lists (the providers are not per-layer); this
@@ -266,6 +308,8 @@ ObjectSummary _circleSummary(Circle c, String layerId, int index) {
   final center = LatLng(c.centerLat, c.centerLng);
   return ObjectSummary(
     ref: ObjectRef(kind: ObjectKind.circle, id: c.id, layerId: layerId),
+    colorArgb: c.colorArgb,
+    colorShade: c.colorShade,
     title: _titleOr(c.label, 'Circle', index),
     subtitle: '${formatMeters(c.radiusMeters)} radius',
     center: center,
@@ -285,6 +329,8 @@ ObjectSummary _planeSummary(Plane p, String layerId, int index) {
   final center = _bboxCenter(pts) ?? a;
   return ObjectSummary(
     ref: ObjectRef(kind: ObjectKind.plane, id: p.id, layerId: layerId),
+    colorArgb: p.colorArgb,
+    colorShade: p.colorShade,
     title: _titleOr(p.label, 'Plane', index),
     subtitle: 'Nearer side: ${p.nearA ? 'A' : 'B'}',
     center: center,
@@ -309,6 +355,8 @@ ObjectSummary _subspaceSummary(
   final center = main ?? _bboxCenter(pts) ?? const LatLng(0, 0);
   return ObjectSummary(
     ref: ObjectRef(kind: ObjectKind.subspace, id: s.id, layerId: layerId),
+    colorArgb: s.colorArgb,
+    colorShade: s.colorShade,
     title: _titleOr(s.label, 'Subspace', index),
     subtitle: _plural(pts.length, 'point'),
     center: center,
@@ -348,6 +396,8 @@ ObjectSummary _freeLineSummary(
   final offset = l.offsetMeters;
   return ObjectSummary(
     ref: ObjectRef(kind: ObjectKind.freeLine, id: l.id, layerId: layerId),
+    colorArgb: l.colorArgb,
+    colorShade: l.colorShade,
     title: _titleOr(l.label, 'Line', index),
     subtitle: offset == 0
         ? _plural(pts.length, 'point')
@@ -372,6 +422,8 @@ ObjectSummary _freeAreaSummary(
   final offset = a.offsetMeters;
   return ObjectSummary(
     ref: ObjectRef(kind: ObjectKind.freeArea, id: a.id, layerId: layerId),
+    colorArgb: a.colorArgb,
+    colorShade: a.colorShade,
     title: _titleOr(a.label, 'Area', index),
     subtitle: offset == 0
         ? _plural(pts.length, 'point')
@@ -391,6 +443,8 @@ ObjectSummary _heightSummary(HeightRegion r, String layerId, int index) {
   ];
   return ObjectSummary(
     ref: ObjectRef(kind: ObjectKind.heightRegion, id: r.id, layerId: layerId),
+    colorArgb: r.colorArgb,
+    colorShade: r.colorShade,
     title: _titleOr(r.label, 'Height area', index),
     subtitle: parts.join(' · '),
     center: center,
@@ -447,6 +501,8 @@ ObjectSummary _transitSetSummary(
 
   return ObjectSummary(
     ref: ObjectRef(kind: ObjectKind.transitSet, id: s.id, layerId: layerId),
+    colorArgb: s.colorArgb,
+    colorShade: s.colorShade,
     title: title,
     subtitle: subtitle,
     center: center,
@@ -481,6 +537,7 @@ ObjectSummary _borderAreaSummary(BorderArea a, String layerId, int index) {
       LengthUnit.Meter, LatLng(a.south, a.west), LatLng(a.north, a.west));
   return ObjectSummary(
     ref: ObjectRef(kind: ObjectKind.borderArea, id: a.id, layerId: layerId),
+    colorArgb: a.colorArgb,
     title: _titleOr(a.name, 'Area', index),
     subtitle: [
       '${formatMeters(width)} × ${formatMeters(height)}',
@@ -508,6 +565,8 @@ ObjectSummary _poiSetSummary(
   final count = allPoints.where((p) => p.poiSetId == s.id).length;
   return ObjectSummary(
     ref: ObjectRef(kind: ObjectKind.poiSet, id: s.id, layerId: layerId),
+    colorArgb: s.colorArgb,
+    colorShade: s.colorShade,
     title: _titleOr(s.label, 'POI set', index),
     subtitle: '${_plural(count, 'POI')} · within ${formatMeters(s.radiusMeters)}',
     center: center,

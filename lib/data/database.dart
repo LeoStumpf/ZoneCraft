@@ -83,6 +83,19 @@ class Circles extends Table {
   TextColumn get label => text().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 
+  /// Per-element colour (v22). Null = follow the layer: the element paints in
+  /// its auto **shade** of the layer colour, picked by [colorShade] so the
+  /// elements of one layer tell each other apart and all follow a layer
+  /// recolour. A set value overrides that and survives a layer recolour, which
+  /// is what makes the recolour dialog ask what to do with them.
+  IntColumn get colorArgb => integer().nullable()();
+
+  /// Which auto shade this element takes, assigned in creation order within the
+  /// layer. **0 is the layer colour exactly**, which is what every row
+  /// migrating in from v21 gets — an untouched map must look untouched.
+  IntColumn get colorShade => integer().withDefault(const Constant(0))();
+
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -102,6 +115,19 @@ class Planes extends Table {
   TextColumn get label => text().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 
+  /// Per-element colour (v22). Null = follow the layer: the element paints in
+  /// its auto **shade** of the layer colour, picked by [colorShade] so the
+  /// elements of one layer tell each other apart and all follow a layer
+  /// recolour. A set value overrides that and survives a layer recolour, which
+  /// is what makes the recolour dialog ask what to do with them.
+  IntColumn get colorArgb => integer().nullable()();
+
+  /// Which auto shade this element takes, assigned in creation order within the
+  /// layer. **0 is the layer colour exactly**, which is what every row
+  /// migrating in from v21 gets — an untouched map must look untouched.
+  IntColumn get colorShade => integer().withDefault(const Constant(0))();
+
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -116,6 +142,19 @@ class Subspaces extends Table {
       text().references(Layers, #id, onDelete: KeyAction.cascade)();
   TextColumn get label => text().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  /// Per-element colour (v22). Null = follow the layer: the element paints in
+  /// its auto **shade** of the layer colour, picked by [colorShade] so the
+  /// elements of one layer tell each other apart and all follow a layer
+  /// recolour. A set value overrides that and survives a layer recolour, which
+  /// is what makes the recolour dialog ask what to do with them.
+  IntColumn get colorArgb => integer().nullable()();
+
+  /// Which auto shade this element takes, assigned in creation order within the
+  /// layer. **0 is the layer colour exactly**, which is what every row
+  /// migrating in from v21 gets — an untouched map must look untouched.
+  IntColumn get colorShade => integer().withDefault(const Constant(0))();
+
 
   @override
   Set<Column> get primaryKey => {id};
@@ -163,6 +202,19 @@ class FreeLines extends Table {
   RealColumn get inclusionRadiusMeters => real().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 
+  /// Per-element colour (v22). Null = follow the layer: the element paints in
+  /// its auto **shade** of the layer colour, picked by [colorShade] so the
+  /// elements of one layer tell each other apart and all follow a layer
+  /// recolour. A set value overrides that and survives a layer recolour, which
+  /// is what makes the recolour dialog ask what to do with them.
+  IntColumn get colorArgb => integer().nullable()();
+
+  /// Which auto shade this element takes, assigned in creation order within the
+  /// layer. **0 is the layer colour exactly**, which is what every row
+  /// migrating in from v21 gets — an untouched map must look untouched.
+  IntColumn get colorShade => integer().withDefault(const Constant(0))();
+
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -196,6 +248,19 @@ class FreeAreas extends Table {
   /// Signed inward offset in metres (see class doc). 0 = boundary on the ring.
   RealColumn get offsetMeters => real().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  /// Per-element colour (v22). Null = follow the layer: the element paints in
+  /// its auto **shade** of the layer colour, picked by [colorShade] so the
+  /// elements of one layer tell each other apart and all follow a layer
+  /// recolour. A set value overrides that and survives a layer recolour, which
+  /// is what makes the recolour dialog ask what to do with them.
+  IntColumn get colorArgb => integer().nullable()();
+
+  /// Which auto shade this element takes, assigned in creation order within the
+  /// layer. **0 is the layer colour exactly**, which is what every row
+  /// migrating in from v21 gets — an untouched map must look untouched.
+  IntColumn get colorShade => integer().withDefault(const Constant(0))();
+
 
   @override
   Set<Column> get primaryKey => {id};
@@ -242,6 +307,19 @@ class HeightRegions extends Table {
   /// When the fill polygons were last generated; null until first generation.
   DateTimeColumn get generatedAt => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  /// Per-element colour (v22). Null = follow the layer: the element paints in
+  /// its auto **shade** of the layer colour, picked by [colorShade] so the
+  /// elements of one layer tell each other apart and all follow a layer
+  /// recolour. A set value overrides that and survives a layer recolour, which
+  /// is what makes the recolour dialog ask what to do with them.
+  IntColumn get colorArgb => integer().nullable()();
+
+  /// Which auto shade this element takes, assigned in creation order within the
+  /// layer. **0 is the layer colour exactly**, which is what every row
+  /// migrating in from v21 gets — an untouched map must look untouched.
+  IntColumn get colorShade => integer().withDefault(const Constant(0))();
+
 
   @override
   Set<Column> get primaryKey => {id};
@@ -290,6 +368,19 @@ class PoiSets extends Table {
   RealColumn get radiusMeters => real()();
   TextColumn get label => text().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  /// Per-element colour (v22). Null = follow the layer: the element paints in
+  /// its auto **shade** of the layer colour, picked by [colorShade] so the
+  /// elements of one layer tell each other apart and all follow a layer
+  /// recolour. A set value overrides that and survives a layer recolour, which
+  /// is what makes the recolour dialog ask what to do with them.
+  IntColumn get colorArgb => integer().nullable()();
+
+  /// Which auto shade this element takes, assigned in creation order within the
+  /// layer. **0 is the layer colour exactly**, which is what every row
+  /// migrating in from v21 gets — an untouched map must look untouched.
+  IntColumn get colorShade => integer().withDefault(const Constant(0))();
+
 
   @override
   Set<Column> get primaryKey => {id};
@@ -368,6 +459,19 @@ class TransitSets extends Table {
   IntColumn get nodeCount => integer().withDefault(const Constant(0))();
 
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  /// Per-element colour (v22). Null = follow the layer: the element paints in
+  /// its auto **shade** of the layer colour, picked by [colorShade] so the
+  /// elements of one layer tell each other apart and all follow a layer
+  /// recolour. A set value overrides that and survives a layer recolour, which
+  /// is what makes the recolour dialog ask what to do with them.
+  IntColumn get colorArgb => integer().nullable()();
+
+  /// Which auto shade this element takes, assigned in creation order within the
+  /// layer. **0 is the layer colour exactly**, which is what every row
+  /// migrating in from v21 gets — an untouched map must look untouched.
+  IntColumn get colorShade => integer().withDefault(const Constant(0))();
+
 
   @override
   Set<Column> get primaryKey => {id};
@@ -495,6 +599,11 @@ class BorderAreas extends Table {
   TextColumn get wayIds => text()();
 
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  /// Per-area colour override (v22). Null = the layer's own rule: the
+  /// neighbour-distinct palette entry at [colorIndex] when "Colour areas" is
+  /// on, the layer colour otherwise. Set = this exact colour, either way.
+  IntColumn get colorArgb => integer().nullable()();
+
 
   @override
   Set<Column> get primaryKey => {id};
@@ -639,7 +748,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 21;
+  int get schemaVersion => 22;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -780,6 +889,29 @@ class AppDatabase extends _$AppDatabase {
             // that share a doorway.
             await m.addColumn(poiPoints, poiPoints.osmType);
             await m.addColumn(poiPoints, poiPoints.osmId);
+          }
+          if (from < 22) {
+            // Per-element colours. Every existing row keeps `color_argb` null
+            // and `color_shade` 0, and shade 0 *is* the layer colour, so an
+            // upgraded map renders pixel-identically until the user adds or
+            // recolours something. Only new elements start taking shades.
+            await m.addColumn(circles, circles.colorArgb);
+            await m.addColumn(circles, circles.colorShade);
+            await m.addColumn(planes, planes.colorArgb);
+            await m.addColumn(planes, planes.colorShade);
+            await m.addColumn(subspaces, subspaces.colorArgb);
+            await m.addColumn(subspaces, subspaces.colorShade);
+            await m.addColumn(freeLines, freeLines.colorArgb);
+            await m.addColumn(freeLines, freeLines.colorShade);
+            await m.addColumn(freeAreas, freeAreas.colorArgb);
+            await m.addColumn(freeAreas, freeAreas.colorShade);
+            await m.addColumn(heightRegions, heightRegions.colorArgb);
+            await m.addColumn(heightRegions, heightRegions.colorShade);
+            await m.addColumn(poiSets, poiSets.colorArgb);
+            await m.addColumn(poiSets, poiSets.colorShade);
+            await m.addColumn(transitSets, transitSets.colorArgb);
+            await m.addColumn(transitSets, transitSets.colorShade);
+            await m.addColumn(borderAreas, borderAreas.colorArgb);
           }
         },
         beforeOpen: (details) async {

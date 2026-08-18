@@ -823,6 +823,29 @@ class $CirclesTable extends Circles with TableInfo<$CirclesTable, Circle> {
     requiredDuringInsert: false,
     defaultValue: currentDateAndTime,
   );
+  static const VerificationMeta _colorArgbMeta = const VerificationMeta(
+    'colorArgb',
+  );
+  @override
+  late final GeneratedColumn<int> colorArgb = GeneratedColumn<int>(
+    'color_argb',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _colorShadeMeta = const VerificationMeta(
+    'colorShade',
+  );
+  @override
+  late final GeneratedColumn<int> colorShade = GeneratedColumn<int>(
+    'color_shade',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -832,6 +855,8 @@ class $CirclesTable extends Circles with TableInfo<$CirclesTable, Circle> {
     radiusMeters,
     label,
     createdAt,
+    colorArgb,
+    colorShade,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -897,6 +922,18 @@ class $CirclesTable extends Circles with TableInfo<$CirclesTable, Circle> {
         createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
       );
     }
+    if (data.containsKey('color_argb')) {
+      context.handle(
+        _colorArgbMeta,
+        colorArgb.isAcceptableOrUnknown(data['color_argb']!, _colorArgbMeta),
+      );
+    }
+    if (data.containsKey('color_shade')) {
+      context.handle(
+        _colorShadeMeta,
+        colorShade.isAcceptableOrUnknown(data['color_shade']!, _colorShadeMeta),
+      );
+    }
     return context;
   }
 
@@ -934,6 +971,14 @@ class $CirclesTable extends Circles with TableInfo<$CirclesTable, Circle> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      colorArgb: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_argb'],
+      ),
+      colorShade: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_shade'],
+      )!,
     );
   }
 
@@ -951,6 +996,18 @@ class Circle extends DataClass implements Insertable<Circle> {
   final double radiusMeters;
   final String? label;
   final DateTime createdAt;
+
+  /// Per-element colour (v22). Null = follow the layer: the element paints in
+  /// its auto **shade** of the layer colour, picked by [colorShade] so the
+  /// elements of one layer tell each other apart and all follow a layer
+  /// recolour. A set value overrides that and survives a layer recolour, which
+  /// is what makes the recolour dialog ask what to do with them.
+  final int? colorArgb;
+
+  /// Which auto shade this element takes, assigned in creation order within the
+  /// layer. **0 is the layer colour exactly**, which is what every row
+  /// migrating in from v21 gets — an untouched map must look untouched.
+  final int colorShade;
   const Circle({
     required this.id,
     required this.layerId,
@@ -959,6 +1016,8 @@ class Circle extends DataClass implements Insertable<Circle> {
     required this.radiusMeters,
     this.label,
     required this.createdAt,
+    this.colorArgb,
+    required this.colorShade,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -972,6 +1031,10 @@ class Circle extends DataClass implements Insertable<Circle> {
       map['label'] = Variable<String>(label);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || colorArgb != null) {
+      map['color_argb'] = Variable<int>(colorArgb);
+    }
+    map['color_shade'] = Variable<int>(colorShade);
     return map;
   }
 
@@ -986,6 +1049,10 @@ class Circle extends DataClass implements Insertable<Circle> {
           ? const Value.absent()
           : Value(label),
       createdAt: Value(createdAt),
+      colorArgb: colorArgb == null && nullToAbsent
+          ? const Value.absent()
+          : Value(colorArgb),
+      colorShade: Value(colorShade),
     );
   }
 
@@ -1002,6 +1069,8 @@ class Circle extends DataClass implements Insertable<Circle> {
       radiusMeters: serializer.fromJson<double>(json['radiusMeters']),
       label: serializer.fromJson<String?>(json['label']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      colorArgb: serializer.fromJson<int?>(json['colorArgb']),
+      colorShade: serializer.fromJson<int>(json['colorShade']),
     );
   }
   @override
@@ -1015,6 +1084,8 @@ class Circle extends DataClass implements Insertable<Circle> {
       'radiusMeters': serializer.toJson<double>(radiusMeters),
       'label': serializer.toJson<String?>(label),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'colorArgb': serializer.toJson<int?>(colorArgb),
+      'colorShade': serializer.toJson<int>(colorShade),
     };
   }
 
@@ -1026,6 +1097,8 @@ class Circle extends DataClass implements Insertable<Circle> {
     double? radiusMeters,
     Value<String?> label = const Value.absent(),
     DateTime? createdAt,
+    Value<int?> colorArgb = const Value.absent(),
+    int? colorShade,
   }) => Circle(
     id: id ?? this.id,
     layerId: layerId ?? this.layerId,
@@ -1034,6 +1107,8 @@ class Circle extends DataClass implements Insertable<Circle> {
     radiusMeters: radiusMeters ?? this.radiusMeters,
     label: label.present ? label.value : this.label,
     createdAt: createdAt ?? this.createdAt,
+    colorArgb: colorArgb.present ? colorArgb.value : this.colorArgb,
+    colorShade: colorShade ?? this.colorShade,
   );
   Circle copyWithCompanion(CirclesCompanion data) {
     return Circle(
@@ -1046,6 +1121,10 @@ class Circle extends DataClass implements Insertable<Circle> {
           : this.radiusMeters,
       label: data.label.present ? data.label.value : this.label,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      colorArgb: data.colorArgb.present ? data.colorArgb.value : this.colorArgb,
+      colorShade: data.colorShade.present
+          ? data.colorShade.value
+          : this.colorShade,
     );
   }
 
@@ -1058,7 +1137,9 @@ class Circle extends DataClass implements Insertable<Circle> {
           ..write('centerLng: $centerLng, ')
           ..write('radiusMeters: $radiusMeters, ')
           ..write('label: $label, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('colorArgb: $colorArgb, ')
+          ..write('colorShade: $colorShade')
           ..write(')'))
         .toString();
   }
@@ -1072,6 +1153,8 @@ class Circle extends DataClass implements Insertable<Circle> {
     radiusMeters,
     label,
     createdAt,
+    colorArgb,
+    colorShade,
   );
   @override
   bool operator ==(Object other) =>
@@ -1083,7 +1166,9 @@ class Circle extends DataClass implements Insertable<Circle> {
           other.centerLng == this.centerLng &&
           other.radiusMeters == this.radiusMeters &&
           other.label == this.label &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.colorArgb == this.colorArgb &&
+          other.colorShade == this.colorShade);
 }
 
 class CirclesCompanion extends UpdateCompanion<Circle> {
@@ -1094,6 +1179,8 @@ class CirclesCompanion extends UpdateCompanion<Circle> {
   final Value<double> radiusMeters;
   final Value<String?> label;
   final Value<DateTime> createdAt;
+  final Value<int?> colorArgb;
+  final Value<int> colorShade;
   final Value<int> rowid;
   const CirclesCompanion({
     this.id = const Value.absent(),
@@ -1103,6 +1190,8 @@ class CirclesCompanion extends UpdateCompanion<Circle> {
     this.radiusMeters = const Value.absent(),
     this.label = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.colorArgb = const Value.absent(),
+    this.colorShade = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   CirclesCompanion.insert({
@@ -1113,6 +1202,8 @@ class CirclesCompanion extends UpdateCompanion<Circle> {
     required double radiusMeters,
     this.label = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.colorArgb = const Value.absent(),
+    this.colorShade = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        layerId = Value(layerId),
@@ -1127,6 +1218,8 @@ class CirclesCompanion extends UpdateCompanion<Circle> {
     Expression<double>? radiusMeters,
     Expression<String>? label,
     Expression<DateTime>? createdAt,
+    Expression<int>? colorArgb,
+    Expression<int>? colorShade,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1137,6 +1230,8 @@ class CirclesCompanion extends UpdateCompanion<Circle> {
       if (radiusMeters != null) 'radius_meters': radiusMeters,
       if (label != null) 'label': label,
       if (createdAt != null) 'created_at': createdAt,
+      if (colorArgb != null) 'color_argb': colorArgb,
+      if (colorShade != null) 'color_shade': colorShade,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1149,6 +1244,8 @@ class CirclesCompanion extends UpdateCompanion<Circle> {
     Value<double>? radiusMeters,
     Value<String?>? label,
     Value<DateTime>? createdAt,
+    Value<int?>? colorArgb,
+    Value<int>? colorShade,
     Value<int>? rowid,
   }) {
     return CirclesCompanion(
@@ -1159,6 +1256,8 @@ class CirclesCompanion extends UpdateCompanion<Circle> {
       radiusMeters: radiusMeters ?? this.radiusMeters,
       label: label ?? this.label,
       createdAt: createdAt ?? this.createdAt,
+      colorArgb: colorArgb ?? this.colorArgb,
+      colorShade: colorShade ?? this.colorShade,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1187,6 +1286,12 @@ class CirclesCompanion extends UpdateCompanion<Circle> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (colorArgb.present) {
+      map['color_argb'] = Variable<int>(colorArgb.value);
+    }
+    if (colorShade.present) {
+      map['color_shade'] = Variable<int>(colorShade.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1203,6 +1308,8 @@ class CirclesCompanion extends UpdateCompanion<Circle> {
           ..write('radiusMeters: $radiusMeters, ')
           ..write('label: $label, ')
           ..write('createdAt: $createdAt, ')
+          ..write('colorArgb: $colorArgb, ')
+          ..write('colorShade: $colorShade, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1307,6 +1414,29 @@ class $PlanesTable extends Planes with TableInfo<$PlanesTable, Plane> {
     requiredDuringInsert: false,
     defaultValue: currentDateAndTime,
   );
+  static const VerificationMeta _colorArgbMeta = const VerificationMeta(
+    'colorArgb',
+  );
+  @override
+  late final GeneratedColumn<int> colorArgb = GeneratedColumn<int>(
+    'color_argb',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _colorShadeMeta = const VerificationMeta(
+    'colorShade',
+  );
+  @override
+  late final GeneratedColumn<int> colorShade = GeneratedColumn<int>(
+    'color_shade',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1318,6 +1448,8 @@ class $PlanesTable extends Planes with TableInfo<$PlanesTable, Plane> {
     nearA,
     label,
     createdAt,
+    colorArgb,
+    colorShade,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1394,6 +1526,18 @@ class $PlanesTable extends Planes with TableInfo<$PlanesTable, Plane> {
         createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
       );
     }
+    if (data.containsKey('color_argb')) {
+      context.handle(
+        _colorArgbMeta,
+        colorArgb.isAcceptableOrUnknown(data['color_argb']!, _colorArgbMeta),
+      );
+    }
+    if (data.containsKey('color_shade')) {
+      context.handle(
+        _colorShadeMeta,
+        colorShade.isAcceptableOrUnknown(data['color_shade']!, _colorShadeMeta),
+      );
+    }
     return context;
   }
 
@@ -1439,6 +1583,14 @@ class $PlanesTable extends Planes with TableInfo<$PlanesTable, Plane> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      colorArgb: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_argb'],
+      ),
+      colorShade: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_shade'],
+      )!,
     );
   }
 
@@ -1458,6 +1610,18 @@ class Plane extends DataClass implements Insertable<Plane> {
   final bool nearA;
   final String? label;
   final DateTime createdAt;
+
+  /// Per-element colour (v22). Null = follow the layer: the element paints in
+  /// its auto **shade** of the layer colour, picked by [colorShade] so the
+  /// elements of one layer tell each other apart and all follow a layer
+  /// recolour. A set value overrides that and survives a layer recolour, which
+  /// is what makes the recolour dialog ask what to do with them.
+  final int? colorArgb;
+
+  /// Which auto shade this element takes, assigned in creation order within the
+  /// layer. **0 is the layer colour exactly**, which is what every row
+  /// migrating in from v21 gets — an untouched map must look untouched.
+  final int colorShade;
   const Plane({
     required this.id,
     required this.layerId,
@@ -1468,6 +1632,8 @@ class Plane extends DataClass implements Insertable<Plane> {
     required this.nearA,
     this.label,
     required this.createdAt,
+    this.colorArgb,
+    required this.colorShade,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1483,6 +1649,10 @@ class Plane extends DataClass implements Insertable<Plane> {
       map['label'] = Variable<String>(label);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || colorArgb != null) {
+      map['color_argb'] = Variable<int>(colorArgb);
+    }
+    map['color_shade'] = Variable<int>(colorShade);
     return map;
   }
 
@@ -1499,6 +1669,10 @@ class Plane extends DataClass implements Insertable<Plane> {
           ? const Value.absent()
           : Value(label),
       createdAt: Value(createdAt),
+      colorArgb: colorArgb == null && nullToAbsent
+          ? const Value.absent()
+          : Value(colorArgb),
+      colorShade: Value(colorShade),
     );
   }
 
@@ -1517,6 +1691,8 @@ class Plane extends DataClass implements Insertable<Plane> {
       nearA: serializer.fromJson<bool>(json['nearA']),
       label: serializer.fromJson<String?>(json['label']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      colorArgb: serializer.fromJson<int?>(json['colorArgb']),
+      colorShade: serializer.fromJson<int>(json['colorShade']),
     );
   }
   @override
@@ -1532,6 +1708,8 @@ class Plane extends DataClass implements Insertable<Plane> {
       'nearA': serializer.toJson<bool>(nearA),
       'label': serializer.toJson<String?>(label),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'colorArgb': serializer.toJson<int?>(colorArgb),
+      'colorShade': serializer.toJson<int>(colorShade),
     };
   }
 
@@ -1545,6 +1723,8 @@ class Plane extends DataClass implements Insertable<Plane> {
     bool? nearA,
     Value<String?> label = const Value.absent(),
     DateTime? createdAt,
+    Value<int?> colorArgb = const Value.absent(),
+    int? colorShade,
   }) => Plane(
     id: id ?? this.id,
     layerId: layerId ?? this.layerId,
@@ -1555,6 +1735,8 @@ class Plane extends DataClass implements Insertable<Plane> {
     nearA: nearA ?? this.nearA,
     label: label.present ? label.value : this.label,
     createdAt: createdAt ?? this.createdAt,
+    colorArgb: colorArgb.present ? colorArgb.value : this.colorArgb,
+    colorShade: colorShade ?? this.colorShade,
   );
   Plane copyWithCompanion(PlanesCompanion data) {
     return Plane(
@@ -1567,6 +1749,10 @@ class Plane extends DataClass implements Insertable<Plane> {
       nearA: data.nearA.present ? data.nearA.value : this.nearA,
       label: data.label.present ? data.label.value : this.label,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      colorArgb: data.colorArgb.present ? data.colorArgb.value : this.colorArgb,
+      colorShade: data.colorShade.present
+          ? data.colorShade.value
+          : this.colorShade,
     );
   }
 
@@ -1581,14 +1767,27 @@ class Plane extends DataClass implements Insertable<Plane> {
           ..write('bLng: $bLng, ')
           ..write('nearA: $nearA, ')
           ..write('label: $label, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('colorArgb: $colorArgb, ')
+          ..write('colorShade: $colorShade')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, layerId, aLat, aLng, bLat, bLng, nearA, label, createdAt);
+  int get hashCode => Object.hash(
+    id,
+    layerId,
+    aLat,
+    aLng,
+    bLat,
+    bLng,
+    nearA,
+    label,
+    createdAt,
+    colorArgb,
+    colorShade,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1601,7 +1800,9 @@ class Plane extends DataClass implements Insertable<Plane> {
           other.bLng == this.bLng &&
           other.nearA == this.nearA &&
           other.label == this.label &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.colorArgb == this.colorArgb &&
+          other.colorShade == this.colorShade);
 }
 
 class PlanesCompanion extends UpdateCompanion<Plane> {
@@ -1614,6 +1815,8 @@ class PlanesCompanion extends UpdateCompanion<Plane> {
   final Value<bool> nearA;
   final Value<String?> label;
   final Value<DateTime> createdAt;
+  final Value<int?> colorArgb;
+  final Value<int> colorShade;
   final Value<int> rowid;
   const PlanesCompanion({
     this.id = const Value.absent(),
@@ -1625,6 +1828,8 @@ class PlanesCompanion extends UpdateCompanion<Plane> {
     this.nearA = const Value.absent(),
     this.label = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.colorArgb = const Value.absent(),
+    this.colorShade = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   PlanesCompanion.insert({
@@ -1637,6 +1842,8 @@ class PlanesCompanion extends UpdateCompanion<Plane> {
     this.nearA = const Value.absent(),
     this.label = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.colorArgb = const Value.absent(),
+    this.colorShade = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        layerId = Value(layerId),
@@ -1654,6 +1861,8 @@ class PlanesCompanion extends UpdateCompanion<Plane> {
     Expression<bool>? nearA,
     Expression<String>? label,
     Expression<DateTime>? createdAt,
+    Expression<int>? colorArgb,
+    Expression<int>? colorShade,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1666,6 +1875,8 @@ class PlanesCompanion extends UpdateCompanion<Plane> {
       if (nearA != null) 'near_a': nearA,
       if (label != null) 'label': label,
       if (createdAt != null) 'created_at': createdAt,
+      if (colorArgb != null) 'color_argb': colorArgb,
+      if (colorShade != null) 'color_shade': colorShade,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1680,6 +1891,8 @@ class PlanesCompanion extends UpdateCompanion<Plane> {
     Value<bool>? nearA,
     Value<String?>? label,
     Value<DateTime>? createdAt,
+    Value<int?>? colorArgb,
+    Value<int>? colorShade,
     Value<int>? rowid,
   }) {
     return PlanesCompanion(
@@ -1692,6 +1905,8 @@ class PlanesCompanion extends UpdateCompanion<Plane> {
       nearA: nearA ?? this.nearA,
       label: label ?? this.label,
       createdAt: createdAt ?? this.createdAt,
+      colorArgb: colorArgb ?? this.colorArgb,
+      colorShade: colorShade ?? this.colorShade,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1726,6 +1941,12 @@ class PlanesCompanion extends UpdateCompanion<Plane> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (colorArgb.present) {
+      map['color_argb'] = Variable<int>(colorArgb.value);
+    }
+    if (colorShade.present) {
+      map['color_shade'] = Variable<int>(colorShade.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1744,6 +1965,8 @@ class PlanesCompanion extends UpdateCompanion<Plane> {
           ..write('nearA: $nearA, ')
           ..write('label: $label, ')
           ..write('createdAt: $createdAt, ')
+          ..write('colorArgb: $colorArgb, ')
+          ..write('colorShade: $colorShade, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2560,8 +2783,38 @@ class $SubspacesTable extends Subspaces
     requiredDuringInsert: false,
     defaultValue: currentDateAndTime,
   );
+  static const VerificationMeta _colorArgbMeta = const VerificationMeta(
+    'colorArgb',
+  );
   @override
-  List<GeneratedColumn> get $columns => [id, layerId, label, createdAt];
+  late final GeneratedColumn<int> colorArgb = GeneratedColumn<int>(
+    'color_argb',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _colorShadeMeta = const VerificationMeta(
+    'colorShade',
+  );
+  @override
+  late final GeneratedColumn<int> colorShade = GeneratedColumn<int>(
+    'color_shade',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    layerId,
+    label,
+    createdAt,
+    colorArgb,
+    colorShade,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -2599,6 +2852,18 @@ class $SubspacesTable extends Subspaces
         createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
       );
     }
+    if (data.containsKey('color_argb')) {
+      context.handle(
+        _colorArgbMeta,
+        colorArgb.isAcceptableOrUnknown(data['color_argb']!, _colorArgbMeta),
+      );
+    }
+    if (data.containsKey('color_shade')) {
+      context.handle(
+        _colorShadeMeta,
+        colorShade.isAcceptableOrUnknown(data['color_shade']!, _colorShadeMeta),
+      );
+    }
     return context;
   }
 
@@ -2624,6 +2889,14 @@ class $SubspacesTable extends Subspaces
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      colorArgb: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_argb'],
+      ),
+      colorShade: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_shade'],
+      )!,
     );
   }
 
@@ -2638,11 +2911,25 @@ class Subspace extends DataClass implements Insertable<Subspace> {
   final String layerId;
   final String? label;
   final DateTime createdAt;
+
+  /// Per-element colour (v22). Null = follow the layer: the element paints in
+  /// its auto **shade** of the layer colour, picked by [colorShade] so the
+  /// elements of one layer tell each other apart and all follow a layer
+  /// recolour. A set value overrides that and survives a layer recolour, which
+  /// is what makes the recolour dialog ask what to do with them.
+  final int? colorArgb;
+
+  /// Which auto shade this element takes, assigned in creation order within the
+  /// layer. **0 is the layer colour exactly**, which is what every row
+  /// migrating in from v21 gets — an untouched map must look untouched.
+  final int colorShade;
   const Subspace({
     required this.id,
     required this.layerId,
     this.label,
     required this.createdAt,
+    this.colorArgb,
+    required this.colorShade,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2653,6 +2940,10 @@ class Subspace extends DataClass implements Insertable<Subspace> {
       map['label'] = Variable<String>(label);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || colorArgb != null) {
+      map['color_argb'] = Variable<int>(colorArgb);
+    }
+    map['color_shade'] = Variable<int>(colorShade);
     return map;
   }
 
@@ -2664,6 +2955,10 @@ class Subspace extends DataClass implements Insertable<Subspace> {
           ? const Value.absent()
           : Value(label),
       createdAt: Value(createdAt),
+      colorArgb: colorArgb == null && nullToAbsent
+          ? const Value.absent()
+          : Value(colorArgb),
+      colorShade: Value(colorShade),
     );
   }
 
@@ -2677,6 +2972,8 @@ class Subspace extends DataClass implements Insertable<Subspace> {
       layerId: serializer.fromJson<String>(json['layerId']),
       label: serializer.fromJson<String?>(json['label']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      colorArgb: serializer.fromJson<int?>(json['colorArgb']),
+      colorShade: serializer.fromJson<int>(json['colorShade']),
     );
   }
   @override
@@ -2687,6 +2984,8 @@ class Subspace extends DataClass implements Insertable<Subspace> {
       'layerId': serializer.toJson<String>(layerId),
       'label': serializer.toJson<String?>(label),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'colorArgb': serializer.toJson<int?>(colorArgb),
+      'colorShade': serializer.toJson<int>(colorShade),
     };
   }
 
@@ -2695,11 +2994,15 @@ class Subspace extends DataClass implements Insertable<Subspace> {
     String? layerId,
     Value<String?> label = const Value.absent(),
     DateTime? createdAt,
+    Value<int?> colorArgb = const Value.absent(),
+    int? colorShade,
   }) => Subspace(
     id: id ?? this.id,
     layerId: layerId ?? this.layerId,
     label: label.present ? label.value : this.label,
     createdAt: createdAt ?? this.createdAt,
+    colorArgb: colorArgb.present ? colorArgb.value : this.colorArgb,
+    colorShade: colorShade ?? this.colorShade,
   );
   Subspace copyWithCompanion(SubspacesCompanion data) {
     return Subspace(
@@ -2707,6 +3010,10 @@ class Subspace extends DataClass implements Insertable<Subspace> {
       layerId: data.layerId.present ? data.layerId.value : this.layerId,
       label: data.label.present ? data.label.value : this.label,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      colorArgb: data.colorArgb.present ? data.colorArgb.value : this.colorArgb,
+      colorShade: data.colorShade.present
+          ? data.colorShade.value
+          : this.colorShade,
     );
   }
 
@@ -2716,13 +3023,16 @@ class Subspace extends DataClass implements Insertable<Subspace> {
           ..write('id: $id, ')
           ..write('layerId: $layerId, ')
           ..write('label: $label, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('colorArgb: $colorArgb, ')
+          ..write('colorShade: $colorShade')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, layerId, label, createdAt);
+  int get hashCode =>
+      Object.hash(id, layerId, label, createdAt, colorArgb, colorShade);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2730,7 +3040,9 @@ class Subspace extends DataClass implements Insertable<Subspace> {
           other.id == this.id &&
           other.layerId == this.layerId &&
           other.label == this.label &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.colorArgb == this.colorArgb &&
+          other.colorShade == this.colorShade);
 }
 
 class SubspacesCompanion extends UpdateCompanion<Subspace> {
@@ -2738,12 +3050,16 @@ class SubspacesCompanion extends UpdateCompanion<Subspace> {
   final Value<String> layerId;
   final Value<String?> label;
   final Value<DateTime> createdAt;
+  final Value<int?> colorArgb;
+  final Value<int> colorShade;
   final Value<int> rowid;
   const SubspacesCompanion({
     this.id = const Value.absent(),
     this.layerId = const Value.absent(),
     this.label = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.colorArgb = const Value.absent(),
+    this.colorShade = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   SubspacesCompanion.insert({
@@ -2751,6 +3067,8 @@ class SubspacesCompanion extends UpdateCompanion<Subspace> {
     required String layerId,
     this.label = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.colorArgb = const Value.absent(),
+    this.colorShade = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        layerId = Value(layerId);
@@ -2759,6 +3077,8 @@ class SubspacesCompanion extends UpdateCompanion<Subspace> {
     Expression<String>? layerId,
     Expression<String>? label,
     Expression<DateTime>? createdAt,
+    Expression<int>? colorArgb,
+    Expression<int>? colorShade,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2766,6 +3086,8 @@ class SubspacesCompanion extends UpdateCompanion<Subspace> {
       if (layerId != null) 'layer_id': layerId,
       if (label != null) 'label': label,
       if (createdAt != null) 'created_at': createdAt,
+      if (colorArgb != null) 'color_argb': colorArgb,
+      if (colorShade != null) 'color_shade': colorShade,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2775,6 +3097,8 @@ class SubspacesCompanion extends UpdateCompanion<Subspace> {
     Value<String>? layerId,
     Value<String?>? label,
     Value<DateTime>? createdAt,
+    Value<int?>? colorArgb,
+    Value<int>? colorShade,
     Value<int>? rowid,
   }) {
     return SubspacesCompanion(
@@ -2782,6 +3106,8 @@ class SubspacesCompanion extends UpdateCompanion<Subspace> {
       layerId: layerId ?? this.layerId,
       label: label ?? this.label,
       createdAt: createdAt ?? this.createdAt,
+      colorArgb: colorArgb ?? this.colorArgb,
+      colorShade: colorShade ?? this.colorShade,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2801,6 +3127,12 @@ class SubspacesCompanion extends UpdateCompanion<Subspace> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (colorArgb.present) {
+      map['color_argb'] = Variable<int>(colorArgb.value);
+    }
+    if (colorShade.present) {
+      map['color_shade'] = Variable<int>(colorShade.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2814,6 +3146,8 @@ class SubspacesCompanion extends UpdateCompanion<Subspace> {
           ..write('layerId: $layerId, ')
           ..write('label: $label, ')
           ..write('createdAt: $createdAt, ')
+          ..write('colorArgb: $colorArgb, ')
+          ..write('colorShade: $colorShade, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -3426,6 +3760,29 @@ class $FreeLinesTable extends FreeLines
     requiredDuringInsert: false,
     defaultValue: currentDateAndTime,
   );
+  static const VerificationMeta _colorArgbMeta = const VerificationMeta(
+    'colorArgb',
+  );
+  @override
+  late final GeneratedColumn<int> colorArgb = GeneratedColumn<int>(
+    'color_argb',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _colorShadeMeta = const VerificationMeta(
+    'colorShade',
+  );
+  @override
+  late final GeneratedColumn<int> colorShade = GeneratedColumn<int>(
+    'color_shade',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -3436,6 +3793,8 @@ class $FreeLinesTable extends FreeLines
     inclusionLng,
     inclusionRadiusMeters,
     createdAt,
+    colorArgb,
+    colorShade,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3510,6 +3869,18 @@ class $FreeLinesTable extends FreeLines
         createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
       );
     }
+    if (data.containsKey('color_argb')) {
+      context.handle(
+        _colorArgbMeta,
+        colorArgb.isAcceptableOrUnknown(data['color_argb']!, _colorArgbMeta),
+      );
+    }
+    if (data.containsKey('color_shade')) {
+      context.handle(
+        _colorShadeMeta,
+        colorShade.isAcceptableOrUnknown(data['color_shade']!, _colorShadeMeta),
+      );
+    }
     return context;
   }
 
@@ -3551,6 +3922,14 @@ class $FreeLinesTable extends FreeLines
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      colorArgb: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_argb'],
+      ),
+      colorShade: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_shade'],
+      )!,
     );
   }
 
@@ -3576,6 +3955,18 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
   final double? inclusionLng;
   final double? inclusionRadiusMeters;
   final DateTime createdAt;
+
+  /// Per-element colour (v22). Null = follow the layer: the element paints in
+  /// its auto **shade** of the layer colour, picked by [colorShade] so the
+  /// elements of one layer tell each other apart and all follow a layer
+  /// recolour. A set value overrides that and survives a layer recolour, which
+  /// is what makes the recolour dialog ask what to do with them.
+  final int? colorArgb;
+
+  /// Which auto shade this element takes, assigned in creation order within the
+  /// layer. **0 is the layer colour exactly**, which is what every row
+  /// migrating in from v21 gets — an untouched map must look untouched.
+  final int colorShade;
   const FreeLine({
     required this.id,
     required this.layerId,
@@ -3585,6 +3976,8 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
     this.inclusionLng,
     this.inclusionRadiusMeters,
     required this.createdAt,
+    this.colorArgb,
+    required this.colorShade,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3605,6 +3998,10 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
       map['inclusion_radius_meters'] = Variable<double>(inclusionRadiusMeters);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || colorArgb != null) {
+      map['color_argb'] = Variable<int>(colorArgb);
+    }
+    map['color_shade'] = Variable<int>(colorShade);
     return map;
   }
 
@@ -3626,6 +4023,10 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
           ? const Value.absent()
           : Value(inclusionRadiusMeters),
       createdAt: Value(createdAt),
+      colorArgb: colorArgb == null && nullToAbsent
+          ? const Value.absent()
+          : Value(colorArgb),
+      colorShade: Value(colorShade),
     );
   }
 
@@ -3645,6 +4046,8 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
         json['inclusionRadiusMeters'],
       ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      colorArgb: serializer.fromJson<int?>(json['colorArgb']),
+      colorShade: serializer.fromJson<int>(json['colorShade']),
     );
   }
   @override
@@ -3661,6 +4064,8 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
         inclusionRadiusMeters,
       ),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'colorArgb': serializer.toJson<int?>(colorArgb),
+      'colorShade': serializer.toJson<int>(colorShade),
     };
   }
 
@@ -3673,6 +4078,8 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
     Value<double?> inclusionLng = const Value.absent(),
     Value<double?> inclusionRadiusMeters = const Value.absent(),
     DateTime? createdAt,
+    Value<int?> colorArgb = const Value.absent(),
+    int? colorShade,
   }) => FreeLine(
     id: id ?? this.id,
     layerId: layerId ?? this.layerId,
@@ -3684,6 +4091,8 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
         ? inclusionRadiusMeters.value
         : this.inclusionRadiusMeters,
     createdAt: createdAt ?? this.createdAt,
+    colorArgb: colorArgb.present ? colorArgb.value : this.colorArgb,
+    colorShade: colorShade ?? this.colorShade,
   );
   FreeLine copyWithCompanion(FreeLinesCompanion data) {
     return FreeLine(
@@ -3703,6 +4112,10 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
           ? data.inclusionRadiusMeters.value
           : this.inclusionRadiusMeters,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      colorArgb: data.colorArgb.present ? data.colorArgb.value : this.colorArgb,
+      colorShade: data.colorShade.present
+          ? data.colorShade.value
+          : this.colorShade,
     );
   }
 
@@ -3716,7 +4129,9 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
           ..write('inclusionLat: $inclusionLat, ')
           ..write('inclusionLng: $inclusionLng, ')
           ..write('inclusionRadiusMeters: $inclusionRadiusMeters, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('colorArgb: $colorArgb, ')
+          ..write('colorShade: $colorShade')
           ..write(')'))
         .toString();
   }
@@ -3731,6 +4146,8 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
     inclusionLng,
     inclusionRadiusMeters,
     createdAt,
+    colorArgb,
+    colorShade,
   );
   @override
   bool operator ==(Object other) =>
@@ -3743,7 +4160,9 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
           other.inclusionLat == this.inclusionLat &&
           other.inclusionLng == this.inclusionLng &&
           other.inclusionRadiusMeters == this.inclusionRadiusMeters &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.colorArgb == this.colorArgb &&
+          other.colorShade == this.colorShade);
 }
 
 class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
@@ -3755,6 +4174,8 @@ class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
   final Value<double?> inclusionLng;
   final Value<double?> inclusionRadiusMeters;
   final Value<DateTime> createdAt;
+  final Value<int?> colorArgb;
+  final Value<int> colorShade;
   final Value<int> rowid;
   const FreeLinesCompanion({
     this.id = const Value.absent(),
@@ -3765,6 +4186,8 @@ class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
     this.inclusionLng = const Value.absent(),
     this.inclusionRadiusMeters = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.colorArgb = const Value.absent(),
+    this.colorShade = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   FreeLinesCompanion.insert({
@@ -3776,6 +4199,8 @@ class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
     this.inclusionLng = const Value.absent(),
     this.inclusionRadiusMeters = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.colorArgb = const Value.absent(),
+    this.colorShade = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        layerId = Value(layerId);
@@ -3788,6 +4213,8 @@ class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
     Expression<double>? inclusionLng,
     Expression<double>? inclusionRadiusMeters,
     Expression<DateTime>? createdAt,
+    Expression<int>? colorArgb,
+    Expression<int>? colorShade,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -3800,6 +4227,8 @@ class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
       if (inclusionRadiusMeters != null)
         'inclusion_radius_meters': inclusionRadiusMeters,
       if (createdAt != null) 'created_at': createdAt,
+      if (colorArgb != null) 'color_argb': colorArgb,
+      if (colorShade != null) 'color_shade': colorShade,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -3813,6 +4242,8 @@ class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
     Value<double?>? inclusionLng,
     Value<double?>? inclusionRadiusMeters,
     Value<DateTime>? createdAt,
+    Value<int?>? colorArgb,
+    Value<int>? colorShade,
     Value<int>? rowid,
   }) {
     return FreeLinesCompanion(
@@ -3825,6 +4256,8 @@ class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
       inclusionRadiusMeters:
           inclusionRadiusMeters ?? this.inclusionRadiusMeters,
       createdAt: createdAt ?? this.createdAt,
+      colorArgb: colorArgb ?? this.colorArgb,
+      colorShade: colorShade ?? this.colorShade,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -3858,6 +4291,12 @@ class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (colorArgb.present) {
+      map['color_argb'] = Variable<int>(colorArgb.value);
+    }
+    if (colorShade.present) {
+      map['color_shade'] = Variable<int>(colorShade.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -3875,6 +4314,8 @@ class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
           ..write('inclusionLng: $inclusionLng, ')
           ..write('inclusionRadiusMeters: $inclusionRadiusMeters, ')
           ..write('createdAt: $createdAt, ')
+          ..write('colorArgb: $colorArgb, ')
+          ..write('colorShade: $colorShade, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -4355,6 +4796,29 @@ class $FreeAreasTable extends FreeAreas
     requiredDuringInsert: false,
     defaultValue: currentDateAndTime,
   );
+  static const VerificationMeta _colorArgbMeta = const VerificationMeta(
+    'colorArgb',
+  );
+  @override
+  late final GeneratedColumn<int> colorArgb = GeneratedColumn<int>(
+    'color_argb',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _colorShadeMeta = const VerificationMeta(
+    'colorShade',
+  );
+  @override
+  late final GeneratedColumn<int> colorShade = GeneratedColumn<int>(
+    'color_shade',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -4362,6 +4826,8 @@ class $FreeAreasTable extends FreeAreas
     label,
     offsetMeters,
     createdAt,
+    colorArgb,
+    colorShade,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -4409,6 +4875,18 @@ class $FreeAreasTable extends FreeAreas
         createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
       );
     }
+    if (data.containsKey('color_argb')) {
+      context.handle(
+        _colorArgbMeta,
+        colorArgb.isAcceptableOrUnknown(data['color_argb']!, _colorArgbMeta),
+      );
+    }
+    if (data.containsKey('color_shade')) {
+      context.handle(
+        _colorShadeMeta,
+        colorShade.isAcceptableOrUnknown(data['color_shade']!, _colorShadeMeta),
+      );
+    }
     return context;
   }
 
@@ -4438,6 +4916,14 @@ class $FreeAreasTable extends FreeAreas
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      colorArgb: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_argb'],
+      ),
+      colorShade: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_shade'],
+      )!,
     );
   }
 
@@ -4455,12 +4941,26 @@ class FreeArea extends DataClass implements Insertable<FreeArea> {
   /// Signed inward offset in metres (see class doc). 0 = boundary on the ring.
   final double offsetMeters;
   final DateTime createdAt;
+
+  /// Per-element colour (v22). Null = follow the layer: the element paints in
+  /// its auto **shade** of the layer colour, picked by [colorShade] so the
+  /// elements of one layer tell each other apart and all follow a layer
+  /// recolour. A set value overrides that and survives a layer recolour, which
+  /// is what makes the recolour dialog ask what to do with them.
+  final int? colorArgb;
+
+  /// Which auto shade this element takes, assigned in creation order within the
+  /// layer. **0 is the layer colour exactly**, which is what every row
+  /// migrating in from v21 gets — an untouched map must look untouched.
+  final int colorShade;
   const FreeArea({
     required this.id,
     required this.layerId,
     this.label,
     required this.offsetMeters,
     required this.createdAt,
+    this.colorArgb,
+    required this.colorShade,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -4472,6 +4972,10 @@ class FreeArea extends DataClass implements Insertable<FreeArea> {
     }
     map['offset_meters'] = Variable<double>(offsetMeters);
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || colorArgb != null) {
+      map['color_argb'] = Variable<int>(colorArgb);
+    }
+    map['color_shade'] = Variable<int>(colorShade);
     return map;
   }
 
@@ -4484,6 +4988,10 @@ class FreeArea extends DataClass implements Insertable<FreeArea> {
           : Value(label),
       offsetMeters: Value(offsetMeters),
       createdAt: Value(createdAt),
+      colorArgb: colorArgb == null && nullToAbsent
+          ? const Value.absent()
+          : Value(colorArgb),
+      colorShade: Value(colorShade),
     );
   }
 
@@ -4498,6 +5006,8 @@ class FreeArea extends DataClass implements Insertable<FreeArea> {
       label: serializer.fromJson<String?>(json['label']),
       offsetMeters: serializer.fromJson<double>(json['offsetMeters']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      colorArgb: serializer.fromJson<int?>(json['colorArgb']),
+      colorShade: serializer.fromJson<int>(json['colorShade']),
     );
   }
   @override
@@ -4509,6 +5019,8 @@ class FreeArea extends DataClass implements Insertable<FreeArea> {
       'label': serializer.toJson<String?>(label),
       'offsetMeters': serializer.toJson<double>(offsetMeters),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'colorArgb': serializer.toJson<int?>(colorArgb),
+      'colorShade': serializer.toJson<int>(colorShade),
     };
   }
 
@@ -4518,12 +5030,16 @@ class FreeArea extends DataClass implements Insertable<FreeArea> {
     Value<String?> label = const Value.absent(),
     double? offsetMeters,
     DateTime? createdAt,
+    Value<int?> colorArgb = const Value.absent(),
+    int? colorShade,
   }) => FreeArea(
     id: id ?? this.id,
     layerId: layerId ?? this.layerId,
     label: label.present ? label.value : this.label,
     offsetMeters: offsetMeters ?? this.offsetMeters,
     createdAt: createdAt ?? this.createdAt,
+    colorArgb: colorArgb.present ? colorArgb.value : this.colorArgb,
+    colorShade: colorShade ?? this.colorShade,
   );
   FreeArea copyWithCompanion(FreeAreasCompanion data) {
     return FreeArea(
@@ -4534,6 +5050,10 @@ class FreeArea extends DataClass implements Insertable<FreeArea> {
           ? data.offsetMeters.value
           : this.offsetMeters,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      colorArgb: data.colorArgb.present ? data.colorArgb.value : this.colorArgb,
+      colorShade: data.colorShade.present
+          ? data.colorShade.value
+          : this.colorShade,
     );
   }
 
@@ -4544,13 +5064,23 @@ class FreeArea extends DataClass implements Insertable<FreeArea> {
           ..write('layerId: $layerId, ')
           ..write('label: $label, ')
           ..write('offsetMeters: $offsetMeters, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('colorArgb: $colorArgb, ')
+          ..write('colorShade: $colorShade')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, layerId, label, offsetMeters, createdAt);
+  int get hashCode => Object.hash(
+    id,
+    layerId,
+    label,
+    offsetMeters,
+    createdAt,
+    colorArgb,
+    colorShade,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -4559,7 +5089,9 @@ class FreeArea extends DataClass implements Insertable<FreeArea> {
           other.layerId == this.layerId &&
           other.label == this.label &&
           other.offsetMeters == this.offsetMeters &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.colorArgb == this.colorArgb &&
+          other.colorShade == this.colorShade);
 }
 
 class FreeAreasCompanion extends UpdateCompanion<FreeArea> {
@@ -4568,6 +5100,8 @@ class FreeAreasCompanion extends UpdateCompanion<FreeArea> {
   final Value<String?> label;
   final Value<double> offsetMeters;
   final Value<DateTime> createdAt;
+  final Value<int?> colorArgb;
+  final Value<int> colorShade;
   final Value<int> rowid;
   const FreeAreasCompanion({
     this.id = const Value.absent(),
@@ -4575,6 +5109,8 @@ class FreeAreasCompanion extends UpdateCompanion<FreeArea> {
     this.label = const Value.absent(),
     this.offsetMeters = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.colorArgb = const Value.absent(),
+    this.colorShade = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   FreeAreasCompanion.insert({
@@ -4583,6 +5119,8 @@ class FreeAreasCompanion extends UpdateCompanion<FreeArea> {
     this.label = const Value.absent(),
     this.offsetMeters = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.colorArgb = const Value.absent(),
+    this.colorShade = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        layerId = Value(layerId);
@@ -4592,6 +5130,8 @@ class FreeAreasCompanion extends UpdateCompanion<FreeArea> {
     Expression<String>? label,
     Expression<double>? offsetMeters,
     Expression<DateTime>? createdAt,
+    Expression<int>? colorArgb,
+    Expression<int>? colorShade,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -4600,6 +5140,8 @@ class FreeAreasCompanion extends UpdateCompanion<FreeArea> {
       if (label != null) 'label': label,
       if (offsetMeters != null) 'offset_meters': offsetMeters,
       if (createdAt != null) 'created_at': createdAt,
+      if (colorArgb != null) 'color_argb': colorArgb,
+      if (colorShade != null) 'color_shade': colorShade,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -4610,6 +5152,8 @@ class FreeAreasCompanion extends UpdateCompanion<FreeArea> {
     Value<String?>? label,
     Value<double>? offsetMeters,
     Value<DateTime>? createdAt,
+    Value<int?>? colorArgb,
+    Value<int>? colorShade,
     Value<int>? rowid,
   }) {
     return FreeAreasCompanion(
@@ -4618,6 +5162,8 @@ class FreeAreasCompanion extends UpdateCompanion<FreeArea> {
       label: label ?? this.label,
       offsetMeters: offsetMeters ?? this.offsetMeters,
       createdAt: createdAt ?? this.createdAt,
+      colorArgb: colorArgb ?? this.colorArgb,
+      colorShade: colorShade ?? this.colorShade,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -4640,6 +5186,12 @@ class FreeAreasCompanion extends UpdateCompanion<FreeArea> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (colorArgb.present) {
+      map['color_argb'] = Variable<int>(colorArgb.value);
+    }
+    if (colorShade.present) {
+      map['color_shade'] = Variable<int>(colorShade.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -4654,6 +5206,8 @@ class FreeAreasCompanion extends UpdateCompanion<FreeArea> {
           ..write('label: $label, ')
           ..write('offsetMeters: $offsetMeters, ')
           ..write('createdAt: $createdAt, ')
+          ..write('colorArgb: $colorArgb, ')
+          ..write('colorShade: $colorShade, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -5205,6 +5759,29 @@ class $HeightRegionsTable extends HeightRegions
     requiredDuringInsert: false,
     defaultValue: currentDateAndTime,
   );
+  static const VerificationMeta _colorArgbMeta = const VerificationMeta(
+    'colorArgb',
+  );
+  @override
+  late final GeneratedColumn<int> colorArgb = GeneratedColumn<int>(
+    'color_argb',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _colorShadeMeta = const VerificationMeta(
+    'colorShade',
+  );
+  @override
+  late final GeneratedColumn<int> colorShade = GeneratedColumn<int>(
+    'color_shade',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -5218,6 +5795,8 @@ class $HeightRegionsTable extends HeightRegions
     label,
     generatedAt,
     createdAt,
+    colorArgb,
+    colorShade,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -5316,6 +5895,18 @@ class $HeightRegionsTable extends HeightRegions
         createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
       );
     }
+    if (data.containsKey('color_argb')) {
+      context.handle(
+        _colorArgbMeta,
+        colorArgb.isAcceptableOrUnknown(data['color_argb']!, _colorArgbMeta),
+      );
+    }
+    if (data.containsKey('color_shade')) {
+      context.handle(
+        _colorShadeMeta,
+        colorShade.isAcceptableOrUnknown(data['color_shade']!, _colorShadeMeta),
+      );
+    }
     return context;
   }
 
@@ -5369,6 +5960,14 @@ class $HeightRegionsTable extends HeightRegions
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      colorArgb: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_argb'],
+      ),
+      colorShade: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_shade'],
+      )!,
     );
   }
 
@@ -5398,6 +5997,18 @@ class HeightRegion extends DataClass implements Insertable<HeightRegion> {
   /// When the fill polygons were last generated; null until first generation.
   final DateTime? generatedAt;
   final DateTime createdAt;
+
+  /// Per-element colour (v22). Null = follow the layer: the element paints in
+  /// its auto **shade** of the layer colour, picked by [colorShade] so the
+  /// elements of one layer tell each other apart and all follow a layer
+  /// recolour. A set value overrides that and survives a layer recolour, which
+  /// is what makes the recolour dialog ask what to do with them.
+  final int? colorArgb;
+
+  /// Which auto shade this element takes, assigned in creation order within the
+  /// layer. **0 is the layer colour exactly**, which is what every row
+  /// migrating in from v21 gets — an untouched map must look untouched.
+  final int colorShade;
   const HeightRegion({
     required this.id,
     required this.layerId,
@@ -5410,6 +6021,8 @@ class HeightRegion extends DataClass implements Insertable<HeightRegion> {
     this.label,
     this.generatedAt,
     required this.createdAt,
+    this.colorArgb,
+    required this.colorShade,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -5429,6 +6042,10 @@ class HeightRegion extends DataClass implements Insertable<HeightRegion> {
       map['generated_at'] = Variable<DateTime>(generatedAt);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || colorArgb != null) {
+      map['color_argb'] = Variable<int>(colorArgb);
+    }
+    map['color_shade'] = Variable<int>(colorShade);
     return map;
   }
 
@@ -5449,6 +6066,10 @@ class HeightRegion extends DataClass implements Insertable<HeightRegion> {
           ? const Value.absent()
           : Value(generatedAt),
       createdAt: Value(createdAt),
+      colorArgb: colorArgb == null && nullToAbsent
+          ? const Value.absent()
+          : Value(colorArgb),
+      colorShade: Value(colorShade),
     );
   }
 
@@ -5469,6 +6090,8 @@ class HeightRegion extends DataClass implements Insertable<HeightRegion> {
       label: serializer.fromJson<String?>(json['label']),
       generatedAt: serializer.fromJson<DateTime?>(json['generatedAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      colorArgb: serializer.fromJson<int?>(json['colorArgb']),
+      colorShade: serializer.fromJson<int>(json['colorShade']),
     );
   }
   @override
@@ -5486,6 +6109,8 @@ class HeightRegion extends DataClass implements Insertable<HeightRegion> {
       'label': serializer.toJson<String?>(label),
       'generatedAt': serializer.toJson<DateTime?>(generatedAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'colorArgb': serializer.toJson<int?>(colorArgb),
+      'colorShade': serializer.toJson<int>(colorShade),
     };
   }
 
@@ -5501,6 +6126,8 @@ class HeightRegion extends DataClass implements Insertable<HeightRegion> {
     Value<String?> label = const Value.absent(),
     Value<DateTime?> generatedAt = const Value.absent(),
     DateTime? createdAt,
+    Value<int?> colorArgb = const Value.absent(),
+    int? colorShade,
   }) => HeightRegion(
     id: id ?? this.id,
     layerId: layerId ?? this.layerId,
@@ -5513,6 +6140,8 @@ class HeightRegion extends DataClass implements Insertable<HeightRegion> {
     label: label.present ? label.value : this.label,
     generatedAt: generatedAt.present ? generatedAt.value : this.generatedAt,
     createdAt: createdAt ?? this.createdAt,
+    colorArgb: colorArgb.present ? colorArgb.value : this.colorArgb,
+    colorShade: colorShade ?? this.colorShade,
   );
   HeightRegion copyWithCompanion(HeightRegionsCompanion data) {
     return HeightRegion(
@@ -5537,6 +6166,10 @@ class HeightRegion extends DataClass implements Insertable<HeightRegion> {
           ? data.generatedAt.value
           : this.generatedAt,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      colorArgb: data.colorArgb.present ? data.colorArgb.value : this.colorArgb,
+      colorShade: data.colorShade.present
+          ? data.colorShade.value
+          : this.colorShade,
     );
   }
 
@@ -5553,7 +6186,9 @@ class HeightRegion extends DataClass implements Insertable<HeightRegion> {
           ..write('sampleZoom: $sampleZoom, ')
           ..write('label: $label, ')
           ..write('generatedAt: $generatedAt, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('colorArgb: $colorArgb, ')
+          ..write('colorShade: $colorShade')
           ..write(')'))
         .toString();
   }
@@ -5571,6 +6206,8 @@ class HeightRegion extends DataClass implements Insertable<HeightRegion> {
     label,
     generatedAt,
     createdAt,
+    colorArgb,
+    colorShade,
   );
   @override
   bool operator ==(Object other) =>
@@ -5586,7 +6223,9 @@ class HeightRegion extends DataClass implements Insertable<HeightRegion> {
           other.sampleZoom == this.sampleZoom &&
           other.label == this.label &&
           other.generatedAt == this.generatedAt &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.colorArgb == this.colorArgb &&
+          other.colorShade == this.colorShade);
 }
 
 class HeightRegionsCompanion extends UpdateCompanion<HeightRegion> {
@@ -5601,6 +6240,8 @@ class HeightRegionsCompanion extends UpdateCompanion<HeightRegion> {
   final Value<String?> label;
   final Value<DateTime?> generatedAt;
   final Value<DateTime> createdAt;
+  final Value<int?> colorArgb;
+  final Value<int> colorShade;
   final Value<int> rowid;
   const HeightRegionsCompanion({
     this.id = const Value.absent(),
@@ -5614,6 +6255,8 @@ class HeightRegionsCompanion extends UpdateCompanion<HeightRegion> {
     this.label = const Value.absent(),
     this.generatedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.colorArgb = const Value.absent(),
+    this.colorShade = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   HeightRegionsCompanion.insert({
@@ -5628,6 +6271,8 @@ class HeightRegionsCompanion extends UpdateCompanion<HeightRegion> {
     this.label = const Value.absent(),
     this.generatedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.colorArgb = const Value.absent(),
+    this.colorShade = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        layerId = Value(layerId),
@@ -5646,6 +6291,8 @@ class HeightRegionsCompanion extends UpdateCompanion<HeightRegion> {
     Expression<String>? label,
     Expression<DateTime>? generatedAt,
     Expression<DateTime>? createdAt,
+    Expression<int>? colorArgb,
+    Expression<int>? colorShade,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -5660,6 +6307,8 @@ class HeightRegionsCompanion extends UpdateCompanion<HeightRegion> {
       if (label != null) 'label': label,
       if (generatedAt != null) 'generated_at': generatedAt,
       if (createdAt != null) 'created_at': createdAt,
+      if (colorArgb != null) 'color_argb': colorArgb,
+      if (colorShade != null) 'color_shade': colorShade,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -5676,6 +6325,8 @@ class HeightRegionsCompanion extends UpdateCompanion<HeightRegion> {
     Value<String?>? label,
     Value<DateTime?>? generatedAt,
     Value<DateTime>? createdAt,
+    Value<int?>? colorArgb,
+    Value<int>? colorShade,
     Value<int>? rowid,
   }) {
     return HeightRegionsCompanion(
@@ -5690,6 +6341,8 @@ class HeightRegionsCompanion extends UpdateCompanion<HeightRegion> {
       label: label ?? this.label,
       generatedAt: generatedAt ?? this.generatedAt,
       createdAt: createdAt ?? this.createdAt,
+      colorArgb: colorArgb ?? this.colorArgb,
+      colorShade: colorShade ?? this.colorShade,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -5730,6 +6383,12 @@ class HeightRegionsCompanion extends UpdateCompanion<HeightRegion> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (colorArgb.present) {
+      map['color_argb'] = Variable<int>(colorArgb.value);
+    }
+    if (colorShade.present) {
+      map['color_shade'] = Variable<int>(colorShade.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -5750,6 +6409,8 @@ class HeightRegionsCompanion extends UpdateCompanion<HeightRegion> {
           ..write('label: $label, ')
           ..write('generatedAt: $generatedAt, ')
           ..write('createdAt: $createdAt, ')
+          ..write('colorArgb: $colorArgb, ')
+          ..write('colorShade: $colorShade, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -6578,6 +7239,29 @@ class $PoiSetsTable extends PoiSets with TableInfo<$PoiSetsTable, PoiSet> {
     requiredDuringInsert: false,
     defaultValue: currentDateAndTime,
   );
+  static const VerificationMeta _colorArgbMeta = const VerificationMeta(
+    'colorArgb',
+  );
+  @override
+  late final GeneratedColumn<int> colorArgb = GeneratedColumn<int>(
+    'color_argb',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _colorShadeMeta = const VerificationMeta(
+    'colorShade',
+  );
+  @override
+  late final GeneratedColumn<int> colorShade = GeneratedColumn<int>(
+    'color_shade',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -6588,6 +7272,8 @@ class $PoiSetsTable extends PoiSets with TableInfo<$PoiSetsTable, PoiSet> {
     radiusMeters,
     label,
     createdAt,
+    colorArgb,
+    colorShade,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -6664,6 +7350,18 @@ class $PoiSetsTable extends PoiSets with TableInfo<$PoiSetsTable, PoiSet> {
         createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
       );
     }
+    if (data.containsKey('color_argb')) {
+      context.handle(
+        _colorArgbMeta,
+        colorArgb.isAcceptableOrUnknown(data['color_argb']!, _colorArgbMeta),
+      );
+    }
+    if (data.containsKey('color_shade')) {
+      context.handle(
+        _colorShadeMeta,
+        colorShade.isAcceptableOrUnknown(data['color_shade']!, _colorShadeMeta),
+      );
+    }
     return context;
   }
 
@@ -6705,6 +7403,14 @@ class $PoiSetsTable extends PoiSets with TableInfo<$PoiSetsTable, PoiSet> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      colorArgb: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_argb'],
+      ),
+      colorShade: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_shade'],
+      )!,
     );
   }
 
@@ -6725,6 +7431,18 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
   final double radiusMeters;
   final String? label;
   final DateTime createdAt;
+
+  /// Per-element colour (v22). Null = follow the layer: the element paints in
+  /// its auto **shade** of the layer colour, picked by [colorShade] so the
+  /// elements of one layer tell each other apart and all follow a layer
+  /// recolour. A set value overrides that and survives a layer recolour, which
+  /// is what makes the recolour dialog ask what to do with them.
+  final int? colorArgb;
+
+  /// Which auto shade this element takes, assigned in creation order within the
+  /// layer. **0 is the layer colour exactly**, which is what every row
+  /// migrating in from v21 gets — an untouched map must look untouched.
+  final int colorShade;
   const PoiSet({
     required this.id,
     required this.layerId,
@@ -6734,6 +7452,8 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
     required this.radiusMeters,
     this.label,
     required this.createdAt,
+    this.colorArgb,
+    required this.colorShade,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -6748,6 +7468,10 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
       map['label'] = Variable<String>(label);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || colorArgb != null) {
+      map['color_argb'] = Variable<int>(colorArgb);
+    }
+    map['color_shade'] = Variable<int>(colorShade);
     return map;
   }
 
@@ -6763,6 +7487,10 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
           ? const Value.absent()
           : Value(label),
       createdAt: Value(createdAt),
+      colorArgb: colorArgb == null && nullToAbsent
+          ? const Value.absent()
+          : Value(colorArgb),
+      colorShade: Value(colorShade),
     );
   }
 
@@ -6780,6 +7508,8 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
       radiusMeters: serializer.fromJson<double>(json['radiusMeters']),
       label: serializer.fromJson<String?>(json['label']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      colorArgb: serializer.fromJson<int?>(json['colorArgb']),
+      colorShade: serializer.fromJson<int>(json['colorShade']),
     );
   }
   @override
@@ -6794,6 +7524,8 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
       'radiusMeters': serializer.toJson<double>(radiusMeters),
       'label': serializer.toJson<String?>(label),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'colorArgb': serializer.toJson<int?>(colorArgb),
+      'colorShade': serializer.toJson<int>(colorShade),
     };
   }
 
@@ -6806,6 +7538,8 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
     double? radiusMeters,
     Value<String?> label = const Value.absent(),
     DateTime? createdAt,
+    Value<int?> colorArgb = const Value.absent(),
+    int? colorShade,
   }) => PoiSet(
     id: id ?? this.id,
     layerId: layerId ?? this.layerId,
@@ -6815,6 +7549,8 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
     radiusMeters: radiusMeters ?? this.radiusMeters,
     label: label.present ? label.value : this.label,
     createdAt: createdAt ?? this.createdAt,
+    colorArgb: colorArgb.present ? colorArgb.value : this.colorArgb,
+    colorShade: colorShade ?? this.colorShade,
   );
   PoiSet copyWithCompanion(PoiSetsCompanion data) {
     return PoiSet(
@@ -6830,6 +7566,10 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
           : this.radiusMeters,
       label: data.label.present ? data.label.value : this.label,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      colorArgb: data.colorArgb.present ? data.colorArgb.value : this.colorArgb,
+      colorShade: data.colorShade.present
+          ? data.colorShade.value
+          : this.colorShade,
     );
   }
 
@@ -6843,7 +7583,9 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
           ..write('centerLng: $centerLng, ')
           ..write('radiusMeters: $radiusMeters, ')
           ..write('label: $label, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('colorArgb: $colorArgb, ')
+          ..write('colorShade: $colorShade')
           ..write(')'))
         .toString();
   }
@@ -6858,6 +7600,8 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
     radiusMeters,
     label,
     createdAt,
+    colorArgb,
+    colorShade,
   );
   @override
   bool operator ==(Object other) =>
@@ -6870,7 +7614,9 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
           other.centerLng == this.centerLng &&
           other.radiusMeters == this.radiusMeters &&
           other.label == this.label &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.colorArgb == this.colorArgb &&
+          other.colorShade == this.colorShade);
 }
 
 class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
@@ -6882,6 +7628,8 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
   final Value<double> radiusMeters;
   final Value<String?> label;
   final Value<DateTime> createdAt;
+  final Value<int?> colorArgb;
+  final Value<int> colorShade;
   final Value<int> rowid;
   const PoiSetsCompanion({
     this.id = const Value.absent(),
@@ -6892,6 +7640,8 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
     this.radiusMeters = const Value.absent(),
     this.label = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.colorArgb = const Value.absent(),
+    this.colorShade = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   PoiSetsCompanion.insert({
@@ -6903,6 +7653,8 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
     required double radiusMeters,
     this.label = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.colorArgb = const Value.absent(),
+    this.colorShade = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        layerId = Value(layerId),
@@ -6919,6 +7671,8 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
     Expression<double>? radiusMeters,
     Expression<String>? label,
     Expression<DateTime>? createdAt,
+    Expression<int>? colorArgb,
+    Expression<int>? colorShade,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -6930,6 +7684,8 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
       if (radiusMeters != null) 'radius_meters': radiusMeters,
       if (label != null) 'label': label,
       if (createdAt != null) 'created_at': createdAt,
+      if (colorArgb != null) 'color_argb': colorArgb,
+      if (colorShade != null) 'color_shade': colorShade,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -6943,6 +7699,8 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
     Value<double>? radiusMeters,
     Value<String?>? label,
     Value<DateTime>? createdAt,
+    Value<int?>? colorArgb,
+    Value<int>? colorShade,
     Value<int>? rowid,
   }) {
     return PoiSetsCompanion(
@@ -6954,6 +7712,8 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
       radiusMeters: radiusMeters ?? this.radiusMeters,
       label: label ?? this.label,
       createdAt: createdAt ?? this.createdAt,
+      colorArgb: colorArgb ?? this.colorArgb,
+      colorShade: colorShade ?? this.colorShade,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -6985,6 +7745,12 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (colorArgb.present) {
+      map['color_argb'] = Variable<int>(colorArgb.value);
+    }
+    if (colorShade.present) {
+      map['color_shade'] = Variable<int>(colorShade.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -7002,6 +7768,8 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
           ..write('radiusMeters: $radiusMeters, ')
           ..write('label: $label, ')
           ..write('createdAt: $createdAt, ')
+          ..write('colorArgb: $colorArgb, ')
+          ..write('colorShade: $colorShade, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -7727,6 +8495,29 @@ class $TransitSetsTable extends TransitSets
     requiredDuringInsert: false,
     defaultValue: currentDateAndTime,
   );
+  static const VerificationMeta _colorArgbMeta = const VerificationMeta(
+    'colorArgb',
+  );
+  @override
+  late final GeneratedColumn<int> colorArgb = GeneratedColumn<int>(
+    'color_argb',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _colorShadeMeta = const VerificationMeta(
+    'colorShade',
+  );
+  @override
+  late final GeneratedColumn<int> colorShade = GeneratedColumn<int>(
+    'color_shade',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -7743,6 +8534,8 @@ class $TransitSetsTable extends TransitSets
     stationCount,
     nodeCount,
     createdAt,
+    colorArgb,
+    colorShade,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -7857,6 +8650,18 @@ class $TransitSetsTable extends TransitSets
         createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
       );
     }
+    if (data.containsKey('color_argb')) {
+      context.handle(
+        _colorArgbMeta,
+        colorArgb.isAcceptableOrUnknown(data['color_argb']!, _colorArgbMeta),
+      );
+    }
+    if (data.containsKey('color_shade')) {
+      context.handle(
+        _colorShadeMeta,
+        colorShade.isAcceptableOrUnknown(data['color_shade']!, _colorShadeMeta),
+      );
+    }
     return context;
   }
 
@@ -7922,6 +8727,14 @@ class $TransitSetsTable extends TransitSets
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      colorArgb: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_argb'],
+      ),
+      colorShade: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_shade'],
+      )!,
     );
   }
 
@@ -7966,6 +8779,18 @@ class TransitSet extends DataClass implements Insertable<TransitSet> {
   final int stationCount;
   final int nodeCount;
   final DateTime createdAt;
+
+  /// Per-element colour (v22). Null = follow the layer: the element paints in
+  /// its auto **shade** of the layer colour, picked by [colorShade] so the
+  /// elements of one layer tell each other apart and all follow a layer
+  /// recolour. A set value overrides that and survives a layer recolour, which
+  /// is what makes the recolour dialog ask what to do with them.
+  final int? colorArgb;
+
+  /// Which auto shade this element takes, assigned in creation order within the
+  /// layer. **0 is the layer colour exactly**, which is what every row
+  /// migrating in from v21 gets — an untouched map must look untouched.
+  final int colorShade;
   const TransitSet({
     required this.id,
     required this.layerId,
@@ -7981,6 +8806,8 @@ class TransitSet extends DataClass implements Insertable<TransitSet> {
     required this.stationCount,
     required this.nodeCount,
     required this.createdAt,
+    this.colorArgb,
+    required this.colorShade,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -8005,6 +8832,10 @@ class TransitSet extends DataClass implements Insertable<TransitSet> {
     map['station_count'] = Variable<int>(stationCount);
     map['node_count'] = Variable<int>(nodeCount);
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || colorArgb != null) {
+      map['color_argb'] = Variable<int>(colorArgb);
+    }
+    map['color_shade'] = Variable<int>(colorShade);
     return map;
   }
 
@@ -8030,6 +8861,10 @@ class TransitSet extends DataClass implements Insertable<TransitSet> {
       stationCount: Value(stationCount),
       nodeCount: Value(nodeCount),
       createdAt: Value(createdAt),
+      colorArgb: colorArgb == null && nullToAbsent
+          ? const Value.absent()
+          : Value(colorArgb),
+      colorShade: Value(colorShade),
     );
   }
 
@@ -8053,6 +8888,8 @@ class TransitSet extends DataClass implements Insertable<TransitSet> {
       stationCount: serializer.fromJson<int>(json['stationCount']),
       nodeCount: serializer.fromJson<int>(json['nodeCount']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      colorArgb: serializer.fromJson<int?>(json['colorArgb']),
+      colorShade: serializer.fromJson<int>(json['colorShade']),
     );
   }
   @override
@@ -8073,6 +8910,8 @@ class TransitSet extends DataClass implements Insertable<TransitSet> {
       'stationCount': serializer.toJson<int>(stationCount),
       'nodeCount': serializer.toJson<int>(nodeCount),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'colorArgb': serializer.toJson<int?>(colorArgb),
+      'colorShade': serializer.toJson<int>(colorShade),
     };
   }
 
@@ -8091,6 +8930,8 @@ class TransitSet extends DataClass implements Insertable<TransitSet> {
     int? stationCount,
     int? nodeCount,
     DateTime? createdAt,
+    Value<int?> colorArgb = const Value.absent(),
+    int? colorShade,
   }) => TransitSet(
     id: id ?? this.id,
     layerId: layerId ?? this.layerId,
@@ -8106,6 +8947,8 @@ class TransitSet extends DataClass implements Insertable<TransitSet> {
     stationCount: stationCount ?? this.stationCount,
     nodeCount: nodeCount ?? this.nodeCount,
     createdAt: createdAt ?? this.createdAt,
+    colorArgb: colorArgb.present ? colorArgb.value : this.colorArgb,
+    colorShade: colorShade ?? this.colorShade,
   );
   TransitSet copyWithCompanion(TransitSetsCompanion data) {
     return TransitSet(
@@ -8127,6 +8970,10 @@ class TransitSet extends DataClass implements Insertable<TransitSet> {
           : this.stationCount,
       nodeCount: data.nodeCount.present ? data.nodeCount.value : this.nodeCount,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      colorArgb: data.colorArgb.present ? data.colorArgb.value : this.colorArgb,
+      colorShade: data.colorShade.present
+          ? data.colorShade.value
+          : this.colorShade,
     );
   }
 
@@ -8146,7 +8993,9 @@ class TransitSet extends DataClass implements Insertable<TransitSet> {
           ..write('lastError: $lastError, ')
           ..write('stationCount: $stationCount, ')
           ..write('nodeCount: $nodeCount, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('colorArgb: $colorArgb, ')
+          ..write('colorShade: $colorShade')
           ..write(')'))
         .toString();
   }
@@ -8167,6 +9016,8 @@ class TransitSet extends DataClass implements Insertable<TransitSet> {
     stationCount,
     nodeCount,
     createdAt,
+    colorArgb,
+    colorShade,
   );
   @override
   bool operator ==(Object other) =>
@@ -8185,7 +9036,9 @@ class TransitSet extends DataClass implements Insertable<TransitSet> {
           other.lastError == this.lastError &&
           other.stationCount == this.stationCount &&
           other.nodeCount == this.nodeCount &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.colorArgb == this.colorArgb &&
+          other.colorShade == this.colorShade);
 }
 
 class TransitSetsCompanion extends UpdateCompanion<TransitSet> {
@@ -8203,6 +9056,8 @@ class TransitSetsCompanion extends UpdateCompanion<TransitSet> {
   final Value<int> stationCount;
   final Value<int> nodeCount;
   final Value<DateTime> createdAt;
+  final Value<int?> colorArgb;
+  final Value<int> colorShade;
   final Value<int> rowid;
   const TransitSetsCompanion({
     this.id = const Value.absent(),
@@ -8219,6 +9074,8 @@ class TransitSetsCompanion extends UpdateCompanion<TransitSet> {
     this.stationCount = const Value.absent(),
     this.nodeCount = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.colorArgb = const Value.absent(),
+    this.colorShade = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   TransitSetsCompanion.insert({
@@ -8236,6 +9093,8 @@ class TransitSetsCompanion extends UpdateCompanion<TransitSet> {
     this.stationCount = const Value.absent(),
     this.nodeCount = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.colorArgb = const Value.absent(),
+    this.colorShade = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        layerId = Value(layerId),
@@ -8259,6 +9118,8 @@ class TransitSetsCompanion extends UpdateCompanion<TransitSet> {
     Expression<int>? stationCount,
     Expression<int>? nodeCount,
     Expression<DateTime>? createdAt,
+    Expression<int>? colorArgb,
+    Expression<int>? colorShade,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -8276,6 +9137,8 @@ class TransitSetsCompanion extends UpdateCompanion<TransitSet> {
       if (stationCount != null) 'station_count': stationCount,
       if (nodeCount != null) 'node_count': nodeCount,
       if (createdAt != null) 'created_at': createdAt,
+      if (colorArgb != null) 'color_argb': colorArgb,
+      if (colorShade != null) 'color_shade': colorShade,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -8295,6 +9158,8 @@ class TransitSetsCompanion extends UpdateCompanion<TransitSet> {
     Value<int>? stationCount,
     Value<int>? nodeCount,
     Value<DateTime>? createdAt,
+    Value<int?>? colorArgb,
+    Value<int>? colorShade,
     Value<int>? rowid,
   }) {
     return TransitSetsCompanion(
@@ -8312,6 +9177,8 @@ class TransitSetsCompanion extends UpdateCompanion<TransitSet> {
       stationCount: stationCount ?? this.stationCount,
       nodeCount: nodeCount ?? this.nodeCount,
       createdAt: createdAt ?? this.createdAt,
+      colorArgb: colorArgb ?? this.colorArgb,
+      colorShade: colorShade ?? this.colorShade,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -8361,6 +9228,12 @@ class TransitSetsCompanion extends UpdateCompanion<TransitSet> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (colorArgb.present) {
+      map['color_argb'] = Variable<int>(colorArgb.value);
+    }
+    if (colorShade.present) {
+      map['color_shade'] = Variable<int>(colorShade.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -8384,6 +9257,8 @@ class TransitSetsCompanion extends UpdateCompanion<TransitSet> {
           ..write('stationCount: $stationCount, ')
           ..write('nodeCount: $nodeCount, ')
           ..write('createdAt: $createdAt, ')
+          ..write('colorArgb: $colorArgb, ')
+          ..write('colorShade: $colorShade, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -9860,6 +10735,17 @@ class $BorderAreasTable extends BorderAreas
     requiredDuringInsert: false,
     defaultValue: currentDateAndTime,
   );
+  static const VerificationMeta _colorArgbMeta = const VerificationMeta(
+    'colorArgb',
+  );
+  @override
+  late final GeneratedColumn<int> colorArgb = GeneratedColumn<int>(
+    'color_argb',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -9877,6 +10763,7 @@ class $BorderAreasTable extends BorderAreas
     rings,
     wayIds,
     createdAt,
+    colorArgb,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -10001,6 +10888,12 @@ class $BorderAreasTable extends BorderAreas
         createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
       );
     }
+    if (data.containsKey('color_argb')) {
+      context.handle(
+        _colorArgbMeta,
+        colorArgb.isAcceptableOrUnknown(data['color_argb']!, _colorArgbMeta),
+      );
+    }
     return context;
   }
 
@@ -10070,6 +10963,10 @@ class $BorderAreasTable extends BorderAreas
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      colorArgb: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_argb'],
+      ),
     );
   }
 
@@ -10114,6 +11011,11 @@ class BorderArea extends DataClass implements Insertable<BorderArea> {
   /// two areas share a border iff they share a way id, which is exact and free.
   final String wayIds;
   final DateTime createdAt;
+
+  /// Per-area colour override (v22). Null = the layer's own rule: the
+  /// neighbour-distinct palette entry at [colorIndex] when "Colour areas" is
+  /// on, the layer colour otherwise. Set = this exact colour, either way.
+  final int? colorArgb;
   const BorderArea({
     required this.id,
     required this.setId,
@@ -10130,6 +11032,7 @@ class BorderArea extends DataClass implements Insertable<BorderArea> {
     required this.rings,
     required this.wayIds,
     required this.createdAt,
+    this.colorArgb,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -10151,6 +11054,9 @@ class BorderArea extends DataClass implements Insertable<BorderArea> {
     map['rings'] = Variable<String>(rings);
     map['way_ids'] = Variable<String>(wayIds);
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || colorArgb != null) {
+      map['color_argb'] = Variable<int>(colorArgb);
+    }
     return map;
   }
 
@@ -10171,6 +11077,9 @@ class BorderArea extends DataClass implements Insertable<BorderArea> {
       rings: Value(rings),
       wayIds: Value(wayIds),
       createdAt: Value(createdAt),
+      colorArgb: colorArgb == null && nullToAbsent
+          ? const Value.absent()
+          : Value(colorArgb),
     );
   }
 
@@ -10195,6 +11104,7 @@ class BorderArea extends DataClass implements Insertable<BorderArea> {
       rings: serializer.fromJson<String>(json['rings']),
       wayIds: serializer.fromJson<String>(json['wayIds']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      colorArgb: serializer.fromJson<int?>(json['colorArgb']),
     );
   }
   @override
@@ -10216,6 +11126,7 @@ class BorderArea extends DataClass implements Insertable<BorderArea> {
       'rings': serializer.toJson<String>(rings),
       'wayIds': serializer.toJson<String>(wayIds),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'colorArgb': serializer.toJson<int?>(colorArgb),
     };
   }
 
@@ -10235,6 +11146,7 @@ class BorderArea extends DataClass implements Insertable<BorderArea> {
     String? rings,
     String? wayIds,
     DateTime? createdAt,
+    Value<int?> colorArgb = const Value.absent(),
   }) => BorderArea(
     id: id ?? this.id,
     setId: setId ?? this.setId,
@@ -10251,6 +11163,7 @@ class BorderArea extends DataClass implements Insertable<BorderArea> {
     rings: rings ?? this.rings,
     wayIds: wayIds ?? this.wayIds,
     createdAt: createdAt ?? this.createdAt,
+    colorArgb: colorArgb.present ? colorArgb.value : this.colorArgb,
   );
   BorderArea copyWithCompanion(BorderAreasCompanion data) {
     return BorderArea(
@@ -10273,6 +11186,7 @@ class BorderArea extends DataClass implements Insertable<BorderArea> {
       rings: data.rings.present ? data.rings.value : this.rings,
       wayIds: data.wayIds.present ? data.wayIds.value : this.wayIds,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      colorArgb: data.colorArgb.present ? data.colorArgb.value : this.colorArgb,
     );
   }
 
@@ -10293,7 +11207,8 @@ class BorderArea extends DataClass implements Insertable<BorderArea> {
           ..write('pointCount: $pointCount, ')
           ..write('rings: $rings, ')
           ..write('wayIds: $wayIds, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('colorArgb: $colorArgb')
           ..write(')'))
         .toString();
   }
@@ -10315,6 +11230,7 @@ class BorderArea extends DataClass implements Insertable<BorderArea> {
     rings,
     wayIds,
     createdAt,
+    colorArgb,
   );
   @override
   bool operator ==(Object other) =>
@@ -10334,7 +11250,8 @@ class BorderArea extends DataClass implements Insertable<BorderArea> {
           other.pointCount == this.pointCount &&
           other.rings == this.rings &&
           other.wayIds == this.wayIds &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.colorArgb == this.colorArgb);
 }
 
 class BorderAreasCompanion extends UpdateCompanion<BorderArea> {
@@ -10353,6 +11270,7 @@ class BorderAreasCompanion extends UpdateCompanion<BorderArea> {
   final Value<String> rings;
   final Value<String> wayIds;
   final Value<DateTime> createdAt;
+  final Value<int?> colorArgb;
   final Value<int> rowid;
   const BorderAreasCompanion({
     this.id = const Value.absent(),
@@ -10370,6 +11288,7 @@ class BorderAreasCompanion extends UpdateCompanion<BorderArea> {
     this.rings = const Value.absent(),
     this.wayIds = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.colorArgb = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   BorderAreasCompanion.insert({
@@ -10388,6 +11307,7 @@ class BorderAreasCompanion extends UpdateCompanion<BorderArea> {
     required String rings,
     required String wayIds,
     this.createdAt = const Value.absent(),
+    this.colorArgb = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        setId = Value(setId),
@@ -10417,6 +11337,7 @@ class BorderAreasCompanion extends UpdateCompanion<BorderArea> {
     Expression<String>? rings,
     Expression<String>? wayIds,
     Expression<DateTime>? createdAt,
+    Expression<int>? colorArgb,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -10435,6 +11356,7 @@ class BorderAreasCompanion extends UpdateCompanion<BorderArea> {
       if (rings != null) 'rings': rings,
       if (wayIds != null) 'way_ids': wayIds,
       if (createdAt != null) 'created_at': createdAt,
+      if (colorArgb != null) 'color_argb': colorArgb,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -10455,6 +11377,7 @@ class BorderAreasCompanion extends UpdateCompanion<BorderArea> {
     Value<String>? rings,
     Value<String>? wayIds,
     Value<DateTime>? createdAt,
+    Value<int?>? colorArgb,
     Value<int>? rowid,
   }) {
     return BorderAreasCompanion(
@@ -10473,6 +11396,7 @@ class BorderAreasCompanion extends UpdateCompanion<BorderArea> {
       rings: rings ?? this.rings,
       wayIds: wayIds ?? this.wayIds,
       createdAt: createdAt ?? this.createdAt,
+      colorArgb: colorArgb ?? this.colorArgb,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -10525,6 +11449,9 @@ class BorderAreasCompanion extends UpdateCompanion<BorderArea> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (colorArgb.present) {
+      map['color_argb'] = Variable<int>(colorArgb.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -10549,6 +11476,7 @@ class BorderAreasCompanion extends UpdateCompanion<BorderArea> {
           ..write('rings: $rings, ')
           ..write('wayIds: $wayIds, ')
           ..write('createdAt: $createdAt, ')
+          ..write('colorArgb: $colorArgb, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -12861,6 +13789,8 @@ typedef $$CirclesTableCreateCompanionBuilder =
       required double radiusMeters,
       Value<String?> label,
       Value<DateTime> createdAt,
+      Value<int?> colorArgb,
+      Value<int> colorShade,
       Value<int> rowid,
     });
 typedef $$CirclesTableUpdateCompanionBuilder =
@@ -12872,6 +13802,8 @@ typedef $$CirclesTableUpdateCompanionBuilder =
       Value<double> radiusMeters,
       Value<String?> label,
       Value<DateTime> createdAt,
+      Value<int?> colorArgb,
+      Value<int> colorShade,
       Value<int> rowid,
     });
 
@@ -12934,6 +13866,16 @@ class $$CirclesTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorArgb => $composableBuilder(
+    column: $table.colorArgb,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorShade => $composableBuilder(
+    column: $table.colorShade,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -13000,6 +13942,16 @@ class $$CirclesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get colorArgb => $composableBuilder(
+    column: $table.colorArgb,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get colorShade => $composableBuilder(
+    column: $table.colorShade,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$LayersTableOrderingComposer get layerId {
     final $$LayersTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -13052,6 +14004,14 @@ class $$CirclesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<int> get colorArgb =>
+      $composableBuilder(column: $table.colorArgb, builder: (column) => column);
+
+  GeneratedColumn<int> get colorShade => $composableBuilder(
+    column: $table.colorShade,
+    builder: (column) => column,
+  );
 
   $$LayersTableAnnotationComposer get layerId {
     final $$LayersTableAnnotationComposer composer = $composerBuilder(
@@ -13112,6 +14072,8 @@ class $$CirclesTableTableManager
                 Value<double> radiusMeters = const Value.absent(),
                 Value<String?> label = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<int?> colorArgb = const Value.absent(),
+                Value<int> colorShade = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CirclesCompanion(
                 id: id,
@@ -13121,6 +14083,8 @@ class $$CirclesTableTableManager
                 radiusMeters: radiusMeters,
                 label: label,
                 createdAt: createdAt,
+                colorArgb: colorArgb,
+                colorShade: colorShade,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -13132,6 +14096,8 @@ class $$CirclesTableTableManager
                 required double radiusMeters,
                 Value<String?> label = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<int?> colorArgb = const Value.absent(),
+                Value<int> colorShade = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CirclesCompanion.insert(
                 id: id,
@@ -13141,6 +14107,8 @@ class $$CirclesTableTableManager
                 radiusMeters: radiusMeters,
                 label: label,
                 createdAt: createdAt,
+                colorArgb: colorArgb,
+                colorShade: colorShade,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -13221,6 +14189,8 @@ typedef $$PlanesTableCreateCompanionBuilder =
       Value<bool> nearA,
       Value<String?> label,
       Value<DateTime> createdAt,
+      Value<int?> colorArgb,
+      Value<int> colorShade,
       Value<int> rowid,
     });
 typedef $$PlanesTableUpdateCompanionBuilder =
@@ -13234,6 +14204,8 @@ typedef $$PlanesTableUpdateCompanionBuilder =
       Value<bool> nearA,
       Value<String?> label,
       Value<DateTime> createdAt,
+      Value<int?> colorArgb,
+      Value<int> colorShade,
       Value<int> rowid,
     });
 
@@ -13306,6 +14278,16 @@ class $$PlanesTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorArgb => $composableBuilder(
+    column: $table.colorArgb,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorShade => $composableBuilder(
+    column: $table.colorShade,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -13382,6 +14364,16 @@ class $$PlanesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get colorArgb => $composableBuilder(
+    column: $table.colorArgb,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get colorShade => $composableBuilder(
+    column: $table.colorShade,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$LayersTableOrderingComposer get layerId {
     final $$LayersTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -13438,6 +14430,14 @@ class $$PlanesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<int> get colorArgb =>
+      $composableBuilder(column: $table.colorArgb, builder: (column) => column);
+
+  GeneratedColumn<int> get colorShade => $composableBuilder(
+    column: $table.colorShade,
+    builder: (column) => column,
+  );
 
   $$LayersTableAnnotationComposer get layerId {
     final $$LayersTableAnnotationComposer composer = $composerBuilder(
@@ -13500,6 +14500,8 @@ class $$PlanesTableTableManager
                 Value<bool> nearA = const Value.absent(),
                 Value<String?> label = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<int?> colorArgb = const Value.absent(),
+                Value<int> colorShade = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PlanesCompanion(
                 id: id,
@@ -13511,6 +14513,8 @@ class $$PlanesTableTableManager
                 nearA: nearA,
                 label: label,
                 createdAt: createdAt,
+                colorArgb: colorArgb,
+                colorShade: colorShade,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -13524,6 +14528,8 @@ class $$PlanesTableTableManager
                 Value<bool> nearA = const Value.absent(),
                 Value<String?> label = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<int?> colorArgb = const Value.absent(),
+                Value<int> colorShade = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PlanesCompanion.insert(
                 id: id,
@@ -13535,6 +14541,8 @@ class $$PlanesTableTableManager
                 nearA: nearA,
                 label: label,
                 createdAt: createdAt,
+                colorArgb: colorArgb,
+                colorShade: colorShade,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -13951,6 +14959,8 @@ typedef $$SubspacesTableCreateCompanionBuilder =
       required String layerId,
       Value<String?> label,
       Value<DateTime> createdAt,
+      Value<int?> colorArgb,
+      Value<int> colorShade,
       Value<int> rowid,
     });
 typedef $$SubspacesTableUpdateCompanionBuilder =
@@ -13959,6 +14969,8 @@ typedef $$SubspacesTableUpdateCompanionBuilder =
       Value<String> layerId,
       Value<String?> label,
       Value<DateTime> createdAt,
+      Value<int?> colorArgb,
+      Value<int> colorShade,
       Value<int> rowid,
     });
 
@@ -14027,6 +15039,16 @@ class $$SubspacesTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorArgb => $composableBuilder(
+    column: $table.colorArgb,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorShade => $composableBuilder(
+    column: $table.colorShade,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -14103,6 +15125,16 @@ class $$SubspacesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get colorArgb => $composableBuilder(
+    column: $table.colorArgb,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get colorShade => $composableBuilder(
+    column: $table.colorShade,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$LayersTableOrderingComposer get layerId {
     final $$LayersTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -14144,6 +15176,14 @@ class $$SubspacesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<int> get colorArgb =>
+      $composableBuilder(column: $table.colorArgb, builder: (column) => column);
+
+  GeneratedColumn<int> get colorShade => $composableBuilder(
+    column: $table.colorShade,
+    builder: (column) => column,
+  );
 
   $$LayersTableAnnotationComposer get layerId {
     final $$LayersTableAnnotationComposer composer = $composerBuilder(
@@ -14226,12 +15266,16 @@ class $$SubspacesTableTableManager
                 Value<String> layerId = const Value.absent(),
                 Value<String?> label = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<int?> colorArgb = const Value.absent(),
+                Value<int> colorShade = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SubspacesCompanion(
                 id: id,
                 layerId: layerId,
                 label: label,
                 createdAt: createdAt,
+                colorArgb: colorArgb,
+                colorShade: colorShade,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -14240,12 +15284,16 @@ class $$SubspacesTableTableManager
                 required String layerId,
                 Value<String?> label = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<int?> colorArgb = const Value.absent(),
+                Value<int> colorShade = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SubspacesCompanion.insert(
                 id: id,
                 layerId: layerId,
                 label: label,
                 createdAt: createdAt,
+                colorArgb: colorArgb,
+                colorShade: colorShade,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -14733,6 +15781,8 @@ typedef $$FreeLinesTableCreateCompanionBuilder =
       Value<double?> inclusionLng,
       Value<double?> inclusionRadiusMeters,
       Value<DateTime> createdAt,
+      Value<int?> colorArgb,
+      Value<int> colorShade,
       Value<int> rowid,
     });
 typedef $$FreeLinesTableUpdateCompanionBuilder =
@@ -14745,6 +15795,8 @@ typedef $$FreeLinesTableUpdateCompanionBuilder =
       Value<double?> inclusionLng,
       Value<double?> inclusionRadiusMeters,
       Value<DateTime> createdAt,
+      Value<int?> colorArgb,
+      Value<int> colorShade,
       Value<int> rowid,
     });
 
@@ -14833,6 +15885,16 @@ class $$FreeLinesTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorArgb => $composableBuilder(
+    column: $table.colorArgb,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorShade => $composableBuilder(
+    column: $table.colorShade,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -14929,6 +15991,16 @@ class $$FreeLinesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get colorArgb => $composableBuilder(
+    column: $table.colorArgb,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get colorShade => $composableBuilder(
+    column: $table.colorShade,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$LayersTableOrderingComposer get layerId {
     final $$LayersTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -14990,6 +16062,14 @@ class $$FreeLinesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<int> get colorArgb =>
+      $composableBuilder(column: $table.colorArgb, builder: (column) => column);
+
+  GeneratedColumn<int> get colorShade => $composableBuilder(
+    column: $table.colorShade,
+    builder: (column) => column,
+  );
 
   $$LayersTableAnnotationComposer get layerId {
     final $$LayersTableAnnotationComposer composer = $composerBuilder(
@@ -15076,6 +16156,8 @@ class $$FreeLinesTableTableManager
                 Value<double?> inclusionLng = const Value.absent(),
                 Value<double?> inclusionRadiusMeters = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<int?> colorArgb = const Value.absent(),
+                Value<int> colorShade = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FreeLinesCompanion(
                 id: id,
@@ -15086,6 +16168,8 @@ class $$FreeLinesTableTableManager
                 inclusionLng: inclusionLng,
                 inclusionRadiusMeters: inclusionRadiusMeters,
                 createdAt: createdAt,
+                colorArgb: colorArgb,
+                colorShade: colorShade,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -15098,6 +16182,8 @@ class $$FreeLinesTableTableManager
                 Value<double?> inclusionLng = const Value.absent(),
                 Value<double?> inclusionRadiusMeters = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<int?> colorArgb = const Value.absent(),
+                Value<int> colorShade = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FreeLinesCompanion.insert(
                 id: id,
@@ -15108,6 +16194,8 @@ class $$FreeLinesTableTableManager
                 inclusionLng: inclusionLng,
                 inclusionRadiusMeters: inclusionRadiusMeters,
                 createdAt: createdAt,
+                colorArgb: colorArgb,
+                colorShade: colorShade,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -15554,6 +16642,8 @@ typedef $$FreeAreasTableCreateCompanionBuilder =
       Value<String?> label,
       Value<double> offsetMeters,
       Value<DateTime> createdAt,
+      Value<int?> colorArgb,
+      Value<int> colorShade,
       Value<int> rowid,
     });
 typedef $$FreeAreasTableUpdateCompanionBuilder =
@@ -15563,6 +16653,8 @@ typedef $$FreeAreasTableUpdateCompanionBuilder =
       Value<String?> label,
       Value<double> offsetMeters,
       Value<DateTime> createdAt,
+      Value<int?> colorArgb,
+      Value<int> colorShade,
       Value<int> rowid,
     });
 
@@ -15636,6 +16728,16 @@ class $$FreeAreasTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorArgb => $composableBuilder(
+    column: $table.colorArgb,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorShade => $composableBuilder(
+    column: $table.colorShade,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -15717,6 +16819,16 @@ class $$FreeAreasTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get colorArgb => $composableBuilder(
+    column: $table.colorArgb,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get colorShade => $composableBuilder(
+    column: $table.colorShade,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$LayersTableOrderingComposer get layerId {
     final $$LayersTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -15763,6 +16875,14 @@ class $$FreeAreasTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<int> get colorArgb =>
+      $composableBuilder(column: $table.colorArgb, builder: (column) => column);
+
+  GeneratedColumn<int> get colorShade => $composableBuilder(
+    column: $table.colorShade,
+    builder: (column) => column,
+  );
 
   $$LayersTableAnnotationComposer get layerId {
     final $$LayersTableAnnotationComposer composer = $composerBuilder(
@@ -15846,6 +16966,8 @@ class $$FreeAreasTableTableManager
                 Value<String?> label = const Value.absent(),
                 Value<double> offsetMeters = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<int?> colorArgb = const Value.absent(),
+                Value<int> colorShade = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FreeAreasCompanion(
                 id: id,
@@ -15853,6 +16975,8 @@ class $$FreeAreasTableTableManager
                 label: label,
                 offsetMeters: offsetMeters,
                 createdAt: createdAt,
+                colorArgb: colorArgb,
+                colorShade: colorShade,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -15862,6 +16986,8 @@ class $$FreeAreasTableTableManager
                 Value<String?> label = const Value.absent(),
                 Value<double> offsetMeters = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<int?> colorArgb = const Value.absent(),
+                Value<int> colorShade = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FreeAreasCompanion.insert(
                 id: id,
@@ -15869,6 +16995,8 @@ class $$FreeAreasTableTableManager
                 label: label,
                 offsetMeters: offsetMeters,
                 createdAt: createdAt,
+                colorArgb: colorArgb,
+                colorShade: colorShade,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -16321,6 +17449,8 @@ typedef $$HeightRegionsTableCreateCompanionBuilder =
       Value<String?> label,
       Value<DateTime?> generatedAt,
       Value<DateTime> createdAt,
+      Value<int?> colorArgb,
+      Value<int> colorShade,
       Value<int> rowid,
     });
 typedef $$HeightRegionsTableUpdateCompanionBuilder =
@@ -16336,6 +17466,8 @@ typedef $$HeightRegionsTableUpdateCompanionBuilder =
       Value<String?> label,
       Value<DateTime?> generatedAt,
       Value<DateTime> createdAt,
+      Value<int?> colorArgb,
+      Value<int> colorShade,
       Value<int> rowid,
     });
 
@@ -16443,6 +17575,16 @@ class $$HeightRegionsTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorArgb => $composableBuilder(
+    column: $table.colorArgb,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorShade => $composableBuilder(
+    column: $table.colorShade,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -16554,6 +17696,16 @@ class $$HeightRegionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get colorArgb => $composableBuilder(
+    column: $table.colorArgb,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get colorShade => $composableBuilder(
+    column: $table.colorShade,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$LayersTableOrderingComposer get layerId {
     final $$LayersTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -16626,6 +17778,14 @@ class $$HeightRegionsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<int> get colorArgb =>
+      $composableBuilder(column: $table.colorArgb, builder: (column) => column);
+
+  GeneratedColumn<int> get colorShade => $composableBuilder(
+    column: $table.colorShade,
+    builder: (column) => column,
+  );
 
   $$LayersTableAnnotationComposer get layerId {
     final $$LayersTableAnnotationComposer composer = $composerBuilder(
@@ -16715,6 +17875,8 @@ class $$HeightRegionsTableTableManager
                 Value<String?> label = const Value.absent(),
                 Value<DateTime?> generatedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<int?> colorArgb = const Value.absent(),
+                Value<int> colorShade = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HeightRegionsCompanion(
                 id: id,
@@ -16728,6 +17890,8 @@ class $$HeightRegionsTableTableManager
                 label: label,
                 generatedAt: generatedAt,
                 createdAt: createdAt,
+                colorArgb: colorArgb,
+                colorShade: colorShade,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -16743,6 +17907,8 @@ class $$HeightRegionsTableTableManager
                 Value<String?> label = const Value.absent(),
                 Value<DateTime?> generatedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<int?> colorArgb = const Value.absent(),
+                Value<int> colorShade = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HeightRegionsCompanion.insert(
                 id: id,
@@ -16756,6 +17922,8 @@ class $$HeightRegionsTableTableManager
                 label: label,
                 generatedAt: generatedAt,
                 createdAt: createdAt,
+                colorArgb: colorArgb,
+                colorShade: colorShade,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -17642,6 +18810,8 @@ typedef $$PoiSetsTableCreateCompanionBuilder =
       required double radiusMeters,
       Value<String?> label,
       Value<DateTime> createdAt,
+      Value<int?> colorArgb,
+      Value<int> colorShade,
       Value<int> rowid,
     });
 typedef $$PoiSetsTableUpdateCompanionBuilder =
@@ -17654,6 +18824,8 @@ typedef $$PoiSetsTableUpdateCompanionBuilder =
       Value<double> radiusMeters,
       Value<String?> label,
       Value<DateTime> createdAt,
+      Value<int?> colorArgb,
+      Value<int> colorShade,
       Value<int> rowid,
     });
 
@@ -17739,6 +18911,16 @@ class $$PoiSetsTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorArgb => $composableBuilder(
+    column: $table.colorArgb,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorShade => $composableBuilder(
+    column: $table.colorShade,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -17835,6 +19017,16 @@ class $$PoiSetsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get colorArgb => $composableBuilder(
+    column: $table.colorArgb,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get colorShade => $composableBuilder(
+    column: $table.colorShade,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$LayersTableOrderingComposer get layerId {
     final $$LayersTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -17892,6 +19084,14 @@ class $$PoiSetsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<int> get colorArgb =>
+      $composableBuilder(column: $table.colorArgb, builder: (column) => column);
+
+  GeneratedColumn<int> get colorShade => $composableBuilder(
+    column: $table.colorShade,
+    builder: (column) => column,
+  );
 
   $$LayersTableAnnotationComposer get layerId {
     final $$LayersTableAnnotationComposer composer = $composerBuilder(
@@ -17978,6 +19178,8 @@ class $$PoiSetsTableTableManager
                 Value<double> radiusMeters = const Value.absent(),
                 Value<String?> label = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<int?> colorArgb = const Value.absent(),
+                Value<int> colorShade = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PoiSetsCompanion(
                 id: id,
@@ -17988,6 +19190,8 @@ class $$PoiSetsTableTableManager
                 radiusMeters: radiusMeters,
                 label: label,
                 createdAt: createdAt,
+                colorArgb: colorArgb,
+                colorShade: colorShade,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -18000,6 +19204,8 @@ class $$PoiSetsTableTableManager
                 required double radiusMeters,
                 Value<String?> label = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<int?> colorArgb = const Value.absent(),
+                Value<int> colorShade = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PoiSetsCompanion.insert(
                 id: id,
@@ -18010,6 +19216,8 @@ class $$PoiSetsTableTableManager
                 radiusMeters: radiusMeters,
                 label: label,
                 createdAt: createdAt,
+                colorArgb: colorArgb,
+                colorShade: colorShade,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -18500,6 +19708,8 @@ typedef $$TransitSetsTableCreateCompanionBuilder =
       Value<int> stationCount,
       Value<int> nodeCount,
       Value<DateTime> createdAt,
+      Value<int?> colorArgb,
+      Value<int> colorShade,
       Value<int> rowid,
     });
 typedef $$TransitSetsTableUpdateCompanionBuilder =
@@ -18518,6 +19728,8 @@ typedef $$TransitSetsTableUpdateCompanionBuilder =
       Value<int> stationCount,
       Value<int> nodeCount,
       Value<DateTime> createdAt,
+      Value<int?> colorArgb,
+      Value<int> colorShade,
       Value<int> rowid,
     });
 
@@ -18633,6 +19845,16 @@ class $$TransitSetsTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorArgb => $composableBuilder(
+    column: $table.colorArgb,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorShade => $composableBuilder(
+    column: $table.colorShade,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -18759,6 +19981,16 @@ class $$TransitSetsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get colorArgb => $composableBuilder(
+    column: $table.colorArgb,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get colorShade => $composableBuilder(
+    column: $table.colorShade,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$LayersTableOrderingComposer get layerId {
     final $$LayersTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -18834,6 +20066,14 @@ class $$TransitSetsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<int> get colorArgb =>
+      $composableBuilder(column: $table.colorArgb, builder: (column) => column);
+
+  GeneratedColumn<int> get colorShade => $composableBuilder(
+    column: $table.colorShade,
+    builder: (column) => column,
+  );
 
   $$LayersTableAnnotationComposer get layerId {
     final $$LayersTableAnnotationComposer composer = $composerBuilder(
@@ -18926,6 +20166,8 @@ class $$TransitSetsTableTableManager
                 Value<int> stationCount = const Value.absent(),
                 Value<int> nodeCount = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<int?> colorArgb = const Value.absent(),
+                Value<int> colorShade = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TransitSetsCompanion(
                 id: id,
@@ -18942,6 +20184,8 @@ class $$TransitSetsTableTableManager
                 stationCount: stationCount,
                 nodeCount: nodeCount,
                 createdAt: createdAt,
+                colorArgb: colorArgb,
+                colorShade: colorShade,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -18960,6 +20204,8 @@ class $$TransitSetsTableTableManager
                 Value<int> stationCount = const Value.absent(),
                 Value<int> nodeCount = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<int?> colorArgb = const Value.absent(),
+                Value<int> colorShade = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TransitSetsCompanion.insert(
                 id: id,
@@ -18976,6 +20222,8 @@ class $$TransitSetsTableTableManager
                 stationCount: stationCount,
                 nodeCount: nodeCount,
                 createdAt: createdAt,
+                colorArgb: colorArgb,
+                colorShade: colorShade,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -20039,6 +21287,7 @@ typedef $$BorderAreasTableCreateCompanionBuilder =
       required String rings,
       required String wayIds,
       Value<DateTime> createdAt,
+      Value<int?> colorArgb,
       Value<int> rowid,
     });
 typedef $$BorderAreasTableUpdateCompanionBuilder =
@@ -20058,6 +21307,7 @@ typedef $$BorderAreasTableUpdateCompanionBuilder =
       Value<String> rings,
       Value<String> wayIds,
       Value<DateTime> createdAt,
+      Value<int?> colorArgb,
       Value<int> rowid,
     });
 
@@ -20164,6 +21414,11 @@ class $$BorderAreasTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<int> get colorArgb => $composableBuilder(
+    column: $table.colorArgb,
+    builder: (column) => ColumnFilters(column),
+  );
+
   $$BorderSetsTableFilterComposer get setId {
     final $$BorderSetsTableFilterComposer composer = $composerBuilder(
       composer: this,
@@ -20267,6 +21522,11 @@ class $$BorderAreasTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get colorArgb => $composableBuilder(
+    column: $table.colorArgb,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$BorderSetsTableOrderingComposer get setId {
     final $$BorderSetsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -20346,6 +21606,9 @@ class $$BorderAreasTableAnnotationComposer
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
+  GeneratedColumn<int> get colorArgb =>
+      $composableBuilder(column: $table.colorArgb, builder: (column) => column);
+
   $$BorderSetsTableAnnotationComposer get setId {
     final $$BorderSetsTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -20413,6 +21676,7 @@ class $$BorderAreasTableTableManager
                 Value<String> rings = const Value.absent(),
                 Value<String> wayIds = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<int?> colorArgb = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => BorderAreasCompanion(
                 id: id,
@@ -20430,6 +21694,7 @@ class $$BorderAreasTableTableManager
                 rings: rings,
                 wayIds: wayIds,
                 createdAt: createdAt,
+                colorArgb: colorArgb,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -20449,6 +21714,7 @@ class $$BorderAreasTableTableManager
                 required String rings,
                 required String wayIds,
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<int?> colorArgb = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => BorderAreasCompanion.insert(
                 id: id,
@@ -20466,6 +21732,7 @@ class $$BorderAreasTableTableManager
                 rings: rings,
                 wayIds: wayIds,
                 createdAt: createdAt,
+                colorArgb: colorArgb,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

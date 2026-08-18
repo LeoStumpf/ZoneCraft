@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart' hide Circle;
 
 import '../data/database.dart';
 import 'camera_viewport.dart';
+import 'element_color.dart';
 import 'screen_cluster.dart';
 
 /// The marker icon for a POI category key (see `poiCategories` in
@@ -68,12 +69,24 @@ class PoiMarkersLayer extends StatelessWidget {
   Widget build(BuildContext context) {
     final camera = MapCamera.of(context);
     final catBySet = {for (final s in sets) s.id: s.categoryKey};
+    // One POI *set* is one element of the layer, so the colour lives there:
+    // two categories imported into one layer read apart at a glance.
+    final layerColor = Color(layer.colorArgb);
+    final colorBySet = {
+      for (final s in sets)
+        s.id: elementColor(
+          colorArgb: s.colorArgb,
+          shadeIndex: s.colorShade,
+          layerColor: layerColor,
+        ),
+    };
 
     // Cull to the viewport (+margin so edge clusters don't pop) and project.
     final bounds = cameraViewport(camera).inflate(2 * _clusterRadiusPx);
     final lls = <LatLng>[];
     final names = <String?>[];
     final cats = <String>[];
+    final colors = <Color>[];
     final offs = <Offset>[];
     for (final p in points) {
       final cat = catBySet[p.poiSetId];
@@ -84,6 +97,7 @@ class PoiMarkersLayer extends StatelessWidget {
       lls.add(ll);
       names.add(p.name);
       cats.add(cat);
+      colors.add(colorBySet[p.poiSetId] ?? layerColor);
       offs.add(o);
     }
     if (offs.isEmpty) return const SizedBox.shrink();
@@ -93,27 +107,33 @@ class PoiMarkersLayer extends StatelessWidget {
     for (final c in clusters) {
       if (c.indices.length == 1) {
         final i = c.indices.single;
-        markers.add(_poiMarker(lls[i], cats[i], names[i]));
+        markers.add(_poiMarker(lls[i], cats[i], names[i], colors[i]));
       } else {
         // Anchor the badge at the members' mean position (average lat/lng is
         // fine at cluster scale).
         var lat = 0.0, lng = 0.0;
         String? sharedCat = cats[c.indices.first];
+        Color? sharedColor = colors[c.indices.first];
         for (final i in c.indices) {
           lat += lls[i].latitude;
           lng += lls[i].longitude;
           if (cats[i] != sharedCat) sharedCat = null;
+          if (colors[i] != sharedColor) sharedColor = null;
         }
         final center =
             LatLng(lat / c.indices.length, lng / c.indices.length);
-        markers.add(_clusterMarker(center, c.indices.length, sharedCat));
+        // A badge over two differently-coloured sets belongs to neither, so it
+        // falls back to the layer's own colour.
+        markers.add(_clusterMarker(
+            center, c.indices.length, sharedCat, sharedColor ?? layerColor));
       }
     }
     return MarkerLayer(markers: markers);
   }
 
   /// A single POI: white disc + category icon, name on a tiny plate below.
-  Marker _poiMarker(LatLng point, String categoryKey, String? name) {
+  Marker _poiMarker(
+      LatLng point, String categoryKey, String? name, Color color) {
     const coreSize = 26.0;
     const labelHeight = 14.0;
     const gap = 1.0;
@@ -135,7 +155,9 @@ class PoiMarkersLayer extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.white,
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.black26),
+              // The disc's ring is the POI's colour — the icon itself has to
+              // stay legible, so the tint goes on the border, not the fill.
+              border: Border.all(color: color, width: 2),
             ),
             child:
                 Icon(poiIconFor(categoryKey), size: 16, color: Colors.black87),
@@ -171,7 +193,8 @@ class PoiMarkersLayer extends StatelessWidget {
 
   /// A cluster badge: member count ringed in the layer colour, plus the
   /// category icon when every member shares one. Tap to zoom in.
-  Marker _clusterMarker(LatLng center, int count, String? sharedCategory) {
+  Marker _clusterMarker(
+      LatLng center, int count, String? sharedCategory, Color color) {
     const size = 38.0;
     return Marker(
       point: center,
@@ -185,7 +208,7 @@ class PoiMarkersLayer extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             shape: BoxShape.circle,
-            border: Border.all(color: Color(layer.colorArgb), width: 2.5),
+            border: Border.all(color: color, width: 2.5),
             boxShadow: const [
               BoxShadow(color: Colors.black26, blurRadius: 3),
             ],

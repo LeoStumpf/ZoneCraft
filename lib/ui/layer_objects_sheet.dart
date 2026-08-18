@@ -3,8 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/database.dart';
+import '../data/repository.dart' show ColoredElement;
 import '../state/providers.dart';
 import 'import_actions.dart' show convertBorderAreaFlow;
+import 'element_color.dart';
+import 'element_color_dialog.dart';
 import 'object_summary.dart';
 import 'transit_modes_sheet.dart'
     show TransitModeFilter, transitTallyProvider;
@@ -58,28 +61,7 @@ class _LayerObjectsList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // The row providers are global (not per-layer); summariseLayer filters.
-    final summaries = summariseLayer(
-      layer,
-      circles: ref.watch(circlesProvider).asData?.value ?? const [],
-      planes: ref.watch(planesProvider).asData?.value ?? const [],
-      subspaces: ref.watch(subspacesProvider).asData?.value ?? const [],
-      subspacePoints:
-          ref.watch(subspacePointsProvider).asData?.value ?? const [],
-      freeLines: ref.watch(freeLinesProvider).asData?.value ?? const [],
-      freeLinePoints:
-          ref.watch(freeLinePointsProvider).asData?.value ?? const [],
-      freeAreas: ref.watch(freeAreasProvider).asData?.value ?? const [],
-      freeAreaPoints:
-          ref.watch(freeAreaPointsProvider).asData?.value ?? const [],
-      heightRegions: ref.watch(heightRegionsProvider).asData?.value ?? const [],
-      poiSets: ref.watch(poiSetsProvider).asData?.value ?? const [],
-      poiPoints: ref.watch(poiPointsProvider).asData?.value ?? const [],
-      transitSets: ref.watch(transitSetsProvider).asData?.value ?? const [],
-      transitStops: ref.watch(transitStopsProvider).asData?.value ?? const [],
-      borderSets: ref.watch(borderSetsProvider).asData?.value ?? const [],
-      borderAreas: ref.watch(borderAreasProvider).asData?.value ?? const [],
-    );
+    final summaries = ref.watch(layerSummariesProvider(layer.id));
     // Imports (POI, transit, borders) have no editor sheet, so their row taps
     // frame the object instead of selecting it.
     final canEdit = layerHasEditor(layer.type);
@@ -187,6 +169,8 @@ class _LayerObjectsList extends ConsumerWidget {
               Navigator.pop(context, ElementResult(ElementAction.retry, s));
             case 'toFreehand':
               await _convertToFreehand(context, ref, s);
+            case 'color':
+              await _pickElementColor(context, ref, s);
             case 'rename':
               await _rename(context, ref, s);
             case 'delete':
@@ -206,6 +190,7 @@ class _LayerObjectsList extends ConsumerWidget {
               value: 'toFreehand',
               child: Text('Convert to freehand area…'),
             ),
+          const PopupMenuItem(value: 'color', child: Text('Colour…')),
           const PopupMenuItem(value: 'rename', child: Text('Rename…')),
           const PopupMenuItem(value: 'delete', child: Text('Delete')),
         ],
@@ -229,6 +214,32 @@ class _LayerObjectsList extends ConsumerWidget {
       rings: rings,
     );
     if (context.mounted) Navigator.pop(context);
+  }
+
+  /// Gives one element its own colour, or hands it back to the layer.
+  Future<void> _pickElementColor(
+      BuildContext context, WidgetRef ref, ObjectSummary s) async {
+    final kind = ColoredElement.forLayerType(layer.type);
+    if (kind == null) return;
+    final layerColor = Color(layer.colorArgb);
+    final choice = await showElementColorDialog(
+      context,
+      title: s.title,
+      current: elementColor(
+        colorArgb: s.colorArgb,
+        shadeIndex: s.colorShade,
+        layerColor: layerColor,
+      ),
+      following: s.colorArgb == null,
+      layerColor: layerColor,
+      shadeIndex: s.colorShade,
+    );
+    if (choice == null) return; // cancelled
+    await ref.read(repositoryProvider).setElementColor(
+          kind,
+          s.ref.id,
+          choice.argb,
+        );
   }
 
   Future<void> _rename(

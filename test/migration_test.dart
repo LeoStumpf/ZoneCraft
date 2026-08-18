@@ -14,9 +14,9 @@ import 'generated_migrations/schema.dart';
 /// any of that was `scripts/build.sh --install` re-installing over the one
 /// development phone, i.e. exactly one upgrade path on exactly one database.
 ///
-/// With **two** snapshots (v20, v21) this now does what one snapshot could not:
-/// it opens a real v20 database, runs the app's own `onUpgrade` against it, and
-/// compares the result to v21's independently-dumped shape. That is what
+/// With **three** snapshots (v20, v21, v22) this now does what one snapshot could not:
+/// it opens a real older database, runs the app's own `onUpgrade` against it,
+/// and compares the result to the next version's independently-dumped shape. That is what
 /// catches a column added to a table class without the matching
 /// `if (from < N)` block — the failure mode that only ever showed up on a
 /// user's phone, since a fresh install creates the newest schema directly and
@@ -29,7 +29,7 @@ import 'generated_migrations/schema.dart';
 /// dart run drift_dev schema generate drift_schemas/ test/generated_migrations/
 /// ```
 ///
-/// then add the v21 → v22 step below. A snapshot must be taken *before* that
+/// then add the v22 → v23 step below. A snapshot must be taken *before* that
 /// version ships; it cannot be reconstructed afterwards.
 void main() {
   late SchemaVerifier verifier;
@@ -38,13 +38,13 @@ void main() {
     verifier = SchemaVerifier(GeneratedHelper());
   });
 
-  test('the schema the table classes build matches the v21 snapshot', () async {
+  test('the schema the table classes build matches the v22 snapshot', () async {
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 21);
+    await verifier.migrateAndValidate(db, 22);
   });
 
-  test('v20 → v21 upgrades a real database, and keeps its rows', () async {
+  test('v20 → today upgrades a real database, and keeps its rows', () async {
     // The v21 change adds POI OSM identity. The thing worth proving is not that
     // the columns appear — `migrateAndValidate` covers the shape — but that a
     // POI stored before v21 survives the upgrade with a *null* identity, since
@@ -67,7 +67,10 @@ void main() {
 
     final db = AppDatabase.forTesting(old.newConnection());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 21);
+    // Validated against the *current* version, not v21: opening a database runs
+    // the whole remaining chain, so this is the real "upgrade from an old
+    // install" path rather than a snapshot-to-snapshot hop.
+    await verifier.migrateAndValidate(db, 22);
 
     final rows = await db.select(db.poiPoints).get();
     expect(rows, hasLength(1), reason: 'the upgrade must not drop POIs');
@@ -76,7 +79,32 @@ void main() {
     expect(rows.single.osmId, isNull);
   });
 
-  test('a v21 database opens, writes and reads back', () async {
+  test('v21 → today leaves every existing element on the layer colour', () async {
+    // The v22 change adds per-element colours. The promise that matters to
+    // someone upgrading is that their map does not change: every migrated row
+    // must come out with **no** override and shade **0**, and shade 0 is the
+    // layer colour itself (see `ui/element_color.dart`).
+    final old = await verifier.schemaAt(21);
+    old.rawDatabase.execute(
+      "INSERT INTO layers (id, name, color_argb, sort_order, type) "
+      "VALUES ('l1', 'Circles', 4278190335, 0, 'circles')",
+    );
+    old.rawDatabase.execute(
+      "INSERT INTO circles (id, layer_id, center_lat, center_lng, "
+      "radius_meters, label) VALUES ('c1', 'l1', 48.1, 11.5, 1000, 'Home')",
+    );
+
+    final db = AppDatabase.forTesting(old.newConnection());
+    addTearDown(db.close);
+    await verifier.migrateAndValidate(db, 22);
+
+    final circle = (await db.select(db.circles).get()).single;
+    expect(circle.label, 'Home', reason: 'the upgrade must not drop circles');
+    expect(circle.colorArgb, isNull, reason: 'no override was ever set');
+    expect(circle.colorShade, 0, reason: 'shade 0 == the layer colour');
+  });
+
+  test('a v22 database opens, writes and reads back', () async {
     // `migrateAndValidate` proves the *shape*; this proves the thing opens and
     // the foreign keys the cascade deletes depend on are actually on.
     final db = AppDatabase.forTesting(NativeDatabase.memory());

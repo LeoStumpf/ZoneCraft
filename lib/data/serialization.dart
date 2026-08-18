@@ -31,12 +31,18 @@ class ExportObject {
     this.inclusionRadiusMeters,
     this.categoryKey,
     this.pointLabels,
+    this.colorArgb,
   });
 
   /// One of: circle, plane, subspace, freeline, freearea, height, poi.
   final String kind;
   final List<LatLng> coords;
   final String? label;
+
+  /// The element's colour override, if it has one. Null means it follows its
+  /// layer, and stays following it on the far side of an import — the auto
+  /// shade is derived from the layer, so it is not a thing to carry across.
+  final int? colorArgb;
 
   // circle / height: radius of the circle (height uses it as its bound)
   final double? radiusMeters;
@@ -143,6 +149,7 @@ Map<String, dynamic> _objectToFeature(ExportObject o, int layerIndex) {
       'inclusionRadiusMeters': o.inclusionRadiusMeters,
     if (o.categoryKey != null) 'categoryKey': o.categoryKey,
     if (o.pointLabels != null) 'pointLabels': o.pointLabels,
+    if (o.colorArgb != null) 'colorArgb': o.colorArgb,
   };
   final Map<String, dynamic> geometry;
   switch (o.kind) {
@@ -252,6 +259,7 @@ ExportObject? _featureToObject(Map f) {
     inclusionLng: (props['inclusionLng'] as num?)?.toDouble(),
     inclusionRadiusMeters: (props['inclusionRadiusMeters'] as num?)?.toDouble(),
     categoryKey: props['categoryKey'] as String?,
+    colorArgb: (props['colorArgb'] as num?)?.toInt(),
     pointLabels: props['pointLabels'] is List
         ? [
             for (final n in props['pointLabels'] as List)

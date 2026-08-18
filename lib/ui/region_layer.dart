@@ -8,6 +8,7 @@ import '../geo/plane.dart';
 import '../geo/subspace.dart';
 import 'area_geometry.dart';
 import 'camera_viewport.dart';
+import 'element_color.dart';
 import 'region_geometry.dart';
 import 'screen_clip.dart';
 
@@ -198,7 +199,12 @@ class _RegionPainter extends CustomPainter {
     // Height layers render their stored fill polygons with their own bounded
     // band (along the elevation contour only), so handle them separately.
     if (heightRegions.isNotEmpty) {
-      _paintHeight(canvas);
+      _passes(
+        canvas,
+        _byColor(heightRegions, (r) => r.colorArgb, (r) => r.colorShade),
+        (c, items, replace) =>
+            _paintHeight(canvas, c, items, replace: replace),
+      );
       return;
     }
 
@@ -207,7 +213,22 @@ class _RegionPainter extends CustomPainter {
     // at reflex corners and gaps at convex ones, which on a city-sized outline
     // turns the band into spikes. Handle them separately so the buffer is robust.
     if (freeAreas.isNotEmpty) {
-      _paintFreeAreas(canvas);
+      // The resolved geometry is built in `freeAreas` order, so the two lists
+      // index together — group the areas, carry the geometry along.
+      final resolved = <String, ResolvedArea>{
+        for (var i = 0; i < freeAreas.length && i < resolvedAreas.length; i++)
+          freeAreas[i].id: resolvedAreas[i],
+      };
+      _passes(
+        canvas,
+        _byColor(freeAreas, (a) => a.colorArgb, (a) => a.colorShade),
+        (c, items, replace) => _paintFreeAreas(
+          canvas,
+          c,
+          [for (final a in items) resolved[a.id]!],
+          replace: replace,
+        ),
+      );
       return;
     }
 
@@ -215,9 +236,106 @@ class _RegionPainter extends CustomPainter {
     // half-disk), so the invert complement is the disk — not the viewport.
     // Handle them separately rather than on the shared unbounded path.
     if (freeLines.isNotEmpty) {
-      _paintFreeLines(canvas);
+      _passes(
+        canvas,
+        _byColor(freeLines, (l) => l.colorArgb, (l) => l.colorShade),
+        (c, items, replace) =>
+            _paintFreeLines(canvas, c, items, replace: replace),
+      );
       return;
     }
+
+    if (circles.isNotEmpty) {
+      _passes(
+        canvas,
+        _byColor(circles, (c) => c.colorArgb, (c) => c.colorShade),
+        (c, items, replace) =>
+            _paintUnbounded(canvas, c, circles: items, replace: replace),
+      );
+      return;
+    }
+    if (planes.isNotEmpty) {
+      _passes(
+        canvas,
+        _byColor(planes, (p) => p.colorArgb, (p) => p.colorShade),
+        (c, items, replace) =>
+            _paintUnbounded(canvas, c, planes: items, replace: replace),
+      );
+      return;
+    }
+    _passes(
+      canvas,
+      _byColor(subspaces, (s) => s.colorArgb, (s) => s.colorShade),
+      (c, items, replace) =>
+          _paintUnbounded(canvas, c, subspaces: items, replace: replace),
+    );
+  }
+
+  /// The layer's elements grouped by the colour they actually paint in, oldest
+  /// group first.
+  ///
+  /// That order is what makes "the newest element wins an overlap" well
+  /// defined: `colorShade` is the per-layer creation counter, so a group sits
+  /// where its newest member does and the last pass painted holds the most
+  /// recent element. One group — every layer with untouched colours, and so
+  /// every layer that predates v22 — collapses to exactly the old single pass.
+  ///
+  /// **Inverted layers are always one group in the layer colour.** Their fill is
+  /// the complement of everything, a single region that belongs to no element,
+  /// so there is nothing for an element colour to mean there.
+  List<({Color color, List<T> items})> _byColor<T>(
+    List<T> items,
+    int? Function(T) argbOf,
+    int Function(T) shadeOf,
+  ) {
+    if (inverted) return [(color: color, items: items)];
+    final byKey = <int, List<T>>{};
+    final newest = <int, int>{};
+    for (final it in items) {
+      final key = elementColor(
+        colorArgb: argbOf(it),
+        shadeIndex: shadeOf(it),
+        layerColor: color,
+      ).toARGB32();
+      (byKey[key] ??= <T>[]).add(it);
+      final shade = shadeOf(it);
+      if (shade > (newest[key] ?? -1)) newest[key] = shade;
+    }
+    final keys = byKey.keys.toList()
+      ..sort((a, b) => newest[a]!.compareTo(newest[b]!));
+    return [for (final k in keys) (color: Color(k), items: byKey[k]!)];
+  }
+
+  /// Runs one paint pass per colour group. With more than one they all go into
+  /// a single offscreen layer and each pass **replaces** what the previous one
+  /// put down (`BlendMode.src`, threaded through as `replace`) rather than
+  /// blending with it — two translucent fills stacking would read as a third
+  /// colour, which is exactly what the flat-union model exists to avoid.
+  void _passes<T>(
+    Canvas canvas,
+    List<({Color color, List<T> items})> groups,
+    void Function(Color color, List<T> items, bool replace) paintPass,
+  ) {
+    if (groups.isEmpty) return;
+    final multi = groups.length > 1;
+    if (multi) canvas.saveLayer(_clip, Paint());
+    for (final g in groups) {
+      paintPass(g.color, g.items, multi);
+    }
+    if (multi) canvas.restore();
+  }
+
+  /// The shared path for the unbounded region types (circle / plane / subspace):
+  /// union the group's objects, then solid + band + outline. A layer holds one
+  /// object type, so exactly one of the three lists is ever non-empty.
+  void _paintUnbounded(
+    Canvas canvas,
+    Color color, {
+    List<Circle> circles = const [],
+    List<Plane> planes = const [],
+    List<Subspace> subspaces = const [],
+    bool replace = false,
+  }) {
 
     Path? outerUnion;
     Path? coreUnion;
@@ -339,11 +457,14 @@ class _RegionPainter extends CustomPainter {
       solid = core;
     }
 
+    final blend = replace ? BlendMode.src : BlendMode.srcOver;
     final solidPaint = Paint()
       ..style = PaintingStyle.fill
+      ..blendMode = blend
       ..color = color.withValues(alpha: _solidAlpha);
     final bandPaint = Paint()
       ..style = PaintingStyle.fill
+      ..blendMode = blend
       ..color = color.withValues(alpha: _bandAlpha);
     final strokePaint = Paint()
       ..style = PaintingStyle.stroke
@@ -392,7 +513,12 @@ class _RegionPainter extends CustomPainter {
   /// Painting the wider region first and replacing it with the narrower one
   /// ([BlendMode.src], [BlendMode.clear]) needs no path-ops at all and keeps
   /// overlapping objects flat, which is the whole point of the union anyway.
-  void _paintFreeAreas(Canvas canvas) {
+  void _paintFreeAreas(
+    Canvas canvas,
+    Color color,
+    List<ResolvedArea> resolvedAreas, {
+    bool replace = false,
+  }) {
     // Per-object screen geometry: the nominal boundary, and the band's far edge
     // (where the solid starts). With no uncertainty the two coincide; an empty
     // band edge under a positive uncertainty means the band swallowed the whole
@@ -430,7 +556,7 @@ class _RegionPainter extends CustomPainter {
     // by the uncertainty) solid. Inverted, the coloured side is the outside, so
     // it is: whole viewport solid, then the grown band edge at band alpha, then
     // the interior cleared away.
-    canvas.saveLayer(_clip, Paint());
+    if (!replace) canvas.saveLayer(_clip, Paint());
     if (inverted) {
       canvas.drawRect(_clip, solidPaint);
       for (final e in edges) {
@@ -447,7 +573,7 @@ class _RegionPainter extends CustomPainter {
         canvas.drawPath(e, solidPaint);
       }
     }
-    canvas.restore();
+    if (!replace) canvas.restore();
 
     // Outline traces the nominal boundary.
     for (final c in cores) {
@@ -463,7 +589,12 @@ class _RegionPainter extends CustomPainter {
   /// the uncertainty radius and clipping it to the coloured side — so the fill
   /// turns solid only a band-width past the divider and nothing ever spills onto
   /// the far side. The outline traces the dividing line.
-  void _paintFreeLines(Canvas canvas) {
+  void _paintFreeLines(
+    Canvas canvas,
+    Color color,
+    List<FreeLine> freeLines, {
+    bool replace = false,
+  }) {
     final bandMeters = uncertaintyMeters > 0 ? uncertaintyMeters : 0.0;
 
     Path? coreUnion; // the right-hand filled side, ∩ disk
@@ -579,6 +710,7 @@ class _RegionPainter extends CustomPainter {
 
     final solidPaint = Paint()
       ..style = PaintingStyle.fill
+      ..blendMode = replace ? BlendMode.src : BlendMode.srcOver
       ..color = color.withValues(alpha: _solidAlpha);
     final bandPaint = Paint()
       ..style = PaintingStyle.stroke
@@ -606,7 +738,8 @@ class _RegionPainter extends CustomPainter {
         ? _metersToPixels(bandRef, bandMeters)
         : 0.0;
     final coloredArea = bounded(coloured);
-    if (bandPx > 0) canvas.saveLayer(_clip, Paint());
+    final ownLayer = bandPx > 0 && !replace;
+    if (ownLayer) canvas.saveLayer(_clip, Paint());
     canvas.drawPath(coloredArea, solidPaint);
     if (bandPx > 0) {
       canvas.save();
@@ -618,7 +751,7 @@ class _RegionPainter extends CustomPainter {
           ..blendMode = BlendMode.src,
       );
       canvas.restore();
-      canvas.restore();
+      if (ownLayer) canvas.restore();
     }
 
     // Outline: the dividing line, clipped to the disk.
@@ -700,9 +833,15 @@ class _RegionPainter extends CustomPainter {
   /// and the fill only reads as fully solid a band-width inside it (holes get
   /// the same treatment from their side). The fill already encodes above/below
   /// and is bounded, so there is no viewport invert here.
-  void _paintHeight(Canvas canvas) {
+  void _paintHeight(
+    Canvas canvas,
+    Color color,
+    List<HeightRegion> heightRegions, {
+    bool replace = false,
+  }) {
     final solidPaint = Paint()
       ..style = PaintingStyle.fill
+      ..blendMode = replace ? BlendMode.src : BlendMode.srcOver
       ..color = color.withValues(alpha: _solidAlpha);
     final bandPaint = Paint()
       ..style = PaintingStyle.stroke
@@ -775,7 +914,9 @@ class _RegionPainter extends CustomPainter {
         // The strip overlays the solid, so drawing it plainly would compound the
         // alphas; render both into an offscreen layer and let the band
         // `BlendMode.src`-replace the solid's pixels there instead.
-        canvas.saveLayer(_clip, Paint());
+        // (Skipped when the colour passes already opened a layer: the band's
+        // `src` must replace inside *that* one, not a nested copy.)
+        if (!replace) canvas.saveLayer(_clip, Paint());
         canvas.drawPath(fill, solidPaint);
         canvas.save();
         canvas.clipPath(fill);
@@ -786,7 +927,7 @@ class _RegionPainter extends CustomPainter {
             ..blendMode = BlendMode.src,
         );
         canvas.restore();
-        canvas.restore();
+        if (!replace) canvas.restore();
       }
       canvas.drawPath(contour, strokePaint);
     }

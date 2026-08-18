@@ -89,13 +89,22 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   exported alone and files imported as a new layer or **merged** into an existing same-type
   one (`ui/import_actions.dart`); generic **GeoJSON/KML/KMZ/GPX** tracks import into freehand
   layers (`data/geo_import.dart`).
-- **Drift schema is at v20**; migrations are append-only `if (from < N)` blocks. (v19 is the
+- **Drift schema is at v22**; migrations are append-only `if (from < N)` blocks. (v19 is the
   one exception: it *drops* the transit route tables, because route geometry was abandoned —
-  see `data/transit.dart`'s header for the measurements behind that.) v20 is snapshotted in
-  `drift_schemas/` and guarded by `test/migration_test.dart`. **Any schema change must dump a
+  see `data/transit.dart`'s header for the measurements behind that.) v20/v21/v22 are
+  snapshotted in `drift_schemas/` and guarded by `test/migration_test.dart`. **Any schema change must dump a
   new snapshot** (`dart run drift_dev schema dump lib/data/database.dart drift_schemas/`, then
   `... schema generate drift_schemas/ test/generated_migrations/`) — a snapshot cannot be
   reconstructed after the version ships, and the test fails until it exists.
+- **Elements carry their own colour** (`ui/element_color.dart`, schema v22). Every element
+  has a nullable `colorArgb` override and a `colorShade` slot; **shade 0 is the layer colour
+  exactly**, which is what every pre-v22 row migrated in as, so an old map is untouched. With
+  no override an element paints an auto *shade* of the layer colour (same hue, van der Corput
+  lightness), so new elements tell each other apart and all follow a layer recolour. The
+  region painter runs **one pass per distinct colour**, ordered by each group's newest member
+  (`colorShade` is the per-layer creation counter) and composited with `BlendMode.src` inside
+  one `saveLayer`, so the newest element wins an overlap and fills stay flat. Inverted layers
+  stay single-colour: their fill is the complement, which belongs to no element.
 - **Point rows reach the renderer pre-grouped by owner** (`state/providers.dart`'s
   `*By*Provider`s build `Map<ownerId, List<point>>` once per stream emission). `RegionLayer`
   takes maps, not flat lists: it rebuilds on every camera tick, so a linear scan per object
@@ -114,7 +123,7 @@ editors, settings (uncertainty, clear-all, offline cache, import/export), opt-in
 persisted camera, offline resilience (cache-first tiles; **no** prefetch on the community OSM
 servers — see `data/tile_source.dart`), and import/export
 (whole-DB + per-layer + external GeoJSON/KML/KMZ/GPX; freeline imports prompt for their
-inclusion-circle radius). Drift schema is **v20**.
+inclusion-circle radius). Drift schema is **v22**.
 
 `planning/PLAN.md` has no open roadmap items; future polish ideas are listed there.
 `planning/PRODUCTION_AUDIT.md` records the production-readiness pass (what was found, what

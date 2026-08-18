@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 import '../data/database.dart';
 import '../data/transit.dart';
 import 'camera_viewport.dart';
+import 'element_color.dart';
 import 'screen_cluster.dart';
 
 /// Renders a `transit` layer: its imported **stations**, clustered in screen
@@ -62,11 +63,16 @@ class TransitStationsLayer extends StatelessWidget {
   const TransitStationsLayer({
     super.key,
     required this.layer,
+    required this.sets,
     required this.stations,
     this.onClusterTap,
   });
 
   final Layer layer;
+
+  /// This layer's imports — one element each, and where a per-element colour
+  /// lives (the stations themselves are just their set's dots).
+  final List<TransitSet> sets;
 
   /// Already filtered by [visibleTransitStations].
   final List<TransitStop> stations;
@@ -83,10 +89,22 @@ class TransitStationsLayer extends StatelessWidget {
     if (stations.isEmpty) return const MarkerLayer(markers: []);
     final camera = MapCamera.of(context);
     final bounds = cameraViewport(camera).inflate(2 * _clusterRadiusPx);
+    // One import (a `TransitSet`) is one element of the layer, so that is where
+    // the colour lives — two boxes imported into one layer stay apart.
+    final layerColor = Color(layer.colorArgb);
+    final colorBySet = {
+      for (final s in sets)
+        s.id: elementColor(
+          colorArgb: s.colorArgb,
+          shadeIndex: s.colorShade,
+          layerColor: layerColor,
+        ),
+    };
 
     final lls = <LatLng>[];
     final names = <String?>[];
     final masks = <int>[];
+    final colors = <Color>[];
     final offs = <Offset>[];
     for (final s in stations) {
       if (!s.lat.isFinite || !s.lng.isFinite) continue;
@@ -96,6 +114,7 @@ class TransitStationsLayer extends StatelessWidget {
       lls.add(ll);
       names.add(s.name);
       masks.add(s.modeMask);
+      colors.add(colorBySet[s.setId] ?? layerColor);
       offs.add(o);
     }
     if (offs.isEmpty) return const MarkerLayer(markers: []);
@@ -105,27 +124,32 @@ class TransitStationsLayer extends StatelessWidget {
     for (final c in clusterOffsets(offs, _clusterRadiusPx)) {
       if (c.indices.length == 1) {
         final i = c.indices.first;
-        markers.add(
-            _stationMarker(lls[i], masks[i], showLabels ? names[i] : null));
+        markers.add(_stationMarker(
+            lls[i], masks[i], showLabels ? names[i] : null, colors[i]));
         continue;
       }
       var lat = 0.0, lng = 0.0, mask = 0;
+      Color? sharedColor = colors[c.indices.first];
       for (final i in c.indices) {
         lat += lls[i].latitude;
         lng += lls[i].longitude;
         mask |= masks[i];
+        if (colors[i] != sharedColor) sharedColor = null;
       }
       markers.add(_clusterMarker(
         LatLng(lat / c.indices.length, lng / c.indices.length),
         c.indices.length,
         mask,
+        // A badge spanning two imports belongs to neither: use the layer's own.
+        sharedColor ?? layerColor,
       ));
     }
     return MarkerLayer(markers: markers);
   }
 
   /// One station: a white disc with its mode icon, name on a plate below.
-  Marker _stationMarker(LatLng point, int modeMask, String? name) {
+  Marker _stationMarker(
+      LatLng point, int modeMask, String? name, Color color) {
     const coreSize = 22.0;
     const labelHeight = 14.0;
     const gap = 1.0;
@@ -147,7 +171,8 @@ class TransitStationsLayer extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.white,
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.black26),
+              // Ring, not fill: the mode icon inside has to stay legible.
+              border: Border.all(color: color, width: 2),
             ),
             child:
                 Icon(transitIconFor(modeMask), size: 13, color: Colors.black87),
@@ -182,7 +207,8 @@ class TransitStationsLayer extends StatelessWidget {
   }
 
   /// A cluster badge: member count ringed in the layer colour.
-  Marker _clusterMarker(LatLng center, int count, int modeMask) {
+  Marker _clusterMarker(
+      LatLng center, int count, int modeMask, Color color) {
     const size = 38.0;
     return Marker(
       point: center,
@@ -196,7 +222,7 @@ class TransitStationsLayer extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             shape: BoxShape.circle,
-            border: Border.all(color: Color(layer.colorArgb), width: 2.5),
+            border: Border.all(color: color, width: 2.5),
             boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 3)],
           ),
           child: Column(

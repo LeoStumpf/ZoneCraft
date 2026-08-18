@@ -223,6 +223,90 @@ class Repository {
     return _db.select(_db.circles).watch();
   }
 
+  // --- Per-element colour (v22) ---------------------------------------------
+
+  /// Sets — or with null clears — one element's colour override. Clearing puts
+  /// the element back on its auto shade of the layer colour, so it follows
+  /// later layer recolours again.
+  Future<void> setElementColor(ColoredElement kind, String id, int? argb) {
+    final v = Value<int?>(argb);
+    return switch (kind) {
+      ColoredElement.circle =>
+        (_db.update(_db.circles)..where((t) => t.id.equals(id)))
+            .write(CirclesCompanion(colorArgb: v)),
+      ColoredElement.plane =>
+        (_db.update(_db.planes)..where((t) => t.id.equals(id)))
+            .write(PlanesCompanion(colorArgb: v)),
+      ColoredElement.subspace =>
+        (_db.update(_db.subspaces)..where((t) => t.id.equals(id)))
+            .write(SubspacesCompanion(colorArgb: v)),
+      ColoredElement.freeLine =>
+        (_db.update(_db.freeLines)..where((t) => t.id.equals(id)))
+            .write(FreeLinesCompanion(colorArgb: v)),
+      ColoredElement.freeArea =>
+        (_db.update(_db.freeAreas)..where((t) => t.id.equals(id)))
+            .write(FreeAreasCompanion(colorArgb: v)),
+      ColoredElement.heightRegion =>
+        (_db.update(_db.heightRegions)..where((t) => t.id.equals(id)))
+            .write(HeightRegionsCompanion(colorArgb: v)),
+      ColoredElement.poiSet =>
+        (_db.update(_db.poiSets)..where((t) => t.id.equals(id)))
+            .write(PoiSetsCompanion(colorArgb: v)),
+      ColoredElement.transitSet =>
+        (_db.update(_db.transitSets)..where((t) => t.id.equals(id)))
+            .write(TransitSetsCompanion(colorArgb: v)),
+      ColoredElement.borderArea =>
+        (_db.update(_db.borderAreas)..where((t) => t.id.equals(id)))
+            .write(BorderAreasCompanion(colorArgb: v)),
+    };
+  }
+
+  /// The ids of [layerId]'s elements that carry an explicit colour — what the
+  /// layer-recolour dialog needs to know, since those are exactly the elements
+  /// a recolour would *not* reach on its own.
+  Future<List<String>> elementsWithColorOverride(
+    String layerId,
+    String layerType,
+  ) async {
+    final kind = ColoredElement.forLayerType(layerType);
+    if (kind == null) return const [];
+    // Border areas hang off their import set, not off the layer directly.
+    final sql = kind == ColoredElement.borderArea
+        ? 'SELECT a.id AS id FROM border_areas a '
+              'JOIN border_sets s ON a.set_id = s.id '
+              'WHERE s.layer_id = ? AND a.color_argb IS NOT NULL'
+        : 'SELECT id FROM ${kind.table} '
+              'WHERE layer_id = ? AND color_argb IS NOT NULL';
+    final rows = await _db.customSelect(
+      sql,
+      variables: [Variable<String>(layerId)],
+    ).get();
+    return [for (final r in rows) r.read<String>('id')];
+  }
+
+  /// Clears the colour override on [ids], putting them back on auto shades.
+  Future<void> clearElementColors(ColoredElement kind, List<String> ids) async {
+    for (final id in ids) {
+      await setElementColor(kind, id, null);
+    }
+  }
+
+  /// The auto-shade slot a new element of [table] takes in [layerId]: one past
+  /// the highest already used, so elements are shaded in creation order and
+  /// deleting one never re-shades the others — a single delete repainting the
+  /// whole layer in different colours would be alarming.
+  ///
+  /// Shade 0 is the layer colour itself, so the first element of a layer looks
+  /// exactly as it did before per-element colours existed.
+  Future<int> _nextColorShade(String table, String layerId) async {
+    final row = await _db.customSelect(
+      'SELECT COALESCE(MAX(color_shade), -1) + 1 AS next '
+      'FROM $table WHERE layer_id = ?',
+      variables: [Variable<String>(layerId)],
+    ).getSingle();
+    return row.read<int>('next');
+  }
+
   Future<String> createCircle({
     required String layerId,
     required double centerLat,
@@ -231,6 +315,7 @@ class Repository {
     String? label,
   }) async {
     final id = _uuid.v4();
+    final shade = await _nextColorShade('circles', layerId);
     await _db.into(_db.circles).insert(
           CirclesCompanion.insert(
             id: id,
@@ -239,6 +324,7 @@ class Repository {
             centerLng: centerLng,
             radiusMeters: radiusMeters,
             label: Value(label),
+            colorShade: Value(shade),
           ),
         );
     return id;
@@ -286,6 +372,7 @@ class Repository {
     String? label,
   }) async {
     final id = _uuid.v4();
+    final shade = await _nextColorShade('planes', layerId);
     await _db.into(_db.planes).insert(
           PlanesCompanion.insert(
             id: id,
@@ -296,6 +383,7 @@ class Repository {
             bLng: bLng,
             nearA: Value(nearA),
             label: Value(label),
+            colorShade: Value(shade),
           ),
         );
     return id;
@@ -343,11 +431,13 @@ class Repository {
 
   Future<String> createSubspace({required String layerId, String? label}) async {
     final id = _uuid.v4();
+    final shade = await _nextColorShade('subspaces', layerId);
     await _db.into(_db.subspaces).insert(
           SubspacesCompanion.insert(
             id: id,
             layerId: layerId,
             label: Value(label),
+            colorShade: Value(shade),
           ),
         );
     return id;
@@ -461,6 +551,7 @@ class Repository {
     double? inclusionRadiusMeters,
   }) async {
     final id = _uuid.v4();
+    final shade = await _nextColorShade('free_lines', layerId);
     await _db.into(_db.freeLines).insert(
           FreeLinesCompanion.insert(
             id: id,
@@ -469,6 +560,7 @@ class Repository {
             inclusionLat: Value(inclusionLat),
             inclusionLng: Value(inclusionLng),
             inclusionRadiusMeters: Value(inclusionRadiusMeters),
+            colorShade: Value(shade),
           ),
         );
     return id;
@@ -627,11 +719,13 @@ class Repository {
 
   Future<String> createFreeArea({required String layerId, String? label}) async {
     final id = _uuid.v4();
+    final shade = await _nextColorShade('free_areas', layerId);
     await _db.into(_db.freeAreas).insert(
           FreeAreasCompanion.insert(
             id: id,
             layerId: layerId,
             label: Value(label),
+            colorShade: Value(shade),
           ),
         );
     return id;
@@ -795,6 +889,7 @@ class Repository {
     String? label,
   }) async {
     final id = _uuid.v4();
+    final shade = await _nextColorShade('height_regions', layerId);
     await _db.into(_db.heightRegions).insert(
           HeightRegionsCompanion.insert(
             id: id,
@@ -806,6 +901,7 @@ class Repository {
             aboveThreshold: Value(aboveThreshold),
             sampleZoom: Value(sampleZoom),
             label: Value(label),
+            colorShade: Value(shade),
           ),
         );
     return id;
@@ -921,6 +1017,7 @@ class Repository {
     String? label,
   }) async {
     final id = _uuid.v4();
+    final shade = await _nextColorShade('poi_sets', layerId);
     await _db.into(_db.poiSets).insert(
           PoiSetsCompanion.insert(
             id: id,
@@ -930,6 +1027,7 @@ class Repository {
             centerLng: centerLng,
             radiusMeters: radiusMeters,
             label: Value(label),
+            colorShade: Value(shade),
           ),
         );
     return id;
@@ -1048,6 +1146,7 @@ class Repository {
     String? label,
   }) async {
     final id = _uuid.v4();
+    final shade = await _nextColorShade('transit_sets', layerId);
     await _db.into(_db.transitSets).insert(
           TransitSetsCompanion.insert(
             id: id,
@@ -1059,6 +1158,7 @@ class Repository {
             modeMask: modeMask,
             visibleModeMask: Value(visibleModeMask),
             label: Value(label),
+            colorShade: Value(shade),
           ),
         );
     return id;
@@ -1668,6 +1768,7 @@ class Repository {
               coords: [LatLng(c.centerLat, c.centerLng)],
               radiusMeters: c.radiusMeters,
               label: c.label,
+              colorArgb: c.colorArgb,
             ));
           }
         case 'planes':
@@ -1677,6 +1778,7 @@ class Repository {
               coords: [LatLng(p.aLat, p.aLng), LatLng(p.bLat, p.bLng)],
               nearA: p.nearA,
               label: p.label,
+              colorArgb: p.colorArgb,
             ));
           }
         case 'subspace':
@@ -1690,6 +1792,7 @@ class Repository {
               coords: [for (final p in pts) LatLng(p.lat, p.lng)],
               mainIndex: mainIndex,
               label: s.label,
+              colorArgb: s.colorArgb,
             ));
           }
         case 'freeline':
@@ -1703,6 +1806,7 @@ class Repository {
               inclusionLng: l.inclusionLng,
               inclusionRadiusMeters: l.inclusionRadiusMeters,
               label: l.label,
+              colorArgb: l.colorArgb,
             ));
           }
         case 'freearea':
@@ -1713,6 +1817,7 @@ class Repository {
               coords: [for (final p in pts) LatLng(p.lat, p.lng)],
               offsetMeters: a.offsetMeters,
               label: a.label,
+              colorArgb: a.colorArgb,
             ));
           }
         case 'height':
@@ -1725,6 +1830,7 @@ class Repository {
               aboveThreshold: r.aboveThreshold,
               sampleZoom: r.sampleZoom,
               label: r.label,
+              colorArgb: r.colorArgb,
             ));
           }
         case 'poi':
@@ -1742,6 +1848,7 @@ class Repository {
               categoryKey: s.categoryKey,
               pointLabels: [for (final p in pts) p.name],
               label: s.label,
+              colorArgb: s.colorArgb,
             ));
           }
         case 'transit':
@@ -1757,6 +1864,7 @@ class Repository {
               coords: [for (final x in stops) LatLng(x.lat, x.lng)],
               pointLabels: [for (final x in stops) x.name],
               label: t.label,
+              colorArgb: t.colorArgb,
             ));
           }
         case 'borders':
@@ -1820,6 +1928,14 @@ class Repository {
     return imported;
   }
 
+  /// Applies an imported element's colour override, if the file carried one.
+  /// A file without it leaves the element following its new layer, which is
+  /// what an import into a differently-coloured layer should do.
+  Future<void> _applyImportedColor(
+      ColoredElement kind, String id, int? argb) async {
+    if (argb != null) await setElementColor(kind, id, argb);
+  }
+
   /// Inserts one exported object into [layerId]. Returns true when it created an
   /// object, false when the geometry was unusable. Shared by [importData] (into
   /// fresh layers) and [mergeIntoLayer] (into an existing one).
@@ -1830,16 +1946,17 @@ class Repository {
         if (o.coords.isEmpty || r == null || !r.isFinite || r <= 0) {
           return false;
         }
-        await createCircle(
+        final cid = await createCircle(
           layerId: layerId,
           centerLat: o.coords.first.latitude,
           centerLng: o.coords.first.longitude,
           radiusMeters: r,
           label: o.label,
         );
+        await _applyImportedColor(ColoredElement.circle, cid, o.colorArgb);
       case 'plane':
         if (o.coords.length < 2) return false;
-        await createPlane(
+        final pid = await createPlane(
           layerId: layerId,
           aLat: o.coords[0].latitude,
           aLng: o.coords[0].longitude,
@@ -1848,6 +1965,7 @@ class Repository {
           nearA: o.nearA ?? true,
           label: o.label,
         );
+        await _applyImportedColor(ColoredElement.plane, pid, o.colorArgb);
       case 'subspace':
         if (o.coords.isEmpty) return false;
         final sid = await createSubspace(layerId: layerId, label: o.label);
@@ -1860,6 +1978,7 @@ class Repository {
             isMain: i == main,
           );
         }
+        await _applyImportedColor(ColoredElement.subspace, sid, o.colorArgb);
       case 'freeline':
         if (o.coords.length < 2) return false;
         final lid = await createFreeLine(
@@ -1876,6 +1995,7 @@ class Repository {
         // city lines) — RDP keeps the endpoints and overall shape.
         await addFreeLinePoints(
             lid, simplifyLine(o.coords, kImportSimplifyMeters));
+        await _applyImportedColor(ColoredElement.freeLine, lid, o.colorArgb);
       case 'freearea':
         if (o.coords.length < 3) return false;
         final aid = await createFreeArea(layerId: layerId, label: o.label);
@@ -1884,6 +2004,7 @@ class Repository {
         }
         await addFreeAreaPoints(
             aid, simplifyRing(o.coords, kImportSimplifyMeters, minPoints: 3));
+        await _applyImportedColor(ColoredElement.freeArea, aid, o.colorArgb);
       case 'height':
         final r = o.radiusMeters;
         if (o.coords.isEmpty || r == null || !r.isFinite || r <= 0) {
@@ -1891,7 +2012,7 @@ class Repository {
         }
         // The generated polygons are derived, not imported — the region comes
         // in un-generated and the user taps Generate.
-        await createHeightRegion(
+        final hid = await createHeightRegion(
           layerId: layerId,
           centerLat: o.coords.first.latitude,
           centerLng: o.coords.first.longitude,
@@ -1901,6 +2022,7 @@ class Repository {
           sampleZoom: o.sampleZoom ?? 13,
           label: o.label,
         );
+        await _applyImportedColor(ColoredElement.heightRegion, hid, o.colorArgb);
       case 'poi':
         final r = o.radiusMeters;
         if (o.coords.isEmpty || r == null || !r.isFinite || r <= 0) {
@@ -1927,6 +2049,7 @@ class Repository {
               name: i - 1 < labels.length ? labels[i - 1] : null,
             ),
         ]);
+        await _applyImportedColor(ColoredElement.poiSet, sid, o.colorArgb);
       case 'transitstop':
         // Derived, re-fetchable OSM data — see the 'transit' case in
         // exportData. Re-import an area by fetching it again, not from a file.
@@ -1976,4 +2099,35 @@ class Repository {
   }
 
   static bool _isFinite(double? v) => v != null && v.isFinite;
+}
+
+/// The element tables that carry a per-element colour (schema v22).
+///
+/// A data-layer twin of the UI's `ObjectKind`: the repository can't reach into
+/// `state/providers.dart`, and only these nine kinds have a colour to set.
+enum ColoredElement {
+  circle('circles', 'circles'),
+  plane('planes', 'planes'),
+  subspace('subspaces', 'subspace'),
+  freeLine('free_lines', 'freeline'),
+  freeArea('free_areas', 'freearea'),
+  heightRegion('height_regions', 'height'),
+  poiSet('poi_sets', 'poi'),
+  transitSet('transit_sets', 'transit'),
+  borderArea('border_areas', 'borders');
+
+  const ColoredElement(this.table, this.layerType);
+
+  /// The SQL table the elements live in.
+  final String table;
+
+  /// The `Layers.type` string whose elements these are.
+  final String layerType;
+
+  static ColoredElement? forLayerType(String type) {
+    for (final k in ColoredElement.values) {
+      if (k.layerType == type) return k;
+    }
+    return null;
+  }
 }

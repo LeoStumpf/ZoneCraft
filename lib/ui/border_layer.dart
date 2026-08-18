@@ -48,6 +48,7 @@ class BorderShape {
     required this.id,
     required this.name,
     required this.colorIndex,
+    this.colorArgb,
     required this.south,
     required this.west,
     required this.north,
@@ -59,6 +60,11 @@ class BorderShape {
   final String id;
   final String? name;
   final int colorIndex;
+
+  /// Per-area colour override (v22). Null = this layer's own rule: the
+  /// neighbour-distinct [borderPalette] entry when "Colour areas" is on, the
+  /// layer colour otherwise.
+  final int? colorArgb;
 
   /// The area's own bounds, for viewport culling.
   final double south, west, north, east;
@@ -86,6 +92,7 @@ final borderShapesProvider =
           id: a.id,
           name: a.name,
           colorIndex: a.colorIndex,
+          colorArgb: a.colorArgb,
           south: a.south,
           west: a.west,
           north: a.north,
@@ -223,6 +230,12 @@ class _BorderPainter extends CustomPainter {
   /// half see is just a worse outline.
   final double opacity;
 
+  /// The colour an area fills in: its own override, else the auto
+  /// neighbour-distinct palette entry.
+  Color _fillColor(BorderShape s) => s.colorArgb != null
+      ? Color(s.colorArgb!)
+      : borderPalette[s.colorIndex % borderPalette.length];
+
   @override
   void paint(Canvas canvas, Size size) {
     // The camera's non-rotated widget box, not the `size` handed to paint():
@@ -240,6 +253,16 @@ class _BorderPainter extends CustomPainter {
       ..strokeWidth = 1.5
       ..strokeCap = StrokeCap.round
       ..color = outline;
+    // An area with its own colour is outlined in it too — otherwise the
+    // override would be invisible with "Colour areas" off, which is the
+    // layer's default look.
+    Paint strokeFor(BorderShape s) => s.colorArgb == null
+        ? strokePaint
+        : (Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5
+          ..strokeCap = StrokeCap.round
+          ..color = Color(s.colorArgb!));
 
     for (final s in shapes) {
       if (fillAreas) {
@@ -262,8 +285,7 @@ class _BorderPainter extends CustomPainter {
             path,
             Paint()
               ..style = PaintingStyle.fill
-              ..color = borderPalette[s.colorIndex % borderPalette.length]
-                  .withValues(alpha: opacity),
+              ..color = _fillColor(s).withValues(alpha: opacity),
           );
         }
       }
@@ -284,7 +306,7 @@ class _BorderPainter extends CustomPainter {
           border.lineTo(seg.$2.dx, seg.$2.dy);
         }
       }
-      canvas.drawPath(border, strokePaint);
+      canvas.drawPath(border, strokeFor(s));
     }
   }
 

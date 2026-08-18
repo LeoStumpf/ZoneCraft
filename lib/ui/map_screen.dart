@@ -3169,6 +3169,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           child: TransitStationsLayer(
                             key: ValueKey(layer.id),
                             layer: layer,
+                            sets: transitSets
+                                .where((s) => s.layerId == layer.id)
+                                .toList(),
                             stations: visibleTransitStations(
                               transitStations.where(
                                 (s) => (transitSetIds[layer.id] ?? const {})

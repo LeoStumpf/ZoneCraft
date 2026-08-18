@@ -207,7 +207,7 @@ Leave them unset for a policy-compliant build against `tile.openstreetmap.org`. 
 
 ### Database schema
 
-The local database is at **schema v20**; migrations are append-only. Installing with `-r` (as
+The local database is at **schema v22**; migrations are append-only. Installing with `-r` (as
 the build script does) preserves existing data and exercises them.
 
 Any schema change must snapshot the new version, or `test/migration_test.dart` fails — a
