@@ -100,12 +100,9 @@ class LayersDrawer extends ConsumerWidget {
                         onPressed: () =>
                             importLayerFlow(context, repo, layers),
                       ),
-                      IconButton(
-                        tooltip: 'Import map feature (city border, river…)',
-                        icon: const Icon(Icons.public),
-                        onPressed: () =>
-                            importFeatureFlow(context, repo, layers),
-                      ),
+                      // (Importing a named map feature is not here any more: it
+                      // always produces freehand geometry, so it lives on the
+                      // freehand layers themselves, next to "Import track…".)
                       PopupMenuButton<String>(
                         tooltip: 'Add layer',
                         onSelected: (type) => addLayer(layers.length, type),
@@ -454,6 +451,16 @@ class _LayerTile extends ConsumerWidget {
                 case 'showNames':
                   await repo.updateBorderLayerOptions(layer.id,
                       showNames: !layer.borderShowNames);
+                case 'importFeature':
+                  // The flow needs the full list only for its fallback picker
+                  // (a line feature asked for from an area layer, or vice
+                  // versa); normally it merges straight into this layer.
+                  await importFeatureFlow(
+                    context,
+                    repo,
+                    ref.read(layersProvider).asData?.value ?? const <Layer>[],
+                    into: layer,
+                  );
                 case 'importTrack':
                   await importTrackIntoLayer(context, repo, layer);
                 case 'export':
@@ -506,11 +513,16 @@ class _LayerTile extends ConsumerWidget {
                   child: const Text('Show names'),
                 ),
               ],
-              if (layer.type == 'freeline' || layer.type == 'freearea')
+              if (layer.type == 'freeline' || layer.type == 'freearea') ...[
+                const PopupMenuItem(
+                  value: 'importFeature',
+                  child: Text('Import map feature…'),
+                ),
                 const PopupMenuItem(
                   value: 'importTrack',
                   child: Text('Import track…'),
                 ),
+              ],
               const PopupMenuItem(value: 'export', child: Text('Export layer…')),
               if (canCombine)
                 const PopupMenuItem(

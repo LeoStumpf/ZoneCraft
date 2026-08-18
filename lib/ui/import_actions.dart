@@ -247,11 +247,17 @@ Future<void> importTrackIntoLayer(
 /// freehand layer — areas (boundaries, parks, lakes…) as a freehand area, lines
 /// (rivers, roads, coastlines…) as a freehand line — a new layer or merged into
 /// an existing same-type one. [layers] is the current list (for the picker).
+///
+/// [into] is the layer whose menu started this, if any: the destination
+/// question is then already answered and the picker is skipped. The geometry
+/// still decides the type, so a *line* feature searched from a freehand **area**
+/// layer falls back to the picker rather than being coerced into a polygon.
 Future<void> importFeatureFlow(
   BuildContext context,
   Repository repo,
-  List<Layer> layers,
-) async {
+  List<Layer> layers, {
+  Layer? into,
+}) async {
   final messenger = ScaffoldMessenger.of(context);
   final place = await showFeatureSearchDialog(context);
   if (place == null || !context.mounted) return;
@@ -312,10 +318,24 @@ Future<void> importFeatureFlow(
     objects: objects,
   );
 
-  final target = await _askNewOrMerge(context, layers, type);
-  if (target == null) return; // cancelled
-
   final noun = isArea ? 'area' : 'line';
+  final _ImportChoice target;
+  if (into != null && into.type == type) {
+    target = _ImportChoice.merge(into.id); // started from this layer's menu
+  } else {
+    final picked = await _askNewOrMerge(
+      context,
+      layers,
+      type,
+      note: into == null
+          ? null
+          : '“${place.shortName}” is a $noun, so it can’t go into '
+              '“${into.name}”.',
+    );
+    if (picked == null) return; // cancelled
+    target = picked;
+  }
+
   try {
     final int count;
     if (target.mergeLayerId != null) {
@@ -610,16 +630,31 @@ Future<String?> combineLayerFlow(
   return target.id;
 }
 
+/// Asks where an import of [type] should go. [note] explains *why* the question
+/// is being asked when the caller already had a destination in mind (see
+/// [importFeatureFlow]) — without it, a picker appearing out of a layer's own
+/// menu reads as a bug.
 Future<_ImportChoice?> _askNewOrMerge(
   BuildContext context,
   List<Layer> layers,
-  String type,
-) {
+  String type, {
+  String? note,
+}) {
   final mergeable = layers.where((l) => l.type == type).toList();
   return showDialog<_ImportChoice>(
     context: context,
     builder: (ctx) => SimpleDialog(
-      title: const Text('Import layer'),
+      title: note == null
+          ? const Text('Import layer')
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Import layer'),
+                const SizedBox(height: 6),
+                Text(note, style: Theme.of(ctx).textTheme.bodyMedium),
+              ],
+            ),
       children: [
         SimpleDialogOption(
           onPressed: () => Navigator.pop(ctx, const _ImportChoice.newLayer()),
