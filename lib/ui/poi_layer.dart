@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' hide Circle;
 
 import '../data/database.dart';
+import 'camera_viewport.dart';
 import 'screen_cluster.dart';
 
 /// The marker icon for a POI category key (see `poiCategories` in
@@ -69,7 +70,7 @@ class PoiMarkersLayer extends StatelessWidget {
     final catBySet = {for (final s in sets) s.id: s.categoryKey};
 
     // Cull to the viewport (+margin so edge clusters don't pop) and project.
-    final bounds = (Offset.zero & camera.size).inflate(2 * _clusterRadiusPx);
+    final bounds = cameraViewport(camera).inflate(2 * _clusterRadiusPx);
     final lls = <LatLng>[];
     final names = <String?>[];
     final cats = <String>[];

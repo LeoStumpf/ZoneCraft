@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../data/database.dart';
 import '../data/transit.dart';
+import 'camera_viewport.dart';
 import 'screen_cluster.dart';
 
 /// Renders a `transit` layer: its imported **stations**, clustered in screen
@@ -81,7 +82,7 @@ class TransitStationsLayer extends StatelessWidget {
   Widget build(BuildContext context) {
     if (stations.isEmpty) return const MarkerLayer(markers: []);
     final camera = MapCamera.of(context);
-    final bounds = (Offset.zero & camera.size).inflate(2 * _clusterRadiusPx);
+    final bounds = cameraViewport(camera).inflate(2 * _clusterRadiusPx);
 
     final lls = <LatLng>[];
     final names = <String?>[];

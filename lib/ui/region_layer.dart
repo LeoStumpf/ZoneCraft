@@ -7,6 +7,7 @@ import '../geo/freeline.dart';
 import '../geo/plane.dart';
 import '../geo/subspace.dart';
 import 'area_geometry.dart';
+import 'camera_viewport.dart';
 import 'region_geometry.dart';
 import 'screen_clip.dart';
 
@@ -94,7 +95,8 @@ class RegionLayer extends StatelessWidget {
     ];
     return IgnorePointer(
       child: CustomPaint(
-        size: camera.size,
+        // The widget's own box, never `camera.size` — see [cameraViewport].
+        size: camera.nonRotatedSize,
         painter: _RegionPainter(
           camera: camera,
           color: Color(layer.colorArgb),
@@ -184,15 +186,19 @@ class _RegionPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Both rects come from [cameraViewport], not the `size` handed to paint():
+    // the projection is in the camera's non-rotated widget box, so the clip has
+    // to be that same box whatever the layout hands this painter.
+    final viewportRect = cameraViewport(camera);
     // Clip so region fills/strokes (which extend a few px past the viewport to
     // hide their clip-cut edges) don't paint outside this layer's bounds.
-    canvas.clipRect(Offset.zero & size);
-    _clip = (Offset.zero & size).inflate(4);
+    canvas.clipRect(viewportRect);
+    _clip = viewportRect.inflate(4);
 
     // Height layers render their stored fill polygons with their own bounded
     // band (along the elevation contour only), so handle them separately.
     if (heightRegions.isNotEmpty) {
-      _paintHeight(canvas, size);
+      _paintHeight(canvas);
       return;
     }
 
@@ -201,7 +207,7 @@ class _RegionPainter extends CustomPainter {
     // at reflex corners and gaps at convex ones, which on a city-sized outline
     // turns the band into spikes. Handle them separately so the buffer is robust.
     if (freeAreas.isNotEmpty) {
-      _paintFreeAreas(canvas, size);
+      _paintFreeAreas(canvas);
       return;
     }
 
@@ -209,7 +215,7 @@ class _RegionPainter extends CustomPainter {
     // half-disk), so the invert complement is the disk — not the viewport.
     // Handle them separately rather than on the shared unbounded path.
     if (freeLines.isNotEmpty) {
-      _paintFreeLines(canvas, size);
+      _paintFreeLines(canvas);
       return;
     }
 
@@ -258,7 +264,7 @@ class _RegionPainter extends CustomPainter {
     }
     // Plane/subspace clip to the viewport as a spherical quad; unproject its
     // (slightly inflated) corners once. Null at extreme zoom / near-pole.
-    final corners = _viewportCorners(size);
+    final corners = viewportCorners(camera);
     // Unbounded regions (plane/subspace/freeline) are cached against a generous
     // bound and reused while the live view still fits inside it, so a pan/zoom
     // re-projects cached rings instead of re-clipping every frame.
@@ -386,7 +392,7 @@ class _RegionPainter extends CustomPainter {
   /// Painting the wider region first and replacing it with the narrower one
   /// ([BlendMode.src], [BlendMode.clear]) needs no path-ops at all and keeps
   /// overlapping objects flat, which is the whole point of the union anyway.
-  void _paintFreeAreas(Canvas canvas, Size size) {
+  void _paintFreeAreas(Canvas canvas) {
     // Per-object screen geometry: the nominal boundary, and the band's far edge
     // (where the solid starts). With no uncertainty the two coincide; an empty
     // band edge under a positive uncertainty means the band swallowed the whole
@@ -457,7 +463,7 @@ class _RegionPainter extends CustomPainter {
   /// the uncertainty radius and clipping it to the coloured side — so the fill
   /// turns solid only a band-width past the divider and nothing ever spills onto
   /// the far side. The outline traces the dividing line.
-  void _paintFreeLines(Canvas canvas, Size size) {
+  void _paintFreeLines(Canvas canvas) {
     final bandMeters = uncertaintyMeters > 0 ? uncertaintyMeters : 0.0;
 
     Path? coreUnion; // the right-hand filled side, ∩ disk
@@ -694,7 +700,7 @@ class _RegionPainter extends CustomPainter {
   /// and the fill only reads as fully solid a band-width inside it (holes get
   /// the same treatment from their side). The fill already encodes above/below
   /// and is bounded, so there is no viewport invert here.
-  void _paintHeight(Canvas canvas, Size size) {
+  void _paintHeight(Canvas canvas) {
     final solidPaint = Paint()
       ..style = PaintingStyle.fill
       ..color = color.withValues(alpha: _solidAlpha);
@@ -791,21 +797,6 @@ class _RegionPainter extends CustomPainter {
     final east = _distance.offset(at, meters, 90);
     return (camera.latLngToScreenOffset(at) - camera.latLngToScreenOffset(east))
         .distance;
-  }
-
-  /// The four corners of the (slightly inflated) viewport as lat/lng, in ring
-  /// order, for use as the spherical clip quad. Null when a corner unprojects to
-  /// a non-finite coordinate (extreme zoom-out / near-pole).
-  List<LatLng>? _viewportCorners(Size size) {
-    final r = (Offset.zero & size).inflate(8);
-    final offs = <Offset>[r.topLeft, r.topRight, r.bottomRight, r.bottomLeft];
-    final out = <LatLng>[];
-    for (final o in offs) {
-      final ll = camera.screenOffsetToLatLng(o);
-      if (!ll.latitude.isFinite || !ll.longitude.isFinite) return null;
-      out.add(ll);
-    }
-    return out;
   }
 
   /// Projects [ring] and pre-clips it to [_clip] (see [clipRingToRect]) before

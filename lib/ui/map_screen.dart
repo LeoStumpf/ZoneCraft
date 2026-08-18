@@ -2891,6 +2891,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       _mapReady = true;
                       _schedulePrefetch();
                     },
+                    // Rotation is tracked off the event stream, not
+                    // onPositionChanged: flutter_map calls that one only for
+                    // move/zoom, so a pure rotate (two-finger twist, or our own
+                    // `rotate(0)`) would leave the compass pointing the wrong
+                    // way — and now also stuck on screen, since it shows only
+                    // while rotated.
+                    onMapEvent: (event) {
+                      final r = event.camera.rotation;
+                      if (r != _rotation) setState(() => _rotation = r);
+                    },
                     onPositionChanged: (camera, _) {
                       // Recover from a degenerate gesture that produced a
                       // non-finite camera: snap back to the last valid view so
@@ -2905,10 +2915,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       }
                       _lastGoodCenter = c;
                       _lastGoodZoom = camera.zoom;
-                      // Keep the compass needle in sync with map rotation.
-                      if (camera.rotation != _rotation) {
-                        setState(() => _rotation = camera.rotation);
-                      }
                       // An import box's live corner *is* the map centre, so it
                       // has to follow the camera. Only runs while a corner is
                       // buffered.
@@ -3495,6 +3501,40 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     ),
                   ),
                 ),
+                // …and a compass at the top-right, but only while the map is
+                // rotated. It is map chrome rather than a FAB on purpose: a
+                // two-finger pinch also rotates, and the FAB column is hidden
+                // both when the tools are collapsed and while an editor sheet
+                // is open — so as a FAB it was invisible in exactly the states
+                // where an accidental rotation gets noticed.
+                if (_rotation != 0)
+                  SafeArea(
+                    child: Align(
+                      alignment: Alignment.topRight,
+                      child: Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Material(
+                          color: Theme.of(context).colorScheme.surface,
+                          elevation: 2,
+                          shape: const CircleBorder(),
+                          clipBehavior: Clip.antiAlias,
+                          child: IconButton(
+                            tooltip: 'Reset to north-up',
+                            onPressed: () => _mapController.rotate(0),
+                            icon: Transform.rotate(
+                              // Counter-rotate so the needle points to
+                              // map-north.
+                              angle: -_rotation * math.pi / 180,
+                              child: const Icon(
+                                Icons.navigation,
+                                color: Colors.red,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 // Add-mode banner: what to tap, plus Undo / Edit last / Done.
                 if (mode == MapMode.add && _placeLayerId != null)
                   SafeArea(
@@ -3718,17 +3758,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     ),
                     const SizedBox(height: 12),
                   ],
-                  FloatingActionButton.small(
-                    heroTag: 'compass',
-                    tooltip: 'Reset to north-up',
-                    onPressed: () => _mapController.rotate(0),
-                    child: Transform.rotate(
-                      // Counter-rotate so the needle always points to map-north.
-                      angle: -_rotation * math.pi / 180,
-                      child: const Icon(Icons.navigation, color: Colors.red),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
+                  // (The compass lives on the map itself, top-right, and only
+                  // while the map is rotated — see the map chrome above.)
                   FloatingActionButton.small(
                     heroTag: 'locate',
                     tooltip: 'Locate me',

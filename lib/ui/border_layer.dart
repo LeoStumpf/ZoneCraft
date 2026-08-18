@@ -6,6 +6,7 @@ import 'package:latlong2/latlong.dart' hide Path;
 import '../data/database.dart';
 import '../geo/border_areas.dart';
 import '../state/providers.dart';
+import 'camera_viewport.dart';
 import 'screen_clip.dart';
 import 'screen_cluster.dart';
 
@@ -123,7 +124,8 @@ class BorderAreasLayer extends StatelessWidget {
       children: [
         IgnorePointer(
           child: CustomPaint(
-            size: camera.size,
+            // The widget's own box, never `camera.size` — see [cameraViewport].
+            size: camera.nonRotatedSize,
             painter: _BorderPainter(
               camera: camera,
               shapes: visible,
@@ -155,7 +157,7 @@ class BorderAreasLayer extends StatelessWidget {
     if (named.isEmpty) return const SizedBox.shrink();
     final offsets = <Offset>[];
     final kept = <BorderShape>[];
-    final bounds = (Offset.zero & camera.size).inflate(_plateSpacingPx);
+    final bounds = cameraViewport(camera).inflate(_plateSpacingPx);
     for (final s in named) {
       if (!s.labelPoint.latitude.isFinite ||
           !s.labelPoint.longitude.isFinite) {
@@ -223,12 +225,15 @@ class _BorderPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.clipRect(Offset.zero & size);
+    // The camera's non-rotated widget box, not the `size` handed to paint():
+    // the projection below is in that space. See [cameraViewport].
+    final viewportRect = cameraViewport(camera);
+    canvas.clipRect(viewportRect);
     // Every projected coordinate is confined to this box before Skia sees it:
     // a city-sized outline at street zoom projects to ±10⁵ px, where fills
     // rasterise with pieces missing. The inflation puts the clip's own cut
     // edges outside the canvas clip, so they are never visible as strokes.
-    final clip = (Offset.zero & size).inflate(4);
+    final clip = viewportRect.inflate(4);
 
     final strokePaint = Paint()
       ..style = PaintingStyle.stroke
