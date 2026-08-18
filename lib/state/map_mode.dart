@@ -23,6 +23,11 @@ enum MapMode {
   /// stays armed so several objects can be dropped in a row.
   add,
 
+  /// One finger **draws** a freehand line/area instead of panning the map;
+  /// panning and zooming move to two fingers. Sticky like [add], and offered
+  /// only for the two freehand layer types.
+  draw,
+
   /// A tap reads the terrain elevation at that point.
   elevation,
 
@@ -41,5 +46,6 @@ class MapModeNotifier extends Notifier<MapMode> {
   void toggle(MapMode mode) => state = state == mode ? MapMode.view : mode;
 }
 
-final mapModeProvider =
-    NotifierProvider<MapModeNotifier, MapMode>(MapModeNotifier.new);
+final mapModeProvider = NotifierProvider<MapModeNotifier, MapMode>(
+  MapModeNotifier.new,
+);

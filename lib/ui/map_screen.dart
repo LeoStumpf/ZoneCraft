@@ -37,6 +37,7 @@ import 'import_progress.dart';
 import 'layers_panel.dart';
 import 'object_summary.dart';
 import 'plane_editor.dart';
+import 'draw_stroke.dart';
 import 'poi_import_dialog.dart';
 import 'poi_layer.dart';
 import 'area_geometry.dart';
@@ -91,6 +92,28 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// Everything placed in the current Add session, newest last: the object each
   /// tap belongs to (for "Edit last") and how to undo that one tap.
   final List<({ObjectRef object, Future<void> Function() undo})> _addSteps = [];
+
+  // --- Draw mode ------------------------------------------------------------
+  // While [MapMode.draw] is armed one finger draws instead of panning, and each
+  // completed stroke becomes one freehand line/area. Shares [_addSteps] with Add
+  // mode, so Undo / Edit / Done behave identically.
+  String? _drawLayerId;
+  String? _drawType;
+
+  /// The stroke under the finger, in the map widget's screen coordinates. It is
+  /// converted to lat/lng only on release ([strokeToPoints]) — the camera can't
+  /// move mid-stroke, because a second finger abandons the stroke.
+  final List<Offset> _stroke = [];
+
+  /// Pointers currently down on the map, and which one owns [_stroke]. A stroke
+  /// is only ever a **single** finger: the moment a second lands the gesture is
+  /// a pan/pinch, not a drawing.
+  final Set<int> _strokePointers = {};
+  int? _strokeOwner;
+
+  /// Bumped per collected point so only the stroke preview repaints — a
+  /// setState per pointer move would rebuild the whole map screen.
+  final ValueNotifier<int> _strokeRevision = ValueNotifier(0);
   // Vertex ids marked (by tapping their handle) for bulk delete; all belong to
   // the currently selected object. Cleared on any selection change.
   final Set<String> _markedPoints = {};
@@ -190,6 +213,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     _saveCamera();
     _prefetchDebounce?.cancel();
     _tileClient.close();
+    _strokeRevision.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _mapController.dispose();
     super.dispose();
@@ -532,8 +556,19 @@ class _MapScreenState extends ConsumerState<MapScreen>
         _placeLayerId = null;
         _placeType = null;
       }
+      if (previous == MapMode.draw) {
+        _drawLayerId = null;
+        _drawType = null;
+        _stroke.clear();
+        _strokePointers.clear();
+        _strokeOwner = null;
+      }
+      if (previous == MapMode.add || previous == MapMode.draw) {
+        _addSteps.clear();
+      }
     });
     if (mode == MapMode.add ||
+        mode == MapMode.draw ||
         mode == MapMode.elevation ||
         mode == MapMode.distance) {
       _clearSelection();
@@ -1832,6 +1867,134 @@ class _MapScreenState extends ConsumerState<MapScreen>
     setState(() => _addSteps.add((object: object, undo: undo)));
   }
 
+  /// Arms Draw mode for [layer]: one finger now draws a freehand line/area
+  /// instead of panning the map. Sticky like Add mode — each stroke becomes one
+  /// object and the mode stays on until Done.
+  void _enterDrawMode(Layer layer) {
+    _enterMode(MapMode.draw);
+    setState(() {
+      _drawLayerId = layer.id;
+      _drawType = layer.type;
+    });
+    _hint(_drawBannerText(0));
+  }
+
+  /// Leaves Draw mode, selecting the last stroke so its handles and editor
+  /// appear — the same "Done ⇒ now edit it" contract Add mode has, and the
+  /// point of drawing into ordinary freehand objects in the first place.
+  void _finishDraw() {
+    final last = _addSteps.lastOrNull?.object;
+    setState(() {
+      _drawLayerId = null;
+      _drawType = null;
+      _stroke.clear();
+      _strokePointers.clear();
+      _strokeOwner = null;
+      _addSteps.clear();
+    });
+    ref.read(mapModeProvider.notifier).set(MapMode.view);
+    if (last != null) _select(last.kind, last.id);
+  }
+
+  String _drawBannerText(int drawn) {
+    final noun = _drawType == 'freearea' ? 'area' : 'line';
+    if (drawn > 0) {
+      return '$drawn $noun${drawn == 1 ? '' : 's'} · draw another';
+    }
+    return 'Drag one finger to draw · two fingers pan';
+  }
+
+  // --- Draw mode gestures ---------------------------------------------------
+  // Raw pointer events, not a gesture recogniser: flutter_map owns the gesture
+  // arena for pan/pinch, and a [Listener] sees every pointer regardless of who
+  // wins there. One-finger drag is disabled on the map while drawing (see
+  // [_interactionOptions]), so the two never fight over the same finger.
+
+  void _strokeDown(PointerDownEvent e) {
+    _strokePointers.add(e.pointer);
+    if (_strokePointers.length > 1) {
+      // A second finger means pan/pinch. Abandon the stroke rather than commit
+      // a half-drawn shape the user never meant to leave behind.
+      _strokeOwner = null;
+      _stroke.clear();
+      _strokeRevision.value++;
+      return;
+    }
+    _strokeOwner = e.pointer;
+    _stroke
+      ..clear()
+      ..add(e.localPosition);
+    _strokeRevision.value++;
+  }
+
+  void _strokeMove(PointerMoveEvent e) {
+    if (e.pointer != _strokeOwner) return;
+    _stroke.add(e.localPosition);
+    _strokeRevision.value++;
+  }
+
+  Future<void> _strokeUp(PointerEvent e) async {
+    _strokePointers.remove(e.pointer);
+    if (e.pointer != _strokeOwner) return;
+    _strokeOwner = null;
+    final stroke = List<Offset>.of(_stroke);
+    _stroke.clear();
+    _strokeRevision.value++;
+    await _commitStroke(stroke);
+  }
+
+  /// Writes one finished stroke as an ordinary freehand object, so every
+  /// existing affordance — drag handles, insert/reorder points, offset, export
+  /// — works on it with no special cases.
+  Future<void> _commitStroke(List<Offset> stroke) async {
+    final layerId = _drawLayerId;
+    if (layerId == null || !mounted) return;
+    final closed = _drawType == 'freearea';
+    final pts = strokeToPoints(stroke, _mapController.camera, closed: closed);
+    // A tap or a twitch: silently nothing. Saying "too short" after every
+    // stray touch would be noisier than the mistake.
+    if (pts == null) return;
+    final repo = ref.read(repositoryProvider);
+    if (closed) {
+      final id = await repo.createFreeArea(layerId: layerId);
+      await repo.addFreeAreaPoints(id, pts);
+      _pushAddStep(
+        ObjectRef(kind: ObjectKind.freeArea, id: id, layerId: layerId),
+        () => repo.deleteFreeArea(id),
+      );
+    } else {
+      // A freehand line splits an inclusion circle, so the circle has to be
+      // *visible at the zoom the stroke was drawn at*. The stored-null default
+      // won't do: `effectiveInclusion` caps its derived radius at 5 km, which is
+      // right for a whole-river import (it would otherwise derive a
+      // continent-sized circle) and wrong here, where a stroke across the screen
+      // would come back as a sub-pixel dot. The stroke can't be bigger than the
+      // viewport, so its own size is a safe radius — floored by the usual
+      // viewport-relative default for a short one.
+      final inc = effectiveInclusion(
+        lat: null,
+        lng: null,
+        radiusMeters: null,
+        points: pts,
+      );
+      final radius = math.max(
+        ViewBound.ofCorners(pts).diagonalMeters * 0.75,
+        _defaultRadius(),
+      );
+      final id = await repo.createFreeLine(
+        layerId: layerId,
+        inclusionLat: inc.center.latitude,
+        inclusionLng: inc.center.longitude,
+        inclusionRadiusMeters: radius,
+      );
+      await repo.addFreeLinePoints(id, pts);
+      _pushAddStep(
+        ObjectRef(kind: ObjectKind.freeLine, id: id, layerId: layerId),
+        () => repo.deleteFreeLine(id),
+      );
+    }
+  }
+
   /// Undoes the most recent placement of this Add session (a pending plane
   /// point A first, since it isn't committed yet).
   Future<void> _undoLastAdd() async {
@@ -2182,13 +2345,24 @@ class _MapScreenState extends ConsumerState<MapScreen>
   ///
   /// So while a tap means something the zoom gesture is off; pinch, the zoom
   /// buttons and plain view mode are untouched.
-  InteractionOptions _interactionOptions(bool tapPlaces) => InteractionOptions(
-    flags: tapPlaces
-        ? InteractiveFlag.all &
-              ~InteractiveFlag.doubleTapZoom &
-              ~InteractiveFlag.doubleTapDragZoom
-        : InteractiveFlag.all,
-  );
+  /// While [drawing], one-finger drag belongs to the stroke, so the map's own
+  /// drag (and its fling, and the one-finger double-tap-drag zoom) is off and
+  /// panning moves to two fingers. That is a big change to make silently —
+  /// hence the banner, which says so in as many words.
+  InteractionOptions _interactionOptions(
+    bool tapPlaces, {
+    bool drawing = false,
+  }) {
+    var flags = InteractiveFlag.all;
+    if (tapPlaces || drawing) {
+      flags &=
+          ~InteractiveFlag.doubleTapZoom & ~InteractiveFlag.doubleTapDragZoom;
+    }
+    if (drawing) {
+      flags &= ~InteractiveFlag.drag & ~InteractiveFlag.flingAnimation;
+    }
+    return InteractionOptions(flags: flags);
+  }
 
   /// A map tap. Everything it can do is decided by exactly two things: whether
   /// an editor armed the next tap, and the current [MapMode]. In the default
@@ -2207,6 +2381,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
         return;
       case MapMode.add:
         await _addTapAt(latlng);
+        return;
+      case MapMode.draw:
+        // A tap is a zero-length stroke: nothing to draw, and nothing to
+        // select either — the finger is the pen while this mode is on.
         return;
       case MapMode.view:
         // A plain tap is a complete no-op — no select, no create, no deselect.
@@ -2460,11 +2638,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
         // The other single-object-per-tap type. Its absence here was the reason
         // a height layer felt like it could only be added to from the FAB.
         actions.add(
-          _pointMenuItem(
-            'newHeight',
-            Icons.terrain,
-            'New height area here',
-          ),
+          _pointMenuItem('newHeight', Icons.terrain, 'New height area here'),
         );
       case 'subspace':
         if (selectedSubspaceId != null) {
@@ -2841,6 +3015,19 @@ class _MapScreenState extends ConsumerState<MapScreen>
             _ => false,
           };
     final canEditByTap = activeHasEditor && activeHasElements;
+    // Only the two freehand types can be drawn into — everything else is built
+    // from points, radii or an import.
+    final canDraw =
+        activeLayer?.type == 'freeline' || activeLayer?.type == 'freearea';
+    // Same reasoning as Edit below: switching to a non-freehand layer while
+    // Draw is armed would leave one-finger pan off with nothing to draw into.
+    if (mode == MapMode.draw && !canDraw) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && ref.read(mapModeProvider) == MapMode.draw) {
+          _finishDraw();
+        }
+      });
+    }
     // Switching to an import layer (or emptying the current one) while Edit is
     // armed would otherwise leave a lit button that no longer does anything.
     if (mode == MapMode.edit && !canEditByTap) {
@@ -2886,7 +3073,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     // zoom-out gestures from degenerating into a NaN camera.
                     maxZoom: 19,
                     minZoom: 2,
-                    interactionOptions: _interactionOptions(tapPlaces),
+                    interactionOptions: _interactionOptions(
+                      tapPlaces,
+                      drawing: mode == MapMode.draw,
+                    ),
                     onMapReady: () {
                       _mapReady = true;
                       _schedulePrefetch();
@@ -3483,6 +3673,36 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     ),
                   ],
                 ),
+                // The stroke being drawn. Translucent so the map underneath
+                // still receives the pointers it needs for two-finger
+                // pan/pinch — the Listener only *watches*, and the one-finger
+                // conflict is resolved by turning the map's drag off instead.
+                if (mode == MapMode.draw)
+                  Positioned.fill(
+                    child: Listener(
+                      behavior: HitTestBehavior.translucent,
+                      onPointerDown: _strokeDown,
+                      onPointerMove: _strokeMove,
+                      onPointerUp: _strokeUp,
+                      onPointerCancel: _strokeUp,
+                      child: RepaintBoundary(
+                        child: CustomPaint(
+                          painter: StrokePainter(
+                            points: _stroke,
+                            repaint: _strokeRevision,
+                            closed: _drawType == 'freearea',
+                            color: Color(
+                              layers
+                                      .where((l) => l.id == _drawLayerId)
+                                      .firstOrNull
+                                      ?.colorArgb ??
+                                  0xFF2196F3,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 // The only chrome over the map: a menu button at the top-left.
                 SafeArea(
                   child: Padding(
@@ -3577,6 +3797,48 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                   ),
                                 TextButton(
                                   onPressed: _finishAdd,
+                                  child: const Text('Done'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                // Draw-mode banner. It earns its place twice over: it is the
+                // only thing that says one-finger pan is off for the moment.
+                if (mode == MapMode.draw && _drawLayerId != null)
+                  SafeArea(
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Material(
+                          color: Theme.of(context).colorScheme.surface,
+                          elevation: 2,
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.gesture, size: 16),
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    _drawBannerText(_addSteps.length),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: _addSteps.isEmpty
+                                      ? null
+                                      : _undoLastAdd,
+                                  child: const Text('Undo'),
+                                ),
+                                TextButton(
+                                  onPressed: _finishDraw,
                                   child: const Text('Done'),
                                 ),
                               ],
@@ -3799,6 +4061,25 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     child: const Icon(Icons.straighten),
                   ),
                   const SizedBox(height: 12),
+                  // Freehand layers only: there is nothing to draw into on a
+                  // circle, a plane or an import layer.
+                  if (canDraw) ...[
+                    FloatingActionButton.small(
+                      heroTag: 'draw',
+                      tooltip: 'Draw with your finger',
+                      backgroundColor: mode == MapMode.draw
+                          ? Theme.of(context).colorScheme.primary
+                          : null,
+                      foregroundColor: mode == MapMode.draw
+                          ? Theme.of(context).colorScheme.onPrimary
+                          : null,
+                      onPressed: () => mode == MapMode.draw
+                          ? _finishDraw()
+                          : _enterDrawMode(activeLayer!),
+                      child: const Icon(Icons.gesture),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                 ],
                 // Bottom row: the tools toggle, an optional POI-import button
                 // (circle/subspace layers only), then the primary Add button.
@@ -3826,14 +4107,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       tooltip: activeLayer == null
                           ? 'No layer to edit'
                           : !activeHasEditor
-                                ? 'Imported layers have no editor — use '
-                                      'Elements to find an item'
-                                : !activeHasElements
-                                      ? 'Nothing to edit yet — add something '
-                                            'first'
-                                      : mode == MapMode.edit
-                                      ? 'Stop selecting by tap'
-                                      : 'Select by tapping the map',
+                          ? 'Imported layers have no editor — use '
+                                'Elements to find an item'
+                          : !activeHasElements
+                          ? 'Nothing to edit yet — add something '
+                                'first'
+                          : mode == MapMode.edit
+                          ? 'Stop selecting by tap'
+                          : 'Select by tapping the map',
                       // A FAB does not grey itself when onPressed is null, so
                       // the disabled colour is explicit — same as the Add FAB.
                       backgroundColor: !canEditByTap
