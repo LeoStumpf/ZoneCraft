@@ -104,15 +104,41 @@ final borderShapesProvider =
 });
 
 /// The areas of one borders layer.
+/// [shapes] with [draft] standing in for the stored version of the same area.
+///
+/// Matching is by **id**, and a draft that matches nothing is simply ignored:
+/// the map screen holds one draft for the whole app but hands it to every
+/// borders layer it paints, so the layers that don't own it must be left
+/// exactly as they were rather than gaining a stray outline.
+List<BorderShape> withDraft(List<BorderShape> shapes, BorderShape? draft) {
+  if (draft == null) return shapes;
+  return [
+    for (final s in shapes)
+      if (s.id == draft.id) draft else s,
+  ];
+}
+
 class BorderAreasLayer extends StatelessWidget {
   const BorderAreasLayer({
     super.key,
     required this.layer,
     required this.shapes,
+    this.draft,
   });
 
   final Layer layer;
   final List<BorderShape> shapes;
+
+  /// An outline being reshaped right now, standing in for the stored version of
+  /// the same area.
+  ///
+  /// Reshaping writes to the database only on drag *end* — one area is a single
+  /// ring blob, and re-encoding a 119 238-point boundary at 20 fps (and
+  /// re-decoding every area in the layer behind it) is not something a drag can
+  /// afford. So the map screen holds the in-progress rings and hands them here,
+  /// which is what makes the border follow the finger instead of snapping when
+  /// you let go.
+  final BorderShape? draft;
 
   /// Name plates closer than this (screen px) collapse to whichever was placed
   /// first, so a zoomed-out import doesn't become a wall of overlapping text.
@@ -122,7 +148,7 @@ class BorderAreasLayer extends StatelessWidget {
   Widget build(BuildContext context) {
     final camera = MapCamera.of(context);
     final visible = [
-      for (final s in shapes)
+      for (final s in withDraft(shapes, draft))
         if (_overlapsViewport(s, camera.visibleBounds)) s,
     ];
     if (visible.isEmpty) return const SizedBox.shrink();

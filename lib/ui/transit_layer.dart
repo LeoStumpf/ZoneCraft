@@ -37,25 +37,16 @@ IconData transitIconFor(int modeMask) {
 /// The stations that should be drawn: those whose own modes intersect the
 /// visible-mode mask of the import they came from.
 ///
-/// **Invariant:** a station shows iff *at least one* of its modes is enabled —
-/// so unticking Bus leaves Pasing Bahnhof standing, because a train stops
-/// there. A station with no modes at all (`modeMask == 0`, ~0.1 % of Munich)
-/// shows whenever anything is enabled, so it can never become unreachable.
+/// The rule itself is [transitStationVisible], shared with the tap hit-test so
+/// what is drawn and what can be selected cannot drift apart.
 List<TransitStop> visibleTransitStations(
   Iterable<TransitStop> stations,
   Map<String, int> visibleMaskBySetId,
 ) {
   return [
     for (final s in stations)
-      if (_visible(s.modeMask, visibleMaskBySetId[s.setId])) s,
+      if (transitStationVisible(s.modeMask, visibleMaskBySetId[s.setId])) s,
   ];
-}
-
-bool _visible(int stationMask, int? visibleMask) {
-  if (visibleMask == null) return false; // not one of this layer's sets
-  if (visibleMask == 0) return false; // everything hidden
-  if (stationMask == 0) return true; // "no type given" — never orphaned
-  return stationMask & visibleMask != 0;
 }
 
 /// The stations of one transit layer.

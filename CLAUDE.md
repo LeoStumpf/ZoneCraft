@@ -11,11 +11,11 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   to a circle; generated from terrain tiles via marching squares, stored as fill polygons),
   `poi` (a category of OSM POIs fetched **once** from Overpass within a chosen radius and
   stored offline; rendered as icon markers that collapse into count-badge clusters when they'd
-  overlap — no region compositing, no editor; the FAB re-imports more sets),
+  overlap — no region compositing; the FAB re-imports more sets),
   `transit` (public-transport **stations** fetched **once** from Overpass over a
   tap-two-corners bbox and stored offline; **no line geometry is ever fetched** — only which
   transit *types* serve each station — drawn as clustered markers and filtered by a per-layer
-  **Stations** menu; a failed import stays on the layer as a retry row, no editor.
+  **Stations** menu; a failed import stays on the layer as a retry row.
   The import dialog also asks **which types to fetch**, pre-ticked from the box size and
   size-limited per type — bus stops are ~25× the data of train stops, so a state-sized
   train-only import works while a bus one is refused),
@@ -28,7 +28,7 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   neighbours match, adjacency = shared OSM way id) and **Show names**. The Elements list
   names the **areas** ("Maxvorstadt"), not the imports, and each row can be
   **converted to a freehand area layer** — the offline twin of the by-name feature import,
-  and the only way geometry leaves this read-only snapshot. No editor).
+  and the only way geometry leaves this read-only snapshot).
   The region types have a `geo/*.dart` region builder and a `ui/*_editor.dart` docked editor.
 - **Compositing engine** (`ui/region_layer.dart`): per layer, every object yields an
   `outer`+`core` screen-space polygon; these union via `Path.combine`, then paint core (solid)
@@ -89,9 +89,9 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   exported alone and files imported as a new layer or **merged** into an existing same-type
   one (`ui/import_actions.dart`); generic **GeoJSON/KML/KMZ/GPX** tracks import into freehand
   layers (`data/geo_import.dart`).
-- **Drift schema is at v22**; migrations are append-only `if (from < N)` blocks. (v19 is the
+- **Drift schema is at v23**; migrations are append-only `if (from < N)` blocks. (v19 is the
   one exception: it *drops* the transit route tables, because route geometry was abandoned —
-  see `data/transit.dart`'s header for the measurements behind that.) v20/v21/v22 are
+  see `data/transit.dart`'s header for the measurements behind that.) v20/v21/v22/v23 are
   snapshotted in `drift_schemas/` and guarded by `test/migration_test.dart`. **Any schema change must dump a
   new snapshot** (`dart run drift_dev schema dump lib/data/database.dart drift_schemas/`, then
   `... schema generate drift_schemas/ test/generated_migrations/`) — a snapshot cannot be
@@ -109,6 +109,34 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   `*By*Provider`s build `Map<ownerId, List<point>>` once per stream emission). `RegionLayer`
   takes maps, not flat lists: it rebuilds on every camera tick, so a linear scan per object
   there costs O(objects × all points) *per frame*.
+- **All nine types have an editor** (`layerHasEditor` in `ui/object_summary.dart` is the
+  one definition, and now returns **false** for an unknown type so Edit mode can't arm
+  tap-to-select against something nothing opens). The imports' editors are scoped to what a
+  snapshot can honestly offer: `poi_set_editor` / `transit_set_editor` (label, layer, and a
+  transit import's *shown* types — never its box, radius or fetched types, which describe a
+  query that already ran), `imported_point_editor` (one POI or station: **rename and delete
+  only** — a position is the fetched fact, and no column would say one had been moved), and
+  `border_area_editor`. Individual POIs/stations are [ObjectKind]s but **not elements**
+  (`isElement`), so the Elements list never lists them — a city import is thousands.
+- **A reshaped border outline is flagged** (`BorderAreas.editedAt`, schema v23; null =
+  untouched OSM geometry). Reshaping forks the area from upstream while it keeps its
+  `osmId`, so re-import dedup then keeps the edited version — which is why the fork is
+  recorded, shown in the editor and the Elements list, and travels through GeoJSON
+  (`ExportObject.edited`) so a shared file can't launder it back into "what OSM says".
+  `reshapeBorderArea` recomputes the denormalised bounds (the painter culls on them) and
+  **skips the write when the rings come back identical**, so a drag that ends where it
+  started is not a fork. Moving the **name plate** deliberately does not go through it: an
+  anchor is presentation, so `updateBorderArea(labelLat:/labelLng:)` never stamps `editedAt`.
+  Reshaping is a *mode* (`borderReshapeProvider`), not always-on handles, and the screen-space
+  half of it — which vertices get a handle, where an inserted one belongs — is pure in
+  `ui/border_reshape.dart`, because a boundary carries hundreds of vertices where a drawn
+  area carries eight.
+- **What is drawn and what can be tapped share one predicate.** `transitStationVisible`
+  (`data/transit.dart`) is read by both `transit_layer` and `hit_test`; when it existed twice
+  the copies disagreed on the empty filter, leaving mode-less stations tappable over blank
+  ground after every type was unticked. Likewise the borders hit-test **culls on the stored
+  bounds before projecting any ring** — a state boundary is 119 238 points, and the cull is
+  exact, since a ring lies inside its own box.
 
 ## Current status
 
@@ -117,13 +145,14 @@ the shared compositing engine (union / band / invert; the `height` type uses eve
 and is bounded, so it skips band/invert) plus three import types with their own painters:
 `poi` (offline sets, screen-space clustering), `transit` (offline station imports over a
 bbox, per-type visibility, retryable failed imports) and `borders` (offline area imports
-per admin level, neighbour-distinct colouring, name plates, per-area convert-to-freehand)
-— the layers drawer + per-type
-editors, settings (uncertainty, clear-all, offline cache, import/export), opt-in locate-me,
+per admin level, neighbour-distinct colouring, name plates, per-area convert-to-freehand,
+hand-reshapeable outlines that are flagged as forks) — the layers drawer + per-type
+editors for **all nine**, settings (uncertainty, clear-all, offline cache, import/export),
+opt-in locate-me,
 persisted camera, offline resilience (cache-first tiles; **no** prefetch on the community OSM
 servers — see `data/tile_source.dart`), and import/export
 (whole-DB + per-layer + external GeoJSON/KML/KMZ/GPX; freeline imports prompt for their
-inclusion-circle radius). Drift schema is **v22**.
+inclusion-circle radius). Drift schema is **v23**.
 
 `planning/PLAN.md` has no open roadmap items; future polish ideas are listed there.
 `planning/PRODUCTION_AUDIT.md` records the production-readiness pass (what was found, what

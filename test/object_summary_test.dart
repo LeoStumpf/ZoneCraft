@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:latlong2/latlong.dart' show LatLng;
 
 import 'package:zonecraft/data/database.dart';
 import 'package:zonecraft/data/overpass.dart' show PoiResult;
@@ -400,6 +401,31 @@ void main() {
       expect((await rowsFor(mine)).map((r) => r.title), ['Mine']);
     });
 
+    test('a reshaped area says so, and an untouched one stays quiet', () async {
+      // 97 areas on a layer and one of them forked from OSM: the Elements list
+      // is where you would go to find out which.
+      final layer = await seed(['Maxvorstadt', 'Schwabing']);
+      final max = (await repo.watchAllBorderAreas().first)
+          .firstWhere((a) => a.name == 'Maxvorstadt');
+      await repo.reshapeBorderArea(max.id, [
+        [
+          const LatLng(48.1, 11.5),
+          const LatLng(48.1, 11.7),
+          const LatLng(48.25, 11.7),
+        ],
+      ]);
+
+      final rows = await rowsFor(layer);
+      final edited = rows.firstWhere((r) => r.title == 'Maxvorstadt');
+      expect(edited.subtitle, contains('edited'));
+      // The point count follows the new outline, not the imported one.
+      expect(edited.subtitle, contains('3 points'));
+      expect(
+        rows.firstWhere((r) => r.title == 'Schwabing').subtitle,
+        isNot(contains('edited')),
+      );
+    });
+
     test('the row frames the area itself, so Zoom to lands on it', () async {
       final layer = await seed(['Maxvorstadt']);
       final rows = await rowsFor(layer);
@@ -427,17 +453,20 @@ void main() {
       }
     });
 
-    test('the imported snapshots are not', () {
+    test('the imported snapshots are editable too', () {
+      // They were the exception until their editors landed. A snapshot's editor
+      // is scoped — naming, colour, curation, and a border area's outline — but
+      // "no editor at all" is what made Edit and long-press dead over them.
       for (final type in ['poi', 'transit', 'borders']) {
-        expect(layerHasEditor(type), isFalse, reason: type);
+        expect(layerHasEditor(type), isTrue, reason: type);
       }
     });
 
-    test('an unknown type falls back to editable, like typeIcon does', () {
-      // Both default to the circle case, so a type added to the schema but not
-      // here behaves like a normal region layer rather than silently losing its
-      // editor.
-      expect(layerHasEditor('something-new'), isTrue);
+    test('an unknown type has no editor, so Edit mode stays honest', () {
+      // A tenth layer type added to the schema without an editor sheet must not
+      // arm tap-to-select against something nothing can open — the exact
+      // failure this one definition exists to prevent.
+      expect(layerHasEditor('something-new'), isFalse);
     });
   });
 }

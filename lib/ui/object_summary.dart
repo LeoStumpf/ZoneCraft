@@ -91,14 +91,28 @@ IconData typeIcon(String layerType) => switch (layerType) {
 
 /// Whether a `Layers.type` has an editor at all.
 ///
-/// The three import types are offline OSM snapshots: they have no editor sheet
-/// (`state/providers.dart` refuses to select them) and a tap on one can only
-/// ever frame it. One definition, because the Elements list and the map's Edit
-/// mode both have to agree — when they didn't, Edit mode armed tap-to-select
-/// against types nothing could select, which is a button that visibly does
-/// nothing.
-bool layerHasEditor(String layerType) =>
-    !const {'poi', 'transit', 'borders'}.contains(layerType);
+/// **All nine do.** The three import types were the exception until their
+/// editors landed; they are offline OSM snapshots, so theirs is scoped to what
+/// a snapshot can honestly offer — naming, colour, curation, and for a border
+/// area its outline, which is the one thing that genuinely forks from upstream
+/// and is flagged when it does.
+///
+/// Kept as a function rather than inlined `true`, because the Elements list and
+/// the map's Edit mode have to agree on it: when they didn't, Edit mode armed
+/// tap-to-select against types nothing could select, which is a button that
+/// visibly does nothing. A tenth type that arrives without an editor says so
+/// here, once.
+bool layerHasEditor(String layerType) => const {
+      'circles',
+      'planes',
+      'subspace',
+      'freeline',
+      'freearea',
+      'height',
+      'poi',
+      'transit',
+      'borders',
+    }.contains(layerType);
 
 /// Formats a ground distance for display: metres below 1 km, then kilometres.
 String formatMeters(double meters) {
@@ -542,6 +556,9 @@ ObjectSummary _borderAreaSummary(BorderArea a, String layerId, int index) {
     subtitle: [
       '${formatMeters(width)} × ${formatMeters(height)}',
       _plural(a.pointCount, 'point'),
+      // An outline reshaped by hand is no longer what OSM says, and the list is
+      // where you'd look to find out which of 97 areas you touched.
+      if (a.editedAt != null) 'edited',
     ].join(' · '),
     center: center,
     fitPoints: [LatLng(a.south, a.west), LatLng(a.north, a.east)],

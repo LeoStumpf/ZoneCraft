@@ -31,7 +31,13 @@ import 'circle_editor.dart';
 import 'collapsible_sheet.dart';
 import 'freearea_editor.dart';
 import 'freeline_editor.dart';
+import 'border_area_editor.dart';
+import 'border_reshape.dart';
+import 'camera_viewport.dart';
 import 'height_editor.dart';
+import 'imported_point_editor.dart';
+import 'poi_set_editor.dart';
+import 'transit_set_editor.dart';
 import 'hit_test.dart';
 import 'import_progress.dart';
 import 'layers_panel.dart';
@@ -117,6 +123,34 @@ class _MapScreenState extends ConsumerState<MapScreen>
   // Vertex ids marked (by tapping their handle) for bulk delete; all belong to
   // the currently selected object. Cleared on any selection change.
   final Set<String> _markedPoints = {};
+
+  /// The border outline currently being reshaped, held in memory while the
+  /// drag is in flight.
+  ///
+  /// A border area is one ring **blob**, not point rows, so there is no cheap
+  /// per-vertex write: every change re-encodes the whole outline and makes
+  /// `borderShapesProvider` re-decode every area in the layer behind it. At
+  /// 119 238 points that is impossible at drag rate and wasteful at any size.
+  /// So the draft is the truth while reshaping — the painter and the handles
+  /// both read it — and the database is written once per completed gesture.
+  String? _reshapeAreaId;
+  List<List<LatLng>>? _reshapeRings;
+
+  /// Closest two outline handles may be drawn (screen px).
+  ///
+  /// An administrative boundary carries a vertex every few metres — Alleshausen
+  /// is 105 of them across 6 km — so at any zoom that shows the whole area the
+  /// dots overlap into a solid band and there is nothing to aim at. Handles are
+  /// therefore thinned in *screen* space: one per [_reshapeHandleSpacingPx],
+  /// and the rest appear as you zoom in. Each drawn handle is still a real
+  /// vertex, so a drag moves the boundary itself and never an interpolation.
+  static const double _reshapeHandleSpacingPx = 30;
+
+  /// Backstop for the pathological case (a whole state on screen at once):
+  /// beyond this many *thinned* handles even the thinning can't help, so none
+  /// are drawn and the user is told the one thing that does help.
+  static const int _maxReshapeHandles = 400;
+  bool _reshapeZoomHintShown = false;
   // Haversine — shared with the hit-test helpers so the two never drift.
   static const _hitTest = geoDistance;
 
@@ -678,6 +712,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     bool live = true,
     bool marked = false,
     VoidCallback? onTapToggle,
+    VoidCallback? onDragEnded,
   }) {
     const labelHeight = 14.0;
     const gap = 1.0;
@@ -710,6 +745,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
       onDragEnd: (_, latlng) {
         if (!latlng.latitude.isFinite || !latlng.longitude.isFinite) return;
         onMoved(latlng);
+        // Handles whose [onMoved] only touches memory persist here instead —
+        // one write per completed gesture (border outline reshaping).
+        onDragEnded?.call();
         final origin = _dragOrigin;
         _dragOrigin = null;
         // Only worth an undo if the point actually moved.
@@ -868,7 +906,17 @@ class _MapScreenState extends ConsumerState<MapScreen>
       value: value,
       enabled: enabled,
       child: Row(
-        children: [Icon(icon, size: 18), const SizedBox(width: 8), Text(text)],
+        children: [
+          Icon(icon, size: 18),
+          const SizedBox(width: 8),
+          // Ellipsise, don't overflow. A hit row names the object *and* its
+          // subtitle, and an administrative area's is the longest text in the
+          // app — "Uttenweiler · 9.91 km × 10 km · 459 points" ran 106 px past
+          // the menu the first time borders became tappable.
+          Expanded(
+            child: Text(text, maxLines: 2, overflow: TextOverflow.ellipsis),
+          ),
+        ],
       ),
     );
   }
@@ -2449,6 +2497,26 @@ class _MapScreenState extends ConsumerState<MapScreen>
         freeAreaPoints: freeAreaPoints,
         heightRegions:
             ref.read(heightRegionsProvider).asData?.value ?? const [],
+        poiSets: ref.read(poiSetsProvider).asData?.value ?? const [],
+        poiPoints: ref.read(poiPointsProvider).asData?.value ?? const [],
+        transitSets: ref.read(transitSetsProvider).asData?.value ?? const [],
+        transitStops: ref.read(transitStopsProvider).asData?.value ?? const [],
+        // Already-decoded geometry: `borderShapesProvider` parses each area's
+        // ring blob once per stream emission, and a state boundary is 119 238
+        // points — re-parsing that per tap is not a thing that can be done.
+        borderShapes: layer.type != 'borders'
+            ? const []
+            : [
+                for (final sh in ref.read(borderShapesProvider(layer.id)))
+                  BorderShapeRef(
+                    id: sh.id,
+                    rings: sh.rings,
+                    south: sh.south,
+                    west: sh.west,
+                    north: sh.north,
+                    east: sh.east,
+                  ),
+              ],
         // Same arguments the painter uses, so this is a cache hit and the hit
         // area matches the outline actually drawn (offset included).
         areaContours: (a) => areaGeometryCache
@@ -2610,17 +2678,19 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final selectedSubspaceId = ref.read(selectedSubspaceProvider);
     final selectedFreeLineId = ref.read(selectedFreeLineProvider);
     final selectedFreeAreaId = ref.read(selectedFreeAreaProvider);
+    final selectedBorderAreaId = ref.read(selectedBorderAreaProvider);
 
     final items = <PopupMenuEntry<String>>[];
     for (var i = 0; i < hits.length; i++) {
-      final s = summaries[hits[i].ref];
-      items.add(
-        _pointMenuItem(
-          'hit:$i',
-          typeIcon(activeLayer.type),
-          s == null ? 'Element ${i + 1}' : '${s.title} · ${s.subtitle}',
-        ),
-      );
+      final ref_ = hits[i].ref;
+      final s = summaries[ref_];
+      // Individual POIs and stations are never in [summaries] — they are one
+      // level below an element and deliberately unlisted (see [ObjectKind]) —
+      // so they name themselves from their own row.
+      final label = s != null
+          ? '${s.title} · ${s.subtitle}'
+          : _importedPointLabel(ref_) ?? 'Element ${i + 1}';
+      items.add(_pointMenuItem('hit:$i', typeIcon(activeLayer.type), label));
     }
 
     // Contextual add actions — a strict superset of what long-press used to do.
@@ -2660,6 +2730,18 @@ class _MapScreenState extends ConsumerState<MapScreen>
             ),
           );
         }
+      case 'borders':
+        // Only while Reshape is armed: on a read-only snapshot an "insert
+        // point" that appears unasked is an invitation to fork it by accident.
+        if (selectedBorderAreaId != null && ref.read(borderReshapeProvider)) {
+          actions.add(
+            _pointMenuItem(
+              'insertBorder',
+              Icons.add_location_alt_outlined,
+              'Insert outline point here',
+            ),
+          );
+        }
       case 'freearea':
         if (selectedFreeAreaId != null) {
           actions.add(
@@ -2680,11 +2762,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
       items.add(_pointMenuItem('deselect', Icons.close, 'Deselect'));
     }
     if (items.isEmpty) {
-      // Imported objects aren't tap-selectable (they have no editor); point at
-      // the tool that does manage them instead of a dead "nothing here".
+      // Imports are selectable now, so "nothing here" means exactly that —
+      // except on a transit layer, where a station may be present but hidden by
+      // the type filter, which looks identical to empty ground.
       _hint(switch (activeLayer.type) {
-        'transit' => 'Use Stations… in the layer menu to manage this layer.',
-        'borders' => 'Use Elements in the layer drawer to manage this layer.',
+        'transit' =>
+          'Nothing here. Hidden station types don\'t respond — check '
+              'Stations… in the layer menu.',
         _ => 'Nothing here in "${activeLayer.name}".',
       });
       return;
@@ -2733,6 +2817,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
           lat: latlng.latitude,
           lng: latlng.longitude,
         );
+      case 'insertBorder':
+        await _insertReshapeVertex(latlng);
       case 'insertArea':
         final pts =
             (ref.read(freeAreaPointsProvider).asData?.value ??
@@ -2748,6 +2834,235 @@ class _MapScreenState extends ConsumerState<MapScreen>
           lng: latlng.longitude,
         );
     }
+  }
+
+  // --- Border outline reshaping ---------------------------------------------
+
+  /// Keeps the in-memory draft in step with what is selected and armed.
+  ///
+  /// Called from `build`, so it must never call `setState` synchronously; the
+  /// post-frame hop is what lets the draft be *loaded* during a build that is
+  /// already reading it.
+  void _syncReshapeDraft(BorderShape? shape, {required bool armed}) {
+    if (!armed || shape == null) {
+      if (_reshapeAreaId != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          setState(() {
+            _reshapeAreaId = null;
+            _reshapeRings = null;
+          });
+        });
+      }
+      return;
+    }
+    if (_reshapeAreaId == shape.id) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        // A different outline is a different density question — the hint has to
+        // be able to fire again, or the first crowded area silences it for the
+        // rest of the session.
+        _reshapeZoomHintShown = false;
+        _reshapeAreaId = shape.id;
+        // A deep copy: the provider's lists are rebuilt per emission and shared
+        // with the painter, so mutating them in place would edit geometry
+        // nobody asked to edit and survive a cancelled gesture.
+        _reshapeRings = [
+          for (final r in shape.rings) [...r],
+        ];
+      });
+    });
+  }
+
+  /// The draft as a [BorderShape] the painter can swap in for the stored one.
+  BorderShape? _reshapeDraftShape(BorderShape? stored) {
+    final rings = _reshapeRings;
+    if (stored == null || rings == null || _reshapeAreaId != stored.id) {
+      return null;
+    }
+    return BorderShape(
+      id: stored.id,
+      name: stored.name,
+      colorIndex: stored.colorIndex,
+      colorArgb: stored.colorArgb,
+      // The stored bounds, deliberately: they only drive viewport culling, and
+      // an area being dragged must not cull itself out from under the finger.
+      south: stored.south,
+      west: stored.west,
+      north: stored.north,
+      east: stored.east,
+      labelPoint: stored.labelPoint,
+      rings: rings,
+    );
+  }
+
+  /// Drag handles for the outline being reshaped, or null when nothing is.
+  ///
+  /// Which vertices get one is [reshapeHandles]' decision (cull to the
+  /// viewport, then thin to one per [_reshapeHandleSpacingPx]); this only
+  /// projects the draft for it and turns the answer into markers.
+  List<DragMarker>? _reshapeHandles(BorderShape? draft) {
+    final rings = _reshapeRings;
+    if (draft == null || rings == null) return null;
+    final cam = _mapController.camera;
+    final projected = [
+      for (final r in rings)
+        [for (final p in r) cam.latLngToScreenOffset(p)],
+    ];
+    final picked = reshapeHandles(
+      projected,
+      // A margin, so a handle just off the edge is still grabbable after a
+      // nudge.
+      bounds: cameraViewport(cam).inflate(48),
+      spacingPx: _reshapeHandleSpacingPx,
+      max: _maxReshapeHandles,
+    );
+    if (picked.tooMany) {
+      if (!_reshapeZoomHintShown) {
+        _reshapeZoomHintShown = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _hint('Too many outline points here to edit — zoom in.');
+          }
+        });
+      }
+      return const [];
+    }
+    return [
+      for (final k in picked.handles)
+        _dragHandle(
+          rings[k.ring][k.index],
+          key: ValueKey('ba-${draft.id}-${k.ring}-${k.index}'),
+          undoLabel: null, // the whole gesture is one write; see _commitReshape
+          onMoved: (ll) => _moveReshapeVertex(k.ring, k.index, ll),
+          onDragEnded: _commitReshape,
+          onMenu: (pos) => _showFreeVertexMenu(
+            pos,
+            title: 'Outline point',
+            canRemove: rings[k.ring].length > 3,
+            onRemove: () => _removeReshapeVertex(k.ring, k.index),
+          ),
+        ),
+    ];
+  }
+
+  /// The handle that moves an area's **name plate**.
+  ///
+  /// Offered whenever an area is selected, reshaping or not, because unlike the
+  /// outline it costs the snapshot nothing: the anchor is presentation, so
+  /// moving it is not a fork of OSM geometry and deliberately never stamps
+  /// `editedAt`. It earns its place after a reshape in particular — the plate
+  /// is anchored at a stored point, so an outline dragged away from it leaves
+  /// the name floating over ground the area no longer covers.
+  List<DragMarker> _labelHandles(BorderArea? area, Layer? layer) {
+    if (area == null) return const [];
+    if (!area.labelLat.isFinite || !area.labelLng.isFinite) return const [];
+    return [
+      _dragHandle(
+        LatLng(area.labelLat, area.labelLng),
+        key: ValueKey('ba-label-${area.id}'),
+        core: _crosshairCore(),
+        // The name only when the layer isn't already drawing it there —
+        // otherwise the handle stacks a second copy on top of the real plate.
+        label: layer?.borderShowNames == true ? null : area.name,
+        undoLabel: 'Name plate',
+        onMoved: (ll) => ref.read(repositoryProvider).updateBorderArea(
+              area.id,
+              labelLat: ll.latitude,
+              labelLng: ll.longitude,
+            ),
+      ),
+    ];
+  }
+
+  /// Writes the finished outline. Called on drag end and after an insert or a
+  /// remove — one write per completed gesture, never per frame.
+  Future<void> _commitReshape() async {
+    final id = _reshapeAreaId;
+    final rings = _reshapeRings;
+    if (id == null || rings == null) return;
+    final ok = await ref.read(repositoryProvider).reshapeBorderArea(id, rings);
+    if (!ok && mounted) {
+      _hint('That would leave the area with no outline, so it was not saved.');
+    }
+  }
+
+  /// Moves one draft vertex. Cheap on purpose — this runs under the finger.
+  void _moveReshapeVertex(int ring, int index, LatLng to) {
+    final rings = _reshapeRings;
+    if (rings == null || ring >= rings.length) return;
+    if (index >= rings[ring].length) return;
+    setState(() => rings[ring][index] = to);
+  }
+
+  /// Removes one draft vertex, refusing to take a ring below a triangle — a
+  /// two-point "ring" has no interior and would silently drop out of the area.
+  Future<void> _removeReshapeVertex(int ring, int index) async {
+    final rings = _reshapeRings;
+    if (rings == null || ring >= rings.length) return;
+    if (rings[ring].length <= 3) {
+      _hint('An outline ring needs at least three points.');
+      return;
+    }
+    setState(() => rings[ring].removeAt(index));
+    await _commitReshape();
+  }
+
+  /// Inserts [at] into the draft on whichever ring segment is nearest on
+  /// screen, so the new point lands on the outline rather than at the end of an
+  /// arbitrary ring.
+  Future<void> _insertReshapeVertex(LatLng at) async {
+    final rings = _reshapeRings;
+    if (rings == null) return;
+    final cam = _mapController.camera;
+    final where = nearestInsertion(
+      [
+        for (final r in rings)
+          [for (final p in r) cam.latLngToScreenOffset(p)],
+      ],
+      cam.latLngToScreenOffset(at),
+    );
+    if (where == null) return;
+    setState(() => rings[where.ring].insert(where.index, at));
+    await _commitReshape();
+  }
+
+  /// A menu label for an individual POI or station: its OSM name, or the kind
+  /// of thing it is when OSM never gave it one (most benches don't have names).
+  /// Null for anything that is a proper element and therefore already in the
+  /// summaries.
+  String? _importedPointLabel(ObjectRef ref_) {
+    switch (ref_.kind) {
+      case ObjectKind.poiPoint:
+        final p = (ref.read(poiPointsProvider).asData?.value ?? const [])
+            .where((x) => x.id == ref_.id)
+            .firstOrNull;
+        if (p == null) return null;
+        final category = _poiCategoryLabel(
+          ref.read(poiSetsProvider).asData?.value ?? const [],
+          p.poiSetId,
+        );
+        return p.name?.isNotEmpty == true ? '${p.name} · $category' : category;
+      case ObjectKind.transitStop:
+        final st = (ref.read(transitStopsProvider).asData?.value ?? const [])
+            .where((x) => x.id == ref_.id)
+            .firstOrNull;
+        if (st == null) return null;
+        final modes = transitModeLabels(st.modeMask);
+        return st.name?.isNotEmpty == true ? '${st.name} · $modes' : modes;
+      default:
+        return null;
+    }
+  }
+
+  /// The human name of the category a POI's set imported ("Cafés"), for the
+  /// point editor's subtitle. Falls back to the raw key so an old set whose
+  /// category has since been renamed still says something.
+  static String _poiCategoryLabel(List<PoiSet> sets, String setId) {
+    final key = sets.where((s) => s.id == setId).firstOrNull?.categoryKey;
+    if (key == null) return 'POI';
+    return poiCategories.where((c) => c.key == key).firstOrNull?.label ?? key;
   }
 
   /// This layer's element summaries, keyed by ref — used to label hit-menu rows
@@ -2888,6 +3203,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
         ref.watch(transitSetsProvider).asData?.value ?? const <TransitSet>[];
     final transitStations =
         ref.watch(transitStopsProvider).asData?.value ?? const <TransitStop>[];
+    final borderSets =
+        ref.watch(borderSetsProvider).asData?.value ?? const <BorderSet>[];
+    // The undecoded rows — the editor edits a row, while the painter and the
+    // reshape handles work from `borderShapesProvider`'s decoded geometry.
+    final borderAreaRows =
+        ref.watch(borderAreasProvider).asData?.value ?? const <BorderArea>[];
     // Stations hang off a *set*, not the layer, so resolve the layer→sets
     // index (and each set's mode filter) once rather than per station.
     final transitSetIds = <String, Set<String>>{};
@@ -2966,13 +3287,61 @@ class _MapScreenState extends ConsumerState<MapScreen>
             ),
             selectedHeightRegion.radiusMeters,
           );
+    // The three import types. Their editors are scoped to what an offline OSM
+    // snapshot can honestly offer, but they are selections like any other — the
+    // point of giving them editors was to stop Edit mode and long-press being
+    // dead over them.
+    final selectedPoiSet = poiSets
+        .where((s) => s.id == ref.watch(selectedPoiSetProvider))
+        .firstOrNull;
+    final selectedPoiPoint = poiPoints
+        .where((p) => p.id == ref.watch(selectedPoiPointProvider))
+        .firstOrNull;
+    final selectedTransitSet = transitSets
+        .where((t) => t.id == ref.watch(selectedTransitSetProvider))
+        .firstOrNull;
+    final selectedTransitStop = transitStations
+        .where((x) => x.id == ref.watch(selectedTransitStopProvider))
+        .firstOrNull;
+    final selectedBorderArea = borderAreaRows
+        .where((a) => a.id == ref.watch(selectedBorderAreaProvider))
+        .firstOrNull;
+    // The layer behind the selected area, reached through its import — areas
+    // belong to a set, and the editor needs the layer's admin level.
+    final selectedBorderLayer = selectedBorderArea == null
+        ? null
+        : () {
+            final set = borderSets
+                .where((x) => x.id == selectedBorderArea.setId)
+                .firstOrNull;
+            return set == null
+                ? null
+                : layers.where((l) => l.id == set.layerId).firstOrNull;
+          }();
+    // The decoded geometry of the selected area (the editor edits the row; the
+    // handles and the painter need the rings), plus the in-flight draft.
+    final reshapeArmed =
+        ref.watch(borderReshapeProvider) && selectedBorderArea != null;
+    final selectedBorderShape = selectedBorderLayer == null
+        ? null
+        : ref
+            .watch(borderShapesProvider(selectedBorderLayer.id))
+            .where((sh) => sh.id == selectedBorderArea!.id)
+            .firstOrNull;
+    _syncReshapeDraft(selectedBorderShape, armed: reshapeArmed);
+    final reshapeDraft = _reshapeDraftShape(selectedBorderShape);
     final hasSelection =
         selectedCircle != null ||
         selectedPlane != null ||
         selectedSubspace != null ||
         selectedFreeLine != null ||
         selectedFreeArea != null ||
-        selectedHeightRegion != null;
+        selectedHeightRegion != null ||
+        selectedPoiSet != null ||
+        selectedPoiPoint != null ||
+        selectedTransitSet != null ||
+        selectedTransitStop != null ||
+        (selectedBorderArea != null && selectedBorderLayer != null);
     // First selection of the session: point out that handles now drag and that
     // long-press adds/edits — the gestures are otherwise invisible.
     if (hasSelection && !_editHintShown) {
@@ -3012,6 +3381,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
             'freeline' => freeLines.any((l) => l.layerId == activeLayer.id),
             'freearea' => freeAreas.any((a) => a.layerId == activeLayer.id),
             'height' => heightRegions.any((r) => r.layerId == activeLayer.id),
+            // Imports count as elements to select: a POI layer offers its
+            // markers, a transit layer its stations, a borders layer its areas.
+            'poi' => poiSets.any((s) => s.layerId == activeLayer.id),
+            'transit' => transitSets.any((s) => s.layerId == activeLayer.id),
+            'borders' => borderSets.any((s) => s.layerId == activeLayer.id),
             _ => false,
           };
     final canEditByTap = activeHasEditor && activeHasElements;
@@ -3197,6 +3571,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           key: ValueKey(layer.id),
                           layer: layer,
                           shapes: ref.watch(borderShapesProvider(layer.id)),
+                          draft: reshapeDraft,
                         )
                       else if (layer.isVisible)
                         RegionLayer(
@@ -3610,6 +3985,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                   ),
                             ),
                           ],
+                          ...?_reshapeHandles(reshapeDraft),
+                          ..._labelHandles(selectedBorderArea, selectedBorderLayer),
                           for (final p in selectedFreeAreaPoints)
                             _dragHandle(
                               LatLng(p.lat, p.lng),
@@ -4204,7 +4581,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
               // Reset to expanded whenever the selected object changes.
               key: ValueKey(
                 'sheet-'
-                '${selectedCircle?.id ?? selectedPlane?.id ?? selectedSubspace?.id ?? selectedFreeLine?.id ?? selectedFreeArea?.id ?? selectedHeightRegion?.id}',
+                '${selectedCircle?.id ?? selectedPlane?.id ?? selectedSubspace?.id ?? selectedFreeLine?.id ?? selectedFreeArea?.id ?? selectedHeightRegion?.id ?? selectedPoiSet?.id ?? selectedPoiPoint?.id ?? selectedTransitSet?.id ?? selectedTransitStop?.id ?? selectedBorderArea?.id}',
               ),
               child: selectedCircle != null
                   ? CircleEditorSheet(
@@ -4267,6 +4644,64 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       polygonCount:
                           heightPolygons[selectedHeightRegion.id]?.length ?? 0,
                       layers: layers,
+                    )
+                  : selectedPoiPoint != null
+                  ? ImportedPointEditorSheet(
+                      key: ValueKey(selectedPoiPoint.id),
+                      id: selectedPoiPoint.id,
+                      kind: ObjectKind.poiPoint,
+                      name: selectedPoiPoint.name,
+                      lat: selectedPoiPoint.lat,
+                      lng: selectedPoiPoint.lng,
+                      icon: Icons.place_outlined,
+                      title: 'Edit POI',
+                      subtitle: _poiCategoryLabel(
+                        poiSets,
+                        selectedPoiPoint.poiSetId,
+                      ),
+                    )
+                  : selectedTransitStop != null
+                  ? ImportedPointEditorSheet(
+                      key: ValueKey(selectedTransitStop.id),
+                      id: selectedTransitStop.id,
+                      kind: ObjectKind.transitStop,
+                      name: selectedTransitStop.name,
+                      lat: selectedTransitStop.lat,
+                      lng: selectedTransitStop.lng,
+                      icon: Icons.directions_transit,
+                      title: 'Edit station',
+                      subtitle:
+                          transitModeLabels(selectedTransitStop.modeMask),
+                    )
+                  : selectedPoiSet != null
+                  ? PoiSetEditorSheet(
+                      key: ValueKey(selectedPoiSet.id),
+                      set: selectedPoiSet,
+                      pointCount: poiPoints
+                          .where((p) => p.poiSetId == selectedPoiSet.id)
+                          .length,
+                      layers: [
+                        for (final l in layers)
+                          if (l.type == 'poi') l,
+                      ],
+                    )
+                  : selectedTransitSet != null
+                  ? TransitSetEditorSheet(
+                      key: ValueKey(selectedTransitSet.id),
+                      set: selectedTransitSet,
+                      stopCount: transitStations
+                          .where((x) => x.setId == selectedTransitSet.id)
+                          .length,
+                      layers: [
+                        for (final l in layers)
+                          if (l.type == 'transit') l,
+                      ],
+                    )
+                  : selectedBorderArea != null && selectedBorderLayer != null
+                  ? BorderAreaEditorSheet(
+                      key: ValueKey(selectedBorderArea.id),
+                      area: selectedBorderArea,
+                      layer: selectedBorderLayer,
                     )
                   : const SizedBox.shrink(),
             ),

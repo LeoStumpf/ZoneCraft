@@ -294,6 +294,12 @@ class _LayerObjectsList extends ConsumerWidget {
         await repo.updateTransitSet(s.ref.id, label: label);
       case ObjectKind.borderArea:
         await repo.updateBorderArea(s.ref.id, name: label);
+      // Points inside an import are renamed from their own map editor; the
+      // Elements list never lists them (see [ObjectKind]).
+      case ObjectKind.poiPoint:
+        await repo.updatePoiPoint(s.ref.id, name: label);
+      case ObjectKind.transitStop:
+        await repo.updateTransitStop(s.ref.id, name: label);
     }
   }
 
@@ -337,6 +343,10 @@ class _LayerObjectsList extends ConsumerWidget {
         await repo.deleteTransitSet(s.ref.id);
       case ObjectKind.borderArea:
         await repo.deleteBorderArea(s.ref.id);
+      case ObjectKind.poiPoint:
+        await repo.deletePoiPoint(s.ref.id);
+      case ObjectKind.transitStop:
+        await repo.deleteTransitStop(s.ref.id);
     }
     // The editor sheet resolves its row from the global list, so a deleted
     // selection would just vanish — clear it explicitly to keep the state tidy.

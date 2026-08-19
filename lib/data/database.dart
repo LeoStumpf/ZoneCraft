@@ -604,6 +604,20 @@ class BorderAreas extends Table {
   /// on, the layer colour otherwise. Set = this exact colour, either way.
   IntColumn get colorArgb => integer().nullable()();
 
+  /// When the outline was last reshaped by hand (v23). **Null = untouched**:
+  /// the geometry is exactly what OSM returned.
+  ///
+  /// Reshaping is allowed, but it forks the area from upstream, and a fork
+  /// nothing records is the real problem — the row still carries its
+  /// [osmId], so a later import over the same ground skips it as "already
+  /// present" and the edit silently wins over whatever OSM now says. This
+  /// column is what lets the Elements list and the editor say so out loud.
+  /// The original geometry is **not** kept: an area is one blob and storing a
+  /// second copy of a 119 238-point boundary to enable an undo nobody asked
+  /// for is not a trade worth making — "Convert to freehand area" exists for
+  /// people who want an editable copy alongside the snapshot.
+  DateTimeColumn get editedAt => dateTime().nullable()();
+
 
   @override
   Set<Column> get primaryKey => {id};
@@ -748,7 +762,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 22;
+  int get schemaVersion => 23;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -912,6 +926,12 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(transitSets, transitSets.colorArgb);
             await m.addColumn(transitSets, transitSets.colorShade);
             await m.addColumn(borderAreas, borderAreas.colorArgb);
+          }
+          if (from < 23) {
+            // Border outlines became reshapeable. Every existing area is by
+            // definition untouched OSM geometry, so `edited_at` starts null —
+            // which is exactly what the column means.
+            await m.addColumn(borderAreas, borderAreas.editedAt);
           }
         },
         beforeOpen: (details) async {

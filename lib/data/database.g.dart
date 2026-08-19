@@ -10746,6 +10746,17 @@ class $BorderAreasTable extends BorderAreas
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _editedAtMeta = const VerificationMeta(
+    'editedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> editedAt = GeneratedColumn<DateTime>(
+    'edited_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -10764,6 +10775,7 @@ class $BorderAreasTable extends BorderAreas
     wayIds,
     createdAt,
     colorArgb,
+    editedAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -10894,6 +10906,12 @@ class $BorderAreasTable extends BorderAreas
         colorArgb.isAcceptableOrUnknown(data['color_argb']!, _colorArgbMeta),
       );
     }
+    if (data.containsKey('edited_at')) {
+      context.handle(
+        _editedAtMeta,
+        editedAt.isAcceptableOrUnknown(data['edited_at']!, _editedAtMeta),
+      );
+    }
     return context;
   }
 
@@ -10967,6 +10985,10 @@ class $BorderAreasTable extends BorderAreas
         DriftSqlType.int,
         data['${effectivePrefix}color_argb'],
       ),
+      editedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}edited_at'],
+      ),
     );
   }
 
@@ -11016,6 +11038,20 @@ class BorderArea extends DataClass implements Insertable<BorderArea> {
   /// neighbour-distinct palette entry at [colorIndex] when "Colour areas" is
   /// on, the layer colour otherwise. Set = this exact colour, either way.
   final int? colorArgb;
+
+  /// When the outline was last reshaped by hand (v23). **Null = untouched**:
+  /// the geometry is exactly what OSM returned.
+  ///
+  /// Reshaping is allowed, but it forks the area from upstream, and a fork
+  /// nothing records is the real problem — the row still carries its
+  /// [osmId], so a later import over the same ground skips it as "already
+  /// present" and the edit silently wins over whatever OSM now says. This
+  /// column is what lets the Elements list and the editor say so out loud.
+  /// The original geometry is **not** kept: an area is one blob and storing a
+  /// second copy of a 119 238-point boundary to enable an undo nobody asked
+  /// for is not a trade worth making — "Convert to freehand area" exists for
+  /// people who want an editable copy alongside the snapshot.
+  final DateTime? editedAt;
   const BorderArea({
     required this.id,
     required this.setId,
@@ -11033,6 +11069,7 @@ class BorderArea extends DataClass implements Insertable<BorderArea> {
     required this.wayIds,
     required this.createdAt,
     this.colorArgb,
+    this.editedAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -11057,6 +11094,9 @@ class BorderArea extends DataClass implements Insertable<BorderArea> {
     if (!nullToAbsent || colorArgb != null) {
       map['color_argb'] = Variable<int>(colorArgb);
     }
+    if (!nullToAbsent || editedAt != null) {
+      map['edited_at'] = Variable<DateTime>(editedAt);
+    }
     return map;
   }
 
@@ -11080,6 +11120,9 @@ class BorderArea extends DataClass implements Insertable<BorderArea> {
       colorArgb: colorArgb == null && nullToAbsent
           ? const Value.absent()
           : Value(colorArgb),
+      editedAt: editedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(editedAt),
     );
   }
 
@@ -11105,6 +11148,7 @@ class BorderArea extends DataClass implements Insertable<BorderArea> {
       wayIds: serializer.fromJson<String>(json['wayIds']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       colorArgb: serializer.fromJson<int?>(json['colorArgb']),
+      editedAt: serializer.fromJson<DateTime?>(json['editedAt']),
     );
   }
   @override
@@ -11127,6 +11171,7 @@ class BorderArea extends DataClass implements Insertable<BorderArea> {
       'wayIds': serializer.toJson<String>(wayIds),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'colorArgb': serializer.toJson<int?>(colorArgb),
+      'editedAt': serializer.toJson<DateTime?>(editedAt),
     };
   }
 
@@ -11147,6 +11192,7 @@ class BorderArea extends DataClass implements Insertable<BorderArea> {
     String? wayIds,
     DateTime? createdAt,
     Value<int?> colorArgb = const Value.absent(),
+    Value<DateTime?> editedAt = const Value.absent(),
   }) => BorderArea(
     id: id ?? this.id,
     setId: setId ?? this.setId,
@@ -11164,6 +11210,7 @@ class BorderArea extends DataClass implements Insertable<BorderArea> {
     wayIds: wayIds ?? this.wayIds,
     createdAt: createdAt ?? this.createdAt,
     colorArgb: colorArgb.present ? colorArgb.value : this.colorArgb,
+    editedAt: editedAt.present ? editedAt.value : this.editedAt,
   );
   BorderArea copyWithCompanion(BorderAreasCompanion data) {
     return BorderArea(
@@ -11187,6 +11234,7 @@ class BorderArea extends DataClass implements Insertable<BorderArea> {
       wayIds: data.wayIds.present ? data.wayIds.value : this.wayIds,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       colorArgb: data.colorArgb.present ? data.colorArgb.value : this.colorArgb,
+      editedAt: data.editedAt.present ? data.editedAt.value : this.editedAt,
     );
   }
 
@@ -11208,7 +11256,8 @@ class BorderArea extends DataClass implements Insertable<BorderArea> {
           ..write('rings: $rings, ')
           ..write('wayIds: $wayIds, ')
           ..write('createdAt: $createdAt, ')
-          ..write('colorArgb: $colorArgb')
+          ..write('colorArgb: $colorArgb, ')
+          ..write('editedAt: $editedAt')
           ..write(')'))
         .toString();
   }
@@ -11231,6 +11280,7 @@ class BorderArea extends DataClass implements Insertable<BorderArea> {
     wayIds,
     createdAt,
     colorArgb,
+    editedAt,
   );
   @override
   bool operator ==(Object other) =>
@@ -11251,7 +11301,8 @@ class BorderArea extends DataClass implements Insertable<BorderArea> {
           other.rings == this.rings &&
           other.wayIds == this.wayIds &&
           other.createdAt == this.createdAt &&
-          other.colorArgb == this.colorArgb);
+          other.colorArgb == this.colorArgb &&
+          other.editedAt == this.editedAt);
 }
 
 class BorderAreasCompanion extends UpdateCompanion<BorderArea> {
@@ -11271,6 +11322,7 @@ class BorderAreasCompanion extends UpdateCompanion<BorderArea> {
   final Value<String> wayIds;
   final Value<DateTime> createdAt;
   final Value<int?> colorArgb;
+  final Value<DateTime?> editedAt;
   final Value<int> rowid;
   const BorderAreasCompanion({
     this.id = const Value.absent(),
@@ -11289,6 +11341,7 @@ class BorderAreasCompanion extends UpdateCompanion<BorderArea> {
     this.wayIds = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.colorArgb = const Value.absent(),
+    this.editedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   BorderAreasCompanion.insert({
@@ -11308,6 +11361,7 @@ class BorderAreasCompanion extends UpdateCompanion<BorderArea> {
     required String wayIds,
     this.createdAt = const Value.absent(),
     this.colorArgb = const Value.absent(),
+    this.editedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        setId = Value(setId),
@@ -11338,6 +11392,7 @@ class BorderAreasCompanion extends UpdateCompanion<BorderArea> {
     Expression<String>? wayIds,
     Expression<DateTime>? createdAt,
     Expression<int>? colorArgb,
+    Expression<DateTime>? editedAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -11357,6 +11412,7 @@ class BorderAreasCompanion extends UpdateCompanion<BorderArea> {
       if (wayIds != null) 'way_ids': wayIds,
       if (createdAt != null) 'created_at': createdAt,
       if (colorArgb != null) 'color_argb': colorArgb,
+      if (editedAt != null) 'edited_at': editedAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -11378,6 +11434,7 @@ class BorderAreasCompanion extends UpdateCompanion<BorderArea> {
     Value<String>? wayIds,
     Value<DateTime>? createdAt,
     Value<int?>? colorArgb,
+    Value<DateTime?>? editedAt,
     Value<int>? rowid,
   }) {
     return BorderAreasCompanion(
@@ -11397,6 +11454,7 @@ class BorderAreasCompanion extends UpdateCompanion<BorderArea> {
       wayIds: wayIds ?? this.wayIds,
       createdAt: createdAt ?? this.createdAt,
       colorArgb: colorArgb ?? this.colorArgb,
+      editedAt: editedAt ?? this.editedAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -11452,6 +11510,9 @@ class BorderAreasCompanion extends UpdateCompanion<BorderArea> {
     if (colorArgb.present) {
       map['color_argb'] = Variable<int>(colorArgb.value);
     }
+    if (editedAt.present) {
+      map['edited_at'] = Variable<DateTime>(editedAt.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -11477,6 +11538,7 @@ class BorderAreasCompanion extends UpdateCompanion<BorderArea> {
           ..write('wayIds: $wayIds, ')
           ..write('createdAt: $createdAt, ')
           ..write('colorArgb: $colorArgb, ')
+          ..write('editedAt: $editedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -21288,6 +21350,7 @@ typedef $$BorderAreasTableCreateCompanionBuilder =
       required String wayIds,
       Value<DateTime> createdAt,
       Value<int?> colorArgb,
+      Value<DateTime?> editedAt,
       Value<int> rowid,
     });
 typedef $$BorderAreasTableUpdateCompanionBuilder =
@@ -21308,6 +21371,7 @@ typedef $$BorderAreasTableUpdateCompanionBuilder =
       Value<String> wayIds,
       Value<DateTime> createdAt,
       Value<int?> colorArgb,
+      Value<DateTime?> editedAt,
       Value<int> rowid,
     });
 
@@ -21419,6 +21483,11 @@ class $$BorderAreasTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<DateTime> get editedAt => $composableBuilder(
+    column: $table.editedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
   $$BorderSetsTableFilterComposer get setId {
     final $$BorderSetsTableFilterComposer composer = $composerBuilder(
       composer: this,
@@ -21527,6 +21596,11 @@ class $$BorderAreasTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get editedAt => $composableBuilder(
+    column: $table.editedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$BorderSetsTableOrderingComposer get setId {
     final $$BorderSetsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -21609,6 +21683,9 @@ class $$BorderAreasTableAnnotationComposer
   GeneratedColumn<int> get colorArgb =>
       $composableBuilder(column: $table.colorArgb, builder: (column) => column);
 
+  GeneratedColumn<DateTime> get editedAt =>
+      $composableBuilder(column: $table.editedAt, builder: (column) => column);
+
   $$BorderSetsTableAnnotationComposer get setId {
     final $$BorderSetsTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -21677,6 +21754,7 @@ class $$BorderAreasTableTableManager
                 Value<String> wayIds = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int?> colorArgb = const Value.absent(),
+                Value<DateTime?> editedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => BorderAreasCompanion(
                 id: id,
@@ -21695,6 +21773,7 @@ class $$BorderAreasTableTableManager
                 wayIds: wayIds,
                 createdAt: createdAt,
                 colorArgb: colorArgb,
+                editedAt: editedAt,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -21715,6 +21794,7 @@ class $$BorderAreasTableTableManager
                 required String wayIds,
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int?> colorArgb = const Value.absent(),
+                Value<DateTime?> editedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => BorderAreasCompanion.insert(
                 id: id,
@@ -21733,6 +21813,7 @@ class $$BorderAreasTableTableManager
                 wayIds: wayIds,
                 createdAt: createdAt,
                 colorArgb: colorArgb,
+                editedAt: editedAt,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

@@ -28,6 +28,37 @@ String bodyOf(List<Map<String, dynamic>> elements) =>
 int bit(String key) => transitModeByKey(key)!.bit;
 
 void main() {
+  group('transitStationVisible', () {
+    // The rule the painter culls with and the tap hit-test now share. It used
+    // to exist twice, and the copies disagreed on exactly one row of this
+    // table — the one where nothing is ticked and the station has no modes.
+    final bus = transitModeByKey('bus')!.bit;
+    final train = transitModeByKey('train')!.bit;
+
+    test('a station shows while ANY of its types is enabled', () {
+      expect(transitStationVisible(bus | train, train), isTrue,
+          reason: 'a train stops at Pasing Bahnhof, so unticking Bus keeps it');
+      expect(transitStationVisible(bus, train), isFalse);
+    });
+
+    test('a station OSM gave no type rides along with anything enabled', () {
+      expect(transitStationVisible(0, bus), isTrue);
+      expect(transitStationVisible(0, transitAllModesMask), isTrue);
+    });
+
+    test('unticking everything really hides everything', () {
+      for (final station in [0, bus, bus | train, transitAllModesMask]) {
+        expect(transitStationVisible(station, 0), isFalse,
+            reason: 'station mask $station');
+      }
+    });
+
+    test('a station whose set is not on this layer shows nothing', () {
+      expect(transitStationVisible(bus, null), isFalse);
+      expect(transitStationVisible(0, null), isFalse);
+    });
+  });
+
   group('mode catalogue', () {
     test('bits are distinct single bits', () {
       final seen = <int>{};

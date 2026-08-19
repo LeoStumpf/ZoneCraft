@@ -183,8 +183,15 @@ final seedProvider = FutureProvider<String>((ref) {
   return ref.watch(repositoryProvider).ensureDefaultLayer();
 });
 
-/// The nine object types a layer can hold, in one closed enum — the type tag
-/// the six parallel `selectedXProvider`s don't carry themselves.
+/// Everything selectable, in one closed enum — the type tag the parallel
+/// `selectedXProvider`s don't carry themselves.
+///
+/// Nine of these are a layer's **elements**, one kind per layer type, and are
+/// what the Elements list shows. The last two — [poiPoint] and [transitStop] —
+/// are one level *below* an element: an imported POI or station inside its set.
+/// They are selectable on the map but deliberately never listed, because a
+/// city import is thousands of them and the list is a place to find an import,
+/// not to scroll past 2 672 bus stops.
 enum ObjectKind {
   circle,
   plane,
@@ -194,7 +201,9 @@ enum ObjectKind {
   heightRegion,
   poiSet,
   transitSet,
-  borderArea;
+  borderArea,
+  poiPoint,
+  transitStop;
 
   /// The `Layers.type` string that holds this kind of object.
   String get layerType => switch (this) {
@@ -204,10 +213,15 @@ enum ObjectKind {
         ObjectKind.freeLine => 'freeline',
         ObjectKind.freeArea => 'freearea',
         ObjectKind.heightRegion => 'height',
-        ObjectKind.poiSet => 'poi',
-        ObjectKind.transitSet => 'transit',
+        ObjectKind.poiSet || ObjectKind.poiPoint => 'poi',
+        ObjectKind.transitSet || ObjectKind.transitStop => 'transit',
         ObjectKind.borderArea => 'borders',
       };
+
+  /// Whether this is a layer *element* (a row of the Elements list) rather than
+  /// a point inside one.
+  bool get isElement =>
+      this != ObjectKind.poiPoint && this != ObjectKind.transitStop;
 
   /// The kind a layer of [layerType] holds, or null for an unknown type.
   static ObjectKind? forLayerType(String layerType) => switch (layerType) {
@@ -415,6 +429,87 @@ class HeightPlacementNotifier extends Notifier<bool> {
 final heightPlacementProvider =
     NotifierProvider<HeightPlacementNotifier, bool>(HeightPlacementNotifier.new);
 
+/// Id of the selected border area, or null.
+///
+/// Unlike the six geometry kinds this one selects a **read-only OSM snapshot**,
+/// so the editor it opens is mostly presentation — with one exception, the
+/// outline, which can be reshaped and is flagged when it has been (see
+/// `BorderAreas.editedAt`).
+class SelectedBorderAreaNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void select(String? id) => state = id;
+}
+
+final selectedBorderAreaProvider =
+    NotifierProvider<SelectedBorderAreaNotifier, String?>(
+        SelectedBorderAreaNotifier.new);
+
+/// While a border area is selected, whether its outline shows vertex handles.
+///
+/// Off by default, and deliberately a mode rather than always-on: an
+/// administrative boundary carries hundreds of vertices where a hand-drawn area
+/// carries eight, so handles everywhere would bury the map under dots and make
+/// a stray drag — a silent fork from OSM — far too easy.
+class BorderReshapeNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void arm(bool on) => state = on;
+}
+
+final borderReshapeProvider =
+    NotifierProvider<BorderReshapeNotifier, bool>(BorderReshapeNotifier.new);
+
+/// Id of the selected POI import, or null.
+class SelectedPoiSetNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void select(String? id) => state = id;
+}
+
+final selectedPoiSetProvider =
+    NotifierProvider<SelectedPoiSetNotifier, String?>(
+        SelectedPoiSetNotifier.new);
+
+/// Id of the selected individual POI, or null — one level below a set.
+class SelectedPoiPointNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void select(String? id) => state = id;
+}
+
+final selectedPoiPointProvider =
+    NotifierProvider<SelectedPoiPointNotifier, String?>(
+        SelectedPoiPointNotifier.new);
+
+/// Id of the selected transit import, or null.
+class SelectedTransitSetNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void select(String? id) => state = id;
+}
+
+final selectedTransitSetProvider =
+    NotifierProvider<SelectedTransitSetNotifier, String?>(
+        SelectedTransitSetNotifier.new);
+
+/// Id of the selected individual station, or null — one level below an import.
+class SelectedTransitStopNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void select(String? id) => state = id;
+}
+
+final selectedTransitStopProvider =
+    NotifierProvider<SelectedTransitStopNotifier, String?>(
+        SelectedTransitStopNotifier.new);
+
 /// Clears every object selection and disarms every "the next map tap places
 /// this point" flag.
 ///
@@ -436,6 +531,12 @@ void clearSelection(WidgetRef ref) {
   ref.read(freeAreaPlacementProvider.notifier).arm(null);
   ref.read(selectedHeightRegionProvider.notifier).select(null);
   ref.read(heightPlacementProvider.notifier).arm(false);
+  ref.read(selectedPoiSetProvider.notifier).select(null);
+  ref.read(selectedPoiPointProvider.notifier).select(null);
+  ref.read(selectedTransitSetProvider.notifier).select(null);
+  ref.read(selectedTransitStopProvider.notifier).select(null);
+  ref.read(selectedBorderAreaProvider.notifier).select(null);
+  ref.read(borderReshapeProvider.notifier).arm(false);
 }
 
 /// Whether any object is currently selected.
@@ -445,14 +546,19 @@ bool hasAnySelection(WidgetRef ref) =>
     ref.read(selectedSubspaceProvider) != null ||
     ref.read(selectedFreeLineProvider) != null ||
     ref.read(selectedFreeAreaProvider) != null ||
-    ref.read(selectedHeightRegionProvider) != null;
+    ref.read(selectedHeightRegionProvider) != null ||
+    ref.read(selectedPoiSetProvider) != null ||
+    ref.read(selectedPoiPointProvider) != null ||
+    ref.read(selectedTransitSetProvider) != null ||
+    ref.read(selectedTransitStopProvider) != null ||
+    ref.read(selectedBorderAreaProvider) != null;
 
 /// Selects exactly one object, clearing the others (and any armed placement),
 /// and leaves whatever map mode was armed — editing the object is now the job.
 ///
-/// The imported kinds ([ObjectKind.poiSet], [ObjectKind.transitSet],
-/// [ObjectKind.borderArea]) are a no-op: imported objects have no editor, so
-/// there is no selection provider for them.
+/// Every kind has an editor, including the imported ones — theirs is scoped to
+/// what a snapshot can honestly offer (name, colour, curation, and for a border
+/// area its outline), rather than pretending the geometry is yours.
 void selectObject(WidgetRef ref, ObjectKind kind, String id) {
   clearSelection(ref);
   if (ref.read(mapModeProvider) != MapMode.edit) {
@@ -472,9 +578,15 @@ void selectObject(WidgetRef ref, ObjectKind kind, String id) {
     case ObjectKind.heightRegion:
       ref.read(selectedHeightRegionProvider.notifier).select(id);
     case ObjectKind.poiSet:
+      ref.read(selectedPoiSetProvider.notifier).select(id);
+    case ObjectKind.poiPoint:
+      ref.read(selectedPoiPointProvider.notifier).select(id);
     case ObjectKind.transitSet:
+      ref.read(selectedTransitSetProvider.notifier).select(id);
+    case ObjectKind.transitStop:
+      ref.read(selectedTransitStopProvider.notifier).select(id);
     case ObjectKind.borderArea:
-      break; // no editor sheet — nothing to select
+      ref.read(selectedBorderAreaProvider.notifier).select(id);
   }
 }
 

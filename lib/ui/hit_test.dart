@@ -1,10 +1,11 @@
 import 'dart:math' as math;
-import 'dart:ui' show Offset;
+import 'dart:ui' show Offset, Rect;
 
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' hide Circle;
 
 import '../data/database.dart';
+import '../data/transit.dart' show transitStationVisible;
 import '../state/providers.dart';
 import 'object_summary.dart';
 import 'region_geometry.dart';
@@ -116,6 +117,11 @@ List<HitCandidate> collectCandidates({
   List<FreeArea> freeAreas = const [],
   List<FreeAreaPoint> freeAreaPoints = const [],
   List<HeightRegion> heightRegions = const [],
+  List<PoiSet> poiSets = const [],
+  List<PoiPoint> poiPoints = const [],
+  List<TransitSet> transitSets = const [],
+  List<TransitStop> transitStops = const [],
+  List<BorderShapeRef> borderShapes = const [],
   List<List<LatLng>> Function(FreeArea area)? areaContours,
 }) {
   final out = <HitCandidate>[];
@@ -273,8 +279,151 @@ List<HitCandidate> collectCandidates({
           sizeProxyMeters: ViewBound.ofCorners(raw).diagonalMeters,
         ));
       }
+    case 'poi':
+      // The marker, not the set: a POI layer's set is a search circle you can't
+      // see, so a tap on the map can only sensibly mean the dot under it.
+      final mine = {
+        for (final st in poiSets)
+          if (st.layerId == layer.id) st.id,
+      };
+      for (final p in poiPoints) {
+        if (!mine.contains(p.poiSetId)) continue;
+        if (!_finite(p.lat, p.lng)) continue;
+        final d = (camera.latLngToScreenOffset(LatLng(p.lat, p.lng)) - tapPx)
+            .distance;
+        if (!d.isFinite) continue;
+        out.add(HitCandidate(
+          ref: refOf(ObjectKind.poiPoint, p.id),
+          // A marker has no interior — only its own disc counts, which is what
+          // stops a tap on empty ground from picking the nearest POI a screen
+          // away.
+          inside: false,
+          edgeDistPx: d,
+          sizeProxyMeters: 0,
+        ));
+      }
+    case 'transit':
+      final visibleMask = {
+        for (final st in transitSets)
+          if (st.layerId == layer.id) st.id: st.visibleModeMask,
+      };
+      for (final st in transitStops) {
+        if (!visibleMask.containsKey(st.setId)) continue;
+        if (!_finite(st.lat, st.lng)) continue;
+        // A station the type filter is hiding is not on screen, so it must not
+        // be tappable — picking an invisible marker is indistinguishable from
+        // the app picking at random. Same predicate the painter culls with, so
+        // the two cannot drift: notably, unticking *every* type hides even the
+        // mode-less stations, which an "is any bit shared?" test would leave
+        // answering taps over blank ground.
+        if (!transitStationVisible(st.modeMask, visibleMask[st.setId])) {
+          continue;
+        }
+        final d = (camera.latLngToScreenOffset(LatLng(st.lat, st.lng)) - tapPx)
+            .distance;
+        if (!d.isFinite) continue;
+        out.add(HitCandidate(
+          ref: refOf(ObjectKind.transitStop, st.id),
+          inside: false,
+          edgeDistPx: d,
+          sizeProxyMeters: 0,
+        ));
+      }
+    case 'borders':
+      for (final shape in borderShapes) {
+        // Cull on the stored bounds *before* projecting anything.
+        //
+        // An administrative outline is not a handful of vertices: one state
+        // boundary is 119 238 points, and a municipality layer is ~97 areas.
+        // Projecting every vertex of every area on every tap is seconds of
+        // frozen UI, and it buys nothing — a ring lies inside its own bounding
+        // box, so a tap further than the tap slop from the projected box can
+        // neither be inside the area nor near its outline, and [rankCandidates]
+        // would drop it anyway. This makes the cull exact, not approximate.
+        final box = _projectedBounds(camera, shape);
+        if (box == null || !box.inflate(kEdgeTolerancePx).contains(tapPx)) {
+          continue;
+        }
+        var inside = false;
+        var best = double.infinity;
+        for (final ring in shape.rings) {
+          if (ring.length < 3) continue;
+          final px = [for (final p in ring) camera.latLngToScreenOffset(p)];
+          // Even-odd across rings, matching the painter: a tap in a hole is
+          // outside the area, exactly as it looks.
+          if (pointInPolygon(tapPx, px)) inside = !inside;
+          for (var i = 0; i < px.length; i++) {
+            final d = distToSegment(tapPx, px[i], px[(i + 1) % px.length]);
+            if (d < best) best = d;
+          }
+        }
+        if (!best.isFinite) continue;
+        out.add(HitCandidate(
+          ref: refOf(ObjectKind.borderArea, shape.id),
+          inside: inside,
+          edgeDistPx: best,
+          // The stored bounds, not the ring: an administrative area is
+          // hundreds of points and this only has to order "which of the two
+          // areas under the tap is the smaller one".
+          sizeProxyMeters: geoDistance.as(
+            LengthUnit.Meter,
+            LatLng(shape.south, shape.west),
+            LatLng(shape.north, shape.east),
+          ),
+        ));
+      }
   }
   return out;
+}
+
+/// The bare geometry of one border area that hit-testing needs.
+///
+/// Deliberately **not** the painter's `BorderShape`: this file is pure and
+/// unit-testable, and must not depend on a widget library. The map screen
+/// already holds decoded shapes (`borderShapesProvider` decodes once per
+/// emission, never per frame) and adapts them at the call site.
+class BorderShapeRef {
+  const BorderShapeRef({
+    required this.id,
+    required this.rings,
+    required this.south,
+    required this.west,
+    required this.north,
+    required this.east,
+  });
+
+  final String id;
+  final List<List<LatLng>> rings;
+  final double south, west, north, east;
+}
+
+/// The screen-space box that certainly contains [shape], from its four stored
+/// corners alone — four projections instead of one per vertex.
+///
+/// Mercator is monotone in both axes and the camera's rotation is rigid, so the
+/// lat/lng box maps to a (possibly rotated) rectangle whose corners are the
+/// projections of these four; the bounding box of those four therefore contains
+/// every point of the rings. Null when a corner doesn't project finitely.
+Rect? _projectedBounds(MapCamera camera, BorderShapeRef shape) {
+  if (!_finite(shape.south, shape.north) || !_finite(shape.west, shape.east)) {
+    return null;
+  }
+  var minX = double.infinity, minY = double.infinity;
+  var maxX = double.negativeInfinity, maxY = double.negativeInfinity;
+  for (final ll in [
+    LatLng(shape.south, shape.west),
+    LatLng(shape.south, shape.east),
+    LatLng(shape.north, shape.east),
+    LatLng(shape.north, shape.west),
+  ]) {
+    final o = camera.latLngToScreenOffset(ll);
+    if (!o.dx.isFinite || !o.dy.isFinite) return null;
+    if (o.dx < minX) minX = o.dx;
+    if (o.dx > maxX) maxX = o.dx;
+    if (o.dy < minY) minY = o.dy;
+    if (o.dy > maxY) maxY = o.dy;
+  }
+  return Rect.fromLTRB(minX, minY, maxX, maxY);
 }
 
 bool _finite(double a, double b) => a.isFinite && b.isFinite;

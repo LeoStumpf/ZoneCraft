@@ -213,6 +213,31 @@ int get transitAllModesMask => transitMaskOf(transitModes);
 /// The rail modes, for the filter sheet's "Rail only" shortcut.
 int get transitRailMask => transitMaskOf(transitModes.where((m) => m.isRail));
 
+/// Whether a station whose modes are [stationMask] is shown when its import's
+/// filter is [visibleMask].
+///
+/// **One definition, because two things read it**: the painter, to decide what
+/// to draw, and the tap hit-test, to decide what can be selected. When they
+/// disagreed, a station with no modes at all stayed tappable after every type
+/// had been unticked — an invisible marker answering a tap on what looks like
+/// empty ground, which is indistinguishable from the app choosing at random.
+///
+/// The rules, in order:
+/// - a station shows iff **at least one** of its modes is enabled, so unticking
+///   Bus leaves Pasing Bahnhof standing, because a train stops there;
+/// - `stationMask == 0` ("OSM didn't say", ~0.1 % of Munich) shows whenever
+///   anything is enabled, so those can never become unreachable;
+/// - `visibleMask == 0` (everything unticked) shows nothing at all — including
+///   the mode-less ones, which is the case the two copies used to differ on.
+///
+/// A null [visibleMask] means the station's set isn't one of the layer's, which
+/// is not a filter decision but a missing row: it shows nothing.
+bool transitStationVisible(int stationMask, int? visibleMask) {
+  if (visibleMask == null || visibleMask == 0) return false;
+  if (stationMask == 0) return true;
+  return stationMask & visibleMask != 0;
+}
+
 /// The modes in [mask], named — "Train, Tram" — for a subtitle. Empty mask
 /// gives 'nothing'; the full mask gives 'all types'.
 String transitModeLabels(int mask) {

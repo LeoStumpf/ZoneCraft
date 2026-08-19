@@ -333,6 +333,40 @@ void main() {
     expect(pts.map((p) => p.name).toSet(), {'Park bench', null});
   });
 
+  test('one POI can be renamed and removed without touching the rest',
+      () async {
+    final layerId =
+        await repo.createLayer(name: 'POIs', colorArgb: 3, type: 'poi');
+    final sid = await repo.createPoiSet(
+      layerId: layerId,
+      categoryKey: 'cafe',
+      centerLat: 48.0,
+      centerLng: 11.0,
+      radiusMeters: 800,
+    );
+    await repo.addPoiPoints(sid, [
+      PoiResult(lat: 48.001, lng: 11.001, categoryKey: 'cafe', name: 'Closed'),
+      PoiResult(lat: 47.999, lng: 10.999, categoryKey: 'cafe', name: 'Open'),
+    ]);
+
+    final closed = (await repo.watchAllPoiPoints().first)
+        .firstWhere((p) => p.name == 'Closed');
+    await repo.updatePoiPoint(closed.id, name: const Value('Renamed'));
+    expect(
+      (await repo.watchAllPoiPoints().first)
+          .firstWhere((p) => p.id == closed.id)
+          .name,
+      'Renamed',
+    );
+
+    await repo.deletePoiPoint(closed.id);
+    final left = await repo.watchAllPoiPoints().first;
+    expect(left, hasLength(1));
+    expect(left.single.name, 'Open');
+    expect(await repo.watchAllPoiSets().first, hasLength(1),
+        reason: 'curating a POI away must not delete its import');
+  });
+
   // --- transit (schema v19: stations only) ------------------------------------
 
   Future<String> seedTransit(String layerId, {bool pendingOnly = false}) async {
@@ -511,6 +545,32 @@ void main() {
     expect(layer.opacity, 1.0);
     expect(defaultLayerOpacity('transit'), 1.0);
     expect(defaultLayerOpacity('circles'), kDefaultRegionLayerOpacity);
+  });
+
+  test('removing one station keeps its import\'s counts honest', () async {
+    final layerId = await repo.createLayer(
+        name: 'T', colorArgb: 0xFF123456, type: 'transit');
+    final setId = await seedTransit(layerId);
+    final before = (await repo.watchAllTransitSets().first).single;
+    expect(before.stationCount, 3);
+
+    final pasing = (await repo.watchAllTransitStops().first)
+        .firstWhere((s) => s.name == 'Pasing Bahnhof');
+    await repo.updateTransitStop(pasing.id, name: const Value('Pasing'));
+    expect(
+      (await repo.watchAllTransitStops().first)
+          .firstWhere((s) => s.id == pasing.id)
+          .name,
+      'Pasing',
+    );
+
+    await repo.deleteTransitStop(pasing.id);
+    expect(await repo.watchAllTransitStops().first, hasLength(2));
+    final after = (await repo.watchAllTransitSets().first).single;
+    expect(after.id, setId);
+    expect(after.stationCount, 2,
+        reason: 'the layer tile reads this number, so it has to follow');
+    expect(after.nodeCount, before.nodeCount - pasing.nodeCount);
   });
 
   test('a transit layer survives an export/import round-trip', () async {
@@ -861,6 +921,215 @@ void main() {
     expect(left, hasLength(2));
     expect(left.map((a) => a.osmId), isNot(contains(1)));
     expect(await repo.watchAllBorderSets().first, hasLength(1));
+  });
+
+  test('reshaping an area rewrites its bounds, count and edited stamp',
+      () async {
+    final layerId = await repo.createLayer(
+        name: 'B', colorArgb: 0xFF123456, type: 'borders', borderLevel: '8');
+    await seedBorders(layerId);
+    final munich = (await repo.watchAllBorderAreas().first)
+        .firstWhere((a) => a.osmId == 1);
+    expect(munich.editedAt, isNull, reason: 'untouched OSM geometry');
+
+    // Drag one corner well outside the stored bounding box: the painter culls
+    // on those bounds, so an outline that outgrew them would vanish at exactly
+    // the zoom you were working at.
+    final moved = [
+      [
+        const LatLng(48.0, 11.0),
+        const LatLng(48.0, 11.1),
+        const LatLng(48.5, 11.9),
+        const LatLng(48.1, 11.0),
+        const LatLng(48.05, 11.05),
+      ],
+    ];
+    expect(await repo.reshapeBorderArea(munich.id, moved), isTrue);
+
+    final after = (await repo.watchAllBorderAreas().first)
+        .firstWhere((a) => a.id == munich.id);
+    expect(after.editedAt, isNotNull, reason: 'this is a fork from OSM');
+    expect(after.pointCount, 5);
+    expect(after.north, 48.5);
+    expect(after.east, 11.9);
+    expect(await repo.borderAreaRings(after.id), hasLength(1));
+    expect((await repo.borderAreaRings(after.id)).single, hasLength(5));
+    // Identity is untouched: dedup still recognises it on a re-import, which is
+    // the whole reason the edit has to be flagged.
+    expect(after.osmId, 1);
+  });
+
+  test('a reshape that leaves no fillable ring is refused', () async {
+    final layerId = await repo.createLayer(
+        name: 'B', colorArgb: 0xFF123456, type: 'borders', borderLevel: '8');
+    await seedBorders(layerId);
+    final area = (await repo.watchAllBorderAreas().first).first;
+    expect(
+      await repo.reshapeBorderArea(area.id, [
+        [const LatLng(48.0, 11.0), const LatLng(48.1, 11.1)],
+      ]),
+      isFalse,
+      reason: 'two points have no interior',
+    );
+    final after = (await repo.watchAllBorderAreas().first)
+        .firstWhere((a) => a.id == area.id);
+    expect(after.pointCount, 4, reason: 'the outline is untouched');
+    expect(after.editedAt, isNull);
+  });
+
+  test('an outline that comes back unchanged is not a fork', () async {
+    // Every completed drag commits, including one that ends where it started
+    // (and a long-press menu dismissed without choosing anything). A snapshot
+    // labelled "no longer what OSM says" when nothing moved is the one thing
+    // this flag exists to get right.
+    final layerId = await repo.createLayer(
+        name: 'B', colorArgb: 0xFF123456, type: 'borders', borderLevel: '8');
+    await seedBorders(layerId);
+    final area = (await repo.watchAllBorderAreas().first)
+        .firstWhere((a) => a.osmId == 1);
+
+    final same = await repo.borderAreaRings(area.id);
+    expect(await repo.reshapeBorderArea(area.id, same), isTrue,
+        reason: 'accepted — there was simply nothing to write');
+
+    final after = (await repo.watchAllBorderAreas().first)
+        .firstWhere((a) => a.id == area.id);
+    expect(after.editedAt, isNull, reason: 'nothing moved, nothing forked');
+    expect(after.rings, area.rings);
+  });
+
+  test('a reshape of a row that is gone is refused, not silently accepted',
+      () async {
+    final layerId = await repo.createLayer(
+        name: 'B', colorArgb: 0xFF123456, type: 'borders', borderLevel: '8');
+    await seedBorders(layerId);
+    expect(
+      await repo.reshapeBorderArea('no-such-area', [
+        [
+          const LatLng(48.0, 11.0),
+          const LatLng(48.0, 11.1),
+          const LatLng(48.1, 11.1),
+        ],
+      ]),
+      isFalse,
+    );
+  });
+
+  test('a reshape with a non-finite point is refused', () async {
+    // A dragged handle that unprojected to NaN would otherwise write bounds of
+    // NaN, and the painter culls on those — the area would vanish everywhere.
+    final layerId = await repo.createLayer(
+        name: 'B', colorArgb: 0xFF123456, type: 'borders', borderLevel: '8');
+    await seedBorders(layerId);
+    final area = (await repo.watchAllBorderAreas().first).first;
+    expect(
+      await repo.reshapeBorderArea(area.id, [
+        [
+          const LatLng(48.0, 11.0),
+          LatLng(double.nan, 11.1),
+          const LatLng(48.1, 11.1),
+        ],
+      ]),
+      isFalse,
+    );
+    final after = (await repo.watchAllBorderAreas().first)
+        .firstWhere((a) => a.id == area.id);
+    expect(after.editedAt, isNull);
+    expect(after.south, 48.0, reason: 'the stored bounds are untouched');
+  });
+
+  test('rings too short to fill are dropped, and the rest still reshape',
+      () async {
+    final layerId = await repo.createLayer(
+        name: 'B', colorArgb: 0xFF123456, type: 'borders', borderLevel: '8');
+    await seedBorders(layerId);
+    final area = (await repo.watchAllBorderAreas().first).first;
+    expect(
+      await repo.reshapeBorderArea(area.id, [
+        [
+          const LatLng(48.0, 11.0),
+          const LatLng(48.0, 11.2),
+          const LatLng(48.2, 11.2),
+        ],
+        [const LatLng(48.05, 11.05), const LatLng(48.06, 11.06)], // no interior
+      ]),
+      isTrue,
+    );
+    final rings = await repo.borderAreaRings(area.id);
+    expect(rings, hasLength(1));
+    final after = (await repo.watchAllBorderAreas().first)
+        .firstWhere((a) => a.id == area.id);
+    expect(after.pointCount, 3, reason: 'the dropped ring is not counted');
+  });
+
+  test('moving the name plate is presentation, so it is not a fork', () async {
+    // The anchor is where the label draws, not where the boundary runs — a
+    // reshaped outline can leave the plate over ground the area no longer
+    // covers, and dragging it back must not stamp the area as edited.
+    final layerId = await repo.createLayer(
+        name: 'B', colorArgb: 0xFF123456, type: 'borders', borderLevel: '8');
+    await seedBorders(layerId);
+    final area = (await repo.watchAllBorderAreas().first)
+        .firstWhere((a) => a.osmId == 1);
+    expect(area.labelLat, 48.05);
+
+    await repo.updateBorderArea(area.id, labelLat: 48.07, labelLng: 11.08);
+    final after = (await repo.watchAllBorderAreas().first)
+        .firstWhere((a) => a.id == area.id);
+    expect(after.labelLat, 48.07);
+    expect(after.labelLng, 11.08);
+    expect(after.editedAt, isNull, reason: 'geometry is untouched');
+    expect(after.rings, area.rings);
+
+    // A rename alone leaves the anchor where it was put.
+    await repo.updateBorderArea(area.id, name: const Value('Munich'));
+    final renamed = (await repo.watchAllBorderAreas().first)
+        .firstWhere((a) => a.id == area.id);
+    expect(renamed.name, 'Munich');
+    expect(renamed.labelLat, 48.07);
+  });
+
+  test('a reshaped outline stays flagged through export and import', () async {
+    final layerId = await repo.createLayer(
+        name: 'B', colorArgb: 0xFF123456, type: 'borders', borderLevel: '8');
+    await seedBorders(layerId);
+    final area = (await repo.watchAllBorderAreas().first)
+        .firstWhere((a) => a.osmId == 1);
+    await repo.reshapeBorderArea(area.id, [
+      [
+        const LatLng(48.0, 11.0),
+        const LatLng(48.0, 11.2),
+        const LatLng(48.2, 11.2),
+      ],
+    ]);
+
+    final data = await repo.exportData(onlyLayerId: layerId);
+    final exported =
+        data.layers.single.objects.firstWhere((o) => o.osmId == 1);
+    expect(exported.edited, isTrue);
+    expect(
+      data.layers.single.objects.where((o) => o.osmId == 2).single.edited,
+      isNull,
+      reason: 'an untouched area says nothing, rather than "edited: false"',
+    );
+
+    final reread = importFromGeoJson(exportToGeoJson(data))!;
+    await repo.importData(reread);
+    final fresh = (await repo.watchLayers().first)
+        .firstWhere((l) => l.type == 'borders' && l.id != layerId);
+    final freshSets = (await repo.watchAllBorderSets().first)
+        .where((x) => x.layerId == fresh.id)
+        .map((x) => x.id)
+        .toSet();
+    final freshAreas = (await repo.watchAllBorderAreas().first)
+        .where((a) => freshSets.contains(a.setId))
+        .toList();
+    expect(
+      freshAreas.firstWhere((a) => a.osmId == 1).editedAt,
+      isNotNull,
+      reason: 'a shared file must not launder an edit into OSM truth',
+    );
+    expect(freshAreas.firstWhere((a) => a.osmId == 2).editedAt, isNull);
   });
 
   test('deleting an area recolours the neighbours it was constraining',

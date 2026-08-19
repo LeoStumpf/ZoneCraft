@@ -14,7 +14,7 @@ import 'generated_migrations/schema.dart';
 /// any of that was `scripts/build.sh --install` re-installing over the one
 /// development phone, i.e. exactly one upgrade path on exactly one database.
 ///
-/// With **three** snapshots (v20, v21, v22) this now does what one snapshot could not:
+/// With **four** snapshots (v20, v21, v22, v23) this now does what one snapshot could not:
 /// it opens a real older database, runs the app's own `onUpgrade` against it,
 /// and compares the result to the next version's independently-dumped shape. That is what
 /// catches a column added to a table class without the matching
@@ -29,7 +29,7 @@ import 'generated_migrations/schema.dart';
 /// dart run drift_dev schema generate drift_schemas/ test/generated_migrations/
 /// ```
 ///
-/// then add the v22 → v23 step below. A snapshot must be taken *before* that
+/// then add the v23 → v24 step below. A snapshot must be taken *before* that
 /// version ships; it cannot be reconstructed afterwards.
 void main() {
   late SchemaVerifier verifier;
@@ -38,10 +38,10 @@ void main() {
     verifier = SchemaVerifier(GeneratedHelper());
   });
 
-  test('the schema the table classes build matches the v22 snapshot', () async {
+  test('the schema the table classes build matches the v23 snapshot', () async {
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 22);
+    await verifier.migrateAndValidate(db, 23);
   });
 
   test('v20 → today upgrades a real database, and keeps its rows', () async {
@@ -70,7 +70,7 @@ void main() {
     // Validated against the *current* version, not v21: opening a database runs
     // the whole remaining chain, so this is the real "upgrade from an old
     // install" path rather than a snapshot-to-snapshot hop.
-    await verifier.migrateAndValidate(db, 22);
+    await verifier.migrateAndValidate(db, 23);
 
     final rows = await db.select(db.poiPoints).get();
     expect(rows, hasLength(1), reason: 'the upgrade must not drop POIs');
@@ -96,7 +96,7 @@ void main() {
 
     final db = AppDatabase.forTesting(old.newConnection());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 22);
+    await verifier.migrateAndValidate(db, 23);
 
     final circle = (await db.select(db.circles).get()).single;
     expect(circle.label, 'Home', reason: 'the upgrade must not drop circles');
@@ -104,7 +104,40 @@ void main() {
     expect(circle.colorShade, 0, reason: 'shade 0 == the layer colour');
   });
 
-  test('a v22 database opens, writes and reads back', () async {
+  test('v22 → today leaves every border area marked as untouched OSM geometry',
+      () async {
+    // The v23 change makes border outlines reshapeable and records when one
+    // was. Everything that already exists is by definition *not* reshaped, and
+    // that has to survive the upgrade: a stored area wrongly flagged as edited
+    // would tell the user their snapshot had been forked when it hadn't.
+    final old = await verifier.schemaAt(22);
+    old.rawDatabase.execute(
+      "INSERT INTO layers (id, name, color_argb, sort_order, type, "
+      "border_level) VALUES ('l1', 'Districts', 4278190335, 0, 'borders', '8')",
+    );
+    old.rawDatabase.execute(
+      "INSERT INTO border_sets (id, layer_id, south, west, north, east, "
+      "admin_level, fetched_at) VALUES ('s1', 'l1', 48.0, 11.0, 48.2, 11.3, "
+      "'8', 1700000000)",
+    );
+    old.rawDatabase.execute(
+      "INSERT INTO border_areas (id, set_id, osm_id, name, south, west, "
+      "north, east, label_lat, label_lng, point_count, rings, way_ids) "
+      "VALUES ('a1', 's1', 42, 'Maxvorstadt', 48.0, 11.0, 48.1, 11.1, "
+      "48.05, 11.05, 4, "
+      "'[[[48.0,11.0],[48.0,11.1],[48.1,11.1],[48.1,11.0]]]', '[7]')",
+    );
+
+    final db = AppDatabase.forTesting(old.newConnection());
+    addTearDown(db.close);
+    await verifier.migrateAndValidate(db, 23);
+
+    final area = (await db.select(db.borderAreas).get()).single;
+    expect(area.name, 'Maxvorstadt', reason: 'the upgrade must not drop areas');
+    expect(area.editedAt, isNull, reason: 'null == untouched OSM geometry');
+  });
+
+  test('a v23 database opens, writes and reads back', () async {
     // `migrateAndValidate` proves the *shape*; this proves the thing opens and
     // the foreign keys the cascade deletes depend on are actually on.
     final db = AppDatabase.forTesting(NativeDatabase.memory());

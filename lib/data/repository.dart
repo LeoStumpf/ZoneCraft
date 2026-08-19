@@ -1122,6 +1122,25 @@ class Repository {
     return (_db.delete(_db.poiSets)..where((s) => s.id.equals(id))).go();
   }
 
+  /// Renames one stored POI. The name is the only thing about a POI that is
+  /// safe to change: its **position** is the fetched fact the layer exists to
+  /// record, and there is no column that would say a coordinate had been moved.
+  Future<void> updatePoiPoint(String id, {required Value<String?> name}) {
+    return (_db.update(_db.poiPoints)..where((p) => p.id.equals(id)))
+        .write(PoiPointsCompanion(name: name));
+  }
+
+  /// Removes one stored POI — curating an import down to what you want, without
+  /// throwing away the whole set. Its `sort_order` gap is harmless: the order
+  /// only has to be *stable*, and the remaining rows keep theirs.
+  ///
+  /// The POI keeps its OSM identity right up to the delete, so re-importing the
+  /// same ground brings it back. That is the honest behaviour — the row was a
+  /// copy of something upstream, and the upstream copy is still there.
+  Future<void> deletePoiPoint(String id) {
+    return (_db.delete(_db.poiPoints)..where((p) => p.id.equals(id))).go();
+  }
+
   // --- Transit sets ---------------------------------------------------------
 
   Stream<List<TransitSet>> watchAllTransitSets() {
@@ -1293,6 +1312,37 @@ class Repository {
 
   Future<void> deleteTransitSet(String id) {
     return (_db.delete(_db.transitSets)..where((s) => s.id.equals(id))).go();
+  }
+
+  /// Renames one station. As with a POI, the name is the only safe thing to
+  /// change — the position and the mode bits are the fetched facts.
+  Future<void> updateTransitStop(String id, {required Value<String?> name}) {
+    return (_db.update(_db.transitStops)..where((s) => s.id.equals(id)))
+        .write(TransitStopsCompanion(name: name));
+  }
+
+  /// Removes one station and keeps its import's denormalised counts honest —
+  /// the layer tile and the Elements subtitle both read `stationCount`, so a
+  /// delete that skipped it would leave the layer claiming stations it no
+  /// longer draws.
+  Future<void> deleteTransitStop(String id) async {
+    final stop = await (_db.select(_db.transitStops)
+          ..where((s) => s.id.equals(id)))
+        .getSingleOrNull();
+    if (stop == null) return;
+    await _db.transaction(() async {
+      await (_db.delete(_db.transitStops)..where((s) => s.id.equals(id))).go();
+      final set = await (_db.select(_db.transitSets)
+            ..where((t) => t.id.equals(stop.setId)))
+          .getSingleOrNull();
+      if (set == null) return;
+      await (_db.update(_db.transitSets)..where((t) => t.id.equals(set.id)))
+          .write(TransitSetsCompanion(
+        stationCount: Value(set.stationCount > 0 ? set.stationCount - 1 : 0),
+        nodeCount: Value(
+            set.nodeCount >= stop.nodeCount ? set.nodeCount - stop.nodeCount : 0),
+      ));
+    });
   }
 
   // --- Border sets ----------------------------------------------------------
@@ -1469,9 +1519,74 @@ class Repository {
   Future<void> updateBorderArea(
     String id, {
     Value<String?> name = const Value.absent(),
+    double? labelLat,
+    double? labelLng,
   }) async {
-    await (_db.update(_db.borderAreas)..where((a) => a.id.equals(id)))
-        .write(BorderAreasCompanion(name: name));
+    await (_db.update(_db.borderAreas)..where((a) => a.id.equals(id))).write(
+      BorderAreasCompanion(
+        name: name,
+        labelLat: labelLat == null ? const Value.absent() : Value(labelLat),
+        labelLng: labelLng == null ? const Value.absent() : Value(labelLng),
+      ),
+    );
+  }
+
+  /// Replaces one area's outline with [rings] and marks it as **reshaped by
+  /// hand** (v23).
+  ///
+  /// The denormalised bounds and point count are recomputed here rather than
+  /// left to the caller: the painter culls on the bounds, so an outline dragged
+  /// outside its stored box would vanish at exactly the zoom where you were
+  /// working on it.
+  ///
+  /// Refuses geometry that has no fillable ring left — a reshape that empties
+  /// an area is a slip, not an intention, and the row would then draw nothing
+  /// with no way back.
+  ///
+  /// Moving the name plate is deliberately **not** routed through here: an
+  /// anchor is presentation, and flagging it as a fork of OSM geometry would
+  /// make the marker meaningless.
+  ///
+  /// An outline that comes back **identical** is not a reshape and is not
+  /// stamped. Every completed drag commits, including one that ends where it
+  /// started, and a snapshot wrongly labelled "no longer what OSM says" is the
+  /// one thing this flag exists to get right.
+  Future<bool> reshapeBorderArea(String id, List<List<LatLng>> rings) async {
+    final usable = [
+      for (final r in rings)
+        if (r.length >= 3) r,
+    ];
+    if (usable.isEmpty) return false;
+    var south = 90.0, west = 180.0, north = -90.0, east = -180.0;
+    var points = 0;
+    for (final r in usable) {
+      points += r.length;
+      for (final p in r) {
+        if (!p.latitude.isFinite || !p.longitude.isFinite) return false;
+        if (p.latitude < south) south = p.latitude;
+        if (p.latitude > north) north = p.latitude;
+        if (p.longitude < west) west = p.longitude;
+        if (p.longitude > east) east = p.longitude;
+      }
+    }
+    final area = await (_db.select(_db.borderAreas)
+          ..where((a) => a.id.equals(id)))
+        .getSingleOrNull();
+    if (area == null) return false;
+    final encoded = encodeRings(usable);
+    if (encoded == area.rings) return true; // nothing moved; stay untouched
+    await (_db.update(_db.borderAreas)..where((a) => a.id.equals(id))).write(
+      BorderAreasCompanion(
+        rings: Value(encoded),
+        south: Value(south),
+        west: Value(west),
+        north: Value(north),
+        east: Value(east),
+        pointCount: Value(points),
+        editedAt: Value(DateTime.now()),
+      ),
+    );
+    return true;
   }
 
   /// Deletes one imported area, then recolours what is left of its layer.
@@ -1910,6 +2025,7 @@ class Repository {
                 labelLat: a.labelLat,
                 labelLng: a.labelLng,
                 wayIds: _decodeWayIds(a.wayIds),
+                edited: a.editedAt == null ? null : true,
                 colorArgb: a.colorArgb,
               ));
             }
@@ -2284,6 +2400,9 @@ class Repository {
           pointCount: points,
           rings: encodeRings(rings),
           wayIds: jsonEncode(o.wayIds ?? const <int>[]),
+          // An outline the sender reshaped stays flagged here: it is still not
+          // what OSM says, and the receiver's own re-import dedup will keep it.
+          editedAt: Value(o.edited == true ? DateTime.now() : null),
         ));
         if (o.colorArgb != null) overrides[id] = o.colorArgb!;
         sets[key] =

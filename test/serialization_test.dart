@@ -209,6 +209,48 @@ void main() {
       expect(o.rings!.single, hasLength(3), reason: 'the closing vertex is dropped');
     });
 
+    test('a reshaped outline travels as edited, an untouched one silently', () {
+      // A shared file must not launder a hand-edited boundary into "what OSM
+      // says" on the receiving device — where re-import dedup then keeps this
+      // version, which is exactly where it would matter.
+      ExportData dataWith(bool? edited) => ExportData([
+            ExportLayer(
+              name: 'Districts',
+              colorArgb: 0xFF00FF00,
+              type: 'borders',
+              isInverted: false,
+              borderLevel: '9',
+              objects: [
+                ExportObject(
+                  kind: 'borderarea',
+                  coords: const [LatLng(0, 0), LatLng(0, 1), LatLng(1, 1)],
+                  rings: const [
+                    [LatLng(0, 0), LatLng(0, 1), LatLng(1, 1)],
+                  ],
+                  osmId: 42,
+                  edited: edited,
+                ),
+              ],
+            ),
+          ]);
+
+      final json = exportToGeoJson(dataWith(true));
+      expect(json, contains('"edited"'));
+      expect(
+        importFromGeoJson(json)!.layers.single.objects.single.edited,
+        isTrue,
+      );
+
+      // Untouched geometry says nothing at all, rather than "edited: false" —
+      // absence is what every pre-v23 file carries, so the two must agree.
+      final plain = exportToGeoJson(dataWith(null));
+      expect(plain, isNot(contains('"edited"')));
+      expect(
+        importFromGeoJson(plain)!.layers.single.objects.single.edited,
+        isNull,
+      );
+    });
+
     test('a hole and an exclave survive as separate rings', () {
       const outer = [LatLng(0, 0), LatLng(0, 10), LatLng(10, 10), LatLng(10, 0)];
       const hole = [LatLng(2, 2), LatLng(2, 4), LatLng(4, 4), LatLng(4, 2)];

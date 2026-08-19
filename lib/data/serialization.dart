@@ -41,6 +41,7 @@ class ExportObject {
     this.labelLat,
     this.labelLng,
     this.wayIds,
+    this.edited,
     this.modeMask,
     this.visibleModeMask,
     this.pointOsmIds,
@@ -115,6 +116,13 @@ class ExportObject {
   final double? labelLat;
   final double? labelLng;
   final List<int>? wayIds;
+
+  /// borderarea: true when the outline was **reshaped by hand** and is no
+  /// longer what OSM returned (v23). It travels with the file so a shared layer
+  /// cannot launder an edited boundary into "what OSM says" on the receiving
+  /// device — which, since re-import dedup then keeps this version, is exactly
+  /// where it would matter.
+  final bool? edited;
 
   // transitstop: which station types the import fetched, and which of them are
   // shown.
@@ -257,6 +265,7 @@ Map<String, dynamic> _objectToFeature(ExportObject o, int layerIndex) {
     if (o.labelLat != null) 'labelLat': o.labelLat,
     if (o.labelLng != null) 'labelLng': o.labelLng,
     if (o.wayIds != null) 'wayIds': o.wayIds,
+    if (o.edited != null) 'edited': o.edited,
     if (o.modeMask != null) 'modeMask': o.modeMask,
     if (o.visibleModeMask != null) 'visibleModeMask': o.visibleModeMask,
     if (o.pointOsmIds != null) 'pointOsmIds': o.pointOsmIds,
@@ -396,6 +405,7 @@ ExportObject? _featureToObject(Map f) {
     labelLat: (props['labelLat'] as num?)?.toDouble(),
     labelLng: (props['labelLng'] as num?)?.toDouble(),
     wayIds: _readInts(props['wayIds']),
+    edited: props['edited'] as bool?,
     modeMask: (props['modeMask'] as num?)?.toInt(),
     visibleModeMask: (props['visibleModeMask'] as num?)?.toInt(),
     pointOsmIds: _readInts(props['pointOsmIds']),
