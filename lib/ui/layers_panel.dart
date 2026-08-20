@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/borders.dart';
 import '../data/database.dart';
 import '../data/repository.dart';
+import '../geo/coords.dart';
 import '../state/providers.dart';
+import 'editor_sheet.dart';
 import 'import_actions.dart';
 import 'layer_objects_sheet.dart';
 import 'object_summary.dart';
@@ -839,9 +841,11 @@ class _BasemapTile extends ConsumerWidget {
   }
 }
 
-/// A modal 0–100% opacity slider shared by layer tiles and the base-map tile.
-/// [onChanged] fires **live** as the slider moves so the map updates
-/// immediately; there is no Save button — the change is already applied.
+/// A modal 0–100% opacity control shared by layer tiles and the base-map tile:
+/// a slider for a quick sweep plus a per-cent field for an exact value (the
+/// slider's 5% steps cannot express 33%). [onChanged] fires **live** from
+/// either so the map updates immediately; there is no Save button — the change
+/// is already applied.
 Future<void> showOpacityDialog(
   BuildContext context, {
   required String title,
@@ -849,6 +853,10 @@ Future<void> showOpacityDialog(
   required ValueChanged<double> onChanged,
 }) {
   var current = value.clamp(0.0, 1.0);
+  final field = TextEditingController(
+    text: (current * 100).round().toString(),
+  );
+  final focus = FocusNode();
   return showDialog<void>(
     context: context,
     builder: (ctx) => StatefulBuilder(
@@ -857,7 +865,33 @@ Future<void> showOpacityDialog(
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('${(current * 100).round()}% opaque'),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: scaledPx(ctx, 90),
+                  child: TextField(
+                    controller: field,
+                    focusNode: focus,
+                    decoration: const InputDecoration(
+                      labelText: 'Opaque',
+                      suffixText: '%',
+                      isDense: true,
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    onChanged: (s) {
+                      final n = parseDecimal(s);
+                      if (n == null || !n.isFinite) return;
+                      final v = (n / 100).clamp(0.0, 1.0);
+                      setState(() => current = v);
+                      onChanged(v);
+                    },
+                  ),
+                ),
+              ],
+            ),
             Slider(
               min: 0,
               max: 1,
@@ -866,6 +900,14 @@ Future<void> showOpacityDialog(
               label: '${(current * 100).round()}%',
               onChanged: (v) {
                 setState(() => current = v);
+                // Mirrored even while the field has focus: the keyboard stays
+                // up during a drag, and a stale number there would contradict
+                // the slider.
+                final t = (v * 100).round().toString();
+                field.value = TextEditingValue(
+                  text: t,
+                  selection: TextSelection.collapsed(offset: t.length),
+                );
                 onChanged(v);
               },
             ),
@@ -879,7 +921,10 @@ Future<void> showOpacityDialog(
         ],
       ),
     ),
-  );
+  ).whenComplete(() {
+    field.dispose();
+    focus.dispose();
+  });
 }
 
 const _palette = <Color>[

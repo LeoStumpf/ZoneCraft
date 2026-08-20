@@ -36,6 +36,10 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
   late final TextEditingController _center;
   final FocusNode _centerFocus = FocusNode();
   late final TextEditingController _label;
+  // The radius is editable both ways: the log slider for a quick sweep, the
+  // field for an exact value ("500 m" is unhittable on a 10 m–1000 km slider).
+  late final TextEditingController _radiusField;
+  final FocusNode _radiusFocus = FocusNode();
   late double _radius;
 
   Repository get _repo => ref.read(repositoryProvider);
@@ -49,6 +53,7 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
     );
     _label = TextEditingController(text: c.label ?? '');
     _radius = c.radiusMeters;
+    _radiusField = TextEditingController(text: _radiusFieldText(_radius));
   }
 
   @override
@@ -61,6 +66,7 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
     }
     if (widget.circle.radiusMeters != _radius) {
       _radius = widget.circle.radiusMeters;
+      _syncRadiusField();
     }
   }
 
@@ -69,6 +75,8 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
     _center.dispose();
     _centerFocus.dispose();
     _label.dispose();
+    _radiusField.dispose();
+    _radiusFocus.dispose();
     super.dispose();
   }
 
@@ -86,10 +94,36 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
     ref.read(selectedCircleProvider.notifier).select(null);
   }
 
+  /// Applies a radius from the slider: rounded to whole metres so the value
+  /// the field shows is exactly the value that is stored.
+  void _setRadiusFromSlider(double meters) {
+    _setRadius(meters.roundToDouble());
+    // Forced: the field usually keeps focus (the keyboard stays up) while the
+    // slider is dragged, and leaving it on the old number would have the two
+    // controls disagree about the radius.
+    _syncRadiusField(force: true);
+  }
+
   void _setRadius(double meters) {
     setState(() => _radius = meters);
     _repo.updateCircle(widget.circle.id, radiusMeters: meters);
   }
+
+  /// Mirrors the current radius into the field, unless the user is typing in
+  /// it — rewriting it under the caret would fight the keyboard.
+  void _syncRadiusField({bool force = false}) {
+    if (_radiusFocus.hasFocus && !force) return;
+    final t = _radiusFieldText(_radius);
+    if (_radiusField.text == t) return;
+    _radiusField.value = TextEditingValue(
+      text: t,
+      selection: TextSelection.collapsed(offset: t.length),
+    );
+  }
+
+  static String _radiusFieldText(double m) => m == m.roundToDouble()
+      ? m.round().toString()
+      : m.toStringAsFixed(1);
 
   String _radiusLabel(double m) => m >= 1000
       ? '${(m / 1000).toStringAsFixed(m >= 10000 ? 0 : 1)} km'
@@ -130,7 +164,26 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
         ),
         Row(
           children: [
-            Expanded(child: Text('Radius: ${_radiusLabel(_radius)}')),
+            SizedBox(
+              width: scaledPx(context, 132),
+              child: TextField(
+                controller: _radiusField,
+                focusNode: _radiusFocus,
+                decoration: InputDecoration(
+                  labelText: 'Radius (m)',
+                  helperText: _radius >= 1000 ? _radiusLabel(_radius) : null,
+                  isDense: true,
+                ),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                onChanged: (s) {
+                  final n = parseDecimal(s);
+                  if (n != null && n.isFinite && n > 0) _setRadius(n);
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
             // The layer picker takes the slack and ellipsises: a layer named
             // after an imported border ("Ludwigsvorstadt-Isarvorstadt") is
             // far longer than this row is wide.
@@ -148,7 +201,7 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
           min: math.log(_minRadius) / math.ln10,
           max: math.log(_maxRadius) / math.ln10,
           value: sliderValue.toDouble(),
-          onChanged: (v) => _setRadius(math.pow(10, v).toDouble()),
+          onChanged: (v) => _setRadiusFromSlider(math.pow(10, v).toDouble()),
         ),
         Row(
           children: [
