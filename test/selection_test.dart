@@ -7,7 +7,7 @@ import 'package:zonecraft/state/providers.dart';
 
 /// Selection is eleven parallel providers with no shared type tag, kept
 /// consistent only by [selectObject] / [clearSelection] / [hasAnySelection]
-/// agreeing about all eleven. Every kind added since has had to be threaded
+/// agreeing about all eleven (of twelve kinds — `track` has none by design). Every kind added since has had to be threaded
 /// through three separate switch/or-chains by hand — the `borderArea`,
 /// `poiSet` and `transitSet` cases spent a release `break`ing out of
 /// [selectObject] because they had no editor yet, which is exactly the failure
@@ -35,6 +35,15 @@ void main() {
     ObjectKind.transitStop: (c) => c.read(selectedTransitStopProvider),
     ObjectKind.borderArea: (c) => c.read(selectedBorderAreaProvider),
   };
+
+  /// The kinds that deliberately have **no** selection at all.
+  ///
+  /// `track` is the only one: it has no editor (`layerHasEditor('track')` is
+  /// false), so a selection would arm an invisible mode over a recording that
+  /// nothing can open. Stated here rather than left out of [providerOf], so
+  /// dropping a kind's selection by accident still fails the coverage test
+  /// below.
+  const unselectable = {ObjectKind.track};
 
   /// Pumps a throwaway tree and hands [body] its `WidgetRef` and container.
   Future<void> withRef(
@@ -74,14 +83,27 @@ void main() {
 
   testWidgets('the enum is fully covered — no kind is missing above',
       (tester) async {
-    expect(providerOf.keys.toSet(), ObjectKind.values.toSet());
+    expect(providerOf.keys.toSet().union(unselectable), ObjectKind.values.toSet());
+    expect(providerOf.keys.toSet().intersection(unselectable), isEmpty);
+  });
+
+  testWidgets('an unselectable kind selects nothing and clears the rest',
+      (tester) async {
+    await withRef(tester, (ref, container) {
+      selectObject(ref, ObjectKind.circle, 'c1');
+      selectObject(ref, ObjectKind.track, 't1');
+      expect(hasAnySelection(ref), isFalse,
+          reason: 'a track has no editor to select into');
+      expect(container.read(selectedCircleProvider), isNull,
+          reason: 'and it still drops whatever was selected before');
+    });
   });
 
   testWidgets('selecting one kind clears every other', (tester) async {
     await withRef(tester, (ref, container) {
-      for (final kind in ObjectKind.values) {
+      for (final kind in providerOf.keys) {
         selectObject(ref, kind, 'x');
-        for (final other in ObjectKind.values) {
+        for (final other in providerOf.keys) {
           if (other == kind) continue;
           expect(
             providerOf[other]!(container),
@@ -96,7 +118,7 @@ void main() {
   testWidgets('hasAnySelection sees every kind', (tester) async {
     await withRef(tester, (ref, container) {
       expect(hasAnySelection(ref), isFalse);
-      for (final kind in ObjectKind.values) {
+      for (final kind in providerOf.keys) {
         selectObject(ref, kind, 'x');
         expect(hasAnySelection(ref), isTrue, reason: kind.name);
         clearSelection(ref);
@@ -145,6 +167,7 @@ void main() {
         'poi',
         'transit',
         'borders',
+        'track',
       };
       for (final k in ObjectKind.values) {
         expect(types, contains(k.layerType), reason: k.name);

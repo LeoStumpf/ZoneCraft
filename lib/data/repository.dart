@@ -179,6 +179,10 @@ class Repository {
           await (_db.update(_db.borderSets)
                 ..where((t) => t.layerId.equals(sourceId)))
               .write(BorderSetsCompanion(layerId: Value(targetId)));
+        case 'track':
+          await (_db.update(_db.tracks)
+                ..where((t) => t.layerId.equals(sourceId)))
+              .write(TracksCompanion(layerId: Value(targetId)));
         case 'circles':
         default:
           // WARNING: a new layer type that forgets its `case` above lands here,
@@ -258,6 +262,9 @@ class Repository {
       ColoredElement.borderArea =>
         (_db.update(_db.borderAreas)..where((t) => t.id.equals(id)))
             .write(BorderAreasCompanion(colorArgb: v)),
+      ColoredElement.track =>
+        (_db.update(_db.tracks)..where((t) => t.id.equals(id)))
+            .write(TracksCompanion(colorArgb: v)),
     };
   }
 
@@ -700,6 +707,194 @@ class Repository {
     final row = await (_db.selectOnly(_db.freeLinePoints)
           ..addColumns([max])
           ..where(_db.freeLinePoints.freeLineId.equals(freeLineId)))
+        .getSingleOrNull();
+    return row?.read(max) ?? -1;
+  }
+
+  // --- Tracks ---------------------------------------------------------------
+
+  Stream<List<Track>> watchAllTracks() {
+    return _db.select(_db.tracks).watch();
+  }
+
+  /// Every recorded fix across all tracks, ordered by [TrackPoints.sortOrder].
+  Stream<List<TrackPoint>> watchAllTrackPoints() {
+    return (_db.select(_db.trackPoints)
+          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
+        .watch();
+  }
+
+  Future<String> createTrack({
+    required String layerId,
+    String? label,
+  }) async {
+    final id = _uuid.v4();
+    final shade = await _nextColorShade('tracks', layerId);
+    await _db.into(_db.tracks).insert(
+          TracksCompanion.insert(
+            id: id,
+            layerId: layerId,
+            label: Value(label),
+            colorShade: Value(shade),
+          ),
+        );
+    return id;
+  }
+
+  /// The track [layerId] records into, created on first use.
+  ///
+  /// Lazy on purpose: a freshly added track layer that has never recorded shows
+  /// **no** elements, rather than an empty row that cannot be drawn, named
+  /// after a walk that never happened.
+  Future<String> ensureTrackForLayer(String layerId) async {
+    final existing = await (_db.select(_db.tracks)
+          ..where((t) => t.layerId.equals(layerId))
+          ..orderBy([(t) => OrderingTerm(expression: t.createdAt)])
+          ..limit(1))
+        .getSingleOrNull();
+    if (existing != null) return existing.id;
+    return createTrack(layerId: layerId);
+  }
+
+  Future<void> updateTrack(
+    String id, {
+    String? layerId,
+    Value<String?> label = const Value.absent(),
+  }) {
+    return (_db.update(_db.tracks)..where((t) => t.id.equals(id))).write(
+      TracksCompanion(
+        layerId: layerId == null ? const Value.absent() : Value(layerId),
+        label: label,
+      ),
+    );
+  }
+
+  Future<void> deleteTrack(String id) {
+    return (_db.delete(_db.tracks)..where((t) => t.id.equals(id))).go();
+  }
+
+  /// The segment index a new recording run should use: one past the highest
+  /// stored, so the painter breaks the line rather than joining this walk to
+  /// the end of the last one.
+  Future<int> nextTrackSegment(String trackId) async {
+    final max = _db.trackPoints.segmentIndex.max();
+    final row = await (_db.selectOnly(_db.trackPoints)
+          ..addColumns([max])
+          ..where(_db.trackPoints.trackId.equals(trackId)))
+        .getSingleOrNull();
+    final highest = row?.read(max);
+    return highest == null ? 0 : highest + 1;
+  }
+
+  /// Appends one recorded fix and widens the track's denormalised bounds.
+  ///
+  /// Both in one transaction: the bounds are what the painter culls on, so a
+  /// point stored outside them would be invisible until something else
+  /// rewrote them.
+  Future<String> appendTrackPoint({
+    required String trackId,
+    required double lat,
+    required double lng,
+    required int segmentIndex,
+    DateTime? recordedAt,
+  }) async {
+    final id = _uuid.v4();
+    await _db.transaction(() async {
+      final order = await _maxTrackPointOrder(trackId);
+      await _db.into(_db.trackPoints).insert(
+            TrackPointsCompanion.insert(
+              id: id,
+              trackId: trackId,
+              lat: lat,
+              lng: lng,
+              sortOrder: order + 1,
+              segmentIndex: Value(segmentIndex),
+              recordedAt: Value(recordedAt ?? DateTime.now()),
+            ),
+          );
+      await _growTrackBounds(trackId, [LatLng(lat, lng)]);
+    });
+    return id;
+  }
+
+  /// Appends many points in one batch (import), all in one segment.
+  Future<void> addTrackPoints(
+    String trackId,
+    List<LatLng> pts, {
+    int segmentIndex = 0,
+  }) async {
+    if (pts.isEmpty) return;
+    var order = await _maxTrackPointOrder(trackId);
+    await _db.batch((b) {
+      for (final p in pts) {
+        order++;
+        b.insert(
+          _db.trackPoints,
+          TrackPointsCompanion.insert(
+            id: _uuid.v4(),
+            trackId: trackId,
+            lat: p.latitude,
+            lng: p.longitude,
+            sortOrder: order,
+            segmentIndex: Value(segmentIndex),
+          ),
+        );
+      }
+    });
+    await _growTrackBounds(trackId, pts);
+  }
+
+  /// The per-layer track settings.
+  Future<void> updateTrackLayerOptions(
+    String layerId, {
+    double? strokeWidth,
+    double? minDistanceMeters,
+  }) {
+    return (_db.update(_db.layers)..where((l) => l.id.equals(layerId))).write(
+      LayersCompanion(
+        trackStrokeWidth:
+            strokeWidth == null ? const Value.absent() : Value(strokeWidth),
+        trackMinDistanceMeters: minDistanceMeters == null
+            ? const Value.absent()
+            : Value(minDistanceMeters),
+      ),
+    );
+  }
+
+  /// Widens the stored bounds to contain [pts]. Never shrinks them: a deleted
+  /// point leaving the box slightly large costs one wasted cull, where
+  /// recomputing from every row would cost a full table scan per fix.
+  Future<void> _growTrackBounds(String trackId, List<LatLng> pts) async {
+    if (pts.isEmpty) return;
+    final row = await (_db.select(_db.tracks)..where((t) => t.id.equals(trackId)))
+        .getSingleOrNull();
+    if (row == null) return;
+    var south = row.south ?? pts.first.latitude;
+    var north = row.north ?? pts.first.latitude;
+    var west = row.west ?? pts.first.longitude;
+    var east = row.east ?? pts.first.longitude;
+    for (final p in pts) {
+      if (!p.latitude.isFinite || !p.longitude.isFinite) continue;
+      if (p.latitude < south) south = p.latitude;
+      if (p.latitude > north) north = p.latitude;
+      if (p.longitude < west) west = p.longitude;
+      if (p.longitude > east) east = p.longitude;
+    }
+    await (_db.update(_db.tracks)..where((t) => t.id.equals(trackId))).write(
+      TracksCompanion(
+        south: Value(south),
+        north: Value(north),
+        west: Value(west),
+        east: Value(east),
+      ),
+    );
+  }
+
+  Future<int> _maxTrackPointOrder(String trackId) async {
+    final max = _db.trackPoints.sortOrder.max();
+    final row = await (_db.selectOnly(_db.trackPoints)
+          ..addColumns([max])
+          ..where(_db.trackPoints.trackId.equals(trackId)))
         .getSingleOrNull();
     return row?.read(max) ?? -1;
   }
@@ -1860,6 +2055,10 @@ class Repository {
     final flPoints = await (_db.select(_db.freeLinePoints)
           ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
         .get();
+    final tracks = await _db.select(_db.tracks).get();
+    final trackPoints = await (_db.select(_db.trackPoints)
+          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
+        .get();
     final freeAreas = await _db.select(_db.freeAreas).get();
     final faPoints = await (_db.select(_db.freeAreaPoints)
           ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
@@ -1935,6 +2134,21 @@ class Repository {
               inclusionRadiusMeters: l.inclusionRadiusMeters,
               label: l.label,
               colorArgb: l.colorArgb,
+            ));
+          }
+        case 'track':
+          for (final t in tracks.where((t) => t.layerId == layer.id)) {
+            final pts = trackPoints.where((p) => p.trackId == t.id).toList();
+            if (pts.isEmpty) continue;
+            objects.add(ExportObject(
+              kind: 'track',
+              // Flattened: the segment breaks a recording carries have no home
+              // in a GeoJSON LineString, so a re-imported track is one
+              // continuous line. The alternative — a feature per segment —
+              // would turn one element into several on the way back in.
+              coords: [for (final p in pts) LatLng(p.lat, p.lng)],
+              label: t.label,
+              colorArgb: t.colorArgb,
             ));
           }
         case 'freearea':
@@ -2044,6 +2258,10 @@ class Repository {
             layer.type == 'borders' ? layer.borderFillAreas : null,
         borderShowNames:
             layer.type == 'borders' ? layer.borderShowNames : null,
+        trackStrokeWidth:
+            layer.type == 'track' ? layer.trackStrokeWidth : null,
+        trackMinDistanceMeters:
+            layer.type == 'track' ? layer.trackMinDistanceMeters : null,
         objects: objects,
       ));
     }
@@ -2078,6 +2296,15 @@ class Repository {
           layerId,
           fillAreas: layer.borderFillAreas,
           showNames: layer.borderShowNames,
+        );
+      }
+      if (layer.type == 'track' &&
+          (layer.trackStrokeWidth != null ||
+              layer.trackMinDistanceMeters != null)) {
+        await updateTrackLayerOptions(
+          layerId,
+          strokeWidth: layer.trackStrokeWidth,
+          minDistanceMeters: layer.trackMinDistanceMeters,
         );
       }
       imported += await _insertObjects(layerId, layer.objects);
@@ -2199,6 +2426,20 @@ class Repository {
         await addFreeLinePoints(
             lid, simplifyLine(o.coords, kImportSimplifyMeters));
         await _applyImportedColor(ColoredElement.freeLine, lid, o.colorArgb);
+      case 'track':
+        if (o.coords.length < 2) return false;
+        // An imported track lands in the layer's one track — the same place
+        // recording appends to — and in one segment: a file says nothing about
+        // where the recording paused.
+        final tid = await ensureTrackForLayer(layerId);
+        if (o.label != null) {
+          await updateTrack(tid, label: Value(o.label));
+        }
+        final seg = await nextTrackSegment(tid);
+        await addTrackPoints(
+            tid, simplifyLine(o.coords, kImportSimplifyMeters),
+            segmentIndex: seg);
+        await _applyImportedColor(ColoredElement.track, tid, o.colorArgb);
       case 'freearea':
         if (o.coords.length < 3) return false;
         final aid = await createFreeArea(layerId: layerId, label: o.label);
@@ -2502,7 +2743,8 @@ enum ColoredElement {
   heightRegion('height_regions', 'height'),
   poiSet('poi_sets', 'poi'),
   transitSet('transit_sets', 'transit'),
-  borderArea('border_areas', 'borders');
+  borderArea('border_areas', 'borders'),
+  track('tracks', 'track');
 
   const ColoredElement(this.table, this.layerType);
 

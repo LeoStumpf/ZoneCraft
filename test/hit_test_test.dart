@@ -147,6 +147,8 @@ void main() {
         opacity: 1,
         borderFillAreas: false,
         borderShowNames: false,
+        trackStrokeWidth: 4,
+        trackMinDistanceMeters: 10,
         createdAt: DateTime(2026),
       );
 

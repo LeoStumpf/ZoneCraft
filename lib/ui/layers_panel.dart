@@ -55,6 +55,9 @@ class LayersDrawer extends ConsumerWidget {
         ref.watch(borderSetsProvider).asData?.value ?? const <BorderSet>[];
     final borderAreas =
         ref.watch(borderAreasProvider).asData?.value ?? const <BorderArea>[];
+    final tracks = ref.watch(tracksProvider).asData?.value ?? const <Track>[];
+    final trackPoints =
+        ref.watch(trackPointsProvider).asData?.value ?? const <TrackPoint>[];
     final selected = ref.watch(activeLayerProvider);
     final repo = ref.read(repositoryProvider);
 
@@ -155,6 +158,15 @@ class LayersDrawer extends ConsumerWidget {
                             ),
                           ),
                           const PopupMenuItem(
+                            value: 'track',
+                            child: ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(Icons.timeline),
+                              title: Text('Track layer'),
+                            ),
+                          ),
+                          const PopupMenuItem(
                             value: 'height',
                             child: ListTile(
                               dense: true,
@@ -245,6 +257,14 @@ class LayersDrawer extends ConsumerWidget {
                             .toSet();
                         count = freeAreaPoints
                             .where((p) => ids.contains(p.freeAreaId))
+                            .length;
+                      } else if (layer.type == 'track') {
+                        final ids = tracks
+                            .where((t) => t.layerId == layer.id)
+                            .map((t) => t.id)
+                            .toSet();
+                        count = trackPoints
+                            .where((p) => ids.contains(p.trackId))
                             .length;
                       } else if (layer.type == 'height') {
                         count = heightRegions
@@ -344,6 +364,7 @@ class _LayerTile extends ConsumerWidget {
       'subspace' => 'point',
       'freeline' => 'point',
       'freearea' => 'point',
+      'track' => 'point',
       'height' => 'area',
       'poi' => 'POI',
       'transit' => 'station',
@@ -453,6 +474,8 @@ class _LayerTile extends ConsumerWidget {
                 case 'showNames':
                   await repo.updateBorderLayerOptions(layer.id,
                       showNames: !layer.borderShowNames);
+                case 'trackSettings':
+                  await showTrackSettingsDialog(context, repo, layer);
                 case 'importFeature':
                   // The flow needs the full list only for its fallback picker
                   // (a line feature asked for from an area layer, or vice
@@ -489,12 +512,13 @@ class _LayerTile extends ConsumerWidget {
               const PopupMenuItem(
                   value: 'opacity', child: Text('Transparency…')),
               // 'height' layers use an above/below toggle, not viewport
-              // invert; 'poi'/'transit' are markers with nothing to invert;
-              // 'borders' draws many separate areas, so there is no single
-              // region to take the complement of.
+              // invert; 'poi'/'transit'/'track' are markers and lines with
+              // nothing to invert; 'borders' draws many separate areas, so
+              // there is no single region to take the complement of.
               if (layer.type != 'height' &&
                   layer.type != 'poi' &&
                   layer.type != 'transit' &&
+                  layer.type != 'track' &&
                   layer.type != 'borders')
                 PopupMenuItem(
                   value: 'inverse',
@@ -513,6 +537,17 @@ class _LayerTile extends ConsumerWidget {
                   value: 'showNames',
                   checked: layer.borderShowNames,
                   child: const Text('Show names'),
+                ),
+              ],
+              if (layer.type == 'track') ...[
+                const PopupMenuItem(
+                    value: 'trackSettings', child: Text('Track settings…')),
+                // No "Import map feature…" here: that fetches a named place
+                // and a track layer holds recordings, not places. A GPX from
+                // another device is the one thing worth importing.
+                const PopupMenuItem(
+                  value: 'importTrack',
+                  child: Text('Import track…'),
                 ),
               ],
               if (layer.type == 'freeline' || layer.type == 'freearea') ...[
@@ -926,6 +961,79 @@ Future<void> showOpacityDialog(
     focus.dispose();
   });
 }
+
+/// The two per-layer `track` settings: how thick the recorded line is drawn,
+/// and how far the phone must move before another fix is stored.
+///
+/// Typed, not dragged — the same rule every numeric control in the app follows:
+/// "exactly 25 m" is a thing you mean, not a thing you aim at. Both apply
+/// live; the spacing takes effect on the **next** recording, since it is the
+/// stream's `distanceFilter` and that is fixed when the stream is opened.
+Future<void> showTrackSettingsDialog(
+  BuildContext context,
+  Repository repo,
+  Layer layer,
+) async {
+  final stroke =
+      TextEditingController(text: _trim(layer.trackStrokeWidth));
+  final spacing =
+      TextEditingController(text: _trim(layer.trackMinDistanceMeters));
+  await showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Track settings'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: stroke,
+            decoration: const InputDecoration(
+              labelText: 'Line width',
+              suffixText: 'px',
+              isDense: true,
+            ),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            onChanged: (v) {
+              final n = parseDecimal(v);
+              if (n != null && n.isFinite && n > 0 && n <= 40) {
+                repo.updateTrackLayerOptions(layer.id, strokeWidth: n);
+              }
+            },
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: spacing,
+            decoration: const InputDecoration(
+              labelText: 'Record a point every',
+              suffixText: 'm',
+              helperText: 'Applies to the next recording',
+              isDense: true,
+            ),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            onChanged: (v) {
+              final n = parseDecimal(v);
+              if (n != null && n.isFinite && n >= 0 && n <= 10000) {
+                repo.updateTrackLayerOptions(layer.id, minDistanceMeters: n);
+              }
+            },
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Done'),
+        ),
+      ],
+    ),
+  );
+  stroke.dispose();
+  spacing.dispose();
+}
+
+/// A stored double as the shortest text that means it: "4", not "4.0".
+String _trim(double v) =>
+    v == v.roundToDouble() ? v.round().toString() : v.toString();
 
 const _palette = <Color>[
   Color(0xFF2196F3),

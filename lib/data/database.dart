@@ -13,14 +13,17 @@ const double kDefaultRegionLayerOpacity = 0.45;
 
 /// The opacity a freshly created layer of [type] gets.
 ///
-/// Marker/line layers ('poi', 'transit') are crisp at 1.0 — there is no fill to
-/// see the map through. One source of truth, because the repository (on create)
-/// and the drawer (deciding whether to show an opacity chip) must agree; they
-/// used to duplicate the rule inline, which is how a third type silently drifts.
-/// 'borders' is region-like (it has an area fill), so it takes the region
-/// default even though its fill is off until "Colour areas" is ticked.
+/// Marker/line layers ('poi', 'transit', 'track') are crisp at 1.0 — there is
+/// no fill to see the map through. One source of truth, because the repository
+/// (on create) and the drawer (deciding whether to show an opacity chip) must
+/// agree; they used to duplicate the rule inline, which is how a third type
+/// silently drifts. 'borders' is region-like (it has an area fill), so it takes
+/// the region default even though its fill is off until "Colour areas" is
+/// ticked.
 double defaultLayerOpacity(String type) =>
-    (type == 'poi' || type == 'transit') ? 1.0 : kDefaultRegionLayerOpacity;
+    (type == 'poi' || type == 'transit' || type == 'track')
+        ? 1.0
+        : kDefaultRegionLayerOpacity;
 
 /// A map overlay layer. Layers stack on the map ordered by [sortOrder]
 /// (higher = drawn on top) and can be toggled on/off via [isVisible].
@@ -64,6 +67,15 @@ class Layers extends Table {
   /// **`borders` only.** Draw each area's name on a plate at its label anchor.
   BoolColumn get borderShowNames =>
       boolean().withDefault(const Constant(false))();
+
+  /// **`track` only.** Stroke width, in logical pixels, of the recorded line.
+  RealColumn get trackStrokeWidth => real().withDefault(const Constant(4.0))();
+
+  /// **`track` only.** How far the phone must move before another fix is
+  /// stored, in metres — the recorder's `distanceFilter`. Lower is a smoother
+  /// line and more rows; standing still stores nothing either way.
+  RealColumn get trackMinDistanceMeters =>
+      real().withDefault(const Constant(10.0))();
 
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 
@@ -228,6 +240,63 @@ class FreeLinePoints extends Table {
   RealColumn get lng => real()();
   IntColumn get sortOrder => integer()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// A **recorded** line: the phone's own positions, appended while track
+/// recording is on. Unlike every other type this is not a shape the user
+/// states, so it has no editor — what it says is where the phone was.
+///
+/// A `track` layer holds exactly one of these today (the recorder appends to
+/// it), which is why there is no "new track" action; the table is per-layer
+/// rather than per-recording so that a second walk keeps the same colour,
+/// name and Elements row.
+class Tracks extends Table {
+  TextColumn get id => text()();
+  TextColumn get layerId =>
+      text().references(Layers, #id, onDelete: KeyAction.cascade)();
+  TextColumn get label => text().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  /// Per-element colour (v22). Null = follow the layer — see [FreeLines].
+  IntColumn get colorArgb => integer().nullable()();
+
+  /// Which auto shade this element takes; **0 is the layer colour exactly**.
+  IntColumn get colorShade => integer().withDefault(const Constant(0))();
+
+  /// Denormalised bounds of every point, for viewport culling — the
+  /// [BorderAreas] precedent. Null while the track is still empty, which is
+  /// also how the painter knows there is nothing to draw.
+  RealColumn get south => real().nullable()();
+  RealColumn get west => real().nullable()();
+  RealColumn get north => real().nullable()();
+  RealColumn get east => real().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// One recorded fix of a [Tracks] line, in recording order.
+class TrackPoints extends Table {
+  TextColumn get id => text()();
+  TextColumn get trackId =>
+      text().references(Tracks, #id, onDelete: KeyAction.cascade)();
+  RealColumn get lat => real()();
+  RealColumn get lng => real()();
+  IntColumn get sortOrder => integer()();
+
+  /// Which recording run this fix belongs to. A change of segment is a **break**
+  /// in the drawn line, never a new element: recording two walks into one track
+  /// must not join them with a straight line across the map. Bumped when
+  /// recording starts and when a fix arrives after a long gap (a lost signal, a
+  /// tunnel, or the app having been in the background).
+  IntColumn get segmentIndex => integer().withDefault(const Constant(0))();
+
+  /// When the fix was taken — the input to the gap rule above, and the only
+  /// thing that says a track is a recording rather than a drawing.
+  DateTimeColumn get recordedAt => dateTime().withDefault(currentDateAndTime)();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -740,6 +809,8 @@ class AppSettings extends Table {
     SubspacePoints,
     FreeLines,
     FreeLinePoints,
+    Tracks,
+    TrackPoints,
     FreeAreas,
     FreeAreaPoints,
     HeightRegions,
@@ -762,7 +833,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 23;
+  int get schemaVersion => 24;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -932,6 +1003,15 @@ class AppDatabase extends _$AppDatabase {
             // definition untouched OSM geometry, so `edited_at` starts null —
             // which is exactly what the column means.
             await m.addColumn(borderAreas, borderAreas.editedAt);
+          }
+          if (from < 24) {
+            // The `track` type: recorded GPS lines. New tables plus the two
+            // per-layer display/capture settings, which every existing layer
+            // takes at their defaults (they mean nothing off a track layer).
+            await m.createTable(tracks);
+            await m.createTable(trackPoints);
+            await m.addColumn(layers, layers.trackStrokeWidth);
+            await m.addColumn(layers, layers.trackMinDistanceMeters);
           }
         },
         beforeOpen: (details) async {

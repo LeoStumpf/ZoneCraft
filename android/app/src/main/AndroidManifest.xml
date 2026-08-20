@@ -3,7 +3,9 @@
          overlay) so the release build can reach the network. -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Foreground-only location, requested at runtime when the user taps
-         "Locate me" (never at launch). No background location. -->
+         "Locate me" or starts recording a track (never at launch).
+         No ACCESS_BACKGROUND_LOCATION and no foreground service: recording
+         runs only while the app is open, which is what PRIVACY.md promises. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <application

@@ -51,6 +51,16 @@ final freeLinePointsProvider = StreamProvider<List<FreeLinePoint>>((ref) {
   return ref.watch(repositoryProvider).watchAllFreeLinePoints();
 });
 
+/// Reactive list of every recorded track across all layers.
+final tracksProvider = StreamProvider<List<Track>>((ref) {
+  return ref.watch(repositoryProvider).watchAllTracks();
+});
+
+/// Reactive list of every recorded fix (across all tracks), ordered.
+final trackPointsProvider = StreamProvider<List<TrackPoint>>((ref) {
+  return ref.watch(repositoryProvider).watchAllTrackPoints();
+});
+
 /// Reactive list of every freehand area across all layers.
 final freeAreasProvider = StreamProvider<List<FreeArea>>((ref) {
   return ref.watch(repositoryProvider).watchAllFreeAreas();
@@ -159,6 +169,13 @@ final freeAreaPointsByAreaProvider =
   return _groupBy(rows, (p) => p.freeAreaId);
 });
 
+/// Recorded fixes keyed by their track id.
+final trackPointsByTrackProvider =
+    Provider<Map<String, List<TrackPoint>>>((ref) {
+  final rows = ref.watch(trackPointsProvider).asData?.value ?? const [];
+  return _groupBy(rows, (p) => p.trackId);
+});
+
 /// Generated height polygons keyed by their height-region id.
 final heightPolygonsByRegionProvider =
     Provider<Map<String, List<HeightPolygon>>>((ref) {
@@ -202,6 +219,7 @@ enum ObjectKind {
   poiSet,
   transitSet,
   borderArea,
+  track,
   poiPoint,
   transitStop;
 
@@ -216,6 +234,7 @@ enum ObjectKind {
         ObjectKind.poiSet || ObjectKind.poiPoint => 'poi',
         ObjectKind.transitSet || ObjectKind.transitStop => 'transit',
         ObjectKind.borderArea => 'borders',
+        ObjectKind.track => 'track',
       };
 
   /// Whether this is a layer *element* (a row of the Elements list) rather than
@@ -234,6 +253,7 @@ enum ObjectKind {
         'poi' => ObjectKind.poiSet,
         'transit' => ObjectKind.transitSet,
         'borders' => ObjectKind.borderArea,
+        'track' => ObjectKind.track,
         _ => null,
       };
 }
@@ -556,9 +576,11 @@ bool hasAnySelection(WidgetRef ref) =>
 /// Selects exactly one object, clearing the others (and any armed placement),
 /// and leaves whatever map mode was armed — editing the object is now the job.
 ///
-/// Every kind has an editor, including the imported ones — theirs is scoped to
-/// what a snapshot can honestly offer (name, colour, curation, and for a border
-/// area its outline), rather than pretending the geometry is yours.
+/// Every kind but [ObjectKind.track] has an editor, including the imported ones
+/// — theirs is scoped to what a snapshot can honestly offer (name, colour,
+/// curation, and for a border area its outline), rather than pretending the
+/// geometry is yours. A track has none at all: it is a recording of where the
+/// phone was, and there is nothing about it to edit in place.
 void selectObject(WidgetRef ref, ObjectKind kind, String id) {
   clearSelection(ref);
   if (ref.read(mapModeProvider) != MapMode.edit) {
@@ -587,6 +609,11 @@ void selectObject(WidgetRef ref, ObjectKind kind, String id) {
       ref.read(selectedTransitStopProvider.notifier).select(id);
     case ObjectKind.borderArea:
       ref.read(selectedBorderAreaProvider.notifier).select(id);
+    case ObjectKind.track:
+      // Nothing to select into: `layerHasEditor('track')` is false, so no sheet
+      // would open and a selection would only be an invisible mode. The
+      // Elements list still focuses the map on it.
+      break;
   }
 }
 

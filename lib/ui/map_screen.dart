@@ -15,6 +15,7 @@ import '../data/borders.dart';
 import '../data/cached_tile_provider.dart';
 import '../data/database.dart';
 import '../data/height_generator.dart';
+import '../data/location.dart';
 import '../data/overpass.dart';
 import '../data/overpass_client.dart'
     show OverpassCancel, OverpassOutcome, kOverpassPreferenceMaxElapsed;
@@ -27,6 +28,7 @@ import '../geo/geodesic.dart';
 import '../geo/tiles.dart';
 import '../state/map_mode.dart';
 import '../state/providers.dart';
+import '../state/track_recorder.dart';
 import 'circle_editor.dart';
 import 'collapsible_sheet.dart';
 import 'freearea_editor.dart';
@@ -53,6 +55,7 @@ import 'region_geometry.dart';
 import 'region_layer.dart';
 import 'subspace_editor.dart';
 import 'transit_import_dialog.dart';
+import 'track_layer.dart';
 import 'transit_layer.dart';
 
 class MapScreen extends ConsumerStatefulWidget {
@@ -490,24 +493,59 @@ class _MapScreenState extends ConsumerState<MapScreen>
     }
   }
 
+  /// Starts or stops recording into [layer].
+  ///
+  /// Starting asks for location permission the same way "Locate me" does — on
+  /// the tap, never before — and says so if it is refused. There is no
+  /// background service behind this: recording runs while the app is open, and
+  /// a gap becomes a break in the line rather than an invented straight one.
+  Future<void> _toggleRecording(Layer layer) async {
+    final recorder = ref.read(trackRecordingProvider.notifier);
+    if (ref.read(trackRecordingProvider).isRecording) {
+      recorder.stop();
+      _hint('Recording stopped.');
+      return;
+    }
+    final problem = await recorder.start(layer);
+    if (problem != null) {
+      _hint(problem);
+      return;
+    }
+    _hint('Recording. Keep ZoneCraft open — it does not record in the '
+        'background.');
+  }
+
+  /// "Recording · 12 points · 8 s ago". The age of the last fix is the part
+  /// that matters: a recording that has stopped receiving (indoors, no signal)
+  /// looks exactly like a working one otherwise.
+  static String _recordingBannerText(TrackRecording r) {
+    final b = StringBuffer('Recording · ');
+    b.write('${r.pointCount} point${r.pointCount == 1 ? '' : 's'}');
+    final last = r.lastFixAt;
+    if (last == null) {
+      b.write(' · waiting for a fix');
+    } else {
+      final secs = DateTime.now().difference(last).inSeconds;
+      if (secs >= 30) b.write(' · last fix ${_ago(secs)}');
+    }
+    return b.toString();
+  }
+
+  static String _ago(int seconds) => seconds < 120
+      ? '${seconds}s ago'
+      : '${(seconds / 60).round()} min ago';
+
   /// Requests the device's current position, handling permission/service state
   /// with dismissible hints. Returns the fix, or null on denial / disabled
   /// services / a bad (non-finite) fix / any error. Has no side effects on the
   /// map camera — callers decide what to do with the result.
   Future<LatLng?> _getCurrentPosition() async {
     try {
-      if (!await Geolocator.isLocationServiceEnabled()) {
-        _hint('Location services are off. Enable them to use Locate me.');
-        return null;
-      }
-
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        _hint('Location permission denied. ZoneCraft works fine without it.');
+      // Service + permission live in `data/location.dart`, shared with the
+      // track recorder — the two used to be the same twenty lines twice.
+      final problem = await ensureLocationReady();
+      if (problem != null) {
+        _hint(problem);
         return null;
       }
 
@@ -3190,6 +3228,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final freeAreas =
         ref.watch(freeAreasProvider).asData?.value ?? const <FreeArea>[];
     final freeAreaPoints = ref.watch(freeAreaPointsByAreaProvider);
+    final tracks = ref.watch(tracksProvider).asData?.value ?? const <Track>[];
+    final trackPointsByTrack = ref.watch(trackPointsByTrackProvider);
     final heightRegions =
         ref.watch(heightRegionsProvider).asData?.value ??
         const <HeightRegion>[];
@@ -3218,6 +3258,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       transitVisibleMask[s.id] = s.visibleModeMask;
     }
     final mode = ref.watch(mapModeProvider);
+    final recording = ref.watch(trackRecordingProvider);
     // Whether a map tap currently *does* something — see [_interactionOptions].
     final tapPlaces =
         mode != MapMode.view ||
@@ -3386,6 +3427,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
             'poi' => poiSets.any((s) => s.layerId == activeLayer.id),
             'transit' => transitSets.any((s) => s.layerId == activeLayer.id),
             'borders' => borderSets.any((s) => s.layerId == activeLayer.id),
+            // A track is not selectable by tap — it has no editor to open —
+            // so Edit mode stays unarmed over one however many are recorded.
+            'track' => false,
             _ => false,
           };
     final canEditByTap = activeHasEditor && activeHasElements;
@@ -3399,6 +3443,19 @@ class _MapScreenState extends ConsumerState<MapScreen>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && ref.read(mapModeProvider) == MapMode.draw) {
           _finishDraw();
+        }
+      });
+    }
+    // Deleting the layer being recorded into has to end the recording: the
+    // track went with it (cascade), so every further fix would be written to a
+    // row that no longer exists. Guarded on a *loaded* layer list, so the
+    // stream's first empty frame doesn't stop a recording on its own.
+    if (recording.isRecording &&
+        ref.watch(layersProvider).hasValue &&
+        !layers.any((l) => l.id == recording.layerId)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ref.read(trackRecordingProvider.notifier).stopIfLayerGone(layers);
         }
       });
     }
@@ -3572,6 +3629,17 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           layer: layer,
                           shapes: ref.watch(borderShapesProvider(layer.id)),
                           draft: reshapeDraft,
+                        )
+                      else if (layer.isVisible && layer.type == 'track')
+                        // Not wrapped in Opacity: the painter applies it to the
+                        // stroke itself, which is the only thing a track has.
+                        TracksLayer(
+                          key: ValueKey(layer.id),
+                          layer: layer,
+                          tracks: tracks
+                              .where((t) => t.layerId == layer.id)
+                              .toList(),
+                          pointsByTrack: trackPointsByTrack,
                         )
                       else if (layer.isVisible)
                         RegionLayer(
@@ -4228,6 +4296,50 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       ),
                     ),
                   ),
+                // Recording banner. Deliberately unmissable and always on
+                // screen while recording: the phone is reading its position,
+                // which is the one thing this app does that the user must
+                // never be able to forget is running.
+                if (recording.isRecording)
+                  SafeArea(
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Material(
+                          color: Colors.red.shade600,
+                          elevation: 2,
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.fiber_manual_record,
+                                    size: 16, color: Colors.white),
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    _recordingBannerText(recording),
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(color: Colors.white),
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: () => ref
+                                      .read(trackRecordingProvider.notifier)
+                                      .stop(),
+                                  style: TextButton.styleFrom(
+                                      foregroundColor: Colors.white),
+                                  child: const Text('Stop'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 // Bulk-delete banner: appears while any vertices are marked.
                 if (_markedPoints.isNotEmpty)
                   SafeArea(
@@ -4532,6 +4644,26 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     // arms the map so a tap places the object exactly where you
                     // point. Long-press keeps the old one-shot behaviour (place
                     // at the map centre, open the editor) as a no-aim fallback.
+                    if (activeLayer?.type == 'track')
+                      // A track layer records rather than places: the primary
+                      // action is the recorder, and Add mode is never armed
+                      // (there is no such thing as tapping a fix onto the map).
+                      FloatingActionButton.extended(
+                        heroTag: 'add',
+                        tooltip: recording.isRecording
+                            ? 'Stop recording'
+                            : 'Record your position into this layer',
+                        onPressed: () => _toggleRecording(activeLayer!),
+                        backgroundColor:
+                            recording.isRecording ? Colors.red.shade600 : null,
+                        foregroundColor:
+                            recording.isRecording ? Colors.white : null,
+                        icon: Icon(recording.isRecording
+                            ? Icons.stop
+                            : Icons.fiber_manual_record),
+                        label: Text(recording.isRecording ? 'Stop' : 'Record'),
+                      )
+                    else
                     GestureDetector(
                       onLongPress: activeLayer == null
                           ? null

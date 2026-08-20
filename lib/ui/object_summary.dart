@@ -86,22 +86,27 @@ IconData typeIcon(String layerType) => switch (layerType) {
       'poi' => Icons.travel_explore,
       'transit' => Icons.directions_transit,
       'borders' => Icons.public,
+      'track' => Icons.timeline,
       _ => Icons.circle_outlined,
     };
 
 /// Whether a `Layers.type` has an editor at all.
 ///
-/// **All nine do.** The three import types were the exception until their
+/// **Nine of ten do.** The three import types were the exception until their
 /// editors landed; they are offline OSM snapshots, so theirs is scoped to what
 /// a snapshot can honestly offer — naming, colour, curation, and for a border
 /// area its outline, which is the one thing that genuinely forks from upstream
 /// and is flagged when it does.
 ///
+/// `track` is the standing exception, by design rather than by omission: it is
+/// a recording of where the phone was, so there is no property of it to edit in
+/// place. Renaming, recolouring and deleting it live in the Elements list,
+/// which needs no editor.
+///
 /// Kept as a function rather than inlined `true`, because the Elements list and
 /// the map's Edit mode have to agree on it: when they didn't, Edit mode armed
 /// tap-to-select against types nothing could select, which is a button that
-/// visibly does nothing. A tenth type that arrives without an editor says so
-/// here, once.
+/// visibly does nothing.
 bool layerHasEditor(String layerType) => const {
       'circles',
       'planes',
@@ -216,6 +221,8 @@ final layerSummariesProvider = Provider.family<List<ObjectSummary>, String>((
     transitStops: ref.watch(transitStopsProvider).asData?.value ?? const [],
     borderSets: ref.watch(borderSetsProvider).asData?.value ?? const [],
     borderAreas: ref.watch(borderAreasProvider).asData?.value ?? const [],
+    tracks: ref.watch(tracksProvider).asData?.value ?? const [],
+    trackPoints: ref.watch(trackPointsProvider).asData?.value ?? const [],
   );
 });
 
@@ -240,6 +247,8 @@ List<ObjectSummary> summariseLayer(
   List<TransitStop> transitStops = const [],
   List<BorderSet> borderSets = const [],
   List<BorderArea> borderAreas = const [],
+  List<Track> tracks = const [],
+  List<TrackPoint> trackPoints = const [],
 }) {
   switch (layer.type) {
     case 'circles':
@@ -269,6 +278,13 @@ List<ObjectSummary> summariseLayer(
       return [
         for (var i = 0; i < rows.length; i++)
           _freeLineSummary(rows[i], layer.id, i, freeLinePoints),
+      ];
+    case 'track':
+      final rows = _ordered(tracks.where((t) => t.layerId == layer.id),
+          (t) => t.createdAt, (t) => t.id);
+      return [
+        for (var i = 0; i < rows.length; i++)
+          _trackSummary(rows[i], layer.id, i, trackPoints),
       ];
     case 'freearea':
       final rows = _ordered(freeAreas.where((a) => a.layerId == layer.id),
@@ -381,6 +397,49 @@ ObjectSummary _subspaceSummary(
 /// Freehand lines frame their **inclusion circle**, not their raw extent: an
 /// imported river's bounding box spans a continent, while the inclusion circle
 /// is the part that actually renders.
+/// A recorded track: how many fixes, and how far they add up to.
+///
+/// The distance is walked over every point rather than measured across the
+/// bounds, because a track's length is the thing it actually records — an
+/// out-and-back walk covers 8 km inside a 500 m box.
+///
+/// It is summed **within** segments only. A segment break is time the recording
+/// knows nothing about — a stop and restart, a lost signal — and the straight
+/// line across it is not drawn precisely because it was not walked, so counting
+/// its length would be the same lie in numbers. (Two walks a city apart
+/// otherwise read as a 9 000 km hike.)
+ObjectSummary _trackSummary(
+  Track t,
+  String layerId,
+  int index,
+  List<TrackPoint> allPoints,
+) {
+  final rows = allPoints.where((p) => p.trackId == t.id).toList()
+    ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  final usable = [
+    for (final p in rows)
+      if (_finite(p.lat, p.lng)) p,
+  ];
+  final pts = [for (final p in usable) LatLng(p.lat, p.lng)];
+  var meters = 0.0;
+  for (var i = 1; i < usable.length; i++) {
+    if (usable[i].segmentIndex != usable[i - 1].segmentIndex) continue;
+    meters += geoDistance.as(LengthUnit.Meter, pts[i - 1], pts[i]);
+  }
+  final center = _bboxCenter(pts) ?? const LatLng(0, 0);
+  return ObjectSummary(
+    ref: ObjectRef(kind: ObjectKind.track, id: t.id, layerId: layerId),
+    colorArgb: t.colorArgb,
+    colorShade: t.colorShade,
+    title: _titleOr(t.label, 'Track', index),
+    subtitle: pts.length < 2
+        ? _plural(pts.length, 'point')
+        : '${_plural(pts.length, 'point')} · ${formatMeters(meters)}',
+    center: center,
+    fitPoints: pts,
+  );
+}
+
 ObjectSummary _freeLineSummary(
   FreeLine l,
   String layerId,

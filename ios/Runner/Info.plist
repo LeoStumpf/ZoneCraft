@@ -5,7 +5,7 @@
 		<key>CADisableMinimumFrameDurationOnPhone</key>
 		<true/>
 		<key>NSLocationWhenInUseUsageDescription</key>
-		<string>ZoneCraft uses your location only when you tap "Locate me", to centre the map on where you are. It is never used in the background.</string>
+		<string>ZoneCraft uses your location when you tap "Locate me", to centre the map on where you are, and while you are recording a track, to draw where you went. It is never used in the background.</string>
 		<key>CFBundleDevelopmentRegion</key>
 		<string>$(DEVELOPMENT_LANGUAGE)</string>
 		<key>CFBundleDisplayName</key>

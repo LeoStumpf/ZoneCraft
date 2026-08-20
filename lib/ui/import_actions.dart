@@ -263,6 +263,10 @@ Future<void> importTrackIntoLayer(
 ) async {
   final messenger = ScaffoldMessenger.of(context);
   final wantArea = layer.type == 'freearea';
+  // A `track` layer takes the file as what it already is — a recorded line —
+  // so it skips the inclusion-circle question entirely (a track bounds
+  // nothing) and lands in the same track the recorder appends to.
+  final wantTrack = layer.type == 'track';
   try {
     final picked = await openFile(acceptedTypeGroups: const [_importGroup]);
     if (picked == null) return;
@@ -277,14 +281,18 @@ Future<void> importTrackIntoLayer(
     var objects = <ExportObject>[
       for (final f in feats)
         ExportObject(
-          kind: wantArea ? 'freearea' : 'freeline',
+          kind: wantArea
+              ? 'freearea'
+              : wantTrack
+                  ? 'track'
+                  : 'freeline',
           coords: f.coords,
           label: f.label,
         ),
     ];
     // Freehand lines are bounded to an inclusion circle — let the user pick
     // its radius right at import (each line keeps its own derived centre).
-    if (!wantArea) {
+    if (!wantArea && !wantTrack) {
       if (!context.mounted) return;
       final r = await askFreeLineRadius(
         context,

@@ -14,7 +14,7 @@ import 'generated_migrations/schema.dart';
 /// any of that was `scripts/build.sh --install` re-installing over the one
 /// development phone, i.e. exactly one upgrade path on exactly one database.
 ///
-/// With **four** snapshots (v20, v21, v22, v23) this now does what one snapshot could not:
+/// With **five** snapshots (v20 … v24) this now does what one snapshot could not:
 /// it opens a real older database, runs the app's own `onUpgrade` against it,
 /// and compares the result to the next version's independently-dumped shape. That is what
 /// catches a column added to a table class without the matching
@@ -29,7 +29,7 @@ import 'generated_migrations/schema.dart';
 /// dart run drift_dev schema generate drift_schemas/ test/generated_migrations/
 /// ```
 ///
-/// then add the v23 → v24 step below. A snapshot must be taken *before* that
+/// then add the v24 → v25 step below. A snapshot must be taken *before* that
 /// version ships; it cannot be reconstructed afterwards.
 void main() {
   late SchemaVerifier verifier;
@@ -38,10 +38,10 @@ void main() {
     verifier = SchemaVerifier(GeneratedHelper());
   });
 
-  test('the schema the table classes build matches the v23 snapshot', () async {
+  test('the schema the table classes build matches the v24 snapshot', () async {
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 23);
+    await verifier.migrateAndValidate(db, 24);
   });
 
   test('v20 → today upgrades a real database, and keeps its rows', () async {
@@ -70,7 +70,7 @@ void main() {
     // Validated against the *current* version, not v21: opening a database runs
     // the whole remaining chain, so this is the real "upgrade from an old
     // install" path rather than a snapshot-to-snapshot hop.
-    await verifier.migrateAndValidate(db, 23);
+    await verifier.migrateAndValidate(db, 24);
 
     final rows = await db.select(db.poiPoints).get();
     expect(rows, hasLength(1), reason: 'the upgrade must not drop POIs');
@@ -96,7 +96,7 @@ void main() {
 
     final db = AppDatabase.forTesting(old.newConnection());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 23);
+    await verifier.migrateAndValidate(db, 24);
 
     final circle = (await db.select(db.circles).get()).single;
     expect(circle.label, 'Home', reason: 'the upgrade must not drop circles');
@@ -130,14 +130,36 @@ void main() {
 
     final db = AppDatabase.forTesting(old.newConnection());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 23);
+    await verifier.migrateAndValidate(db, 24);
 
     final area = (await db.select(db.borderAreas).get()).single;
     expect(area.name, 'Maxvorstadt', reason: 'the upgrade must not drop areas');
     expect(area.editedAt, isNull, reason: 'null == untouched OSM geometry');
   });
 
-  test('a v23 database opens, writes and reads back', () async {
+  test('v23 → today gives every existing layer the track defaults', () async {
+    // The v24 change adds the `track` type, whose two settings live on *every*
+    // layer row. A layer that predates them must come out with the defaults
+    // rather than 0.0 — a zero stroke width would draw nothing at all, and the
+    // drawer decides whether to show an opacity chip by comparing against
+    // `defaultLayerOpacity`, so wrong defaults are visible immediately.
+    final old = await verifier.schemaAt(23);
+    old.rawDatabase.execute(
+      "INSERT INTO layers (id, name, color_argb, sort_order, type) "
+      "VALUES ('l1', 'Lines', 4278190335, 0, 'freeline')",
+    );
+
+    final db = AppDatabase.forTesting(old.newConnection());
+    addTearDown(db.close);
+    await verifier.migrateAndValidate(db, 24);
+
+    final layer = (await db.select(db.layers).get()).single;
+    expect(layer.name, 'Lines', reason: 'the upgrade must not drop layers');
+    expect(layer.trackStrokeWidth, 4.0);
+    expect(layer.trackMinDistanceMeters, 10.0);
+  });
+
+  test('a v24 database opens, writes and reads back', () async {
     // `migrateAndValidate` proves the *shape*; this proves the thing opens and
     // the foreign keys the cascade deletes depend on are actually on.
     final db = AppDatabase.forTesting(NativeDatabase.memory());

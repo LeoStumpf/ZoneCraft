@@ -51,7 +51,7 @@ class ExportObject {
   });
 
   /// One of: circle, plane, subspace, freeline, freearea, height, poi,
-  /// transitstop, borderarea.
+  /// transitstop, borderarea, track.
   final String kind;
 
   /// The object's geometry as a flat point list. For a `borderarea` — the one
@@ -159,13 +159,15 @@ class ExportLayer {
     this.borderLevel,
     this.borderFillAreas,
     this.borderShowNames,
+    this.trackStrokeWidth,
+    this.trackMinDistanceMeters,
   });
 
   final String name;
   final int colorArgb;
 
   /// circles | planes | subspace | freeline | freearea | height | poi |
-  /// transit | borders.
+  /// transit | borders | track.
   final String type;
   final bool isInverted;
   final List<ExportObject> objects;
@@ -183,6 +185,11 @@ class ExportLayer {
   // `borders` only: the two per-layer display toggles. Null = the defaults.
   final bool? borderFillAreas;
   final bool? borderShowNames;
+
+  // `track` only: stroke width in px and the recorder's minimum spacing in
+  // metres. Null = the defaults.
+  final double? trackStrokeWidth;
+  final double? trackMinDistanceMeters;
 }
 
 /// A whole export: the ordered layers (bottom-to-top draw order).
@@ -231,6 +238,10 @@ String exportToGeoJson(ExportData data) {
             if (l.borderLevel != null) 'borderLevel': l.borderLevel,
             if (l.borderFillAreas != null) 'borderFillAreas': l.borderFillAreas,
             if (l.borderShowNames != null) 'borderShowNames': l.borderShowNames,
+            if (l.trackStrokeWidth != null)
+              'trackStrokeWidth': l.trackStrokeWidth,
+            if (l.trackMinDistanceMeters != null)
+              'trackMinDistanceMeters': l.trackMinDistanceMeters,
           },
       ],
     },
@@ -280,6 +291,7 @@ Map<String, dynamic> _objectToFeature(ExportObject o, int layerIndex) {
       geometry = {'type': 'Point', 'coordinates': _pt(o.coords.first)};
     case 'plane':
     case 'freeline':
+    case 'track':
       geometry = {
         'type': 'LineString',
         'coordinates': [for (final c in o.coords) _pt(c)],
@@ -351,6 +363,9 @@ ExportData? importFromGeoJson(String text) {
       borderLevel: l['borderLevel'] as String?,
       borderFillAreas: l['borderFillAreas'] as bool?,
       borderShowNames: l['borderShowNames'] as bool?,
+      trackStrokeWidth: (l['trackStrokeWidth'] as num?)?.toDouble(),
+      trackMinDistanceMeters:
+          (l['trackMinDistanceMeters'] as num?)?.toDouble(),
       objects: const [],
     ));
     buckets.add(<ExportObject>[]);
@@ -378,6 +393,8 @@ ExportData? importFromGeoJson(String text) {
         borderLevel: layerMeta[i].borderLevel,
         borderFillAreas: layerMeta[i].borderFillAreas,
         borderShowNames: layerMeta[i].borderShowNames,
+        trackStrokeWidth: layerMeta[i].trackStrokeWidth,
+        trackMinDistanceMeters: layerMeta[i].trackMinDistanceMeters,
         objects: buckets[i],
       ),
   ]);
@@ -593,6 +610,7 @@ void _kmlPlacemark(StringBuffer b, ExportObject o) {
       }
     case 'plane':
     case 'freeline':
+    case 'track':
       b.writeln(_kmlLine(o.coords));
     case 'subspace':
       b.writeln('      <MultiGeometry>');

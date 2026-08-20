@@ -294,6 +294,8 @@ class _LayerObjectsList extends ConsumerWidget {
         await repo.updateTransitSet(s.ref.id, label: label);
       case ObjectKind.borderArea:
         await repo.updateBorderArea(s.ref.id, name: label);
+      case ObjectKind.track:
+        await repo.updateTrack(s.ref.id, label: label);
       // Points inside an import are renamed from their own map editor; the
       // Elements list never lists them (see [ObjectKind]).
       case ObjectKind.poiPoint:
@@ -343,6 +345,10 @@ class _LayerObjectsList extends ConsumerWidget {
         await repo.deleteTransitSet(s.ref.id);
       case ObjectKind.borderArea:
         await repo.deleteBorderArea(s.ref.id);
+      case ObjectKind.track:
+        // Deletes the recording itself, not the layer: recording again starts a
+        // fresh track on the same layer.
+        await repo.deleteTrack(s.ref.id);
       case ObjectKind.poiPoint:
         await repo.deletePoiPoint(s.ref.id);
       case ObjectKind.transitStop:

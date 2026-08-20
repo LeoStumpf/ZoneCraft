@@ -15,7 +15,7 @@ Android-first, iOS-ready. Built with Flutter.
 Each **layer** holds one kind of object. The six *region* types paint a single flat-coloured
 area — overlapping objects within a layer never darken each other — and a per-layer **invert**
 fills everything *outside* the region instead. The three *import* types pull a snapshot of real
-OpenStreetMap data and draw it directly.
+OpenStreetMap data and draw it directly. The **track** type records where you actually went.
 
 ### Region types
 
@@ -33,6 +33,12 @@ of the boundary, so the fill only turns solid a band-width in. It is set globall
 The two freehand types additionally have a signed **offset** in metres: positive pushes the
 boundary inward from the area / away from the line (*"inside the city **and** more than 5 km
 from its border"*), negative extends the fill past what you drew.
+
+### Track
+
+| Type | What it draws |
+|---|---|
+| **Track** | A line **recorded from your phone's GPS**. Press Record and it appends your position as you move — a point every 10 m by default, adjustable per layer along with the line width. Recording is **foreground-only**: no background service, no background-location permission, so it runs while the app is open and a gap in the recording is drawn as a break in the line rather than a straight jump. One track per layer, so a second walk continues the same line; a GPX from another device can be imported into one. |
 
 ### Import types
 
