@@ -509,14 +509,19 @@ Future<void> importLayerFlow(
         : const _ImportChoice.newLayer();
     if (target == null) return; // cancelled
 
+    // Our own GeoJSON comes back verbatim: thinning what this app wrote would
+    // change the shape on every round-trip. A generic file still gets the RDP
+    // pass — that is where the GPS jitter and the thousand-point city outlines
+    // are.
     final int count;
     if (target.mergeLayerId != null) {
       count = await repo.mergeIntoLayer(
         target.mergeLayerId!,
         data.layers.first,
+        simplify: !fromZonecraft,
       );
     } else {
-      count = await repo.importData(data);
+      count = await repo.importData(data, simplify: !fromZonecraft);
     }
     messenger.showSnackBar(
       SnackBar(

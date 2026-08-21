@@ -1,7 +1,8 @@
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
-import 'package:latlong2/latlong.dart' show LatLng;
+import 'package:latlong2/latlong.dart'
+    show Distance, Haversine, LatLng, LengthUnit;
 import 'package:uuid/uuid.dart';
 
 import '../geo/border_areas.dart';
@@ -30,11 +31,19 @@ class ImportTally {
   bool get allSkipped => added == 0 && skipped > 0;
 }
 
+const Distance _geo = Distance(calculator: Haversine());
+
 /// `type/id` — the only safe identity for an OSM element, because ids are
 /// unique only *within* a type: node 240109189 and way 240109189 are different
 /// things. Null when either half is missing.
+///
+/// **Zero counts as missing.** It is not a valid OSM id for any element type;
+/// it is the placeholder an id-less imported row is stored with (see
+/// `BorderAreas.osmId`, which is NOT NULL). Treating it as a real identity made
+/// every id-less area look like the same relation, so a re-import kept one and
+/// silently dropped the rest.
 String? osmKey(String? type, int? id) =>
-    (type == null || id == null) ? null : '$type/$id';
+    (type == null || id == null || id == 0) ? null : '$type/$id';
 
 /// Whether an element is new here, recording it in [seen] as a side effect —
 /// so duplicates *within one response* are caught as well as duplicates against
@@ -2064,6 +2073,12 @@ class Repository {
           ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
         .get();
     final heightRegions = await _db.select(_db.heightRegions).get();
+    final heightPolygons = await (_db.select(_db.heightPolygons)
+          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
+        .get();
+    final heightPolygonPoints = await (_db.select(_db.heightPolygonPoints)
+          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
+        .get();
     final transitSets = await _db.select(_db.transitSets).get();
     final transitStops = await _db.select(_db.transitStops).get();
     final poiSets = await _db.select(_db.poiSets).get();
@@ -2083,6 +2098,20 @@ class Repository {
         : await (_db.select(_db.borderAreas)
               ..where((a) => a.setId.isIn([for (final s in borderSets) s.id])))
             .get();
+
+    // The generated height fills, grouped region -> rings in one pass each.
+    // A scan per region inside the layer loop would be O(regions x vertices),
+    // and a generated region carries thousands of them.
+    final ringOfPolygon = <String, List<LatLng>>{};
+    for (final p in heightPolygonPoints) {
+      (ringOfPolygon[p.polygonId] ??= <LatLng>[]).add(LatLng(p.lat, p.lng));
+    }
+    final fillsOfRegion = <String, List<List<LatLng>>>{};
+    for (final poly in heightPolygons) {
+      final ring = ringOfPolygon[poly.id];
+      if (ring == null || ring.length < 3) continue;
+      (fillsOfRegion[poly.heightRegionId] ??= <List<LatLng>>[]).add(ring);
+    }
 
     final out = <ExportLayer>[];
     for (final layer in layers) {
@@ -2118,6 +2147,10 @@ class Repository {
               kind: 'subspace',
               coords: [for (final p in pts) LatLng(p.lat, p.lng)],
               mainIndex: mainIndex,
+              // Only when one is actually named — a list of nulls is bulk.
+              pointLabels: pts.any((p) => p.label != null)
+                  ? [for (final p in pts) p.label]
+                  : null,
               label: s.label,
               colorArgb: s.colorArgb,
             ));
@@ -2125,6 +2158,9 @@ class Repository {
         case 'freeline':
           for (final l in freeLines.where((l) => l.layerId == layer.id)) {
             final pts = flPoints.where((p) => p.freeLineId == l.id).toList();
+            // A point-less row has no geometry to write, and the encoders read
+            // `coords.first` — the same guard subspace and track already make.
+            if (pts.isEmpty) continue;
             objects.add(ExportObject(
               kind: 'freeline',
               coords: [for (final p in pts) LatLng(p.lat, p.lng)],
@@ -2140,13 +2176,26 @@ class Repository {
           for (final t in tracks.where((t) => t.layerId == layer.id)) {
             final pts = trackPoints.where((p) => p.trackId == t.id).toList();
             if (pts.isEmpty) continue;
+            // Split on segmentIndex: a segment change is a *break* in the
+            // drawn line, so it becomes one part of a MultiLineString rather
+            // than being flattened into a straight jump across the pause. One
+            // feature still, so the track stays one element on the way back.
+            final segments = <List<LatLng>>[];
+            var current = <LatLng>[];
+            int? seg;
+            for (final p in pts) {
+              if (seg != null && p.segmentIndex != seg) {
+                segments.add(current);
+                current = <LatLng>[];
+              }
+              seg = p.segmentIndex;
+              current.add(LatLng(p.lat, p.lng));
+            }
+            if (current.isNotEmpty) segments.add(current);
             objects.add(ExportObject(
               kind: 'track',
-              // Flattened: the segment breaks a recording carries have no home
-              // in a GeoJSON LineString, so a re-imported track is one
-              // continuous line. The alternative — a feature per segment —
-              // would turn one element into several on the way back in.
-              coords: [for (final p in pts) LatLng(p.lat, p.lng)],
+              coords: [for (final s in segments) ...s],
+              segments: segments,
               label: t.label,
               colorArgb: t.colorArgb,
             ));
@@ -2154,6 +2203,7 @@ class Repository {
         case 'freearea':
           for (final a in freeAreas.where((a) => a.layerId == layer.id)) {
             final pts = faPoints.where((p) => p.freeAreaId == a.id).toList();
+            if (pts.isEmpty) continue;
             objects.add(ExportObject(
               kind: 'freearea',
               coords: [for (final p in pts) LatLng(p.lat, p.lng)],
@@ -2171,6 +2221,14 @@ class Repository {
               thresholdMeters: r.thresholdMeters,
               aboveThreshold: r.aboveThreshold,
               sampleZoom: r.sampleZoom,
+              // The fills are derived from terrain tiles, but regenerating
+              // them needs the network and can disagree with what the sender
+              // saw — so a generated region travels drawn. An ungenerated one
+              // carries neither key and still imports as ungenerated.
+              generated: r.generatedAt == null ? null : true,
+              heightRings: r.generatedAt == null
+                  ? null
+                  : (fillsOfRegion[r.id] ?? const <List<LatLng>>[]),
               label: r.label,
               colorArgb: r.colorArgb,
             ));
@@ -2180,6 +2238,11 @@ class Repository {
           // themselves, with their names in [ExportObject.pointLabels].
           for (final s in poiSets.where((s) => s.layerId == layer.id)) {
             final pts = poiPoints.where((p) => p.poiSetId == s.id).toList();
+            // The OSM identity of each POI travels too: it is what dedup
+            // matches on, so without it a later import over the same ground
+            // draws every one of them a second time. Written only when at
+            // least one POI has it (rows from before v21 never did).
+            final identified = pts.any((p) => p.osmId != null);
             objects.add(ExportObject(
               kind: 'poi',
               coords: [
@@ -2189,6 +2252,10 @@ class Repository {
               radiusMeters: s.radiusMeters,
               categoryKey: s.categoryKey,
               pointLabels: [for (final p in pts) p.name],
+              pointOsmIds:
+                  identified ? [for (final p in pts) p.osmId ?? 0] : null,
+              pointOsmTypes:
+                  identified ? [for (final p in pts) p.osmType] : null,
               label: s.label,
               colorArgb: s.colorArgb,
             ));
@@ -2197,23 +2264,29 @@ class Repository {
           // One object per *import*: its stations as named points (which is
           // what another tool can read) plus the box and the per-station OSM
           // attributes, which is what lets this app put the import back
-          // together. A pending or failed import has no stations and exports
-          // nothing — a retry row describes a query, not data.
+          // together. An import that never succeeded has no stations but is
+          // still a row on the layer — a retry the user can press — so it
+          // travels as an empty one rather than vanishing.
           for (final t in transitSets.where((t) => t.layerId == layer.id)) {
             final stops =
                 transitStops.where((x) => x.setId == t.id).toList();
-            if (stops.isEmpty) continue;
+            final done = stops.isNotEmpty;
             objects.add(ExportObject(
               kind: 'transitstop',
               coords: [for (final x in stops) LatLng(x.lat, x.lng)],
-              pointLabels: [for (final x in stops) x.name],
-              pointOsmIds: [for (final x in stops) x.osmId],
-              pointModeMasks: [for (final x in stops) x.modeMask],
-              pointNodeCounts: [for (final x in stops) x.nodeCount],
-              pointRouteRefs: [for (final x in stops) x.routeRef],
+              pointLabels: done ? [for (final x in stops) x.name] : null,
+              pointOsmIds: done ? [for (final x in stops) x.osmId] : null,
+              pointModeMasks:
+                  done ? [for (final x in stops) x.modeMask] : null,
+              pointNodeCounts:
+                  done ? [for (final x in stops) x.nodeCount] : null,
+              pointRouteRefs:
+                  done ? [for (final x in stops) x.routeRef] : null,
               bbox: [t.south, t.west, t.north, t.east],
               modeMask: t.modeMask,
               visibleModeMask: t.visibleModeMask,
+              pending: t.fetchedAt == null ? true : null,
+              errorMessage: t.lastError,
               label: t.label,
               colorArgb: t.colorArgb,
             ));
@@ -2232,8 +2305,12 @@ class Repository {
                 coords: rings.first,
                 rings: rings,
                 label: a.name,
-                osmId: a.osmId,
+                // 0 is the "no relation id" placeholder an id-less import was
+                // stored with; writing it out would make every such area look
+                // like the same OSM relation, and dedup would keep one.
+                osmId: a.osmId == 0 ? null : a.osmId,
                 adminLevel: s.adminLevel,
+                setLabel: s.label,
                 bbox: [s.south, s.west, s.north, s.east],
                 colorIndex: a.colorIndex,
                 labelLat: a.labelLat,
@@ -2262,6 +2339,8 @@ class Repository {
             layer.type == 'track' ? layer.trackStrokeWidth : null,
         trackMinDistanceMeters:
             layer.type == 'track' ? layer.trackMinDistanceMeters : null,
+        // Only a hidden layer writes the key; shown is the default everywhere.
+        isVisible: layer.isVisible ? null : false,
         objects: objects,
       ));
     }
@@ -2272,7 +2351,14 @@ class Repository {
   /// type, invert and per-object attributes. Returns the number of objects
   /// created. Objects with unusable geometry (e.g. a non-positive circle radius)
   /// are skipped.
-  Future<int> importData(ExportData data) async {
+  ///
+  /// [simplify] RDP-thins imported line and ring geometry at
+  /// [kImportSimplifyMeters]. It belongs to *generic* files — a GPX full of GPS
+  /// jitter, a thousand-point city outline — and must be **off** for our own
+  /// GeoJSON: thinning what this app itself wrote changes the shape on every
+  /// round-trip, so an export/import is not the identity it looks like. It
+  /// defaults to on so every generic call site keeps its behaviour.
+  Future<int> importData(ExportData data, {bool simplify = true}) async {
     var imported = 0;
     for (final layer in data.layers) {
       final layerId = await createLayer(
@@ -2283,11 +2369,16 @@ class Repository {
         // known before any area is written.
         borderLevel: layer.type == 'borders' ? layer.borderLevel : null,
       );
-      if (layer.isInverted || layer.opacity != null) {
+      if (layer.isInverted ||
+          layer.opacity != null ||
+          layer.isVisible == false) {
         await updateLayer(
           layerId,
           isInverted: layer.isInverted ? true : null,
           opacity: layer.opacity,
+          // Null means "shown", which is also `updateLayer`'s no-op — so only a
+          // hidden layer writes anything here.
+          isVisible: layer.isVisible == false ? false : null,
         );
       }
       if (layer.type == 'borders' &&
@@ -2307,7 +2398,7 @@ class Repository {
           minDistanceMeters: layer.trackMinDistanceMeters,
         );
       }
-      imported += await _insertObjects(layerId, layer.objects);
+      imported += await _insertObjects(layerId, layer.objects, simplify);
     }
     return imported;
   }
@@ -2316,7 +2407,11 @@ class Repository {
   /// type), without creating a new layer. Returns the number of objects
   /// inserted. Throws [ArgumentError] on a missing layer or a type mismatch so
   /// the caller can show a friendly message.
-  Future<int> mergeIntoLayer(String layerId, ExportLayer layer) async {
+  Future<int> mergeIntoLayer(
+    String layerId,
+    ExportLayer layer, {
+    bool simplify = true,
+  }) async {
     final target = await (_db.select(_db.layers)
           ..where((l) => l.id.equals(layerId)))
         .getSingleOrNull();
@@ -2336,7 +2431,7 @@ class Repository {
           'That file holds admin level ${layer.borderLevel} areas, but '
           '“${target.name}” holds level ${target.borderLevel}');
     }
-    return _insertObjects(layerId, layer.objects);
+    return _insertObjects(layerId, layer.objects, simplify);
   }
 
   /// Inserts [objects] into [layerId], returning how many were created.
@@ -2344,13 +2439,17 @@ class Repository {
   /// Border areas are pulled out and written as one batch rather than one at a
   /// time: each area otherwise costs a dedup scan of every area already in the
   /// layer, which is quadratic — and a country-level file is thousands of them.
-  Future<int> _insertObjects(String layerId, List<ExportObject> objects) async {
+  Future<int> _insertObjects(
+    String layerId,
+    List<ExportObject> objects,
+    bool simplify,
+  ) async {
     var imported = 0;
     final areas = <ExportObject>[];
     for (final o in objects) {
       if (o.kind == 'borderarea') {
         areas.add(o);
-      } else if (await _insertObject(layerId, o)) {
+      } else if (await _insertObject(layerId, o, simplify)) {
         imported++;
       }
     }
@@ -2369,7 +2468,11 @@ class Repository {
   /// Inserts one exported object into [layerId]. Returns true when it created an
   /// object, false when the geometry was unusable. Shared by [importData] (into
   /// fresh layers) and [mergeIntoLayer] (into an existing one).
-  Future<bool> _insertObject(String layerId, ExportObject o) async {
+  Future<bool> _insertObject(
+    String layerId,
+    ExportObject o,
+    bool simplify,
+  ) async {
     switch (o.kind) {
       case 'circle':
         final r = o.radiusMeters;
@@ -2400,12 +2503,14 @@ class Repository {
         if (o.coords.isEmpty) return false;
         final sid = await createSubspace(layerId: layerId, label: o.label);
         final main = (o.mainIndex ?? 0).clamp(0, o.coords.length - 1);
+        final seedNames = o.pointLabels ?? const <String?>[];
         for (var i = 0; i < o.coords.length; i++) {
           await addSubspacePoint(
             subspaceId: sid,
             lat: o.coords[i].latitude,
             lng: o.coords[i].longitude,
             isMain: i == main,
+            label: i < seedNames.length ? seedNames[i] : null,
           );
         }
         await _applyImportedColor(ColoredElement.subspace, sid, o.colorArgb);
@@ -2421,13 +2526,13 @@ class Repository {
         if ((o.offsetMeters ?? 0) != 0) {
           await updateFreeLine(lid, offsetMeters: o.offsetMeters);
         }
-        // Thin heavy imported tracks/borders (GPS jitter, thousand-point
-        // city lines) — RDP keeps the endpoints and overall shape.
-        await addFreeLinePoints(
-            lid, simplifyLine(o.coords, kImportSimplifyMeters));
+        await addFreeLinePoints(lid, _importLine(o.coords, simplify));
         await _applyImportedColor(ColoredElement.freeLine, lid, o.colorArgb);
       case 'track':
-        if (o.coords.length < 2) return false;
+        // One point is a track: the recorder got a fix and then nothing. It
+        // draws no line, but it is a stored position and it moves the track's
+        // bounds — dropping it would lose real recorded data.
+        if (o.coords.isEmpty) return false;
         // An imported track lands in the layer's one track — the same place
         // recording appends to — and in one segment: a file says nothing about
         // where the recording paused.
@@ -2435,10 +2540,14 @@ class Repository {
         if (o.label != null) {
           await updateTrack(tid, label: Value(o.label));
         }
-        final seg = await nextTrackSegment(tid);
-        await addTrackPoints(
-            tid, simplifyLine(o.coords, kImportSimplifyMeters),
-            segmentIndex: seg);
+        // One call per exported segment, each with its own index, so the
+        // recording's pauses stay breaks instead of becoming straight jumps.
+        // A file with no segments (v1, or a generic GPX) is one segment.
+        for (final part in o.segments ?? [o.coords]) {
+          if (part.isEmpty) continue;
+          await addTrackPoints(tid, _importLine(part, simplify),
+              segmentIndex: await nextTrackSegment(tid));
+        }
         await _applyImportedColor(ColoredElement.track, tid, o.colorArgb);
       case 'freearea':
         if (o.coords.length < 3) return false;
@@ -2447,15 +2556,16 @@ class Repository {
           await updateFreeArea(aid, offsetMeters: o.offsetMeters);
         }
         await addFreeAreaPoints(
-            aid, simplifyRing(o.coords, kImportSimplifyMeters, minPoints: 3));
+            aid,
+            simplify
+                ? simplifyRing(o.coords, kImportSimplifyMeters, minPoints: 3)
+                : o.coords);
         await _applyImportedColor(ColoredElement.freeArea, aid, o.colorArgb);
       case 'height':
         final r = o.radiusMeters;
         if (o.coords.isEmpty || r == null || !r.isFinite || r <= 0) {
           return false;
         }
-        // The generated polygons are derived, not imported — the region comes
-        // in un-generated and the user taps Generate.
         final hid = await createHeightRegion(
           layerId: layerId,
           centerLat: o.coords.first.latitude,
@@ -2466,24 +2576,40 @@ class Repository {
           sampleZoom: o.sampleZoom ?? 13,
           label: o.label,
         );
+        // A generated region comes back drawn. Regenerating instead would need
+        // the network and could disagree with what the sender saw — and until
+        // someone tapped Generate the layer would show nothing at all.
+        final fills = o.heightRings;
+        if (fills != null || o.generated == true) {
+          await replaceHeightPolygons(hid, fills ?? const <List<LatLng>>[]);
+          await markHeightGenerated(hid);
+        }
         await _applyImportedColor(ColoredElement.heightRegion, hid, o.colorArgb);
       case 'poi':
+        if (o.coords.isEmpty) return false;
         final r = o.radiusMeters;
-        if (o.coords.isEmpty || r == null || !r.isFinite || r <= 0) {
-          return false;
-        }
+        // A search radius is what the set was fetched with, not what its POIs
+        // are — so when a file doesn't carry a usable one, derive it from how
+        // far the POIs actually reach. Dropping the set (and every POI in it)
+        // over a missing number loses far more than it protects.
+        final radius = (r != null && r.isFinite && r > 0)
+            ? r
+            : _coveringRadius(o.coords);
         final sid = await createPoiSet(
           layerId: layerId,
           categoryKey: o.categoryKey ?? 'place',
           centerLat: o.coords.first.latitude,
           centerLng: o.coords.first.longitude,
-          radiusMeters: r,
+          radiusMeters: radius,
           label: o.label,
         );
         final labels = o.pointLabels ?? const <String?>[];
-        // No OSM identity: the export format doesn't carry it, so an imported
-        // file's POIs stay outside the dedup check rather than being given a
-        // made-up one.
+        // The OSM identity travels with the file (v2), so a re-import over the
+        // same ground recognises these POIs instead of drawing them twice. A
+        // file without it — or a POI whose id is missing — simply stays outside
+        // the dedup check, rather than being given a made-up one.
+        final poiIds = o.pointOsmIds ?? const <int>[];
+        final poiTypes = o.pointOsmTypes ?? const <String?>[];
         await addPoiPoints(sid, [
           for (var i = 1; i < o.coords.length; i++)
             PoiResult(
@@ -2491,6 +2617,10 @@ class Repository {
               lng: o.coords[i].longitude,
               categoryKey: o.categoryKey ?? 'place',
               name: i - 1 < labels.length ? labels[i - 1] : null,
+              osmType: i - 1 < poiTypes.length ? poiTypes[i - 1] : null,
+              osmId: i - 1 < poiIds.length && poiIds[i - 1] != 0
+                  ? poiIds[i - 1]
+                  : null,
             ),
         ]);
         await _applyImportedColor(ColoredElement.poiSet, sid, o.colorArgb);
@@ -2501,8 +2631,13 @@ class Repository {
         // different stations collide. That is every transit export written
         // before this feature, which is exactly the set that used to refuse.
         final ids = o.pointOsmIds;
-        if (o.coords.isEmpty || ids == null || ids.isEmpty) return false;
-        final n = ids.length < o.coords.length ? ids.length : o.coords.length;
+        final unfetched = o.coords.isEmpty && o.bbox != null;
+        if (!unfetched && (o.coords.isEmpty || ids == null || ids.isEmpty)) {
+          return false;
+        }
+        final n = unfetched
+            ? 0
+            : (ids!.length < o.coords.length ? ids.length : o.coords.length);
         final masks = o.pointModeMasks ?? const <int>[];
         final nodes = o.pointNodeCounts ?? const <int>[];
         final refs = o.pointRouteRefs ?? const <String?>[];
@@ -2518,10 +2653,21 @@ class Repository {
           visibleModeMask: o.visibleModeMask ?? -1,
           label: o.label,
         );
+        if (unfetched) {
+          // An import that never succeeded is still a row on the layer — the
+          // retry the user can press. Restoring it as an empty *pending* set
+          // keeps the layer looking exactly as it did, error text and all.
+          if (o.errorMessage != null) {
+            await markTransitImportFailed(tid, o.errorMessage!);
+          }
+          await _applyImportedColor(
+              ColoredElement.transitSet, tid, o.colorArgb);
+          return true;
+        }
         await fillTransitSet(tid, [
           for (var i = 0; i < n; i++)
             (
-              osmId: ids[i],
+              osmId: ids![i],
               lat: o.coords[i].latitude,
               lng: o.coords[i].longitude,
               name: i < names.length ? names[i] : null,
@@ -2540,6 +2686,23 @@ class Repository {
         return false;
     }
     return true;
+  }
+
+  /// Imported line geometry: RDP-thinned when [simplify], verbatim otherwise.
+  /// Thinning belongs to *generic* files (GPS jitter, thousand-point city
+  /// lines); our own GeoJSON has to come back exactly as it went out.
+  static List<LatLng> _importLine(List<LatLng> pts, bool simplify) =>
+      simplify ? simplifyLine(pts, kImportSimplifyMeters) : pts;
+
+  /// Metres from `points.first` to the furthest of the rest — the fallback
+  /// search radius for a POI set whose file didn't record one.
+  static double _coveringRadius(List<LatLng> points) {
+    var max = 0.0;
+    for (var i = 1; i < points.length; i++) {
+      final d = _geo.as(LengthUnit.Meter, points.first, points[i]);
+      if (d > max) max = d;
+    }
+    return max > 0 ? max : 1;
   }
 
   /// `[south, west, north, east]` of [points] — the fallback box for a transit
@@ -2617,6 +2780,7 @@ class Repository {
                   north: box[2],
                   east: box[3],
                   adminLevel: level,
+                  label: Value(o.setLabel),
                   fetchedAt: DateTime.now(),
                 ),
               );

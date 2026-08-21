@@ -48,6 +48,13 @@ class ExportObject {
     this.pointModeMasks,
     this.pointNodeCounts,
     this.pointRouteRefs,
+    this.pointOsmTypes,
+    this.heightRings,
+    this.generated,
+    this.segments,
+    this.setLabel,
+    this.pending,
+    this.errorMessage,
   });
 
   /// One of: circle, plane, subspace, freeline, freearea, height, poi,
@@ -141,10 +148,47 @@ class ExportObject {
   final List<int>? pointNodeCounts;
   final List<String?>? pointRouteRefs;
 
+  /// poi: the OSM element *type* of each point, paired with [pointOsmIds].
+  /// Both halves are needed — ids are unique only within a type — and without
+  /// them an imported POI has no identity, so a later import over the same
+  /// ground draws it a second time.
+  final List<String?>? pointOsmTypes;
+
+  /// height: the **generated** fill rings, exactly as stored. They are derived
+  /// from terrain tiles, but deriving them again needs the network and can
+  /// disagree with the sender's, so they travel with the region — otherwise an
+  /// imported height layer draws nothing at all until someone taps Generate.
+  final List<List<LatLng>>? heightRings;
+
+  /// height: whether the region had been generated. Not the same as
+  /// `heightRings != null`: a region whose terrain is entirely on one side of
+  /// the threshold generates *zero* polygons, and that is a result, not a
+  /// pending state.
+  final bool? generated;
+
+  /// track: the recording's points split per segment — a segment change is a
+  /// **break** in the drawn line (the recorder starts one after a long gap).
+  /// [coords] stays the flat list; this is what keeps the pauses.
+  final List<List<LatLng>>? segments;
+
+  /// borderarea: the name of the *import* the area belongs to. The area's own
+  /// name is [label]; a set carries its own, and losing it renames the import.
+  final String? setLabel;
+
+  // transitstop: an import that never succeeded — it has no stations and shows
+  // as a retry row, which is data about a query, so it round-trips as one.
+  final bool? pending;
+  final String? errorMessage;
+
   /// Total vertices this object carries — what an export's size is driven by.
-  int get pointCount => rings == null
-      ? coords.length
-      : rings!.fold(0, (a, r) => a + r.length);
+  int get pointCount {
+    var n = rings == null
+        ? coords.length
+        : rings!.fold(0, (a, r) => a + r.length);
+    final fills = heightRings;
+    if (fills != null) n += fills.fold(0, (a, r) => a + r.length);
+    return n;
+  }
 }
 
 /// One exported layer: its display attributes plus its objects.
@@ -161,6 +205,7 @@ class ExportLayer {
     this.borderShowNames,
     this.trackStrokeWidth,
     this.trackMinDistanceMeters,
+    this.isVisible,
   });
 
   final String name;
@@ -190,6 +235,11 @@ class ExportLayer {
   // metres. Null = the defaults.
   final double? trackStrokeWidth;
   final double? trackMinDistanceMeters;
+
+  /// Whether the layer is shown. Null = shown, which is both the default and
+  /// what a file written before this field carried — so only a *hidden* layer
+  /// puts a key in the file.
+  final bool? isVisible;
 }
 
 /// A whole export: the ordered layers (bottom-to-top draw order).
@@ -210,7 +260,13 @@ class ExportData {
 // --- GeoJSON ----------------------------------------------------------------
 
 /// Current schema version stamped into the `zonecraft` extension member.
-const int geoJsonSchemaVersion = 1;
+///
+/// v2 added: layer `isVisible`; `height` fill rings (`heightRings`/`generated`);
+/// per-segment `track` geometry (`MultiLineString`); POI `pointOsmTypes` beside
+/// the reused `pointOsmIds`; per-point `pointLabels` on a `subspace`; a border
+/// area's `setLabel`; and `pending`/`errorMessage` for a transit import that
+/// never succeeded. Every one of them is optional, so a v1 file still reads.
+const int geoJsonSchemaVersion = 2;
 
 /// Serialises [data] to a pretty-printed GeoJSON `FeatureCollection`. Each object
 /// becomes a `Feature`; layer attributes ride in a non-standard top-level
@@ -242,6 +298,9 @@ String exportToGeoJson(ExportData data) {
               'trackStrokeWidth': l.trackStrokeWidth,
             if (l.trackMinDistanceMeters != null)
               'trackMinDistanceMeters': l.trackMinDistanceMeters,
+            // Only a hidden layer writes a key: absent means shown, which is
+            // what every v1 file means too.
+            if (l.isVisible == false) 'isVisible': false,
           },
       ],
     },
@@ -283,18 +342,40 @@ Map<String, dynamic> _objectToFeature(ExportObject o, int layerIndex) {
     if (o.pointModeMasks != null) 'pointModeMasks': o.pointModeMasks,
     if (o.pointNodeCounts != null) 'pointNodeCounts': o.pointNodeCounts,
     if (o.pointRouteRefs != null) 'pointRouteRefs': o.pointRouteRefs,
+    if (o.pointOsmTypes != null) 'pointOsmTypes': o.pointOsmTypes,
+    // A height region's fills stay in `properties`, not in the geometry: the
+    // centre is the region, the fills are what was generated from it, and a
+    // reader that knows neither still gets the point it always got.
+    if (o.heightRings != null) 'heightRings': _ringArray(o.heightRings!),
+    if (o.generated != null) 'generated': o.generated,
+    if (o.setLabel != null) 'setLabel': o.setLabel,
+    if (o.pending != null) 'pending': o.pending,
+    if (o.errorMessage != null) 'errorMessage': o.errorMessage,
   };
   final Map<String, dynamic> geometry;
   switch (o.kind) {
     case 'circle':
     case 'height':
-      geometry = {'type': 'Point', 'coordinates': _pt(o.coords.first)};
+      geometry = o.coords.isEmpty
+          ? {'type': 'Point', 'coordinates': <double>[]}
+          : {'type': 'Point', 'coordinates': _pt(o.coords.first)};
     case 'plane':
     case 'freeline':
-    case 'track':
       geometry = {
         'type': 'LineString',
         'coordinates': [for (final c in o.coords) _pt(c)],
+      };
+    case 'track':
+      // MultiLineString, one part per segment: a recording *breaks* where it
+      // paused, and a single LineString would draw a straight jump across the
+      // gap — here and in every other tool that opens the file. A track with
+      // no recorded segments still writes one part, so the shape is uniform.
+      final parts = o.segments ?? [o.coords];
+      geometry = {
+        'type': 'MultiLineString',
+        'coordinates': [
+          for (final seg in parts) [for (final c in seg) _pt(c)],
+        ],
       };
     case 'subspace':
     case 'poi':
@@ -307,7 +388,11 @@ Map<String, dynamic> _objectToFeature(ExportObject o, int layerIndex) {
       geometry = {
         'type': 'Polygon',
         'coordinates': [
-          [for (final c in o.coords) _pt(c), _pt(o.coords.first)], // closed ring
+          // A ring is closed by repeating its first vertex. Guarded because an
+          // encoder must never throw: one point-less row would otherwise fail
+          // the whole export with "No element".
+          if (o.coords.isNotEmpty)
+            [for (final c in o.coords) _pt(c), _pt(o.coords.first)],
         ],
       };
     case 'borderarea':
@@ -330,6 +415,11 @@ Map<String, dynamic> _objectToFeature(ExportObject o, int layerIndex) {
 }
 
 List<double> _pt(LatLng p) => [p.longitude, p.latitude];
+
+/// A list of closed linear rings, for the ring lists that ride in `properties`
+/// rather than in a feature's geometry (a height region's fills).
+List<List<List<double>>> _ringArray(List<List<LatLng>> rings) =>
+    [for (final r in rings) if (r.isNotEmpty) _closedRing(r)];
 
 /// A GeoJSON linear ring: the vertices with the first repeated at the end.
 List<List<double>> _closedRing(List<LatLng> ring) =>
@@ -366,6 +456,7 @@ ExportData? importFromGeoJson(String text) {
       trackStrokeWidth: (l['trackStrokeWidth'] as num?)?.toDouble(),
       trackMinDistanceMeters:
           (l['trackMinDistanceMeters'] as num?)?.toDouble(),
+      isVisible: l['isVisible'] as bool?,
       objects: const [],
     ));
     buckets.add(<ExportObject>[]);
@@ -395,6 +486,7 @@ ExportData? importFromGeoJson(String text) {
         borderShowNames: layerMeta[i].borderShowNames,
         trackStrokeWidth: layerMeta[i].trackStrokeWidth,
         trackMinDistanceMeters: layerMeta[i].trackMinDistanceMeters,
+        isVisible: layerMeta[i].isVisible,
         objects: buckets[i],
       ),
   ]);
@@ -407,14 +499,27 @@ ExportObject? _featureToObject(Map f) {
   final kind = props['kind'] as String?;
   if (kind == null) return null;
   final rings = kind == 'borderarea' ? _readRings(geom) : null;
+  final segments = kind == 'track' ? _readSegments(geom) : null;
   final coords = rings != null && rings.isNotEmpty
       ? rings.first
-      : _readCoords(kind, geom);
-  if (coords.isEmpty) return null;
+      : segments != null
+          ? [for (final seg in segments) ...seg]
+          : _readCoords(kind, geom);
+  // A transit import that never succeeded has no stations — it is a retry row,
+  // which describes a query rather than geometry. Every other kind without
+  // coordinates is unusable.
+  if (coords.isEmpty && kind != 'transitstop') return null;
   return ExportObject(
     kind: kind,
     coords: coords,
     rings: rings,
+    segments: segments,
+    pointOsmTypes: _readStrings(props['pointOsmTypes']),
+    heightRings: _readRingArray(props['heightRings']),
+    generated: props['generated'] as bool?,
+    setLabel: props['setLabel'] as String?,
+    pending: props['pending'] as bool?,
+    errorMessage: props['errorMessage'] as String?,
     bbox: _readDoubles(props['bbox'], exactly: 4),
     osmId: (props['osmId'] as num?)?.toInt(),
     adminLevel: props['adminLevel'] as String?,
@@ -478,6 +583,48 @@ List<List<LatLng>>? _readRings(Map geom) {
     }
   }
   return out.isEmpty ? null : out;
+}
+
+/// A ring list that rode in `properties` rather than in a geometry (a height
+/// region's fills). Same closing-vertex rule as a GeoJSON linear ring.
+List<List<LatLng>>? _readRingArray(Object? raw) {
+  if (raw is! List) return null;
+  final out = <List<LatLng>>[];
+  for (final r in raw) {
+    if (r is! List) continue;
+    final ring = _latLngList(r);
+    if (ring.length >= 2 &&
+        ring.first.latitude == ring.last.latitude &&
+        ring.first.longitude == ring.last.longitude) {
+      ring.removeLast();
+    }
+    if (ring.length >= 3) out.add(ring);
+  }
+  // An empty list is a *result*, not an absence: a height region whose terrain
+  // is all on one side of the threshold generates no polygons at all.
+  return out;
+}
+
+/// A `track`'s parts. A `MultiLineString` carries the recording's segment
+/// breaks; a plain `LineString` (every v1 file) is one unbroken segment.
+List<List<LatLng>>? _readSegments(Map geom) {
+  final c = geom['coordinates'];
+  if (c is! List) return null;
+  switch (geom['type']) {
+    case 'MultiLineString':
+      final out = <List<LatLng>>[];
+      for (final part in c) {
+        if (part is! List) continue;
+        final seg = _latLngList(part);
+        if (seg.isNotEmpty) out.add(seg);
+      }
+      return out.isEmpty ? null : out;
+    case 'LineString':
+      final seg = _latLngList(c);
+      return seg.isEmpty ? null : [seg];
+    default:
+      return null;
+  }
 }
 
 List<int>? _readInts(Object? raw) => raw is List
@@ -588,9 +735,28 @@ void _kmlPlacemark(StringBuffer b, ExportObject o) {
   if (o.label != null && o.label!.isNotEmpty) {
     b.writeln('      <name>${_xml(o.label!)}</name>');
   }
+  if (o.coords.isEmpty && (o.heightRings?.isEmpty ?? true)) {
+    // Nothing to draw. A Placemark with no geometry is still valid KML, and
+    // an encoder that throws here would fail the whole export.
+    b.writeln('    </Placemark>');
+    return;
+  }
   switch (o.kind) {
-    case 'circle':
     case 'height':
+      // The generated fill, when the region has one — that is what the layer
+      // actually shows. Without it, the bounding circle is the best available.
+      final fills = o.heightRings;
+      if (fills != null && fills.isNotEmpty) {
+        b.writeln('      <MultiGeometry>');
+        for (final ring in fills) {
+          b.writeln(_kmlPolygon(ring));
+        }
+        b.writeln('      </MultiGeometry>');
+      } else {
+        final ring = geodesicCircle(o.coords.first, o.radiusMeters ?? 0);
+        b.writeln(_kmlPolygon(ring.isEmpty ? [o.coords.first] : ring));
+      }
+    case 'circle':
       final ring = geodesicCircle(o.coords.first, o.radiusMeters ?? 0);
       b.writeln(_kmlPolygon(ring.isEmpty ? [o.coords.first] : ring));
     case 'freearea':
@@ -610,8 +776,19 @@ void _kmlPlacemark(StringBuffer b, ExportObject o) {
       }
     case 'plane':
     case 'freeline':
-    case 'track':
       b.writeln(_kmlLine(o.coords));
+    case 'track':
+      // One LineString per recorded segment, so the pauses stay pauses.
+      final parts = o.segments ?? [o.coords];
+      if (parts.length == 1) {
+        b.writeln(_kmlLine(parts.first));
+      } else {
+        b.writeln('      <MultiGeometry>');
+        for (final seg in parts) {
+          b.writeln(_kmlLine(seg));
+        }
+        b.writeln('      </MultiGeometry>');
+      }
     case 'subspace':
       b.writeln('      <MultiGeometry>');
       for (final c in o.coords) {

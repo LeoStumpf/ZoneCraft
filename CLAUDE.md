@@ -93,7 +93,30 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
 - **Per-layer & external import/export:** besides whole-DB GeoJSON/KML, each layer can be
   exported alone and files imported as a new layer or **merged** into an existing same-type
   one (`ui/import_actions.dart`); generic **GeoJSON/KML/KMZ/GPX** tracks import into freehand
-  layers (`data/geo_import.dart`).
+  layers (`data/geo_import.dart`). There is **one routine** for both scopes —
+  `Repository.exportData({onlyLayerId})` and `importLayerFlow` — so a per-layer file and a
+  whole-DB file differ only in how many layers they hold.
+- **The GeoJSON export is a fixed point** (format schema **v2**, `geoJsonSchemaVersion`):
+  `export → import → export` must be byte-identical, and `test/export_roundtrip_test.dart`
+  asserts exactly that against real rows for all ten types, alongside a whole-DB and a
+  per-layer round-trip. **Anything the DB stores and the UI shows has to survive the trip** —
+  so a hidden layer stays hidden, a `height` region travels **with its generated fill rings**
+  (regenerating needs the network and the layer draws *nothing* until it happens), a `track`
+  keeps its segment breaks (a `MultiLineString`, one part per segment), POIs keep their
+  `osmType`/`osmId` (dedup identity — without it a re-import draws them all twice), a border
+  area keeps its import's `setLabel`, and a failed transit import comes back as its retry row.
+  `serialization_test.dart` covers the pure model; it is the *repository* half where losses
+  hide, because that is the half nothing used to look at. Deliberately not preserved: `createdAt`,
+  a border set holding **zero** areas (the format has no representation of a set), and the
+  original `editedAt`/`fetchedAt` instants (the *flag* travels, the timestamp is new).
+- **Imported geometry is thinned only when the file is foreign.** `importData`/`mergeIntoLayer`
+  take `simplify` (default **true**, for GPX jitter and thousand-point city lines);
+  `importLayerFlow` passes `simplify: !fromZonecraft`, because RDP-thinning what this app
+  itself wrote makes an export/import silently change shapes — and do it again every round-trip.
+- **`osmKey` treats id `0` as no identity at all.** It is not a valid OSM id; it is the
+  placeholder an id-less imported row is stored with (`BorderAreas.osmId` is NOT NULL). Read as
+  a real id it made every such area look like the same relation, so a re-import kept one and
+  dropped the rest.
 - **Drift schema is at v24**; migrations are append-only `if (from < N)` blocks. (v19 is the
   one exception: it *drops* the transit route tables, because route geometry was abandoned —
   see `data/transit.dart`'s header for the measurements behind that.) v20…v24 are
