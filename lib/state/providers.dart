@@ -3,6 +3,7 @@ import 'package:latlong2/latlong.dart' hide Circle;
 
 import '../data/database.dart';
 import '../data/repository.dart';
+import '../data/shared_point.dart';
 import 'map_mode.dart';
 
 /// Single long-lived database instance.
@@ -668,6 +669,26 @@ class PendingTransitRetryNotifier extends Notifier<TransitRetryRequest?> {
 final pendingTransitRetryProvider =
     NotifierProvider<PendingTransitRetryNotifier, TransitRetryRequest?>(
         PendingTransitRetryNotifier.new);
+
+/// A position that arrived from outside the app — a `zonecraft://` link, or
+/// text pasted into the "Paste coordinates" box.
+///
+/// Deliberately **not** written to the database on arrival. A link tapped by
+/// accident must leave nothing behind, so what a share delivers is a camera
+/// move and an offer; turning it into a circle or a POI is a separate,
+/// explicit step. Same one-shot shape as [pendingFocusProvider], and for the
+/// same reason: the sender is not the map screen.
+class ReceivedPointNotifier extends Notifier<SharedPoint?> {
+  @override
+  SharedPoint? build() => null;
+
+  void receive(SharedPoint p) => state = p;
+  void clear() => state = null;
+}
+
+final receivedPointProvider =
+    NotifierProvider<ReceivedPointNotifier, SharedPoint?>(
+        ReceivedPointNotifier.new);
 
 /// Resolves the effective active layer id given the current layer list:
 /// [noActiveLayer] ⇒ none; a still-present selection ⇒ itself; otherwise (nothing

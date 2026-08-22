@@ -33,6 +33,20 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Shared positions: zonecraft://p?lat=..&lng=..&n=..
+                 A custom scheme, not an https App Link: verifying one needs a
+                 domain serving .well-known/assetlinks.json, and there is none.
+                 The cost is that WhatsApp will not make it tappable, which is
+                 why the shared message also carries the plain coordinates and
+                 why Settings has a "Paste coordinates" box that parses them.
+                 Adding https later is this block plus a hosted file — no code
+                 change. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="zonecraft"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

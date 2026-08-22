@@ -4,12 +4,15 @@ import 'dart:math' as math;
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
+import 'package:app_links/app_links.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_dragmarker/flutter_map_dragmarker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart' hide Circle;
+import 'package:share_plus/share_plus.dart';
 
 import '../data/borders.dart';
 import '../data/cached_tile_provider.dart';
@@ -20,6 +23,7 @@ import '../data/overpass.dart';
 import '../data/overpass_client.dart'
     show OverpassCancel, OverpassOutcome, kOverpassPreferenceMaxElapsed;
 import '../data/repository.dart' show Repository;
+import '../data/shared_point.dart';
 import '../data/tile_source.dart';
 import '../data/transit.dart';
 import '../geo/border_areas.dart';
@@ -53,6 +57,7 @@ import 'border_import_dialog.dart';
 import 'border_layer.dart';
 import 'region_geometry.dart';
 import 'region_layer.dart';
+import 'share_place.dart';
 import 'subspace_editor.dart';
 import 'transit_import_dialog.dart';
 import 'track_layer.dart';
@@ -76,6 +81,11 @@ class MapScreen extends ConsumerStatefulWidget {
 class _MapScreenState extends ConsumerState<MapScreen>
     with WidgetsBindingObserver {
   final _mapController = MapController();
+  /// Deep-link subscription (`zonecraft://…`); the app's only one besides
+  /// the track recorder's position stream.
+  StreamSubscription<Uri>? _linkSub;
+  /// Guards the share FAB while a position fix is in flight.
+  bool _sharing = false;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   // Wraps the FlutterMap so a handle's lat/lng can be projected to a global
   // screen position (for popup menus anchored on a dragged point).
@@ -241,6 +251,36 @@ class _MapScreenState extends ConsumerState<MapScreen>
       _tileClient,
       headers: {'User-Agent': tileUserAgent},
     );
+    _listenForSharedLinks();
+  }
+
+  /// Picks up `zonecraft://p?…` links — the one that launched the app and any
+  /// that arrive while it is already open.
+  ///
+  /// Everything here is best-effort and silent on failure: a malformed or
+  /// unrelated URI must do nothing at all, never interrupt with an error. The
+  /// link only ever *offers* a position (see [receivedPointProvider]).
+  void _listenForSharedLinks() {
+    final links = AppLinks();
+    unawaited(() async {
+      try {
+        final initial = await links.getInitialLink();
+        if (initial != null) _consumeSharedUri(initial);
+      } catch (_) {
+        // No initial link, or the platform channel is unavailable.
+      }
+    }());
+    _linkSub = links.uriLinkStream.listen(
+      _consumeSharedUri,
+      onError: (_) {},
+    );
+  }
+
+  void _consumeSharedUri(Uri uri) {
+    if (!mounted) return;
+    final point = decodeSharedPointLink(uri.toString());
+    if (point == null) return;
+    ref.read(receivedPointProvider.notifier).receive(point);
   }
 
   @override
@@ -256,6 +296,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   @override
   void dispose() {
     _saveCamera();
+    unawaited(_linkSub?.cancel());
     _prefetchDebounce?.cancel();
     _tileClient.close();
     _strokeRevision.dispose();
@@ -2723,12 +2764,18 @@ class _MapScreenState extends ConsumerState<MapScreen>
     LatLng latlng,
     Layer? activeLayer,
   ) async {
-    if (activeLayer == null) return;
     // While placing, a long-press would fight the tap-to-place flow.
     if (_mode == MapMode.add) return;
 
-    final hits = _hitsAt(latlng);
-    final summaries = _summariesFor(activeLayer);
+    // A null active layer no longer bails out: the menu still offers what is
+    // true of the *coordinate* — share it, copy it — which is the whole point
+    // of long-pressing empty ground.
+    final hits = activeLayer == null
+        ? const <HitCandidate>[]
+        : _hitsAt(latlng);
+    final summaries = activeLayer == null
+        ? const <ObjectRef, ObjectSummary>{}
+        : _summariesFor(activeLayer);
     final selectedSubspaceId = ref.read(selectedSubspaceProvider);
     final selectedFreeLineId = ref.read(selectedFreeLineProvider);
     final selectedFreeAreaId = ref.read(selectedFreeAreaProvider);
@@ -2744,12 +2791,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
       final label = s != null
           ? '${s.title} · ${s.subtitle}'
           : _importedPointLabel(ref_) ?? 'Element ${i + 1}';
-      items.add(_pointMenuItem('hit:$i', typeIcon(activeLayer.type), label));
+      items.add(_pointMenuItem('hit:$i', typeIcon(activeLayer!.type), label));
     }
 
     // Contextual add actions — a strict superset of what long-press used to do.
     final actions = <PopupMenuEntry<String>>[];
-    switch (activeLayer.type) {
+    switch (activeLayer?.type) {
       case 'circles':
         actions.add(
           _pointMenuItem(
@@ -2815,21 +2862,23 @@ class _MapScreenState extends ConsumerState<MapScreen>
       if (items.isNotEmpty) items.add(const PopupMenuDivider());
       items.add(_pointMenuItem('deselect', Icons.close, 'Deselect'));
     }
-    if (items.isEmpty) {
-      // Imports are selectable now, so "nothing here" means exactly that —
-      // except on a transit layer, where a station may be present but hidden by
-      // the type filter, which looks identical to empty ground.
-      _hint(switch (activeLayer.type) {
-        'transit' =>
-          'Nothing here. Hidden station types don\'t respond — check '
-              'Stations… in the layer menu.',
-        _ => 'Nothing here in "${activeLayer.name}".',
-      });
-      return;
+    // A transit layer can hold a station here that the type filter is hiding,
+    // which looks exactly like empty ground — say so, but don't swallow the
+    // menu for it the way this used to.
+    if (items.isEmpty && activeLayer?.type == 'transit') {
+      _hint('Hidden station types don\'t respond — check Stations… in the '
+          'layer menu.');
     }
 
+    // Always last, always present: what is true of the coordinate itself,
+    // whatever layer is active and whether or not anything was hit. This is
+    // the route to sharing a position that is not your own.
+    if (items.isNotEmpty) items.add(const PopupMenuDivider());
+    items.add(_pointMenuItem('shareCoords', Icons.ios_share, 'Share this place'));
+    items.add(_pointMenuItem('copyCoords', Icons.copy_all_outlined, 'Copy coordinates'));
+
     final selected = await _showPointMenu(
-      activeLayer.name,
+      activeLayer?.name ?? 'This place',
       globalPosition,
       items,
       formatLatLng(latlng.latitude, latlng.longitude),
@@ -2846,11 +2895,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
         _clearSelection();
         setState(() {});
       case 'newCircle':
-        await _addCircleAt(latlng, activeLayer);
+        await _addCircleAt(latlng, activeLayer!);
       case 'newHeight':
         // Selected on creation (unlike a circle), because the region is empty
         // until the editor's Generate has run.
-        await _addHeightRegionAt(latlng, activeLayer);
+        await _addHeightRegionAt(latlng, activeLayer!);
       case 'addPoint':
         await repo.addSubspacePoint(
           subspaceId: selectedSubspaceId!,
@@ -2887,8 +2936,152 @@ class _MapScreenState extends ConsumerState<MapScreen>
           lat: latlng.latitude,
           lng: latlng.longitude,
         );
+      case 'shareCoords':
+        await _sharePlace(latlng);
+      case 'copyCoords':
+        await _copyPlace(latlng);
     }
   }
+
+  // --- Sharing a position ---------------------------------------------------
+
+  /// Opens the share sheet with [at] as a ZoneCraft message.
+  ///
+  /// Asks for a name first, because a bare pair of numbers in a chat is
+  /// unreadable a day later — but the field starts empty and Skip is one tap,
+  /// so naming is never in the way of sending.
+  Future<void> _sharePlace(LatLng at, {String? suggestedName}) async {
+    final point = SharedPoint.named(at.latitude, at.longitude, suggestedName);
+    if (point == null) return; // a non-finite camera; nothing to share
+    final named = await showShareNameDialog(context, point);
+    if (named == null || !mounted) return;
+    await SharePlus.instance.share(
+      ShareParams(
+        text: shareMessage(named),
+        subject: named.name ?? 'A place in ZoneCraft',
+      ),
+    );
+  }
+
+  /// Puts the same message on the clipboard, for pasting somewhere the share
+  /// sheet doesn't reach.
+  Future<void> _copyPlace(LatLng at, {String? suggestedName}) async {
+    final point = SharedPoint.named(at.latitude, at.longitude, suggestedName);
+    if (point == null) return;
+    await Clipboard.setData(ClipboardData(text: shareMessage(point)));
+    if (mounted) _hint('Coordinates copied');
+  }
+
+  /// Shares where the device is, acquiring a fix first if there isn't one.
+  Future<void> _shareMyLocation() async {
+    if (_sharing) return;
+    setState(() => _sharing = true);
+    try {
+      final here = _myPosition ?? await _getCurrentPosition();
+      if (here == null || !mounted) return;
+      setState(() => _myPosition = here);
+      await _sharePlace(here, suggestedName: 'My location');
+    } finally {
+      if (mounted) setState(() => _sharing = false);
+    }
+  }
+
+  /// Turns a received position into something the map keeps.
+  ///
+  /// Offers only targets that exist — a circle on a `circles` layer, a point
+  /// appended to a `subspace` — plus "a new layer", so the list is never a
+  /// menu of things that would silently do nothing. Writing is the *only*
+  /// thing that touches the database in the whole share flow.
+  Future<void> _keepSharedPlace(SharedPoint point) async {
+    final layers = ref.read(layersProvider).asData?.value ?? const <Layer>[];
+    final circleLayers = layers.where((l) => l.type == 'circles').toList();
+    final subspaceLayers = layers.where((l) => l.type == 'subspace').toList();
+
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            ListTile(
+              title: Text(point.name ?? 'Shared place'),
+              subtitle: Text(point.coordText),
+            ),
+            const Divider(height: 1),
+            for (final l in circleLayers)
+              ListTile(
+                leading: Icon(typeIcon('circles')),
+                title: Text('Circle in "${l.name}"'),
+                onTap: () => Navigator.pop(ctx, 'circle:${l.id}'),
+              ),
+            for (final l in subspaceLayers)
+              ListTile(
+                leading: Icon(typeIcon('subspace')),
+                title: Text('Point in "${l.name}"'),
+                onTap: () => Navigator.pop(ctx, 'subspace:${l.id}'),
+              ),
+            ListTile(
+              leading: const Icon(Icons.add),
+              title: const Text('A new circles layer'),
+              onTap: () => Navigator.pop(ctx, 'newLayer'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+
+    final repo = ref.read(repositoryProvider);
+    final label = point.name;
+    if (choice == 'newLayer') {
+      final layerId = await repo.createLayer(
+        name: label ?? 'Shared places',
+        colorArgb: Colors.deepPurple.toARGB32(),
+        type: 'circles',
+      );
+      final id = await repo.createCircle(
+        layerId: layerId,
+        centerLat: point.lat,
+        centerLng: point.lng,
+        radiusMeters: _defaultRadius(),
+        label: label,
+      );
+      ref.read(receivedPointProvider.notifier).clear();
+      _selectCircle(id);
+      return;
+    }
+
+    final layerId = choice.substring(choice.indexOf(':') + 1);
+    if (choice.startsWith('circle:')) {
+      final id = await repo.createCircle(
+        layerId: layerId,
+        centerLat: point.lat,
+        centerLng: point.lng,
+        radiusMeters: _defaultRadius(),
+        label: label,
+      );
+      ref.read(receivedPointProvider.notifier).clear();
+      _selectCircle(id);
+    } else {
+      final existing = (ref.read(subspacesProvider).asData?.value ?? const [])
+          .where((sp) => sp.layerId == layerId)
+          .firstOrNull;
+      final subspaceId = existing?.id ??
+          await repo.createSubspace(layerId: layerId);
+      await repo.addSubspacePoint(
+        subspaceId: subspaceId,
+        lat: point.lat,
+        lng: point.lng,
+        isMain: existing == null,
+        label: label,
+      );
+      ref.read(receivedPointProvider.notifier).clear();
+      if (mounted) _hint('Added to "${_layerName(layers, layerId)}"');
+    }
+  }
+
+  static String _layerName(List<Layer> layers, String id) =>
+      layers.where((l) => l.id == id).firstOrNull?.name ?? 'the layer';
 
   // --- Border outline reshaping ---------------------------------------------
 
@@ -3219,6 +3412,25 @@ class _MapScreenState extends ConsumerState<MapScreen>
       if (set != null) unawaited(retryTransitImport(set));
     });
 
+    // A shared position moves the camera once, on arrival. Same floor as
+    // Locate: receiving a link for the next street must not zoom you out.
+    //
+    // It also drops any selection, so the offer is actually visible. Tapping a
+    // link is an explicit act and deserves an answer; leaving an unrelated
+    // editor on top would hide the one button the link exists to show. Nothing
+    // is lost by closing an editor — every one of them writes live.
+    ref.listen(receivedPointProvider, (previous, next) {
+      if (next == null || identical(previous, next)) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_mapReady) return;
+        if (hasAnySelection(ref)) setState(_clearSelection);
+        _mapController.move(
+          next.latLng,
+          math.max(_mapController.camera.zoom, kMinFocusZoom).clamp(2.0, 19.0),
+        );
+      });
+    });
+
     ref.listen(pendingFocusProvider, (_, req) {
       if (req == null) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -3275,6 +3487,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     }
     final mode = ref.watch(mapModeProvider);
     final recording = ref.watch(trackRecordingProvider);
+    final receivedPoint = ref.watch(receivedPointProvider);
     // Whether a map tap currently *does* something — see [_interactionOptions].
     final tapPlaces =
         mode != MapMode.view ||
@@ -3829,6 +4042,24 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               Icons.my_location,
                               color: Colors.blue,
                               size: 24,
+                            ),
+                          ),
+                        ],
+                      ),
+                    // A position someone shared. Distinct from the "you are
+                    // here" marker on purpose — it is someone else's place,
+                    // and it is not saved.
+                    if (receivedPoint != null)
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: receivedPoint.latLng,
+                            width: 32,
+                            height: 32,
+                            child: const Icon(
+                              Icons.place,
+                              color: Colors.deepPurple,
+                              size: 32,
                             ),
                           ),
                         ],
@@ -4503,7 +4734,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
             ),
       // While an editor sheet is open it provides its own delete/close, and the
       // FABs would overlap it — so show them only when nothing is selected.
-      floatingActionButton: hasSelection
+      // Hidden while a sheet is up — an editor or a shared place — because the
+      // FAB column sits on top of it and buries the buttons the sheet offers.
+      floatingActionButton: hasSelection || receivedPoint != null
           ? null
           : Column(
               mainAxisSize: MainAxisSize.min,
@@ -4541,6 +4774,22 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.my_location),
+                  ),
+                  const SizedBox(height: 12),
+                  // Next to Locate on purpose: both answer "where am I", one
+                  // for you and one for the person you are meeting. Any
+                  // *other* place is shared by long-pressing it.
+                  FloatingActionButton.small(
+                    heroTag: 'share',
+                    tooltip: 'Share my location',
+                    onPressed: _sharing ? null : _shareMyLocation,
+                    child: _sharing
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.ios_share),
                   ),
                   const SizedBox(height: 12),
                   FloatingActionButton.small(
@@ -4724,7 +4973,17 @@ class _MapScreenState extends ConsumerState<MapScreen>
               ],
             ),
       bottomSheet: !hasSelection
-          ? null
+          // A shared position. An arriving one clears the selection (see the
+          // listener above), so in practice these two never compete; the order
+          // here only decides what happens if something is selected *after*.
+          ? (receivedPoint == null
+                ? null
+                : ReceivedPlaceSheet(
+                    point: receivedPoint,
+                    onKeep: () => unawaited(_keepSharedPlace(receivedPoint)),
+                    onDismiss: () =>
+                        ref.read(receivedPointProvider.notifier).clear(),
+                  ))
           : CollapsibleSheet(
               // Reset to expanded whenever the selected object changes.
               key: ValueKey(

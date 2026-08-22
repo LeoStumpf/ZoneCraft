@@ -13,6 +13,7 @@ import '../geo/coords.dart';
 import '../state/providers.dart';
 import 'about_screen.dart';
 import 'import_actions.dart';
+import 'share_place.dart';
 
 /// App-wide settings. Currently just the global uncertainty radius, applied as
 /// a lighter band on every object's outer edge by the rendering engine.
@@ -95,6 +96,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   /// Exports every layer + object to a file and opens the system share sheet.
   /// GeoJSON is the lossless round-trip format; KML is for Google Earth / Maps.
+  /// Parses a pasted position and hands it to the map, which is the only
+  /// place that can show it. Closes Settings on success so the answer is
+  /// visible immediately rather than behind this screen.
+  Future<void> _pastePlace() async {
+    final point = await showPastePlaceDialog(context);
+    if (point == null || !mounted) return;
+    ref.read(receivedPointProvider.notifier).receive(point);
+    Navigator.of(context).pop();
+  }
+
   Future<void> _export() async {
     final data = await _repo.exportData();
     if (!mounted) return;
@@ -306,6 +317,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 label: const Text('Import'),
               ),
             ],
+          ),
+          const Divider(height: 48),
+          Text('Shared places', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          Text(
+            'Someone sent you a position? Paste their message here — a '
+            'zonecraft:// link, a map link, or just the coordinates with the '
+            'chat around them. Long-press anywhere on the map to share a place '
+            'back, or use the share button for where you are.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: _pastePlace,
+              icon: const Icon(Icons.content_paste_go),
+              label: const Text('Paste coordinates'),
+            ),
           ),
           const Divider(height: 48),
           Text('Data', style: Theme.of(context).textTheme.titleMedium),

@@ -16,7 +16,23 @@
 		<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 		<key>CFBundleInfoDictionaryVersion</key>
 		<string>6.0</string>
-		<key>CFBundleName</key>
+		<!-- Shared positions: zonecraft://p?lat=..&amp;lng=..&amp;n=.. — see the
+	     matching intent-filter in the Android manifest. Unverified, like the
+	     rest of the iOS path, which has never been run on a device. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLName</key>
+			<string>com.leostumpf.zonecraft</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>zonecraft</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleName</key>
 		<string>zonecraft</string>
 		<key>CFBundlePackageType</key>
 		<string>APPL</string>

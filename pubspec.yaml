@@ -51,6 +51,7 @@ dependencies:
   archive: ^4.0.0
   image: ^4.3.0
   flutter_map_dragmarker: ^8.0.3
+  app_links: ^7.2.1
 
 dev_dependencies:
   flutter_test:
