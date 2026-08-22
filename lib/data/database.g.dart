@@ -8455,6 +8455,32 @@ class $PoiSetsTable extends PoiSets with TableInfo<$PoiSetsTable, PoiSet> {
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _isManualMeta = const VerificationMeta(
+    'isManual',
+  );
+  @override
+  late final GeneratedColumn<bool> isManual = GeneratedColumn<bool>(
+    'is_manual',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_manual" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _iconKeyMeta = const VerificationMeta(
+    'iconKey',
+  );
+  @override
+  late final GeneratedColumn<String> iconKey = GeneratedColumn<String>(
+    'icon_key',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -8467,6 +8493,8 @@ class $PoiSetsTable extends PoiSets with TableInfo<$PoiSetsTable, PoiSet> {
     createdAt,
     colorArgb,
     colorShade,
+    isManual,
+    iconKey,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -8555,6 +8583,18 @@ class $PoiSetsTable extends PoiSets with TableInfo<$PoiSetsTable, PoiSet> {
         colorShade.isAcceptableOrUnknown(data['color_shade']!, _colorShadeMeta),
       );
     }
+    if (data.containsKey('is_manual')) {
+      context.handle(
+        _isManualMeta,
+        isManual.isAcceptableOrUnknown(data['is_manual']!, _isManualMeta),
+      );
+    }
+    if (data.containsKey('icon_key')) {
+      context.handle(
+        _iconKeyMeta,
+        iconKey.isAcceptableOrUnknown(data['icon_key']!, _iconKeyMeta),
+      );
+    }
     return context;
   }
 
@@ -8604,6 +8644,14 @@ class $PoiSetsTable extends PoiSets with TableInfo<$PoiSetsTable, PoiSet> {
         DriftSqlType.int,
         data['${effectivePrefix}color_shade'],
       )!,
+      isManual: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_manual'],
+      )!,
+      iconKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}icon_key'],
+      ),
     );
   }
 
@@ -8636,6 +8684,23 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
   /// layer. **0 is the layer colour exactly**, which is what every row
   /// migrating in from v21 gets — an untouched map must look untouched.
   final int colorShade;
+
+  /// A category the user made rather than an Overpass import (v25).
+  ///
+  /// The distinction is what keeps an import honest: a fetched set is a
+  /// snapshot of what OSM returned, so its category, centre and radius describe
+  /// a query that already ran and nothing may be added to it by hand. A manual
+  /// set describes no query at all — [centerLat]/[centerLng]/[radiusMeters]
+  /// hold the map centre and 0 purely because the columns are NOT NULL, and the
+  /// editor does not show them.
+  final bool isManual;
+
+  /// Marker icon for a manual set — a key into `poiIcons` (`ui/poi_icons.dart`).
+  ///
+  /// Null on an import, which takes its icon from [categoryKey] instead, and
+  /// null on a manual set that chose one of the built-in categories. Resolved
+  /// in one place, `poiSetIcon`.
+  final String? iconKey;
   const PoiSet({
     required this.id,
     required this.layerId,
@@ -8647,6 +8712,8 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
     required this.createdAt,
     this.colorArgb,
     required this.colorShade,
+    required this.isManual,
+    this.iconKey,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -8665,6 +8732,10 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
       map['color_argb'] = Variable<int>(colorArgb);
     }
     map['color_shade'] = Variable<int>(colorShade);
+    map['is_manual'] = Variable<bool>(isManual);
+    if (!nullToAbsent || iconKey != null) {
+      map['icon_key'] = Variable<String>(iconKey);
+    }
     return map;
   }
 
@@ -8684,6 +8755,10 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
           ? const Value.absent()
           : Value(colorArgb),
       colorShade: Value(colorShade),
+      isManual: Value(isManual),
+      iconKey: iconKey == null && nullToAbsent
+          ? const Value.absent()
+          : Value(iconKey),
     );
   }
 
@@ -8703,6 +8778,8 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       colorArgb: serializer.fromJson<int?>(json['colorArgb']),
       colorShade: serializer.fromJson<int>(json['colorShade']),
+      isManual: serializer.fromJson<bool>(json['isManual']),
+      iconKey: serializer.fromJson<String?>(json['iconKey']),
     );
   }
   @override
@@ -8719,6 +8796,8 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'colorArgb': serializer.toJson<int?>(colorArgb),
       'colorShade': serializer.toJson<int>(colorShade),
+      'isManual': serializer.toJson<bool>(isManual),
+      'iconKey': serializer.toJson<String?>(iconKey),
     };
   }
 
@@ -8733,6 +8812,8 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
     DateTime? createdAt,
     Value<int?> colorArgb = const Value.absent(),
     int? colorShade,
+    bool? isManual,
+    Value<String?> iconKey = const Value.absent(),
   }) => PoiSet(
     id: id ?? this.id,
     layerId: layerId ?? this.layerId,
@@ -8744,6 +8825,8 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
     createdAt: createdAt ?? this.createdAt,
     colorArgb: colorArgb.present ? colorArgb.value : this.colorArgb,
     colorShade: colorShade ?? this.colorShade,
+    isManual: isManual ?? this.isManual,
+    iconKey: iconKey.present ? iconKey.value : this.iconKey,
   );
   PoiSet copyWithCompanion(PoiSetsCompanion data) {
     return PoiSet(
@@ -8763,6 +8846,8 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
       colorShade: data.colorShade.present
           ? data.colorShade.value
           : this.colorShade,
+      isManual: data.isManual.present ? data.isManual.value : this.isManual,
+      iconKey: data.iconKey.present ? data.iconKey.value : this.iconKey,
     );
   }
 
@@ -8778,7 +8863,9 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
           ..write('label: $label, ')
           ..write('createdAt: $createdAt, ')
           ..write('colorArgb: $colorArgb, ')
-          ..write('colorShade: $colorShade')
+          ..write('colorShade: $colorShade, ')
+          ..write('isManual: $isManual, ')
+          ..write('iconKey: $iconKey')
           ..write(')'))
         .toString();
   }
@@ -8795,6 +8882,8 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
     createdAt,
     colorArgb,
     colorShade,
+    isManual,
+    iconKey,
   );
   @override
   bool operator ==(Object other) =>
@@ -8809,7 +8898,9 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
           other.label == this.label &&
           other.createdAt == this.createdAt &&
           other.colorArgb == this.colorArgb &&
-          other.colorShade == this.colorShade);
+          other.colorShade == this.colorShade &&
+          other.isManual == this.isManual &&
+          other.iconKey == this.iconKey);
 }
 
 class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
@@ -8823,6 +8914,8 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
   final Value<DateTime> createdAt;
   final Value<int?> colorArgb;
   final Value<int> colorShade;
+  final Value<bool> isManual;
+  final Value<String?> iconKey;
   final Value<int> rowid;
   const PoiSetsCompanion({
     this.id = const Value.absent(),
@@ -8835,6 +8928,8 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
     this.createdAt = const Value.absent(),
     this.colorArgb = const Value.absent(),
     this.colorShade = const Value.absent(),
+    this.isManual = const Value.absent(),
+    this.iconKey = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   PoiSetsCompanion.insert({
@@ -8848,6 +8943,8 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
     this.createdAt = const Value.absent(),
     this.colorArgb = const Value.absent(),
     this.colorShade = const Value.absent(),
+    this.isManual = const Value.absent(),
+    this.iconKey = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        layerId = Value(layerId),
@@ -8866,6 +8963,8 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
     Expression<DateTime>? createdAt,
     Expression<int>? colorArgb,
     Expression<int>? colorShade,
+    Expression<bool>? isManual,
+    Expression<String>? iconKey,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -8879,6 +8978,8 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
       if (createdAt != null) 'created_at': createdAt,
       if (colorArgb != null) 'color_argb': colorArgb,
       if (colorShade != null) 'color_shade': colorShade,
+      if (isManual != null) 'is_manual': isManual,
+      if (iconKey != null) 'icon_key': iconKey,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -8894,6 +8995,8 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
     Value<DateTime>? createdAt,
     Value<int?>? colorArgb,
     Value<int>? colorShade,
+    Value<bool>? isManual,
+    Value<String?>? iconKey,
     Value<int>? rowid,
   }) {
     return PoiSetsCompanion(
@@ -8907,6 +9010,8 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
       createdAt: createdAt ?? this.createdAt,
       colorArgb: colorArgb ?? this.colorArgb,
       colorShade: colorShade ?? this.colorShade,
+      isManual: isManual ?? this.isManual,
+      iconKey: iconKey ?? this.iconKey,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -8944,6 +9049,12 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
     if (colorShade.present) {
       map['color_shade'] = Variable<int>(colorShade.value);
     }
+    if (isManual.present) {
+      map['is_manual'] = Variable<bool>(isManual.value);
+    }
+    if (iconKey.present) {
+      map['icon_key'] = Variable<String>(iconKey.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -8963,6 +9074,8 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
           ..write('createdAt: $createdAt, ')
           ..write('colorArgb: $colorArgb, ')
           ..write('colorShade: $colorShade, ')
+          ..write('isManual: $isManual, ')
+          ..write('iconKey: $iconKey, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -21069,6 +21182,8 @@ typedef $$PoiSetsTableCreateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<int?> colorArgb,
       Value<int> colorShade,
+      Value<bool> isManual,
+      Value<String?> iconKey,
       Value<int> rowid,
     });
 typedef $$PoiSetsTableUpdateCompanionBuilder =
@@ -21083,6 +21198,8 @@ typedef $$PoiSetsTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<int?> colorArgb,
       Value<int> colorShade,
+      Value<bool> isManual,
+      Value<String?> iconKey,
       Value<int> rowid,
     });
 
@@ -21178,6 +21295,16 @@ class $$PoiSetsTableFilterComposer
 
   ColumnFilters<int> get colorShade => $composableBuilder(
     column: $table.colorShade,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isManual => $composableBuilder(
+    column: $table.isManual,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get iconKey => $composableBuilder(
+    column: $table.iconKey,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -21284,6 +21411,16 @@ class $$PoiSetsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get isManual => $composableBuilder(
+    column: $table.isManual,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get iconKey => $composableBuilder(
+    column: $table.iconKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$LayersTableOrderingComposer get layerId {
     final $$LayersTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -21349,6 +21486,12 @@ class $$PoiSetsTableAnnotationComposer
     column: $table.colorShade,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get isManual =>
+      $composableBuilder(column: $table.isManual, builder: (column) => column);
+
+  GeneratedColumn<String> get iconKey =>
+      $composableBuilder(column: $table.iconKey, builder: (column) => column);
 
   $$LayersTableAnnotationComposer get layerId {
     final $$LayersTableAnnotationComposer composer = $composerBuilder(
@@ -21437,6 +21580,8 @@ class $$PoiSetsTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int?> colorArgb = const Value.absent(),
                 Value<int> colorShade = const Value.absent(),
+                Value<bool> isManual = const Value.absent(),
+                Value<String?> iconKey = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PoiSetsCompanion(
                 id: id,
@@ -21449,6 +21594,8 @@ class $$PoiSetsTableTableManager
                 createdAt: createdAt,
                 colorArgb: colorArgb,
                 colorShade: colorShade,
+                isManual: isManual,
+                iconKey: iconKey,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -21463,6 +21610,8 @@ class $$PoiSetsTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int?> colorArgb = const Value.absent(),
                 Value<int> colorShade = const Value.absent(),
+                Value<bool> isManual = const Value.absent(),
+                Value<String?> iconKey = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PoiSetsCompanion.insert(
                 id: id,
@@ -21475,6 +21624,8 @@ class $$PoiSetsTableTableManager
                 createdAt: createdAt,
                 colorArgb: colorArgb,
                 colorShade: colorShade,
+                isManual: isManual,
+                iconKey: iconKey,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

@@ -450,6 +450,22 @@ class PoiSets extends Table {
   /// migrating in from v21 gets — an untouched map must look untouched.
   IntColumn get colorShade => integer().withDefault(const Constant(0))();
 
+  /// A category the user made rather than an Overpass import (v25).
+  ///
+  /// The distinction is what keeps an import honest: a fetched set is a
+  /// snapshot of what OSM returned, so its category, centre and radius describe
+  /// a query that already ran and nothing may be added to it by hand. A manual
+  /// set describes no query at all — [centerLat]/[centerLng]/[radiusMeters]
+  /// hold the map centre and 0 purely because the columns are NOT NULL, and the
+  /// editor does not show them.
+  BoolColumn get isManual => boolean().withDefault(const Constant(false))();
+
+  /// Marker icon for a manual set — a key into `poiIcons` (`ui/poi_icons.dart`).
+  ///
+  /// Null on an import, which takes its icon from [categoryKey] instead, and
+  /// null on a manual set that chose one of the built-in categories. Resolved
+  /// in one place, `poiSetIcon`.
+  TextColumn get iconKey => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -833,7 +849,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 24;
+  int get schemaVersion => 25;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1012,6 +1028,13 @@ class AppDatabase extends _$AppDatabase {
             await m.createTable(trackPoints);
             await m.addColumn(layers, layers.trackStrokeWidth);
             await m.addColumn(layers, layers.trackMinDistanceMeters);
+          }
+          if (from < 25) {
+            // Hand-placed POIs. Every existing set is an Overpass import by
+            // definition, so `is_manual` starts false and `icon_key` null —
+            // which is exactly what those columns mean for an import.
+            await m.addColumn(poiSets, poiSets.isManual);
+            await m.addColumn(poiSets, poiSets.iconKey);
           }
         },
         beforeOpen: (details) async {

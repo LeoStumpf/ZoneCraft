@@ -1538,4 +1538,127 @@ void main() {
       expect(pts.map((p) => p.sortOrder), [0, 1]);
     });
   });
+
+  group('hand-made POI categories (v25)', () {
+    late AppDatabase db;
+    late Repository repo;
+
+    setUp(() {
+      db = AppDatabase.forTesting(NativeDatabase.memory());
+      repo = Repository(db);
+    });
+    tearDown(() => db.close());
+
+    Future<String> manualSetOn(String layerId) => repo.createPoiSet(
+          layerId: layerId,
+          categoryKey: 'peak',
+          centerLat: 48.1,
+          centerLng: 11.5,
+          radiusMeters: 0,
+          label: 'Swimming spots',
+          isManual: true,
+          iconKey: 'peak',
+        );
+
+    Future<String> importedSetOn(String layerId) => repo.createPoiSet(
+          layerId: layerId,
+          categoryKey: 'cafe',
+          centerLat: 48.1,
+          centerLng: 11.5,
+          radiusMeters: 800,
+        );
+
+    test('a set is an import unless it says otherwise', () async {
+      final layerId =
+          await repo.createLayer(name: 'P', colorArgb: 1, type: 'poi');
+      await importedSetOn(layerId);
+      final set = (await repo.watchAllPoiSets().first).single;
+      expect(set.isManual, isFalse);
+      expect(set.iconKey, isNull);
+    });
+
+    test('points can be placed by hand, in order', () async {
+      final layerId =
+          await repo.createLayer(name: 'P', colorArgb: 1, type: 'poi');
+      final setId = await manualSetOn(layerId);
+      await repo.addManualPoiPoint(poiSetId: setId, lat: 48.1, lng: 11.5);
+      await repo.addManualPoiPoint(
+          poiSetId: setId, lat: 48.2, lng: 11.6, label: 'The rope swing');
+
+      final pts = (await repo.watchAllPoiPoints().first)
+        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+      expect(pts.map((p) => p.sortOrder), [0, 1]);
+      expect(pts.last.name, 'The rope swing');
+      // No upstream, so no identity — which is what keeps hand-placed points
+      // out of re-import dedup, where they would have nothing to match on.
+      expect(pts.every((p) => p.osmId == null && p.osmType == null), isTrue);
+    });
+
+    test('an Overpass import refuses a hand-placed point', () async {
+      // The refusal is the feature: an import is a record of what OSM returned
+      // over a box, and no column could say which of its rows were invented.
+      final layerId =
+          await repo.createLayer(name: 'P', colorArgb: 1, type: 'poi');
+      final setId = await importedSetOn(layerId);
+      await expectLater(
+        repo.addManualPoiPoint(poiSetId: setId, lat: 48.1, lng: 11.5),
+        throwsArgumentError,
+      );
+      expect(await repo.watchAllPoiPoints().first, isEmpty);
+    });
+
+    test('a hand-placed point can be moved', () async {
+      final layerId =
+          await repo.createLayer(name: 'P', colorArgb: 1, type: 'poi');
+      final setId = await manualSetOn(layerId);
+      final id =
+          await repo.addManualPoiPoint(poiSetId: setId, lat: 48.1, lng: 11.5);
+      await repo.moveManualPoiPoint(id: id, lat: 49.0, lng: 12.0);
+
+      final p = (await repo.watchAllPoiPoints().first).single;
+      expect(p.lat, 49.0);
+      expect(p.lng, 12.0);
+    });
+
+    test('an imported POI cannot be moved', () async {
+      // Its position is the fetched fact the layer exists to record.
+      final layerId =
+          await repo.createLayer(name: 'P', colorArgb: 1, type: 'poi');
+      final setId = await importedSetOn(layerId);
+      await repo.addPoiPoints(setId, const [
+        PoiResult(
+            lat: 48.1,
+            lng: 11.5,
+            categoryKey: 'cafe',
+            osmType: 'node',
+            osmId: 7),
+      ]);
+      final id = (await repo.watchAllPoiPoints().first).single.id;
+
+      await expectLater(
+        repo.moveManualPoiPoint(id: id, lat: 49.0, lng: 12.0),
+        throwsArgumentError,
+      );
+      final p = (await repo.watchAllPoiPoints().first).single;
+      expect(p.lat, 48.1, reason: 'the position must be untouched');
+    });
+
+    test('a category can be renamed and re-iconed', () async {
+      final layerId =
+          await repo.createLayer(name: 'P', colorArgb: 1, type: 'poi');
+      final setId = await manualSetOn(layerId);
+      await repo.updatePoiSet(
+        setId,
+        label: const Value('Cold water'),
+        categoryKey: 'water',
+        iconKey: const Value('water'),
+      );
+
+      final set = (await repo.watchAllPoiSets().first).single;
+      expect(set.label, 'Cold water');
+      expect(set.iconKey, 'water');
+      expect(set.categoryKey, 'water');
+      expect(set.isManual, isTrue, reason: 'a rename must not demote it');
+    });
+  });
 }

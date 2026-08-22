@@ -162,6 +162,7 @@ void main() {
       radiusMeters: 800,
       createdAt: DateTime(2026),
       colorShade: 0,
+      isManual: false,
     );
     PoiPoint poi(String id, LatLng at) => PoiPoint(
           id: id,

@@ -51,6 +51,8 @@ import 'object_summary.dart';
 import 'plane_editor.dart';
 import 'draw_stroke.dart';
 import 'poi_import_dialog.dart';
+import 'poi_category_dialog.dart';
+import 'poi_icons.dart';
 import 'poi_layer.dart';
 import 'area_geometry.dart';
 import 'border_import_dialog.dart';
@@ -107,6 +109,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
   // mode stays on until Done.
   String? _placeLayerId;
   String? _placeType;
+  /// The manual POI category Add mode drops points into, on a `poi` layer.
+  /// Null on every other type.
+  String? _placePoiSetId;
 
   /// Buffered first tap of a two-tap type (a plane's point A).
   LatLng? _pendingPlaneA;
@@ -684,6 +689,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       if (previous == MapMode.add) {
         _placeLayerId = null;
         _placeType = null;
+        _placePoiSetId = null;
       }
       if (previous == MapMode.draw) {
         _drawLayerId = null;
@@ -1514,7 +1520,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// The Add button's label for a layer type. A nested ternary got unreadable
   /// at seven types; this is the same mapping as a switch.
   static String _addFabLabel(String? type) => switch (type) {
-    'poi' => 'Import POIs',
+    'poi' => 'Add POI',
     'transit' => 'Import transit',
     'borders' => 'Import borders',
     'subspace' => 'Add subspace',
@@ -1919,16 +1925,90 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// Arms Add mode for [layer]: from now on every map tap places something of
   /// that layer's type, until Done. Clears any selection so the banner and the
   /// map are unobstructed.
-  void _enterAddMode(Layer layer) {
+  ///
+  /// A `poi` layer resolves its target **hand-made category** first — Add on a
+  /// POI layer places your own points, while the Overpass import keeps the FAB
+  /// and the Add-FAB long-press. If the layer has no manual category yet, this
+  /// offers to make one; declining leaves Add unarmed rather than arming a mode
+  /// whose taps would go nowhere.
+  Future<void> _enterAddMode(Layer layer) async {
+    String? poiSetId;
+    if (layer.type == 'poi') {
+      poiSetId = await _resolveManualPoiSet(layer);
+      if (poiSetId == null || !mounted) return;
+    }
     _enterMode(MapMode.add);
     setState(() {
       _placeLayerId = layer.id;
       _placeType = layer.type;
+      _placePoiSetId = poiSetId;
       _pendingPlaneA = null;
       _pendingBoxA = null;
       _addSteps.clear();
     });
     _hint(_addBannerText(layer.type, 0));
+  }
+
+  /// Which manual category to drop POIs into: the only one if there is exactly
+  /// one, otherwise a choice, and an offer to create one when there are none.
+  Future<String?> _resolveManualPoiSet(Layer layer) async {
+    final sets = (ref.read(poiSetsProvider).asData?.value ?? const <PoiSet>[])
+        .where((s) => s.layerId == layer.id && s.isManual)
+        .toList();
+    if (sets.length == 1) return sets.single.id;
+    if (sets.isEmpty) return _createManualPoiSet(layer);
+
+    return showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const ListTile(title: Text('Add POIs to')),
+            const Divider(height: 1),
+            for (final s in sets)
+              ListTile(
+                leading: Icon(poiSetIcon(s)),
+                title: Text(s.label ?? 'Category'),
+                onTap: () => Navigator.pop(ctx, s.id),
+              ),
+            ListTile(
+              leading: const Icon(Icons.add),
+              title: const Text('New category…'),
+              onTap: () => Navigator.pop(ctx, _kNewPoiCategory),
+            ),
+          ],
+        ),
+      ),
+    ).then((choice) async {
+      if (choice == null || !mounted) return null;
+      if (choice != _kNewPoiCategory) return choice;
+      return _createManualPoiSet(layer);
+    });
+  }
+
+  /// Sentinel for "the picker chose *new category*" — not a set id.
+  static const String _kNewPoiCategory = '\u0000new';
+
+  /// Creates a hand-made POI category on [layer], returning its id.
+  Future<String?> _createManualPoiSet(Layer layer) async {
+    final choice = await showPoiCategoryDialog(context);
+    if (choice == null || !mounted) return null;
+    final centre = _mapController.camera.center;
+    return ref.read(repositoryProvider).createPoiSet(
+          layerId: layer.id,
+          // A manual set's category key is its icon key: there is no OSM tag
+          // behind it, and the two must not drift apart.
+          categoryKey: choice.iconKey,
+          // Not a query — see [PoiSets.isManual]. The centre is recorded only
+          // because the column is NOT NULL; radius 0 says "no search".
+          centerLat: centre.latitude,
+          centerLng: centre.longitude,
+          radiusMeters: 0,
+          label: choice.name,
+          isManual: true,
+          iconKey: choice.iconKey,
+        );
   }
 
   /// What Done does. With an import corner already buffered it **commits the
@@ -1972,6 +2052,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     setState(() {
       _placeLayerId = null;
       _placeType = null;
+      _placePoiSetId = null;
       _pendingPlaneA = null;
       _pendingBoxA = null;
       _addSteps.clear();
@@ -2160,6 +2241,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     setState(() {
       _placeLayerId = null;
       _placeType = null;
+      _placePoiSetId = null;
       _pendingPlaneA = null;
       _pendingBoxA = null;
       _addSteps.clear();
@@ -2173,7 +2255,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// The count comes **first** so it survives when the row runs out of width
   /// and the prose ellipsises — the count is the part that changes.
   String _addBannerText(String? layerType, int placed) {
-    if (layerType == 'poi') return 'Tap the search centre';
+    if (layerType == 'poi') {
+      return placed > 0
+          ? '$placed added · tap for more'
+          : 'Tap to place a POI';
+    }
     if (_isBoxImport(layerType)) {
       // Once a corner is down the rubber band tracks the map centre, so Done is
       // a real second way to finish — say so, rather than leaving it looking
@@ -2337,10 +2423,23 @@ class _MapScreenState extends ConsumerState<MapScreen>
           );
         }
       case 'poi':
-        // A POI set is an Overpass import around a centre — one tap picks the
-        // centre, the dialog does the rest, then Add mode is done.
-        _exitAddMode();
-        await _importPois(layer, at: latlng);
+        // Add on a POI layer places *your own* points; the Overpass import is
+        // the FAB and the Add-FAB long-press. Sticky like every other type, so
+        // a run of favourite spots is one tap each.
+        final setId = _placePoiSetId;
+        if (setId == null) {
+          _exitAddMode();
+          return;
+        }
+        final pid = await repo.addManualPoiPoint(
+          poiSetId: setId,
+          lat: latlng.latitude,
+          lng: latlng.longitude,
+        );
+        _pushAddStep(
+          ObjectRef(kind: ObjectKind.poiPoint, id: pid, layerId: layer.id),
+          () => repo.deletePoiPoint(pid),
+        );
       case 'transit':
       case 'borders':
         // Two taps mark opposite corners of the import box (the plane pattern),
@@ -2633,6 +2732,21 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// this coordinate", writing [latlng] to the armed point and disarming.
   /// Returns whether the tap was consumed.
   Future<bool> _consumeArmedPlacement(LatLng latlng) async {
+    // Placement mode: move the selected hand-placed POI. Armed only for a
+    // manual category; the repository refuses an imported POI either way.
+    if (ref.read(poiPointPlacementProvider)) {
+      final selId = ref.read(selectedPoiPointProvider);
+      if (selId != null) {
+        await ref.read(repositoryProvider).moveManualPoiPoint(
+              id: selId,
+              lat: latlng.latitude,
+              lng: latlng.longitude,
+            );
+        ref.read(poiPointPlacementProvider.notifier).arm(false);
+        return true;
+      }
+    }
+
     // Placement mode: relocate the selected circle's centre.
     if (ref.read(circlePlacementProvider)) {
       final selId = ref.read(selectedCircleProvider);
@@ -3307,10 +3421,21 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// point editor's subtitle. Falls back to the raw key so an old set whose
   /// category has since been renamed still says something.
   static String _poiCategoryLabel(List<PoiSet> sets, String setId) {
-    final key = sets.where((s) => s.id == setId).firstOrNull?.categoryKey;
-    if (key == null) return 'POI';
-    return poiCategories.where((c) => c.key == key).firstOrNull?.label ?? key;
+    final set = sets.where((s) => s.id == setId).firstOrNull;
+    if (set == null) return 'POI';
+    // A hand-made category has no OSM tag behind it, so its own name is the
+    // only thing that describes it.
+    if (set.isManual) return set.label ?? 'Category';
+    return poiCategories
+            .where((c) => c.key == set.categoryKey)
+            .firstOrNull
+            ?.label ??
+        set.categoryKey;
   }
+
+  /// The set a POI belongs to, or null when it is gone.
+  static PoiSet? _setOf(List<PoiSet> sets, String setId) =>
+      sets.where((s) => s.id == setId).firstOrNull;
 
   /// This layer's element summaries, keyed by ref — used to label hit-menu rows
   /// with the same names the Elements list shows.
@@ -3491,6 +3616,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     // Whether a map tap currently *does* something — see [_interactionOptions].
     final tapPlaces =
         mode != MapMode.view ||
+        ref.watch(poiPointPlacementProvider) ||
         ref.watch(circlePlacementProvider) ||
         ref.watch(heightPlacementProvider) ||
         ref.watch(freeLineCenterPlacementProvider) ||
@@ -3634,6 +3760,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     // per-type wording now lives in _addFabLabel.
     final isSubspaceLayer = activeLayer?.type == 'subspace';
     final isCircleLayer = activeLayer?.type == 'circles';
+    // Since Add on a POI layer places *hand-made* points, the Overpass import
+    // needs its own button there — it used to be what Add did.
+    final isPoiLayer = activeLayer?.type == 'poi';
 
     // Edit mode arms tap-to-select, so it is meaningful only when the active
     // layer has an editor *and* holds something to select. Left always-on it
@@ -4893,11 +5022,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         mode == MapMode.edit ? Icons.edit : Icons.edit_outlined,
                       ),
                     ),
-                    if (isCircleLayer || isSubspaceLayer) ...[
+                    if (isCircleLayer || isSubspaceLayer || isPoiLayer) ...[
                       const SizedBox(width: 12),
                       FloatingActionButton.small(
                         heroTag: 'poiImport',
-                        tooltip: 'Import nearby POIs',
+                        tooltip: 'Import nearby POIs from OpenStreetMap',
                         onPressed: activeLayer == null
                             ? null
                             : () => _importPois(activeLayer),
@@ -5060,12 +5189,22 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       name: selectedPoiPoint.name,
                       lat: selectedPoiPoint.lat,
                       lng: selectedPoiPoint.lng,
-                      icon: Icons.place_outlined,
+                      icon: () {
+                        final set = _setOf(poiSets, selectedPoiPoint.poiSetId);
+                        return set == null
+                            ? Icons.place_outlined
+                            : poiSetIcon(set);
+                      }(),
                       title: 'Edit POI',
                       subtitle: _poiCategoryLabel(
                         poiSets,
                         selectedPoiPoint.poiSetId,
                       ),
+                      // Only a hand-placed POI can be moved; an imported one's
+                      // position is the fetched fact.
+                      movable:
+                          _setOf(poiSets, selectedPoiPoint.poiSetId)?.isManual ??
+                              false,
                     )
                   : selectedTransitStop != null
                   ? ImportedPointEditorSheet(

@@ -8,6 +8,8 @@ import '../data/repository.dart';
 import '../geo/coords.dart' show formatLatLng;
 import '../state/providers.dart';
 import 'editor_sheet.dart';
+import 'poi_category_dialog.dart';
+import 'poi_icons.dart';
 import 'element_color_dialog.dart';
 import 'object_summary.dart' show formatMeters;
 
@@ -80,6 +82,20 @@ class _PoiSetEditorSheetState extends ConsumerState<PoiSetEditorSheet> {
     return null;
   }
 
+  /// Renames the category and/or changes its icon, in one dialog — the same
+  /// one that created it, so the two can never offer different choices.
+  Future<void> _editCategory() async {
+    final choice = await showPoiCategoryDialog(context, initial: widget.set);
+    if (choice == null) return;
+    await _repo.updatePoiSet(
+      widget.set.id,
+      label: Value(choice.name),
+      categoryKey: choice.iconKey,
+      iconKey: Value(choice.iconKey),
+    );
+    if (mounted) _label.text = choice.name;
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = widget.set;
@@ -92,9 +108,12 @@ class _PoiSetEditorSheetState extends ConsumerState<PoiSetEditorSheet> {
       children: [
         Row(
           children: [
-            const Icon(Icons.travel_explore, size: 20),
+            Icon(s.isManual ? poiSetIcon(s) : Icons.travel_explore, size: 20),
             const SizedBox(width: 8),
-            Text('Edit POI import', style: theme.textTheme.titleMedium),
+            Text(
+              s.isManual ? 'Edit category' : 'Edit POI import',
+              style: theme.textTheme.titleMedium,
+            ),
             const SizedBox(width: 12),
             EditorLayerPicker(
               layers: widget.layers,
@@ -106,13 +125,13 @@ class _PoiSetEditorSheetState extends ConsumerState<PoiSetEditorSheet> {
               id: widget.set.id,
               title: widget.set.label?.trim().isNotEmpty == true
                   ? widget.set.label!.trim()
-                  : 'POI import',
+                  : (s.isManual ? 'Category' : 'POI import'),
               colorArgb: widget.set.colorArgb,
               colorShade: widget.set.colorShade,
               layerColor: _layerColor,
             ),
             IconButton(
-              tooltip: 'Delete import',
+              tooltip: s.isManual ? 'Delete category' : 'Delete import',
               icon: const Icon(Icons.delete_outline),
               color: Colors.red,
               onPressed: () async {
@@ -140,28 +159,55 @@ class _PoiSetEditorSheetState extends ConsumerState<PoiSetEditorSheet> {
           },
         ),
         const SizedBox(height: 8),
-        Text(
-          [
-            category?.label ?? s.categoryKey,
-            '${widget.pointCount} '
-                'POI${widget.pointCount == 1 ? '' : 's'} stored',
-            'within ${formatMeters(s.radiusMeters)} of '
-                '${formatLatLng(s.centerLat, s.centerLng)}',
-          ].join(' · '),
-          style: theme.textTheme.bodySmall,
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'Fetched once and kept offline. The area and category describe the '
-          'search that already ran, so another area means another import — tap '
-          'Import POIs.',
-          style: theme.textTheme.bodySmall,
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Tap a marker on the map to rename or remove that one POI.',
-          style: theme.textTheme.bodySmall,
-        ),
+        if (s.isManual) ...[
+          // A hand-made category has no query to describe, so what an import
+          // shows read-only is editable here instead: the marker every point in
+          // it draws as.
+          Row(
+            children: [
+              Text(
+                '${widget.pointCount} '
+                    'POI${widget.pointCount == 1 ? '' : 's'} placed',
+                style: theme.textTheme.bodySmall,
+              ),
+              const Spacer(),
+              OutlinedButton.icon(
+                onPressed: _editCategory,
+                icon: Icon(poiSetIcon(s), size: 18),
+                label: const Text('Icon'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Your own category. Tap Add POI and then the map to place points, '
+            'and tap one to rename, move or remove it.',
+            style: theme.textTheme.bodySmall,
+          ),
+        ] else ...[
+          Text(
+            [
+              category?.label ?? s.categoryKey,
+              '${widget.pointCount} '
+                  'POI${widget.pointCount == 1 ? '' : 's'} stored',
+              'within ${formatMeters(s.radiusMeters)} of '
+                  '${formatLatLng(s.centerLat, s.centerLng)}',
+            ].join(' · '),
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Fetched once and kept offline. The area and category describe the '
+            'search that already ran, so another area means another import — '
+            'tap Import POIs.',
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Tap a marker on the map to rename or remove that one POI.',
+            style: theme.textTheme.bodySmall,
+          ),
+        ],
       ],
     );
   }

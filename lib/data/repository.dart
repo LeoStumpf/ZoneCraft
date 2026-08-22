@@ -1212,6 +1212,12 @@ class Repository {
 
   /// Creates a POI set (one import: a category within a bounded circle) on a
   /// `poi` layer. Returns its id; the POIs themselves go in via [addPoiPoints].
+  /// Creates a POI set — an Overpass import by default, or a **hand-made
+  /// category** with [isManual] (see [PoiSets.isManual]).
+  ///
+  /// A manual set passes the map centre and radius 0 for the three query
+  /// columns, which are NOT NULL and mean nothing here; nothing reads them
+  /// while [isManual] is true.
   Future<String> createPoiSet({
     required String layerId,
     required String categoryKey,
@@ -1219,6 +1225,8 @@ class Repository {
     required double centerLng,
     required double radiusMeters,
     String? label,
+    bool isManual = false,
+    String? iconKey,
   }) async {
     final id = _uuid.v4();
     final shade = await _nextColorShade('poi_sets', layerId);
@@ -1232,9 +1240,73 @@ class Repository {
             radiusMeters: radiusMeters,
             label: Value(label),
             colorShade: Value(shade),
+            isManual: Value(isManual),
+            iconKey: Value(iconKey),
           ),
         );
     return id;
+  }
+
+  /// Adds one hand-placed POI to a **manual** set, at the end of its order.
+  ///
+  /// Deliberately refuses an import: a fetched set is a record of what OSM
+  /// returned over a given box, and a point someone dropped into it would make
+  /// that record a lie — with no column able to say which rows were which.
+  /// Hand-placed points carry no `osmType`/`osmId`, so they never take part in
+  /// re-import dedup, which is the correct answer for geometry that has no
+  /// upstream.
+  Future<String> addManualPoiPoint({
+    required String poiSetId,
+    required double lat,
+    required double lng,
+    String? label,
+  }) async {
+    final set = await (_db.select(_db.poiSets)
+          ..where((s) => s.id.equals(poiSetId)))
+        .getSingleOrNull();
+    if (set == null) throw ArgumentError('That POI category no longer exists');
+    if (!set.isManual) {
+      throw ArgumentError(
+          'That is an Overpass import — it records what OSM returned, so '
+          'points cannot be added to it by hand');
+    }
+    final next = await _db.customSelect(
+      'SELECT COALESCE(MAX(sort_order), -1) + 1 AS next '
+      'FROM poi_points WHERE poi_set_id = ?',
+      variables: [Variable<String>(poiSetId)],
+    ).getSingle();
+    final id = _uuid.v4();
+    await _db.into(_db.poiPoints).insert(
+          PoiPointsCompanion.insert(
+            id: id,
+            poiSetId: poiSetId,
+            lat: lat,
+            lng: lng,
+            name: Value(label),
+            sortOrder: next.read<int>('next'),
+          ),
+        );
+    return id;
+  }
+
+  /// Moves a hand-placed POI. Guarded the same way [addManualPoiPoint] is, and
+  /// for the same reason: an imported POI's position is the fetched fact.
+  Future<void> moveManualPoiPoint({
+    required String id,
+    required double lat,
+    required double lng,
+  }) async {
+    final row = await _db.customSelect(
+      'SELECT s.is_manual AS is_manual FROM poi_points p '
+      'JOIN poi_sets s ON p.poi_set_id = s.id WHERE p.id = ?',
+      variables: [Variable<String>(id)],
+    ).getSingleOrNull();
+    if (row == null) return;
+    if (row.read<int>('is_manual') == 0) {
+      throw ArgumentError('An imported POI records where OSM put it');
+    }
+    await (_db.update(_db.poiPoints)..where((p) => p.id.equals(id)))
+        .write(PoiPointsCompanion(lat: Value(lat), lng: Value(lng)));
   }
 
   /// Appends the fetched POIs to [poiSetId] in one batch, **skipping any this
@@ -1309,15 +1381,25 @@ class Repository {
   /// Renames a POI set (or moves it to another `poi` layer). The set's search
   /// circle and its stored POIs are immutable — a different area means a new
   /// import.
+  /// [categoryKey] and [iconKey] are only meaningful on a **manual** set — an
+  /// import's category describes the query that ran — but this does not police
+  /// that, because the only caller that passes them is the manual half of the
+  /// editor, and a repository refusing a write it was asked to make is worse
+  /// than a UI that never asks.
   Future<void> updatePoiSet(
     String id, {
     String? layerId,
     Value<String?> label = const Value.absent(),
+    String? categoryKey,
+    Value<String?> iconKey = const Value.absent(),
   }) async {
     await (_db.update(_db.poiSets)..where((s) => s.id.equals(id))).write(
       PoiSetsCompanion(
         layerId: layerId == null ? const Value.absent() : Value(layerId),
         label: label,
+        categoryKey:
+            categoryKey == null ? const Value.absent() : Value(categoryKey),
+        iconKey: iconKey,
       ),
     );
   }
@@ -2256,6 +2338,10 @@ class Repository {
                   identified ? [for (final p in pts) p.osmId ?? 0] : null,
               pointOsmTypes:
                   identified ? [for (final p in pts) p.osmType] : null,
+              // Written only for a hand-made category, so an ordinary import's
+              // GeoJSON is byte-for-byte what it was before v25.
+              manual: s.isManual ? true : null,
+              iconKey: s.iconKey,
               label: s.label,
               colorArgb: s.colorArgb,
             ));
@@ -2592,9 +2678,15 @@ class Repository {
         // are — so when a file doesn't carry a usable one, derive it from how
         // far the POIs actually reach. Dropping the set (and every POI in it)
         // over a missing number loses far more than it protects.
-        final radius = (r != null && r.isFinite && r > 0)
-            ? r
-            : _coveringRadius(o.coords);
+        // A hand-made category never had a search radius — 0 *is* its value,
+        // and deriving one from how far its points reach would both invent a
+        // search that never ran and break the export fixed point.
+        final manual = o.manual ?? false;
+        final radius = manual
+            ? (r ?? 0)
+            : (r != null && r.isFinite && r > 0)
+                ? r
+                : _coveringRadius(o.coords);
         final sid = await createPoiSet(
           layerId: layerId,
           categoryKey: o.categoryKey ?? 'place',
@@ -2602,6 +2694,8 @@ class Repository {
           centerLng: o.coords.first.longitude,
           radiusMeters: radius,
           label: o.label,
+          isManual: manual,
+          iconKey: o.iconKey,
         );
         final labels = o.pointLabels ?? const <String?>[];
         // The OSM identity travels with the file (v2), so a re-import over the

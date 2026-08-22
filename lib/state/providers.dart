@@ -670,6 +670,22 @@ final pendingTransitRetryProvider =
     NotifierProvider<PendingTransitRetryNotifier, TransitRetryRequest?>(
         PendingTransitRetryNotifier.new);
 
+/// While a hand-placed POI is selected, whether the next map tap moves it.
+///
+/// Only ever armed for a POI in a **manual** category: an imported POI's
+/// position is the fetched fact its layer exists to record (see
+/// `Repository.moveManualPoiPoint`, which refuses the write regardless).
+class PoiPointPlacementNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void arm(bool on) => state = on;
+}
+
+final poiPointPlacementProvider =
+    NotifierProvider<PoiPointPlacementNotifier, bool>(
+        PoiPointPlacementNotifier.new);
+
 /// A position that arrived from outside the app — a `zonecraft://` link, or
 /// text pasted into the "Paste coordinates" box.
 ///

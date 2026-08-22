@@ -31,6 +31,8 @@ class ExportObject {
     this.inclusionLng,
     this.inclusionRadiusMeters,
     this.categoryKey,
+    this.iconKey,
+    this.manual,
     this.pointLabels,
     this.colorArgb,
     this.rings,
@@ -93,6 +95,18 @@ class ExportObject {
   // poi: the imported category, and the per-POI names aligned with coords[1..]
   // (coords[0] is the set's search centre; radiusMeters its search radius)
   final String? categoryKey;
+
+  /// poi: a hand-made category's marker icon (a `poiIcons` key), and the flag
+  /// saying it *is* hand-made rather than an Overpass import.
+  ///
+  /// Both travel because the distinction is user-visible and not derivable:
+  /// a manual set is editable, accepts hand-placed points and shows no search
+  /// area, while an import is a read-only snapshot of what OSM returned. A
+  /// manual set that came back as an import would be a silent demotion — and
+  /// its centre/radius, which mean nothing, would start being displayed as a
+  /// search that never ran.
+  final String? iconKey;
+  final bool? manual;
 
   /// poi / transitstop: the per-point names, aligned with the point coords
   /// (`coords[1..]` for a POI set, `coords` for a transit import).
@@ -326,6 +340,8 @@ Map<String, dynamic> _objectToFeature(ExportObject o, int layerIndex) {
     if (o.inclusionRadiusMeters != null)
       'inclusionRadiusMeters': o.inclusionRadiusMeters,
     if (o.categoryKey != null) 'categoryKey': o.categoryKey,
+    if (o.iconKey != null) 'iconKey': o.iconKey,
+    if (o.manual != null) 'manual': o.manual,
     if (o.pointLabels != null) 'pointLabels': o.pointLabels,
     if (o.colorArgb != null) 'colorArgb': o.colorArgb,
     if (o.bbox != null) 'bbox': o.bbox,
@@ -546,6 +562,8 @@ ExportObject? _featureToObject(Map f) {
     inclusionLng: (props['inclusionLng'] as num?)?.toDouble(),
     inclusionRadiusMeters: (props['inclusionRadiusMeters'] as num?)?.toDouble(),
     categoryKey: props['categoryKey'] as String?,
+    iconKey: props['iconKey'] as String?,
+    manual: props['manual'] as bool?,
     colorArgb: (props['colorArgb'] as num?)?.toInt(),
     pointLabels: props['pointLabels'] is List
         ? [

@@ -157,7 +157,8 @@ void main() {
   });
 
   group('PoiSetEditorSheet', () {
-    PoiSet set({String? label}) => PoiSet(
+    PoiSet set({String? label, bool isManual = false, String? iconKey}) =>
+        PoiSet(
           id: 'ps1',
           layerId: 'L',
           categoryKey: 'cafe',
@@ -167,6 +168,8 @@ void main() {
           label: label,
           createdAt: DateTime(2026),
           colorShade: 0,
+          isManual: isManual,
+          iconKey: iconKey,
         );
 
     testWidgets('it names the category, the count and the circle that ran',
@@ -517,9 +520,13 @@ class _RecordingRepository extends Repository {
     String id, {
     String? layerId,
     Value<String?> label = const Value.absent(),
+    String? categoryKey,
+    Value<String?> iconKey = const Value.absent(),
   }) async {
     calls.add('updatePoiSet $id label=${_v(label)}'
-        '${layerId == null ? '' : ' layer=$layerId'}');
+        '${layerId == null ? '' : ' layer=$layerId'}'
+        '${categoryKey == null ? '' : ' category=$categoryKey'}'
+        '${iconKey.present ? ' icon=${_v(iconKey)}' : ''}');
   }
 
   @override

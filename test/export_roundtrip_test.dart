@@ -198,6 +198,25 @@ void main() {
           osmId: 240109189),
       PoiResult(lat: 48.12, lng: 11.56, categoryKey: 'cafe', name: 'Café C'),
     ]);
+    // …and a **hand-made** category on the same layer. A manual set is the one
+    // POI set with no query behind it: radius 0, its own icon, and points that
+    // never had an OSM identity. All of that has to come back as *manual*, or
+    // an editable category silently returns as a read-only import claiming a
+    // search that never ran.
+    final manualSet = await repo.createPoiSet(
+      layerId: ids['poi']!,
+      categoryKey: 'peak',
+      centerLat: 48.10,
+      centerLng: 11.50,
+      radiusMeters: 0,
+      label: 'Swimming spots',
+      isManual: true,
+      iconKey: 'peak',
+    );
+    await repo.addManualPoiPoint(
+        poiSetId: manualSet, lat: 48.101, lng: 11.501, label: 'The rope swing');
+    await repo.addManualPoiPoint(
+        poiSetId: manualSet, lat: 48.102, lng: 11.502);
 
     // transit — one filled import and one that failed (a retry row).
     ids['transit'] = await repo.createLayer(
@@ -490,19 +509,54 @@ void main() {
       () async {
     final ids = await seedEverything();
     final data = await repo.exportData(onlyLayerId: ids['poi']!);
-    final o = data.layers.single.objects.single;
+    // The layer holds two sets: the Overpass import and a hand-made category.
+    final o = data.layers.single.objects
+        .firstWhere((o) => o.manual != true);
     expect(o.pointOsmIds, [240109189, 240109189, 0]);
     expect(o.pointOsmTypes, ['node', 'way', null]);
 
-    // Merging the file back into the layer it came from adds nothing: these
-    // are the same POIs, and node 240109189 is not way 240109189.
+    // Merging the file back into the layer it came from re-creates the sets but
+    // adds no *identified* POI: these are the same ones, and node 240109189 is
+    // not way 240109189.
     expect(await repo.mergeIntoLayer(ids['poi']!, data.layers.single,
-        simplify: false), 1);
+        simplify: false), 2);
     final points = await repo.watchAllPoiPoints().first;
     expect(points.where((p) => p.osmId != null), hasLength(2),
         reason: 'the two identified POIs were recognised, not drawn twice');
-    // The unidentified one has nothing to match on and is kept, as always.
-    expect(points.where((p) => p.osmId == null), hasLength(2));
+    // Everything unidentified has nothing to match on and is kept, as always:
+    // the import's third POI plus the two hand-placed ones, twice over.
+    expect(points.where((p) => p.osmId == null), hasLength(6));
+  });
+
+  test('a hand-made POI category comes back hand-made, not as an import',
+      () async {
+    // The distinction is the whole feature: a manual set is editable, takes
+    // hand-placed points and describes no search, while an import is a
+    // read-only snapshot. A manual set returning as an import would be a silent
+    // demotion — and its radius 0 would start being shown as a search area.
+    final ids = await seedEverything();
+    final data = await repo.exportData(onlyLayerId: ids['poi']!);
+    final o = data.layers.single.objects.firstWhere((o) => o.manual == true);
+    expect(o.iconKey, 'peak');
+    expect(o.label, 'Swimming spots');
+    expect(o.radiusMeters, 0, reason: '0 is the value, not a missing one');
+    expect(o.pointLabels, ['The rope swing', null]);
+    expect(o.pointOsmIds, isNull,
+        reason: 'hand-placed points have no upstream to be identified against');
+
+    final after = await reimport(data);
+    final sets = after.single['objects'] as List;
+    final manual = sets.firstWhere((s) => (s as Map)['isManual'] == true) as Map;
+    expect(manual['iconKey'], 'peak');
+    expect(manual['label'], 'Swimming spots');
+    expect(manual['radiusMeters'], 0);
+
+    // And the import on the same layer is *not* flagged, which is what stops
+    // "manual" from being a field that quietly defaults to true.
+    final imported =
+        sets.firstWhere((s) => (s as Map)['isManual'] == false) as Map;
+    expect(imported['categoryKey'], 'cafe');
+    expect(imported['iconKey'], isNull);
   });
 
   test('a failed transit import comes back as a retry row', () async {
@@ -794,6 +848,11 @@ Future<List<Map<String, Object?>>> _objectsOf(
           'label': s.label,
           'colorArgb': s.colorArgb,
           'colorShade': s.colorShade,
+          // v25: hand-made categories. In the snapshot, so the whole-database
+          // round-trip catches a manual set coming back as an import without
+          // anyone having to write a test for it.
+          'isManual': s.isManual,
+          'iconKey': s.iconKey,
           'points': [
             for (final p in pts.where((p) => p.poiSetId == s.id))
               {
