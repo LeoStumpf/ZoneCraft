@@ -58,6 +58,14 @@ import 'transit_import_dialog.dart';
 import 'track_layer.dart';
 import 'transit_layer.dart';
 
+/// How far in "Locate me" and "Zoom to" will zoom when the map is far out.
+///
+/// It is a **floor, never a target**: both callers take
+/// `max(currentZoom, kMinFocusZoom)`, so looking closely at a street and then
+/// tapping Locate recentres at the zoom you were already at instead of
+/// throwing you back out to a neighbourhood view.
+const double kMinFocusZoom = 14.0;
+
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key});
 
@@ -476,6 +484,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// permission *now* (not at launch); on grant, centres the map and drops a
   /// position marker; on denial or disabled services, shows a dismissible hint
   /// and changes nothing else.
+  ///
+  /// Recentring **never zooms out** (see [kMinFocusZoom]): if you are already
+  /// looking at a building, Locate me moves that view onto you rather than
+  /// snapping back to a neighbourhood.
   Future<void> _locateMe() async {
     if (_locating) return;
     setState(() => _locating = true);
@@ -486,7 +498,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
         _myPosition = here;
         _myElevation = null;
       });
-      _mapController.move(here, 14);
+      _mapController.move(
+        here,
+        math.max(_mapController.camera.zoom, kMinFocusZoom)
+            .clamp(2.0, 19.0),
+      );
       unawaited(_updateMyElevation(here));
     } finally {
       if (mounted) setState(() => _locating = false);
@@ -3172,7 +3188,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (pts.length < 2) {
       _mapController.move(
         pts.first,
-        math.max(_mapController.camera.zoom, 14.0).clamp(2.0, 19.0),
+        math.max(_mapController.camera.zoom, kMinFocusZoom).clamp(2.0, 19.0),
       );
       return;
     }

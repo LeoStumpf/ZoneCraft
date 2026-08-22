@@ -6,6 +6,7 @@ import '../data/database.dart';
 import '../data/repository.dart';
 import '../geo/coords.dart';
 import 'editor_sheet.dart';
+import 'element_color_dialog.dart';
 import '../state/providers.dart';
 
 /// Docked bottom-sheet editor for a freehand area (closed polygon). Lists the
@@ -107,6 +108,17 @@ class _FreeAreaEditorSheetState extends ConsumerState<FreeAreaEditorSheet> {
     await _repo.deleteFreeAreaPoint(p.id);
   }
 
+  /// The owning layer's colour, which the element's shade is derived from.
+  /// Null when the layer is not in the list this sheet was handed (it was
+  /// deleted under us) — the swatch then hides itself rather than throwing
+  /// inside a build.
+  Color? get _layerColor {
+    for (final l in widget.layers) {
+      if (l.id == widget.freeArea.layerId) return Color(l.colorArgb);
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final armed = ref.watch(freeAreaPlacementProvider);
@@ -134,6 +146,16 @@ class _FreeAreaEditorSheetState extends ConsumerState<FreeAreaEditorSheet> {
               layers: areaLayers,
               selectedId: widget.freeArea.layerId,
               onChanged: (v) => _repo.updateFreeArea(id, layerId: v),
+            ),
+            ElementColorButton(
+              kind: ColoredElement.freeArea,
+              id: widget.freeArea.id,
+              title: widget.freeArea.label?.trim().isNotEmpty == true
+                  ? widget.freeArea.label!.trim()
+                  : 'Area',
+              colorArgb: widget.freeArea.colorArgb,
+              colorShade: widget.freeArea.colorShade,
+              layerColor: _layerColor,
             ),
             IconButton(
               tooltip: 'Delete area',

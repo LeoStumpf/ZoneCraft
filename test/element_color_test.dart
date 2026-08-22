@@ -70,4 +70,35 @@ void main() {
       const Color(0xFF43A047),
     );
   });
+
+  group('shadePalette', () {
+    test('is exactly the ladder autoShade hands out, in order', () {
+      // The strip must offer the colours the layer *actually* assigns, or
+      // "the same green as my other circles" would be a near-miss by eye.
+      for (final c in layerColours) {
+        final palette = shadePalette(c, count: 6);
+        expect(palette.length, 6);
+        for (var i = 0; i < palette.length; i++) {
+          expect(palette[i], autoShade(c, i));
+        }
+      }
+    });
+
+    test('starts at the layer colour and has no repeats', () {
+      for (final c in layerColours) {
+        final palette = shadePalette(c);
+        expect(palette.first, c, reason: 'slot 0 is the layer colour exactly');
+        expect(
+          palette.map((s) => s.toARGB32()).toSet().length,
+          palette.length,
+          reason: 'two identical swatches would be an untappable choice',
+        );
+      }
+    });
+
+    test('defaults to eight swatches and accepts an empty request', () {
+      expect(shadePalette(layerColours.first).length, 8);
+      expect(shadePalette(layerColours.first, count: 0), isEmpty);
+    });
+  });
 }

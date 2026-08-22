@@ -8,6 +8,7 @@ import '../data/repository.dart';
 import '../geo/coords.dart';
 import '../state/providers.dart';
 import 'editor_sheet.dart';
+import 'element_color_dialog.dart';
 import 'region_geometry.dart';
 
 /// Docked bottom-sheet editor for a freehand line (polyline). Lists the line's
@@ -145,6 +146,17 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
     await _repo.deleteFreeLinePoint(p.id);
   }
 
+  /// The owning layer's colour, which the element's shade is derived from.
+  /// Null when the layer is not in the list this sheet was handed (it was
+  /// deleted under us) — the swatch then hides itself rather than throwing
+  /// inside a build.
+  Color? get _layerColor {
+    for (final l in widget.layers) {
+      if (l.id == widget.freeLine.layerId) return Color(l.colorArgb);
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final armed = ref.watch(freeLinePlacementProvider);
@@ -173,6 +185,16 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
               selectedId: widget.freeLine.layerId,
               onChanged: (v) =>
                   _repo.updateFreeLine(widget.freeLine.id, layerId: v),
+            ),
+            ElementColorButton(
+              kind: ColoredElement.freeLine,
+              id: widget.freeLine.id,
+              title: widget.freeLine.label?.trim().isNotEmpty == true
+                  ? widget.freeLine.label!.trim()
+                  : 'Line',
+              colorArgb: widget.freeLine.colorArgb,
+              colorShade: widget.freeLine.colorShade,
+              layerColor: _layerColor,
             ),
             IconButton(
               tooltip: 'Delete line',

@@ -8,6 +8,7 @@ import '../data/repository.dart';
 import '../geo/coords.dart';
 import '../state/providers.dart';
 import 'editor_sheet.dart';
+import 'element_color_dialog.dart';
 
 /// Docked bottom-sheet editor for a plane ("closer to one of two points").
 /// Like the circle editor it sits below the interactive map and writes every
@@ -84,6 +85,22 @@ class _PlaneEditorSheetState extends ConsumerState<PlaneEditorSheet> {
       );
   }
 
+  /// The layers this plane can be moved to — see the note in `circle_editor`:
+  /// these two pickers were the only unfiltered ones.
+  List<Layer> get _planeLayers =>
+      widget.layers.where((l) => l.type == 'planes').toList();
+
+  /// The owning layer's colour, which the element's shade is derived from.
+  /// Null when the layer is not in the list this sheet was handed (it was
+  /// deleted under us) — the swatch then hides itself rather than throwing
+  /// inside a build.
+  Color? get _layerColor {
+    for (final l in widget.layers) {
+      if (l.id == widget.plane.layerId) return Color(l.colorArgb);
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final armed = ref.watch(planePlacementProvider);
@@ -97,6 +114,16 @@ class _PlaneEditorSheetState extends ConsumerState<PlaneEditorSheet> {
             const SizedBox(width: 8),
             Text('Edit plane', style: Theme.of(context).textTheme.titleMedium),
             const Spacer(),
+            ElementColorButton(
+              kind: ColoredElement.plane,
+              id: widget.plane.id,
+              title: widget.plane.label?.trim().isNotEmpty == true
+                  ? widget.plane.label!.trim()
+                  : 'Plane',
+              colorArgb: widget.plane.colorArgb,
+              colorShade: widget.plane.colorShade,
+              layerColor: _layerColor,
+            ),
             IconButton(
               tooltip: 'Delete',
               icon: const Icon(Icons.delete_outline),
@@ -134,7 +161,7 @@ class _PlaneEditorSheetState extends ConsumerState<PlaneEditorSheet> {
             // after an imported border ("Ludwigsvorstadt-Isarvorstadt") is
             // far longer than this row is wide.
             EditorLayerPicker(
-              layers: widget.layers,
+              layers: _planeLayers,
               selectedId: widget.plane.layerId,
               onChanged: (v) => _repo.updatePlane(widget.plane.id, layerId: v),
             ),

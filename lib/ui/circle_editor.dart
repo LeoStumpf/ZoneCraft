@@ -9,6 +9,7 @@ import '../data/repository.dart';
 import '../geo/coords.dart';
 import '../state/providers.dart';
 import 'editor_sheet.dart';
+import 'element_color_dialog.dart';
 
 /// Docked bottom-sheet editor for a circle. Unlike a dialog, this sits below the
 /// map (which stays interactive) and applies every change live to the database,
@@ -129,6 +130,23 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
       ? '${(m / 1000).toStringAsFixed(m >= 10000 ? 0 : 1)} km'
       : '${m.round()} m';
 
+  /// The layers this circle can be moved to. Filtered, like every other
+  /// editor's picker: an unfiltered list offered `poi` and `borders` layers
+  /// too, and moving a circle onto one stored it where nothing paints circles.
+  List<Layer> get _circleLayers =>
+      widget.layers.where((l) => l.type == 'circles').toList();
+
+  /// The owning layer's colour, which the element's shade is derived from.
+  /// Null when the layer is not in the list this sheet was handed (it was
+  /// deleted under us) — the swatch then hides itself rather than throwing
+  /// inside a build.
+  Color? get _layerColor {
+    for (final l in widget.layers) {
+      if (l.id == widget.circle.layerId) return Color(l.colorArgb);
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final armed = ref.watch(circlePlacementProvider);
@@ -146,6 +164,16 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
             const SizedBox(width: 8),
             Text('Edit circle', style: Theme.of(context).textTheme.titleMedium),
             const Spacer(),
+            ElementColorButton(
+              kind: ColoredElement.circle,
+              id: widget.circle.id,
+              title: widget.circle.label?.trim().isNotEmpty == true
+                  ? widget.circle.label!.trim()
+                  : 'Circle',
+              colorArgb: widget.circle.colorArgb,
+              colorShade: widget.circle.colorShade,
+              layerColor: _layerColor,
+            ),
             IconButton(
               tooltip: 'Delete',
               icon: const Icon(Icons.delete_outline),
@@ -190,7 +218,7 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
             // Not wrapped in a Flexible: EditorLayerPicker *is* one, and a
             // Flexible must sit directly inside the Flex.
             EditorLayerPicker(
-              layers: widget.layers,
+              layers: _circleLayers,
               selectedId: widget.circle.layerId,
               onChanged: (v) =>
                   _repo.updateCircle(widget.circle.id, layerId: v),

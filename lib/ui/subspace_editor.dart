@@ -7,6 +7,7 @@ import '../data/repository.dart';
 import '../geo/coords.dart';
 import '../state/providers.dart';
 import 'editor_sheet.dart';
+import 'element_color_dialog.dart';
 
 /// Docked bottom-sheet editor for a "closest subspace" object. Lists the
 /// object's points — each a single "lat, lng" field with a "main" radio, a
@@ -110,6 +111,17 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
     }
   }
 
+  /// The owning layer's colour, which the element's shade is derived from.
+  /// Null when the layer is not in the list this sheet was handed (it was
+  /// deleted under us) — the swatch then hides itself rather than throwing
+  /// inside a build.
+  Color? get _layerColor {
+    for (final l in widget.layers) {
+      if (l.id == widget.subspace.layerId) return Color(l.colorArgb);
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final armed = ref.watch(subspacePlacementProvider);
@@ -138,6 +150,16 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
               selectedId: widget.subspace.layerId,
               onChanged: (v) =>
                   _repo.updateSubspace(widget.subspace.id, layerId: v),
+            ),
+            ElementColorButton(
+              kind: ColoredElement.subspace,
+              id: widget.subspace.id,
+              title: widget.subspace.label?.trim().isNotEmpty == true
+                  ? widget.subspace.label!.trim()
+                  : 'Subspace',
+              colorArgb: widget.subspace.colorArgb,
+              colorShade: widget.subspace.colorShade,
+              layerColor: _layerColor,
             ),
             IconButton(
               tooltip: 'Delete subspace',

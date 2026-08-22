@@ -7,6 +7,7 @@ import '../data/database.dart';
 import '../data/repository.dart';
 import '../state/providers.dart';
 import 'editor_sheet.dart';
+import 'element_color_dialog.dart';
 import 'import_actions.dart' show convertBorderAreaFlow;
 import 'hit_test.dart' show geoDistance;
 import 'object_summary.dart' show formatMeters;
@@ -90,6 +91,8 @@ class _BorderAreaEditorSheetState extends ConsumerState<BorderAreaEditorSheet> {
     );
   }
 
+  Color get _layerColor => Color(widget.layer.colorArgb);
+
   @override
   Widget build(BuildContext context) {
     final a = widget.area;
@@ -118,6 +121,14 @@ class _BorderAreaEditorSheetState extends ConsumerState<BorderAreaEditorSheet> {
                 textAlign: TextAlign.end,
                 style: theme.textTheme.bodyMedium,
               ),
+            ),
+            ElementColorButton(
+              kind: ColoredElement.borderArea,
+              id: widget.area.id,
+              title: widget.area.name ?? 'Area',
+              colorArgb: widget.area.colorArgb,
+              colorShade: 0,
+              layerColor: _layerColor,
             ),
             IconButton(
               tooltip: 'Delete area',

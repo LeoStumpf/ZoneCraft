@@ -62,3 +62,15 @@ Color elementColor({
   required int shadeIndex,
   required Color layerColor,
 }) => colorArgb != null ? Color(colorArgb) : autoShade(layerColor, shadeIndex);
+
+/// The ladder of auto shades a layer offers, as a pickable palette.
+///
+/// Index 0 is the layer colour exactly and the rest are [autoShade]'s slots in
+/// creation order, so what the strip shows is precisely the set of colours the
+/// layer hands out on its own. Picking one stores it as an **explicit ARGB**
+/// rather than rewriting the element's `colorShade`: the shade index is the
+/// per-layer creation counter and also orders the region painter's colour
+/// groups (newest wins an overlap), so letting a colour choice rewrite it would
+/// silently reshuffle which element sits on top.
+List<Color> shadePalette(Color layerColor, {int count = 8}) =>
+    [for (var i = 0; i < count; i++) autoShade(layerColor, i)];

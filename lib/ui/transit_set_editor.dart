@@ -7,6 +7,7 @@ import '../data/repository.dart';
 import '../data/transit.dart' show transitModeLabels, transitModes;
 import '../state/providers.dart';
 import 'editor_sheet.dart';
+import 'element_color_dialog.dart';
 
 /// Docked editor for one **transit import** — every station of the chosen types
 /// inside a box, fetched once and stored offline.
@@ -67,6 +68,17 @@ class _TransitSetEditorSheetState
 
   void _close() => ref.read(selectedTransitSetProvider.notifier).select(null);
 
+  /// The owning layer's colour, which the element's shade is derived from.
+  /// Null when the layer is not in the list this sheet was handed (it was
+  /// deleted under us) — the swatch then hides itself rather than throwing
+  /// inside a build.
+  Color? get _layerColor {
+    for (final l in widget.layers) {
+      if (l.id == widget.set.layerId) return Color(l.colorArgb);
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = widget.set;
@@ -88,6 +100,16 @@ class _TransitSetEditorSheetState
               layers: widget.layers,
               selectedId: s.layerId,
               onChanged: (v) => _repo.updateTransitSet(s.id, layerId: v),
+            ),
+            ElementColorButton(
+              kind: ColoredElement.transitSet,
+              id: widget.set.id,
+              title: widget.set.label?.trim().isNotEmpty == true
+                  ? widget.set.label!.trim()
+                  : 'Transit import',
+              colorArgb: widget.set.colorArgb,
+              colorShade: widget.set.colorShade,
+              layerColor: _layerColor,
             ),
             IconButton(
               tooltip: 'Delete import',

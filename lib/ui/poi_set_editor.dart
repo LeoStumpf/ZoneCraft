@@ -8,6 +8,7 @@ import '../data/repository.dart';
 import '../geo/coords.dart' show formatLatLng;
 import '../state/providers.dart';
 import 'editor_sheet.dart';
+import 'element_color_dialog.dart';
 import 'object_summary.dart' show formatMeters;
 
 /// Docked editor for one **POI import** — a category fetched once inside a
@@ -68,6 +69,17 @@ class _PoiSetEditorSheetState extends ConsumerState<PoiSetEditorSheet> {
 
   void _close() => ref.read(selectedPoiSetProvider.notifier).select(null);
 
+  /// The owning layer's colour, which the element's shade is derived from.
+  /// Null when the layer is not in the list this sheet was handed (it was
+  /// deleted under us) — the swatch then hides itself rather than throwing
+  /// inside a build.
+  Color? get _layerColor {
+    for (final l in widget.layers) {
+      if (l.id == widget.set.layerId) return Color(l.colorArgb);
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = widget.set;
@@ -88,6 +100,16 @@ class _PoiSetEditorSheetState extends ConsumerState<PoiSetEditorSheet> {
               layers: widget.layers,
               selectedId: s.layerId,
               onChanged: (v) => _repo.updatePoiSet(s.id, layerId: v),
+            ),
+            ElementColorButton(
+              kind: ColoredElement.poiSet,
+              id: widget.set.id,
+              title: widget.set.label?.trim().isNotEmpty == true
+                  ? widget.set.label!.trim()
+                  : 'POI import',
+              colorArgb: widget.set.colorArgb,
+              colorShade: widget.set.colorShade,
+              layerColor: _layerColor,
             ),
             IconButton(
               tooltip: 'Delete import',

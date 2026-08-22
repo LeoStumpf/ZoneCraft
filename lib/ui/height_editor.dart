@@ -9,6 +9,7 @@ import '../data/repository.dart';
 import '../geo/coords.dart';
 import '../state/providers.dart';
 import 'editor_sheet.dart';
+import 'element_color_dialog.dart';
 
 /// Docked bottom-sheet editor for a height region: an elevation threshold
 /// applied inside a bounded circle. Lets the user set the centre (typed or
@@ -122,6 +123,17 @@ class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
     _snack('Tap the map to place the area centre');
   }
 
+  /// The owning layer's colour, which the element's shade is derived from.
+  /// Null when the layer is not in the list this sheet was handed (it was
+  /// deleted under us) — the swatch then hides itself rather than throwing
+  /// inside a build.
+  Color? get _layerColor {
+    for (final l in widget.layers) {
+      if (l.id == widget.region.layerId) return Color(l.colorArgb);
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final armed = ref.watch(heightPlacementProvider);
@@ -150,6 +162,16 @@ class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
               layers: heightLayers,
               selectedId: r.layerId,
               onChanged: (v) => _repo.updateHeightRegion(r.id, layerId: v),
+            ),
+            ElementColorButton(
+              kind: ColoredElement.heightRegion,
+              id: widget.region.id,
+              title: widget.region.label?.trim().isNotEmpty == true
+                  ? widget.region.label!.trim()
+                  : 'Height area',
+              colorArgb: widget.region.colorArgb,
+              colorShade: widget.region.colorShade,
+              layerColor: _layerColor,
             ),
             IconButton(
               tooltip: 'Delete area',
