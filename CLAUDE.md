@@ -5,7 +5,7 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
 
 ## At a glance (current app)
 
-- **Ten object types**, one per layer: `circles` (geodesic), `planes` (closer-of-two-points
+- **Ten object types**, one per layer (or several at once — see **combined layers** below): `circles` (geodesic), `planes` (closer-of-two-points
   half-plane), `subspace` (closest-of-N Voronoi cell), `freeline` (drawn polyline dividing the
   view), `freearea` (drawn closed polygon), `height` (terrain above/below an elevation, bounded
   to a circle; generated from terrain tiles via marching squares, stored as fill polygons),
@@ -117,9 +117,9 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   placeholder an id-less imported row is stored with (`BorderAreas.osmId` is NOT NULL). Read as
   a real id it made every such area look like the same relation, so a re-import kept one and
   dropped the rest.
-- **Drift schema is at v24**; migrations are append-only `if (from < N)` blocks. (v19 is the
+- **Drift schema is at v25**; migrations are append-only `if (from < N)` blocks. (v19 is the
   one exception: it *drops* the transit route tables, because route geometry was abandoned —
-  see `data/transit.dart`'s header for the measurements behind that.) v20…v24 are
+  see `data/transit.dart`'s header for the measurements behind that.) v20…v25 are
   snapshotted in `drift_schemas/` and guarded by `test/migration_test.dart`. **Any schema change must dump a
   new snapshot** (`dart run drift_dev schema dump lib/data/database.dart drift_schemas/`, then
   `... schema generate drift_schemas/ test/generated_migrations/`) — a snapshot cannot be
@@ -162,6 +162,29 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   half of it — which vertices get a handle, where an inserted one belongs — is pure in
   `ui/border_reshape.dart`, because a boundary carries hundreds of vertices where a drawn
   area carries eight.
+- **Combined layers** (`data/layer_types.dart`): a `mixed` layer holds every element type
+  **except `borders`** (its `borderLevel` is per-layer, and neighbour-distinct colouring is
+  only meaningful within one admin level). **No schema change** — `Layers.type` is text.
+  `layerHolds(layer, type)` / `layerContentTypes(layer)` are **the one predicate**, replacing
+  every `layer.type == 'x'` in the painter, hit test, Elements list, exporter and drawer.
+  Draw order is fixed (regions → tracks → markers); opacity governs the region composite only;
+  invert applies to the region half; Add mode asks which kind to place; auto shades are taken
+  across every table the layer holds. `layerHasEditor` answers true for mixed and the real
+  gate moved to **`ObjectKind.hasEditor`**, with the colour path resolving `ColoredElement`
+  from the row's kind. `combineLayers` is now exhaustive — its old `default:` arm silently
+  lost every row of an unknown type to the cascade.
+- **Hand-placed POIs** (v25, `PoiSets.isManual`/`.iconKey`): a `poi` layer holds Overpass
+  imports **and** categories you name and fill by tapping. `addManualPoiPoint` /
+  `moveManualPoiPoint` **refuse an import** at the repository level — an import records what
+  OSM returned, and a hand-placed point in it would make that a lie. Icons come from
+  `ui/poi_icons.dart` and **must be `const IconData` literals**: release tree-shakes the icon
+  font to what it can see referenced, so a runtime-built one is a blank box in release only.
+- **Sharing a position** (`data/shared_point.dart`): long-press → Share/Copy, a share FAB, a
+  `zonecraft://` deep link (`app_links`) and a clipboard-prefilled paste box. **Receiving
+  writes nothing** — it is a provider value, not a row, until "Add to layer…". A custom
+  scheme, not a verified https App Link (that needs a domain), so the message also carries
+  plain coordinates. `kMinFocusZoom` is a **floor**: Locate me and a received link never zoom
+  you out.
 - **What is drawn and what can be tapped share one predicate.** `transitStationVisible`
   (`data/transit.dart`) is read by both `transit_layer` and `hit_test`; when it existed twice
   the copies disagreed on the empty filter, leaving mode-less stations tappable over blank
