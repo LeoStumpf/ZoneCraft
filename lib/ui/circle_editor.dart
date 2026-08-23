@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/database.dart';
+import '../data/layer_types.dart';
 import '../data/repository.dart';
 import '../geo/coords.dart';
 import '../state/providers.dart';
@@ -134,7 +135,7 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
   /// editor's picker: an unfiltered list offered `poi` and `borders` layers
   /// too, and moving a circle onto one stored it where nothing paints circles.
   List<Layer> get _circleLayers =>
-      widget.layers.where((l) => l.type == 'circles').toList();
+      widget.layers.where((l) => layerHolds(l, kCircles)).toList();
 
   /// The owning layer's colour, which the element's shade is derived from.
   /// Null when the layer is not in the list this sheet was handed (it was

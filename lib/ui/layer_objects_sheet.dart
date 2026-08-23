@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/database.dart';
+import '../data/layer_types.dart';
 import '../data/repository.dart' show ColoredElement;
 import '../state/providers.dart';
 import 'import_actions.dart' show convertBorderAreaFlow;
@@ -62,6 +63,12 @@ class _LayerObjectsList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final summaries = ref.watch(layerSummariesProvider(layer.id));
+    // The transit sections describe *imports that exist*, not a capability. On
+    // a transit layer the two are the same thing; on a combined layer they are
+    // not, and gating on the capability alone put "No stations imported yet —
+    // tap Import transit" above a circle and a track.
+    final hasTransit = layerHolds(layer, kTransit) &&
+        summaries.any((s) => s.ref.kind == ObjectKind.transitSet);
     // Imports (POI, transit, borders) have no editor sheet, so their row taps
     // frame the object instead of selecting it.
     final canEdit = layerHasEditor(layer.type);
@@ -86,7 +93,7 @@ class _LayerObjectsList extends ConsumerWidget {
               // filter is currently drawing — the import count belongs to the
               // Imports heading, where it can't be read as "stations".
               Text(
-                layer.type == 'transit'
+                hasTransit
                     ? () {
                         final t = ref.watch(transitTallyProvider(layer.id));
                         return '${t.shown} / ${t.total} shown';
@@ -100,7 +107,7 @@ class _LayerObjectsList extends ConsumerWidget {
         ),
         const Divider(height: 1),
         Expanded(
-          child: summaries.isEmpty && layer.type != 'transit'
+          child: summaries.isEmpty && !layerHolds(layer, kTransit)
               ? _EmptyState(scrollController: scrollController, layer: layer)
               : ListView(
                   controller: scrollController,
@@ -110,16 +117,28 @@ class _LayerObjectsList extends ConsumerWidget {
                     // *types* are tick boxes that hide markers, the *imports*
                     // are fetched areas that delete data. Both live here, each
                     // under a heading that says which it is.
-                    if (layer.type == 'transit') ...[
+                    if (hasTransit) ...[
                       const _SectionHeader('Station types',
                           'Tick which kinds of stop to draw'),
                       TransitModeFilter(layer: layer),
                       const Divider(height: 1),
                       _SectionHeader(
-                        'Imports',
-                        'Areas you fetched — deleting one removes its stations',
+                        layer.type == kMixedType ? 'Elements' : 'Imports',
+                        layer.type == kMixedType
+                            ? 'Everything on this layer'
+                            : 'Areas you fetched — deleting one removes its '
+                                'stations',
                         trailing: '${summaries.length}',
                       ),
+                    ]
+                    // A pure transit layer with no import yet still shows the
+                    // (empty) type filter, which is where its own empty hint
+                    // lives.
+                    else if (layer.type == 'transit') ...[
+                      const _SectionHeader('Station types',
+                          'Tick which kinds of stop to draw'),
+                      TransitModeFilter(layer: layer),
+                      const Divider(height: 1),
                     ],
                     if (summaries.isEmpty)
                       _EmptyHint(layer: layer)
@@ -142,7 +161,11 @@ class _LayerObjectsList extends ConsumerWidget {
     required bool canEdit,
   }) {
     return ListTile(
-      leading: Icon(s.isPending ? Icons.refresh : typeIcon(layer.type)),
+      // The *element's* icon, not the layer's: a combined layer's rows are
+      // of different kinds, and one shared icon would make the list
+      // unreadable — a circle and a track would look identical.
+      leading: Icon(
+          s.isPending ? Icons.refresh : typeIcon(s.ref.kind.layerType)),
       title: Text(s.title, overflow: TextOverflow.ellipsis),
       subtitle: Text(s.subtitle),
       onTap: () => Navigator.pop(
@@ -219,7 +242,9 @@ class _LayerObjectsList extends ConsumerWidget {
   /// Gives one element its own colour, or hands it back to the layer.
   Future<void> _pickElementColor(
       BuildContext context, WidgetRef ref, ObjectSummary s) async {
-    final kind = ColoredElement.forLayerType(layer.type);
+    // Resolved from the *row's* kind, not the layer's type: a mixed layer holds
+    // several kinds, so the layer can no longer answer for one element.
+    final kind = ColoredElement.forObjectKindName(s.ref.kind.name);
     if (kind == null) return;
     final layerColor = Color(layer.colorArgb);
     final choice = await showElementColorDialog(

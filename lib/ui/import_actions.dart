@@ -10,6 +10,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../data/database.dart';
 import '../data/geo_import.dart';
+import '../data/layer_types.dart';
 import '../data/repository.dart';
 import '../data/serialization.dart';
 import '../geo/border_areas.dart' show outerRings;
@@ -262,11 +263,15 @@ Future<void> importTrackIntoLayer(
   Layer layer,
 ) async {
   final messenger = ScaffoldMessenger.of(context);
-  final wantArea = layer.type == 'freearea';
   // A `track` layer takes the file as what it already is — a recorded line —
   // so it skips the inclusion-circle question entirely (a track bounds
   // nothing) and lands in the same track the recorder appends to.
-  final wantTrack = layer.type == 'track';
+  //
+  // A **combined** layer can hold all three, so track wins: this entry is
+  // called "Import track…", and importing a GPX as anything else would be a
+  // silent reinterpretation of the file.
+  final wantTrack = layerHolds(layer, kTrack);
+  final wantArea = !wantTrack && layerHolds(layer, kFreeArea);
   try {
     final picked = await openFile(acceptedTypeGroups: const [_importGroup]);
     if (picked == null) return;

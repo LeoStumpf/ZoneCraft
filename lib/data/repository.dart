@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 import '../geo/border_areas.dart';
 import '../geo/simplify.dart';
 import 'database.dart';
+import 'layer_types.dart';
 import 'overpass.dart' show PoiResult;
 import 'serialization.dart';
 
@@ -108,6 +109,7 @@ class Repository {
     bool? isVisible,
     bool? isInverted,
     double? opacity,
+    String? type,
   }) {
     return (_db.update(_db.layers)..where((l) => l.id.equals(id))).write(
       LayersCompanion(
@@ -118,7 +120,39 @@ class Repository {
         isInverted:
             isInverted == null ? const Value.absent() : Value(isInverted),
         opacity: opacity == null ? const Value.absent() : Value(opacity),
+        type: type == null ? const Value.absent() : Value(type),
       ),
+    );
+  }
+
+  /// Turns a single-type layer into a **mixed** one, so elements of other types
+  /// can be moved into it.
+  ///
+  /// Nothing about the rows changes — they already hang off the layer by id,
+  /// and a mixed layer simply stops filtering them by type. The only care
+  /// needed is the opacity: a layer still sitting on its *old* type's default
+  /// is moved to the mixed default, while a value the user chose is kept.
+  /// Otherwise a POI layer (default 1.0) would become a mixed layer whose
+  /// region fills are opaque, which reads as a bug rather than a conversion.
+  ///
+  /// Refuses `borders`: its areas carry an admin level that a mixed layer has
+  /// nowhere to keep, and the neighbour-distinct colouring is only meaningful
+  /// within one level.
+  Future<void> convertLayerToMixed(String id) async {
+    final layer = await (_db.select(_db.layers)..where((l) => l.id.equals(id)))
+        .getSingleOrNull();
+    if (layer == null) throw ArgumentError('Layer no longer exists');
+    if (layer.type == kMixedType) return;
+    if (!canBecomeMixed(layer.type)) {
+      throw ArgumentError(
+          'A borders layer holds one admin level, which a combined layer has '
+          'nowhere to keep. Convert an area to a freehand area instead.');
+    }
+    final wasDefault = layer.opacity == defaultLayerOpacity(layer.type);
+    await updateLayer(
+      id,
+      type: kMixedType,
+      opacity: wasDefault ? defaultLayerOpacity(kMixedType) : null,
     );
   }
 
@@ -144,62 +178,30 @@ class Repository {
           ..where((l) => l.id.equals(targetId)))
         .getSingleOrNull();
     if (src == null || tgt == null) throw ArgumentError('Layer no longer exists');
-    if (src.type != tgt.type) {
-      throw ArgumentError('Layers must be the same type');
+    // The target has to be able to *hold* everything the source does — which a
+    // mixed target does for all but `borders`, and a single-type target only
+    // for its own type.
+    final moving = layerContentTypes(src);
+    final unheld = moving.where((t) => !layerTypeHolds(tgt.type, t)).toList();
+    if (unheld.isNotEmpty) {
+      throw ArgumentError(tgt.type == kMixedType
+          ? 'A combined layer cannot hold ${unheld.join(', ')}'
+          : 'Layers must be the same type');
     }
     // One borders layer holds one admin level: the "no two neighbours share a
     // colour" rule is only meaningful within a level, since areas of different
     // levels nest rather than tile.
-    if (src.type == 'borders' && src.borderLevel != tgt.borderLevel) {
+    if (src.type == kBorders && src.borderLevel != tgt.borderLevel) {
       throw ArgumentError('Border layers must hold the same level');
     }
     await _db.transaction(() async {
-      // Only the table for this layer's type holds rows to re-point.
-      switch (src.type) {
-        case 'planes':
-          await (_db.update(_db.planes)
-                ..where((t) => t.layerId.equals(sourceId)))
-              .write(PlanesCompanion(layerId: Value(targetId)));
-        case 'subspace':
-          await (_db.update(_db.subspaces)
-                ..where((t) => t.layerId.equals(sourceId)))
-              .write(SubspacesCompanion(layerId: Value(targetId)));
-        case 'freeline':
-          await (_db.update(_db.freeLines)
-                ..where((t) => t.layerId.equals(sourceId)))
-              .write(FreeLinesCompanion(layerId: Value(targetId)));
-        case 'freearea':
-          await (_db.update(_db.freeAreas)
-                ..where((t) => t.layerId.equals(sourceId)))
-              .write(FreeAreasCompanion(layerId: Value(targetId)));
-        case 'height':
-          await (_db.update(_db.heightRegions)
-                ..where((t) => t.layerId.equals(sourceId)))
-              .write(HeightRegionsCompanion(layerId: Value(targetId)));
-        case 'poi':
-          await (_db.update(_db.poiSets)
-                ..where((t) => t.layerId.equals(sourceId)))
-              .write(PoiSetsCompanion(layerId: Value(targetId)));
-        case 'transit':
-          await (_db.update(_db.transitSets)
-                ..where((t) => t.layerId.equals(sourceId)))
-              .write(TransitSetsCompanion(layerId: Value(targetId)));
-        case 'borders':
-          await (_db.update(_db.borderSets)
-                ..where((t) => t.layerId.equals(sourceId)))
-              .write(BorderSetsCompanion(layerId: Value(targetId)));
-        case 'track':
-          await (_db.update(_db.tracks)
-                ..where((t) => t.layerId.equals(sourceId)))
-              .write(TracksCompanion(layerId: Value(targetId)));
-        case 'circles':
-        default:
-          // WARNING: a new layer type that forgets its `case` above lands here,
-          // re-points nothing, and then loses all its rows to the cascade when
-          // the source layer is deleted below. Add the case when adding a type.
-          await (_db.update(_db.circles)
-                ..where((t) => t.layerId.equals(sourceId)))
-              .write(CirclesCompanion(layerId: Value(targetId)));
+      // Re-point every table the source can hold. Driven by
+      // [layerContentTypes] rather than a switch with a `default:` arm: the old
+      // shape silently sent an unknown type down the `circles` branch, which
+      // re-pointed nothing and then lost every row to the cascade when the
+      // source layer was deleted below. An unknown type now throws instead.
+      for (final type in moving) {
+        await _repointLayerRows(type, sourceId, targetId);
       }
       // The source now holds no objects, so deleting it won't cascade the
       // re-pointed rows away.
@@ -207,7 +209,64 @@ class Repository {
     });
     // The target now holds areas from two imports that were coloured
     // independently, so its seam has to be resolved.
-    if (src.type == 'borders') await recolourBorderLayer(targetId);
+    if (layerTypeHolds(tgt.type, kBorders) && moving.contains(kBorders)) {
+      await recolourBorderLayer(targetId);
+    }
+  }
+
+  /// Moves every row of one object [type] from [sourceId] to [targetId].
+  ///
+  /// Exhaustive by construction: a type with no branch here throws rather than
+  /// quietly doing nothing, which is the failure the old `default:` arm made
+  /// invisible until a layer had already lost its contents.
+  Future<void> _repointLayerRows(
+    String type,
+    String sourceId,
+    String targetId,
+  ) async {
+    final to = Value(targetId);
+    switch (type) {
+      case kCircles:
+        await (_db.update(_db.circles)
+              ..where((t) => t.layerId.equals(sourceId)))
+            .write(CirclesCompanion(layerId: to));
+      case kPlanes:
+        await (_db.update(_db.planes)..where((t) => t.layerId.equals(sourceId)))
+            .write(PlanesCompanion(layerId: to));
+      case kSubspace:
+        await (_db.update(_db.subspaces)
+              ..where((t) => t.layerId.equals(sourceId)))
+            .write(SubspacesCompanion(layerId: to));
+      case kFreeLine:
+        await (_db.update(_db.freeLines)
+              ..where((t) => t.layerId.equals(sourceId)))
+            .write(FreeLinesCompanion(layerId: to));
+      case kFreeArea:
+        await (_db.update(_db.freeAreas)
+              ..where((t) => t.layerId.equals(sourceId)))
+            .write(FreeAreasCompanion(layerId: to));
+      case kHeight:
+        await (_db.update(_db.heightRegions)
+              ..where((t) => t.layerId.equals(sourceId)))
+            .write(HeightRegionsCompanion(layerId: to));
+      case kTrack:
+        await (_db.update(_db.tracks)..where((t) => t.layerId.equals(sourceId)))
+            .write(TracksCompanion(layerId: to));
+      case kPoi:
+        await (_db.update(_db.poiSets)
+              ..where((t) => t.layerId.equals(sourceId)))
+            .write(PoiSetsCompanion(layerId: to));
+      case kTransit:
+        await (_db.update(_db.transitSets)
+              ..where((t) => t.layerId.equals(sourceId)))
+            .write(TransitSetsCompanion(layerId: to));
+      case kBorders:
+        await (_db.update(_db.borderSets)
+              ..where((t) => t.layerId.equals(sourceId)))
+            .write(BorderSetsCompanion(layerId: to));
+      default:
+        throw ArgumentError('No table is registered for layer type "$type"');
+    }
   }
 
   /// Persists a new ordering. [orderedIds] is bottom-to-top draw order.
@@ -284,20 +343,30 @@ class Repository {
     String layerId,
     String layerType,
   ) async {
-    final kind = ColoredElement.forLayerType(layerType);
-    if (kind == null) return const [];
-    // Border areas hang off their import set, not off the layer directly.
-    final sql = kind == ColoredElement.borderArea
-        ? 'SELECT a.id AS id FROM border_areas a '
-              'JOIN border_sets s ON a.set_id = s.id '
-              'WHERE s.layer_id = ? AND a.color_argb IS NOT NULL'
-        : 'SELECT id FROM ${kind.table} '
-              'WHERE layer_id = ? AND color_argb IS NOT NULL';
-    final rows = await _db.customSelect(
-      sql,
-      variables: [Variable<String>(layerId)],
-    ).get();
-    return [for (final r in rows) r.read<String>('id')];
+    // A mixed layer's overrides live across several tables, so this asks each
+    // of the types it holds rather than one.
+    final kinds = [
+      for (final type in layerContentTypesOf(layerType))
+        if (ColoredElement.forLayerType(type) != null)
+          ColoredElement.forLayerType(type)!,
+    ];
+    if (kinds.isEmpty) return const [];
+    final out = <String>[];
+    for (final kind in kinds) {
+      // Border areas hang off their import set, not off the layer directly.
+      final sql = kind == ColoredElement.borderArea
+          ? 'SELECT a.id AS id FROM border_areas a '
+                'JOIN border_sets s ON a.set_id = s.id '
+                'WHERE s.layer_id = ? AND a.color_argb IS NOT NULL'
+          : 'SELECT id FROM ${kind.table} '
+                'WHERE layer_id = ? AND color_argb IS NOT NULL';
+      final rows = await _db.customSelect(
+        sql,
+        variables: [Variable<String>(layerId)],
+      ).get();
+      out.addAll([for (final r in rows) r.read<String>('id')]);
+    }
+    return out;
   }
 
   /// Clears the colour override on [ids], putting them back on auto shades.
@@ -314,14 +383,42 @@ class Repository {
   ///
   /// Shade 0 is the layer colour itself, so the first element of a layer looks
   /// exactly as it did before per-element colours existed.
+  ///
+  /// On a **mixed** layer the maximum is taken across *every* element table the
+  /// layer holds, not just [table]: counting per table would give the first
+  /// circle and the first plane both shade 0, i.e. the same colour, which is
+  /// precisely what the auto shades exist to avoid. A single-type layer keeps
+  /// the one-table query exactly as it was, so no existing row is ever
+  /// re-shaded.
   Future<int> _nextColorShade(String table, String layerId) async {
-    final row = await _db.customSelect(
-      'SELECT COALESCE(MAX(color_shade), -1) + 1 AS next '
-      'FROM $table WHERE layer_id = ?',
-      variables: [Variable<String>(layerId)],
-    ).getSingle();
-    return row.read<int>('next');
+    final layer = await (_db.select(_db.layers)
+          ..where((l) => l.id.equals(layerId)))
+        .getSingleOrNull();
+    final tables = layer?.type == kMixedType
+        ? _shadedTablesOfMixed
+        : <String>[table];
+    var next = 0;
+    for (final t in tables) {
+      final row = await _db.customSelect(
+        'SELECT COALESCE(MAX(color_shade), -1) + 1 AS next '
+        'FROM $t WHERE layer_id = ?',
+        variables: [Variable<String>(layerId)],
+      ).getSingle();
+      final n = row.read<int>('next');
+      if (n > next) next = n;
+    }
+    return next;
   }
+
+  /// The element tables a mixed layer can hold that carry a `color_shade`.
+  /// (`border_areas` has none — it uses its neighbour-distinct `color_index` —
+  /// and a mixed layer holds no borders anyway.)
+  static final List<String> _shadedTablesOfMixed = [
+    for (final k in ColoredElement.values)
+      if (k != ColoredElement.borderArea &&
+          kMixedContentTypes.contains(k.layerType))
+        k.table,
+  ];
 
   Future<String> createCircle({
     required String layerId,
@@ -2198,215 +2295,220 @@ class Repository {
     final out = <ExportLayer>[];
     for (final layer in layers) {
       final objects = <ExportObject>[];
-      switch (layer.type) {
-        case 'circles':
-          for (final c in circles.where((c) => c.layerId == layer.id)) {
-            objects.add(ExportObject(
-              kind: 'circle',
-              coords: [LatLng(c.centerLat, c.centerLng)],
-              radiusMeters: c.radiusMeters,
-              label: c.label,
-              colorArgb: c.colorArgb,
-            ));
-          }
-        case 'planes':
-          for (final p in planes.where((p) => p.layerId == layer.id)) {
-            objects.add(ExportObject(
-              kind: 'plane',
-              coords: [LatLng(p.aLat, p.aLng), LatLng(p.bLat, p.bLng)],
-              nearA: p.nearA,
-              label: p.label,
-              colorArgb: p.colorArgb,
-            ));
-          }
-        case 'subspace':
-          for (final s in subspaces.where((s) => s.layerId == layer.id)) {
-            final pts = subPoints.where((p) => p.subspaceId == s.id).toList();
-            if (pts.isEmpty) continue;
-            var mainIndex = pts.indexWhere((p) => p.isMain);
-            if (mainIndex < 0) mainIndex = 0;
-            objects.add(ExportObject(
-              kind: 'subspace',
-              coords: [for (final p in pts) LatLng(p.lat, p.lng)],
-              mainIndex: mainIndex,
-              // Only when one is actually named — a list of nulls is bulk.
-              pointLabels: pts.any((p) => p.label != null)
-                  ? [for (final p in pts) p.label]
-                  : null,
-              label: s.label,
-              colorArgb: s.colorArgb,
-            ));
-          }
-        case 'freeline':
-          for (final l in freeLines.where((l) => l.layerId == layer.id)) {
-            final pts = flPoints.where((p) => p.freeLineId == l.id).toList();
-            // A point-less row has no geometry to write, and the encoders read
-            // `coords.first` — the same guard subspace and track already make.
-            if (pts.isEmpty) continue;
-            objects.add(ExportObject(
-              kind: 'freeline',
-              coords: [for (final p in pts) LatLng(p.lat, p.lng)],
-              offsetMeters: l.offsetMeters,
-              inclusionLat: l.inclusionLat,
-              inclusionLng: l.inclusionLng,
-              inclusionRadiusMeters: l.inclusionRadiusMeters,
-              label: l.label,
-              colorArgb: l.colorArgb,
-            ));
-          }
-        case 'track':
-          for (final t in tracks.where((t) => t.layerId == layer.id)) {
-            final pts = trackPoints.where((p) => p.trackId == t.id).toList();
-            if (pts.isEmpty) continue;
-            // Split on segmentIndex: a segment change is a *break* in the
-            // drawn line, so it becomes one part of a MultiLineString rather
-            // than being flattened into a straight jump across the pause. One
-            // feature still, so the track stays one element on the way back.
-            final segments = <List<LatLng>>[];
-            var current = <LatLng>[];
-            int? seg;
-            for (final p in pts) {
-              if (seg != null && p.segmentIndex != seg) {
-                segments.add(current);
-                current = <LatLng>[];
-              }
-              seg = p.segmentIndex;
-              current.add(LatLng(p.lat, p.lng));
-            }
-            if (current.isNotEmpty) segments.add(current);
-            objects.add(ExportObject(
-              kind: 'track',
-              coords: [for (final s in segments) ...s],
-              segments: segments,
-              label: t.label,
-              colorArgb: t.colorArgb,
-            ));
-          }
-        case 'freearea':
-          for (final a in freeAreas.where((a) => a.layerId == layer.id)) {
-            final pts = faPoints.where((p) => p.freeAreaId == a.id).toList();
-            if (pts.isEmpty) continue;
-            objects.add(ExportObject(
-              kind: 'freearea',
-              coords: [for (final p in pts) LatLng(p.lat, p.lng)],
-              offsetMeters: a.offsetMeters,
-              label: a.label,
-              colorArgb: a.colorArgb,
-            ));
-          }
-        case 'height':
-          for (final r in heightRegions.where((r) => r.layerId == layer.id)) {
-            objects.add(ExportObject(
-              kind: 'height',
-              coords: [LatLng(r.centerLat, r.centerLng)],
-              radiusMeters: r.radiusMeters,
-              thresholdMeters: r.thresholdMeters,
-              aboveThreshold: r.aboveThreshold,
-              sampleZoom: r.sampleZoom,
-              // The fills are derived from terrain tiles, but regenerating
-              // them needs the network and can disagree with what the sender
-              // saw — so a generated region travels drawn. An ungenerated one
-              // carries neither key and still imports as ungenerated.
-              generated: r.generatedAt == null ? null : true,
-              heightRings: r.generatedAt == null
-                  ? null
-                  : (fillsOfRegion[r.id] ?? const <List<LatLng>>[]),
-              label: r.label,
-              colorArgb: r.colorArgb,
-            ));
-          }
-        case 'poi':
-          // coords[0] is the set's search centre; coords[1..] are the POIs
-          // themselves, with their names in [ExportObject.pointLabels].
-          for (final s in poiSets.where((s) => s.layerId == layer.id)) {
-            final pts = poiPoints.where((p) => p.poiSetId == s.id).toList();
-            // The OSM identity of each POI travels too: it is what dedup
-            // matches on, so without it a later import over the same ground
-            // draws every one of them a second time. Written only when at
-            // least one POI has it (rows from before v21 never did).
-            final identified = pts.any((p) => p.osmId != null);
-            objects.add(ExportObject(
-              kind: 'poi',
-              coords: [
-                LatLng(s.centerLat, s.centerLng),
-                for (final p in pts) LatLng(p.lat, p.lng),
-              ],
-              radiusMeters: s.radiusMeters,
-              categoryKey: s.categoryKey,
-              pointLabels: [for (final p in pts) p.name],
-              pointOsmIds:
-                  identified ? [for (final p in pts) p.osmId ?? 0] : null,
-              pointOsmTypes:
-                  identified ? [for (final p in pts) p.osmType] : null,
-              // Written only for a hand-made category, so an ordinary import's
-              // GeoJSON is byte-for-byte what it was before v25.
-              manual: s.isManual ? true : null,
-              iconKey: s.iconKey,
-              label: s.label,
-              colorArgb: s.colorArgb,
-            ));
-          }
-        case 'transit':
-          // One object per *import*: its stations as named points (which is
-          // what another tool can read) plus the box and the per-station OSM
-          // attributes, which is what lets this app put the import back
-          // together. An import that never succeeded has no stations but is
-          // still a row on the layer — a retry the user can press — so it
-          // travels as an empty one rather than vanishing.
-          for (final t in transitSets.where((t) => t.layerId == layer.id)) {
-            final stops =
-                transitStops.where((x) => x.setId == t.id).toList();
-            final done = stops.isNotEmpty;
-            objects.add(ExportObject(
-              kind: 'transitstop',
-              coords: [for (final x in stops) LatLng(x.lat, x.lng)],
-              pointLabels: done ? [for (final x in stops) x.name] : null,
-              pointOsmIds: done ? [for (final x in stops) x.osmId] : null,
-              pointModeMasks:
-                  done ? [for (final x in stops) x.modeMask] : null,
-              pointNodeCounts:
-                  done ? [for (final x in stops) x.nodeCount] : null,
-              pointRouteRefs:
-                  done ? [for (final x in stops) x.routeRef] : null,
-              bbox: [t.south, t.west, t.north, t.east],
-              modeMask: t.modeMask,
-              visibleModeMask: t.visibleModeMask,
-              pending: t.fetchedAt == null ? true : null,
-              errorMessage: t.lastError,
-              label: t.label,
-              colorArgb: t.colorArgb,
-            ));
-          }
-        case 'borders':
-          // One object per **area**, which is what the Elements list names and
-          // what a person would say they are handing over. The import it came
-          // from rides along as `adminLevel` + `bbox`, so the areas regroup
-          // into the same sets on the far side instead of collapsing into one.
-          for (final s in borderSets.where((s) => s.layerId == layer.id)) {
-            for (final a in borderAreas.where((a) => a.setId == s.id)) {
-              final rings = decodeRings(a.rings);
-              if (rings.isEmpty) continue;
+      // A mixed layer holds several types, so each is collected in turn; a
+      // single-type layer runs exactly one pass, doing what it always did.
+      // The bodies already filter by `layer.id`, so nothing else changes.
+      for (final type in layerContentTypes(layer)) {
+        switch (type) {
+          case 'circles':
+            for (final c in circles.where((c) => c.layerId == layer.id)) {
               objects.add(ExportObject(
-                kind: 'borderarea',
-                coords: rings.first,
-                rings: rings,
-                label: a.name,
-                // 0 is the "no relation id" placeholder an id-less import was
-                // stored with; writing it out would make every such area look
-                // like the same OSM relation, and dedup would keep one.
-                osmId: a.osmId == 0 ? null : a.osmId,
-                adminLevel: s.adminLevel,
-                setLabel: s.label,
-                bbox: [s.south, s.west, s.north, s.east],
-                colorIndex: a.colorIndex,
-                labelLat: a.labelLat,
-                labelLng: a.labelLng,
-                wayIds: _decodeWayIds(a.wayIds),
-                edited: a.editedAt == null ? null : true,
+                kind: 'circle',
+                coords: [LatLng(c.centerLat, c.centerLng)],
+                radiusMeters: c.radiusMeters,
+                label: c.label,
+                colorArgb: c.colorArgb,
+              ));
+            }
+          case 'planes':
+            for (final p in planes.where((p) => p.layerId == layer.id)) {
+              objects.add(ExportObject(
+                kind: 'plane',
+                coords: [LatLng(p.aLat, p.aLng), LatLng(p.bLat, p.bLng)],
+                nearA: p.nearA,
+                label: p.label,
+                colorArgb: p.colorArgb,
+              ));
+            }
+          case 'subspace':
+            for (final s in subspaces.where((s) => s.layerId == layer.id)) {
+              final pts = subPoints.where((p) => p.subspaceId == s.id).toList();
+              if (pts.isEmpty) continue;
+              var mainIndex = pts.indexWhere((p) => p.isMain);
+              if (mainIndex < 0) mainIndex = 0;
+              objects.add(ExportObject(
+                kind: 'subspace',
+                coords: [for (final p in pts) LatLng(p.lat, p.lng)],
+                mainIndex: mainIndex,
+                // Only when one is actually named — a list of nulls is bulk.
+                pointLabels: pts.any((p) => p.label != null)
+                    ? [for (final p in pts) p.label]
+                    : null,
+                label: s.label,
+                colorArgb: s.colorArgb,
+              ));
+            }
+          case 'freeline':
+            for (final l in freeLines.where((l) => l.layerId == layer.id)) {
+              final pts = flPoints.where((p) => p.freeLineId == l.id).toList();
+              // A point-less row has no geometry to write, and the encoders read
+              // `coords.first` — the same guard subspace and track already make.
+              if (pts.isEmpty) continue;
+              objects.add(ExportObject(
+                kind: 'freeline',
+                coords: [for (final p in pts) LatLng(p.lat, p.lng)],
+                offsetMeters: l.offsetMeters,
+                inclusionLat: l.inclusionLat,
+                inclusionLng: l.inclusionLng,
+                inclusionRadiusMeters: l.inclusionRadiusMeters,
+                label: l.label,
+                colorArgb: l.colorArgb,
+              ));
+            }
+          case 'track':
+            for (final t in tracks.where((t) => t.layerId == layer.id)) {
+              final pts = trackPoints.where((p) => p.trackId == t.id).toList();
+              if (pts.isEmpty) continue;
+              // Split on segmentIndex: a segment change is a *break* in the
+              // drawn line, so it becomes one part of a MultiLineString rather
+              // than being flattened into a straight jump across the pause. One
+              // feature still, so the track stays one element on the way back.
+              final segments = <List<LatLng>>[];
+              var current = <LatLng>[];
+              int? seg;
+              for (final p in pts) {
+                if (seg != null && p.segmentIndex != seg) {
+                  segments.add(current);
+                  current = <LatLng>[];
+                }
+                seg = p.segmentIndex;
+                current.add(LatLng(p.lat, p.lng));
+              }
+              if (current.isNotEmpty) segments.add(current);
+              objects.add(ExportObject(
+                kind: 'track',
+                coords: [for (final s in segments) ...s],
+                segments: segments,
+                label: t.label,
+                colorArgb: t.colorArgb,
+              ));
+            }
+          case 'freearea':
+            for (final a in freeAreas.where((a) => a.layerId == layer.id)) {
+              final pts = faPoints.where((p) => p.freeAreaId == a.id).toList();
+              if (pts.isEmpty) continue;
+              objects.add(ExportObject(
+                kind: 'freearea',
+                coords: [for (final p in pts) LatLng(p.lat, p.lng)],
+                offsetMeters: a.offsetMeters,
+                label: a.label,
                 colorArgb: a.colorArgb,
               ));
             }
-          }
+          case 'height':
+            for (final r in heightRegions.where((r) => r.layerId == layer.id)) {
+              objects.add(ExportObject(
+                kind: 'height',
+                coords: [LatLng(r.centerLat, r.centerLng)],
+                radiusMeters: r.radiusMeters,
+                thresholdMeters: r.thresholdMeters,
+                aboveThreshold: r.aboveThreshold,
+                sampleZoom: r.sampleZoom,
+                // The fills are derived from terrain tiles, but regenerating
+                // them needs the network and can disagree with what the sender
+                // saw — so a generated region travels drawn. An ungenerated one
+                // carries neither key and still imports as ungenerated.
+                generated: r.generatedAt == null ? null : true,
+                heightRings: r.generatedAt == null
+                    ? null
+                    : (fillsOfRegion[r.id] ?? const <List<LatLng>>[]),
+                label: r.label,
+                colorArgb: r.colorArgb,
+              ));
+            }
+          case 'poi':
+            // coords[0] is the set's search centre; coords[1..] are the POIs
+            // themselves, with their names in [ExportObject.pointLabels].
+            for (final s in poiSets.where((s) => s.layerId == layer.id)) {
+              final pts = poiPoints.where((p) => p.poiSetId == s.id).toList();
+              // The OSM identity of each POI travels too: it is what dedup
+              // matches on, so without it a later import over the same ground
+              // draws every one of them a second time. Written only when at
+              // least one POI has it (rows from before v21 never did).
+              final identified = pts.any((p) => p.osmId != null);
+              objects.add(ExportObject(
+                kind: 'poi',
+                coords: [
+                  LatLng(s.centerLat, s.centerLng),
+                  for (final p in pts) LatLng(p.lat, p.lng),
+                ],
+                radiusMeters: s.radiusMeters,
+                categoryKey: s.categoryKey,
+                pointLabels: [for (final p in pts) p.name],
+                pointOsmIds:
+                    identified ? [for (final p in pts) p.osmId ?? 0] : null,
+                pointOsmTypes:
+                    identified ? [for (final p in pts) p.osmType] : null,
+                // Written only for a hand-made category, so an ordinary import's
+                // GeoJSON is byte-for-byte what it was before v25.
+                manual: s.isManual ? true : null,
+                iconKey: s.iconKey,
+                label: s.label,
+                colorArgb: s.colorArgb,
+              ));
+            }
+          case 'transit':
+            // One object per *import*: its stations as named points (which is
+            // what another tool can read) plus the box and the per-station OSM
+            // attributes, which is what lets this app put the import back
+            // together. An import that never succeeded has no stations but is
+            // still a row on the layer — a retry the user can press — so it
+            // travels as an empty one rather than vanishing.
+            for (final t in transitSets.where((t) => t.layerId == layer.id)) {
+              final stops =
+                  transitStops.where((x) => x.setId == t.id).toList();
+              final done = stops.isNotEmpty;
+              objects.add(ExportObject(
+                kind: 'transitstop',
+                coords: [for (final x in stops) LatLng(x.lat, x.lng)],
+                pointLabels: done ? [for (final x in stops) x.name] : null,
+                pointOsmIds: done ? [for (final x in stops) x.osmId] : null,
+                pointModeMasks:
+                    done ? [for (final x in stops) x.modeMask] : null,
+                pointNodeCounts:
+                    done ? [for (final x in stops) x.nodeCount] : null,
+                pointRouteRefs:
+                    done ? [for (final x in stops) x.routeRef] : null,
+                bbox: [t.south, t.west, t.north, t.east],
+                modeMask: t.modeMask,
+                visibleModeMask: t.visibleModeMask,
+                pending: t.fetchedAt == null ? true : null,
+                errorMessage: t.lastError,
+                label: t.label,
+                colorArgb: t.colorArgb,
+              ));
+            }
+          case 'borders':
+            // One object per **area**, which is what the Elements list names and
+            // what a person would say they are handing over. The import it came
+            // from rides along as `adminLevel` + `bbox`, so the areas regroup
+            // into the same sets on the far side instead of collapsing into one.
+            for (final s in borderSets.where((s) => s.layerId == layer.id)) {
+              for (final a in borderAreas.where((a) => a.setId == s.id)) {
+                final rings = decodeRings(a.rings);
+                if (rings.isEmpty) continue;
+                objects.add(ExportObject(
+                  kind: 'borderarea',
+                  coords: rings.first,
+                  rings: rings,
+                  label: a.name,
+                  // 0 is the "no relation id" placeholder an id-less import was
+                  // stored with; writing it out would make every such area look
+                  // like the same OSM relation, and dedup would keep one.
+                  osmId: a.osmId == 0 ? null : a.osmId,
+                  adminLevel: s.adminLevel,
+                  setLabel: s.label,
+                  bbox: [s.south, s.west, s.north, s.east],
+                  colorIndex: a.colorIndex,
+                  labelLat: a.labelLat,
+                  labelLng: a.labelLng,
+                  wayIds: _decodeWayIds(a.wayIds),
+                  edited: a.editedAt == null ? null : true,
+                  colorArgb: a.colorArgb,
+                ));
+              }
+            }
+        }
       }
       out.add(ExportLayer(
         name: layer.name,
@@ -2502,15 +2604,27 @@ class Repository {
           ..where((l) => l.id.equals(layerId)))
         .getSingleOrNull();
     if (target == null) throw ArgumentError('Layer no longer exists');
-    if (target.type != layer.type) {
+    // What matters is whether the target can *hold* what the file carries, not
+    // whether the two layers are labelled the same: a mixed target accepts a
+    // circles file, and a mixed file merges into a mixed layer. Checked against
+    // the objects' own kinds rather than the file's layer type, since that is
+    // what `_insertObject` will actually dispatch on.
+    final kinds = <String>{
+      for (final o in layer.objects)
+        if (layerTypeForExportKind(o.kind) != null)
+          layerTypeForExportKind(o.kind)!,
+    };
+    final unheld =
+        kinds.where((t) => !layerTypeHolds(target.type, t)).toList()..sort();
+    if (unheld.isNotEmpty) {
       throw ArgumentError(
-          'That file holds ${layer.type} objects, but the layer is '
+          'That file holds ${unheld.join(', ')} objects, but the layer is '
           '${target.type}');
     }
     // Same rule [combineLayers] enforces: one borders layer holds one admin
     // level, because "no two neighbours share a colour" is only meaningful
     // within a level — areas of different levels nest rather than tile.
-    if (target.type == 'borders' &&
+    if (target.type == kBorders &&
         layer.borderLevel != null &&
         layer.borderLevel != target.borderLevel) {
       throw ArgumentError(
@@ -3018,4 +3132,26 @@ enum ColoredElement {
     }
     return null;
   }
+
+  /// The kind for an [ObjectKind] name, which is what a *row* knows about
+  /// itself.
+  ///
+  /// The layer-type lookup cannot answer for a mixed layer — it holds nine
+  /// kinds — so anything acting on one element (the Elements-list colour menu,
+  /// the editors' colour swatch) must come in this way instead. Takes the
+  /// enum's `name` rather than the enum itself so `data/` need not import
+  /// `state/`.
+  static ColoredElement? forObjectKindName(String kindName) => switch (kindName) {
+        'circle' => ColoredElement.circle,
+        'plane' => ColoredElement.plane,
+        'subspace' => ColoredElement.subspace,
+        'freeLine' => ColoredElement.freeLine,
+        'freeArea' => ColoredElement.freeArea,
+        'heightRegion' => ColoredElement.heightRegion,
+        'poiSet' => ColoredElement.poiSet,
+        'transitSet' => ColoredElement.transitSet,
+        'borderArea' => ColoredElement.borderArea,
+        'track' => ColoredElement.track,
+        _ => null,
+      };
 }

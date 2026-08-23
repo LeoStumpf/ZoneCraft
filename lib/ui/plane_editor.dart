@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 
 import '../data/database.dart';
+import '../data/layer_types.dart';
 import '../data/repository.dart';
 import '../geo/coords.dart';
 import '../state/providers.dart';
@@ -88,7 +89,7 @@ class _PlaneEditorSheetState extends ConsumerState<PlaneEditorSheet> {
   /// The layers this plane can be moved to — see the note in `circle_editor`:
   /// these two pickers were the only unfiltered ones.
   List<Layer> get _planeLayers =>
-      widget.layers.where((l) => l.type == 'planes').toList();
+      widget.layers.where((l) => layerHolds(l, kPlanes)).toList();
 
   /// The owning layer's colour, which the element's shade is derived from.
   /// Null when the layer is not in the list this sheet was handed (it was

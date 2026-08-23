@@ -20,6 +20,11 @@ const double kDefaultRegionLayerOpacity = 0.45;
 /// silently drifts. 'borders' is region-like (it has an area fill), so it takes
 /// the region default even though its fill is off until "Colour areas" is
 /// ticked.
+/// A **mixed** layer takes the region default: its opacity governs the region
+/// composite, while its markers and tracks stay crisp (they are drawn, not
+/// filled — there is nothing to see the map through). Defaulting it to 1.0
+/// instead would make a circle moved into it opaque, which is the more
+/// surprising of the two.
 double defaultLayerOpacity(String type) =>
     (type == 'poi' || type == 'transit' || type == 'track')
         ? 1.0

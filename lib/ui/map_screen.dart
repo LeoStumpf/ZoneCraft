@@ -22,6 +22,7 @@ import '../data/location.dart';
 import '../data/overpass.dart';
 import '../data/overpass_client.dart'
     show OverpassCancel, OverpassOutcome, kOverpassPreferenceMaxElapsed;
+import '../data/layer_types.dart';
 import '../data/repository.dart' show Repository;
 import '../data/shared_point.dart';
 import '../data/tile_source.dart';
@@ -1520,6 +1521,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// The Add button's label for a layer type. A nested ternary got unreadable
   /// at seven types; this is the same mapping as a switch.
   static String _addFabLabel(String? type) => switch (type) {
+    // A combined layer holds nine kinds, so the button cannot name one: it
+    // asks first (see [_pickPlaceType]).
+    kMixedType => 'Add…',
     'poi' => 'Add POI',
     'transit' => 'Import transit',
     'borders' => 'Import borders',
@@ -1899,7 +1903,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
     required List<FreeArea> freeAreas,
   }) {
     final c = _mapController.camera.center;
-    switch (layer.type) {
+    // On a mixed layer the long-press shortcut places whatever Add mode is
+    // armed for; with nothing armed it falls back to the first type it holds.
+    final type = layer.type == kMixedType
+        ? (_placeType ?? kMixedContentTypes.first)
+        : layer.type;
+    switch (type) {
       case 'poi':
         _importPois(layer);
       case 'transit':
@@ -1932,22 +1941,77 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// offers to make one; declining leaves Add unarmed rather than arming a mode
   /// whose taps would go nowhere.
   Future<void> _enterAddMode(Layer layer) async {
+    // A mixed layer holds nine kinds, so "the layer's type" no longer says what
+    // a tap should place. Ask once, up front, and keep it in `_placeType` —
+    // which already existed for exactly this separation.
+    var type = layer.type;
+    if (layer.type == kMixedType) {
+      final picked = await _pickPlaceType(layer);
+      if (picked == null || !mounted) return;
+      // A track is *recorded*, not placed — there is no such thing as tapping
+      // a GPS fix onto the map — so this branch starts the recorder instead of
+      // arming a tap mode. It is why a track layer's Add FAB is a Record
+      // button, and a mixed layer needs the same route in.
+      if (picked == kTrack) {
+        await _toggleRecording(layer);
+        return;
+      }
+      type = picked;
+    }
     String? poiSetId;
-    if (layer.type == 'poi') {
+    if (type == 'poi') {
       poiSetId = await _resolveManualPoiSet(layer);
       if (poiSetId == null || !mounted) return;
     }
     _enterMode(MapMode.add);
     setState(() {
       _placeLayerId = layer.id;
-      _placeType = layer.type;
+      _placeType = type;
       _placePoiSetId = poiSetId;
       _pendingPlaneA = null;
       _pendingBoxA = null;
       _addSteps.clear();
     });
-    _hint(_addBannerText(layer.type, 0));
+    _hint(_addBannerText(type, 0));
   }
+
+  /// Asks which kind of object a mixed layer's Add mode should place.
+  ///
+  /// Offered in draw order, the same order the layer paints and the Elements
+  /// list reads, so the sheet is not a third arbitrary ordering to learn.
+  Future<String?> _pickPlaceType(Layer layer) {
+    return showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            ListTile(title: Text('Add to "${layer.name}"')),
+            const Divider(height: 1),
+            for (final type in kMixedContentTypes)
+              ListTile(
+                leading: Icon(typeIcon(type)),
+                title: Text(_placeTypeLabel(type)),
+                onTap: () => Navigator.pop(ctx, type),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _placeTypeLabel(String type) => switch (type) {
+        'circles' => 'Circle',
+        'planes' => 'Plane',
+        'subspace' => 'Subspace',
+        'freeline' => 'Freehand line',
+        'freearea' => 'Freehand area',
+        'height' => 'Height area',
+        'track' => 'Record a track',
+        'poi' => 'POI',
+        'transit' => 'Transit import',
+        _ => type,
+      };
 
   /// Which manual category to drop POIs into: the only one if there is exactly
   /// one, otherwise a choice, and an offer to create one when there are none.
@@ -2036,9 +2100,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
   static bool _isBoxImport(String? type) =>
       type == 'transit' || type == 'borders';
 
-  /// Runs whichever box import [layer] is for.
+  /// Runs whichever box import Add mode is armed for.
+  ///
+  /// Reads `_placeType`, not the layer's type: a mixed layer is neither, and
+  /// the armed type is the thing that actually decided this is a box import
+  /// (see [_isBoxImport]).
   Future<void> _importBox(Layer layer, LatLngBounds box) =>
-      layer.type == 'borders'
+      (_placeType ?? layer.type) == kBorders
       ? _importBorders(layer, box: box)
       : _importTransit(layer, box: box);
 
@@ -2293,7 +2361,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
       return;
     }
     final repo = ref.read(repositoryProvider);
-    switch (layer.type) {
+    // `_placeType`, not `layer.type`: on a mixed layer these differ, because
+    // Add mode asked which type to place. On every single-type layer they are
+    // equal and nothing changes.
+    switch (_placeType ?? layer.type) {
       case 'circles':
         final id = await _addCircleAt(latlng, layer, select: false);
         _pushAddStep(
@@ -2698,7 +2769,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
         // Already-decoded geometry: `borderShapesProvider` parses each area's
         // ring blob once per stream emission, and a state boundary is 119 238
         // points — re-parsing that per tap is not a thing that can be done.
-        borderShapes: layer.type != 'borders'
+        borderShapes: !layerHolds(layer, kBorders)
             ? const []
             : [
                 for (final sh in ref.read(borderShapesProvider(layer.id)))
@@ -2979,7 +3050,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     // A transit layer can hold a station here that the type filter is hiding,
     // which looks exactly like empty ground — say so, but don't swallow the
     // menu for it the way this used to.
-    if (items.isEmpty && activeLayer?.type == 'transit') {
+    if (items.isEmpty &&
+        activeLayer != null &&
+        layerHolds(activeLayer, kTransit)) {
       _hint('Hidden station types don\'t respond — check Stations… in the '
           'layer menu.');
     }
@@ -3758,11 +3831,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final activeLayer = layers.where((l) => l.id == activeId).firstOrNull;
     // Only the types that still gate a *widget* need a flag; the Add button's
     // per-type wording now lives in _addFabLabel.
-    final isSubspaceLayer = activeLayer?.type == 'subspace';
-    final isCircleLayer = activeLayer?.type == 'circles';
+    final isSubspaceLayer =
+        activeLayer != null && layerHolds(activeLayer, kSubspace);
+    final isCircleLayer =
+        activeLayer != null && layerHolds(activeLayer, kCircles);
     // Since Add on a POI layer places *hand-made* points, the Overpass import
     // needs its own button there — it used to be what Add did.
-    final isPoiLayer = activeLayer?.type == 'poi';
+    final isPoiLayer =
+        activeLayer != null && layerHolds(activeLayer, kPoi);
 
     // Edit mode arms tap-to-select, so it is meaningful only when the active
     // layer has an editor *and* holds something to select. Left always-on it
@@ -3771,30 +3847,39 @@ class _MapScreenState extends ConsumerState<MapScreen>
     // camera tick.
     final activeHasEditor =
         activeLayer != null && layerHasEditor(activeLayer.type);
-    final activeHasElements = activeLayer == null
-        ? false
-        : switch (activeLayer.type) {
-            'circles' => circles.any((c) => c.layerId == activeLayer.id),
-            'planes' => planes.any((p) => p.layerId == activeLayer.id),
-            'subspace' => subspaces.any((s) => s.layerId == activeLayer.id),
-            'freeline' => freeLines.any((l) => l.layerId == activeLayer.id),
-            'freearea' => freeAreas.any((a) => a.layerId == activeLayer.id),
-            'height' => heightRegions.any((r) => r.layerId == activeLayer.id),
-            // Imports count as elements to select: a POI layer offers its
-            // markers, a transit layer its stations, a borders layer its areas.
-            'poi' => poiSets.any((s) => s.layerId == activeLayer.id),
-            'transit' => transitSets.any((s) => s.layerId == activeLayer.id),
-            'borders' => borderSets.any((s) => s.layerId == activeLayer.id),
-            // A track is not selectable by tap — it has no editor to open —
-            // so Edit mode stays unarmed over one however many are recorded.
-            'track' => false,
-            _ => false,
-          };
+    // Counts only elements whose **kind** has an editor, which is what keeps a
+    // mixed layer holding nothing but tracks from arming Edit mode against
+    // something no sheet opens. `layerHasEditor` can no longer answer that on
+    // its own once one layer holds several kinds.
+    bool holdsSelectable(String type) {
+      if (activeLayer == null || !layerHolds(activeLayer, type)) return false;
+      final kind = ObjectKind.forLayerType(type);
+      if (kind == null || !kind.hasEditor) return false;
+      return switch (type) {
+        kCircles => circles.any((c) => c.layerId == activeLayer.id),
+        kPlanes => planes.any((p) => p.layerId == activeLayer.id),
+        kSubspace => subspaces.any((s) => s.layerId == activeLayer.id),
+        kFreeLine => freeLines.any((l) => l.layerId == activeLayer.id),
+        kFreeArea => freeAreas.any((a) => a.layerId == activeLayer.id),
+        kHeight => heightRegions.any((r) => r.layerId == activeLayer.id),
+        // Imports count as elements to select: a POI layer offers its markers,
+        // a transit layer its stations, a borders layer its areas.
+        kPoi => poiSets.any((s) => s.layerId == activeLayer.id),
+        kTransit => transitSets.any((s) => s.layerId == activeLayer.id),
+        kBorders => borderSets.any((s) => s.layerId == activeLayer.id),
+        _ => false,
+      };
+    }
+
+    final activeHasElements = activeLayer != null &&
+        layerContentTypes(activeLayer).any(holdsSelectable);
     final canEditByTap = activeHasEditor && activeHasElements;
     // Only the two freehand types can be drawn into — everything else is built
     // from points, radii or an import.
     final canDraw =
-        activeLayer?.type == 'freeline' || activeLayer?.type == 'freearea';
+        activeLayer != null &&
+        (layerHolds(activeLayer, kFreeLine) ||
+            layerHolds(activeLayer, kFreeArea));
     // Same reasoning as Edit below: switching to a non-freehand layer while
     // Draw is armed would leave one-finger pan off with nothing to draw into.
     if (mode == MapMode.draw && !canDraw) {
@@ -3932,125 +4017,153 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     // it can push the fill all the way to fully opaque). POI
                     // layers hold markers, not a fill, so they wrap in Opacity
                     // to fade the markers uniformly (a no-op at 1.0).
+                    // One composited region per visible layer, bottom-to-top,
+                    // plus the marker/line painters for whatever else it
+                    // holds. A single-type layer builds exactly one of these;
+                    // a mixed layer builds the ones its content types cover,
+                    // in `kMixedContentTypes` order — regions are ground,
+                    // tracks are drawn on them, markers are labels on top.
                     for (final layer in layers)
-                      if (layer.isVisible && layer.type == 'poi')
-                        Opacity(
-                          opacity: layer.opacity.clamp(0.0, 1.0),
-                          child: PoiMarkersLayer(
-                            key: ValueKey(layer.id),
+                      if (layer.isVisible) ...[
+                        // `borders` keeps its own branch: it is the one type a
+                        // mixed layer cannot hold, and its fill takes the
+                        // layer opacity inside the painter while the outline
+                        // stays crisp (a half-visible border line is just a
+                        // worse border line).
+                        if (layerHolds(layer, kBorders))
+                          BorderAreasLayer(
+                            key: ValueKey('borders-${layer.id}'),
                             layer: layer,
-                            sets: poiSets
-                                .where((s) => s.layerId == layer.id)
+                            shapes: ref.watch(borderShapesProvider(layer.id)),
+                            draft: reshapeDraft,
+                          )
+                        else
+                          // Region layers apply their opacity inside the
+                          // painter, so it can push the fill all the way to
+                          // opaque. Built unconditionally for any non-borders
+                          // layer: it is fed only the types the layer holds,
+                          // and an all-empty one paints nothing.
+                          RegionLayer(
+                            key: ValueKey('region-${layer.id}'),
+                            layer: layer,
+                            opacity: layer.opacity,
+                            circles: layerHolds(layer, kCircles)
+                                ? circles
+                                      .where((c) => c.layerId == layer.id)
+                                      .toList()
+                                : const <Circle>[],
+                            planes: layerHolds(layer, kPlanes)
+                                ? planes
+                                      .where((p) => p.layerId == layer.id)
+                                      .toList()
+                                : const <Plane>[],
+                            subspaces: layerHolds(layer, kSubspace)
+                                ? subspaces
+                                      .where((s) => s.layerId == layer.id)
+                                      .toList()
+                                : const <Subspace>[],
+                            subspacePoints: layerHolds(layer, kSubspace)
+                                ? subspacePoints
+                                : const <String, List<SubspacePoint>>{},
+                            freeLines: layerHolds(layer, kFreeLine)
+                                ? freeLines
+                                      .where((l) => l.layerId == layer.id)
+                                      .toList()
+                                : const <FreeLine>[],
+                            freeLinePoints: layerHolds(layer, kFreeLine)
+                                ? freeLinePoints
+                                : const <String, List<FreeLinePoint>>{},
+                            freeAreas: layerHolds(layer, kFreeArea)
+                                ? freeAreas
+                                      .where((a) => a.layerId == layer.id)
+                                      .toList()
+                                : const <FreeArea>[],
+                            freeAreaPoints: layerHolds(layer, kFreeArea)
+                                ? freeAreaPoints
+                                : const <String, List<FreeAreaPoint>>{},
+                            heightRegions: layerHolds(layer, kHeight)
+                                ? heightRegions
+                                      .where((r) => r.layerId == layer.id)
+                                      .toList()
+                                : const <HeightRegion>[],
+                            heightPolygons: layerHolds(layer, kHeight)
+                                ? heightPolygons
+                                : const <String, List<HeightPolygon>>{},
+                            heightPolygonPoints: layerHolds(layer, kHeight)
+                                ? heightPolygonPoints
+                                : const <String, List<HeightPolygonPoint>>{},
+                            uncertaintyMeters: uncertainty,
+                          ),
+                        // Tracks: the painter applies the layer opacity to the
+                        // stroke, which is the only thing a track has.
+                        if (layerHolds(layer, kTrack))
+                          TracksLayer(
+                            key: ValueKey('track-${layer.id}'),
+                            layer: layer,
+                            tracks: tracks
+                                .where((t) => t.layerId == layer.id)
                                 .toList(),
-                            points: poiPoints,
-                            onClusterTap: (center) => _mapController.move(
-                              center,
-                              (_mapController.camera.zoom + 1.5).clamp(
-                                2.0,
-                                19.0,
+                            pointsByTrack: trackPointsByTrack,
+                          ),
+                        // Markers last, so a layer's own POIs and stations stay
+                        // legible over its fills — including when it is
+                        // inverted, where the complement covers everything the
+                        // regions do not.
+                        //
+                        // Marker layers fade via an Opacity wrapper (they are
+                        // markers, not a fill — nothing to push to "opaque").
+                        // A *mixed* layer's opacity is meant for its region
+                        // composite, so its markers stay crisp rather than
+                        // being dimmed to the region default.
+                        if (layerHolds(layer, kTransit))
+                          Opacity(
+                            opacity: layer.type == kMixedType
+                                ? 1.0
+                                : layer.opacity.clamp(0.0, 1.0),
+                            child: TransitStationsLayer(
+                              key: ValueKey('transit-${layer.id}'),
+                              layer: layer,
+                              sets: transitSets
+                                  .where((s) => s.layerId == layer.id)
+                                  .toList(),
+                              stations: visibleTransitStations(
+                                transitStations.where(
+                                  (s) => (transitSetIds[layer.id] ?? const {})
+                                      .contains(s.setId),
+                                ),
+                                transitVisibleMask,
+                              ),
+                              onClusterTap: (center) => _mapController.move(
+                                center,
+                                (_mapController.camera.zoom + 1.5).clamp(
+                                  2.0,
+                                  19.0,
+                                ),
                               ),
                             ),
                           ),
-                        )
-                      else if (layer.isVisible && layer.type == 'transit')
-                        Opacity(
-                          opacity: layer.opacity.clamp(0.0, 1.0),
-                          child: TransitStationsLayer(
-                            key: ValueKey(layer.id),
-                            layer: layer,
-                            sets: transitSets
-                                .where((s) => s.layerId == layer.id)
-                                .toList(),
-                            stations: visibleTransitStations(
-                              transitStations.where(
-                                (s) => (transitSetIds[layer.id] ?? const {})
-                                    .contains(s.setId),
-                              ),
-                              transitVisibleMask,
-                            ),
-                            onClusterTap: (center) => _mapController.move(
-                              center,
-                              (_mapController.camera.zoom + 1.5).clamp(
-                                2.0,
-                                19.0,
+                        if (layerHolds(layer, kPoi))
+                          Opacity(
+                            opacity: layer.type == kMixedType
+                                ? 1.0
+                                : layer.opacity.clamp(0.0, 1.0),
+                            child: PoiMarkersLayer(
+                              key: ValueKey('poi-${layer.id}'),
+                              layer: layer,
+                              sets: poiSets
+                                  .where((s) => s.layerId == layer.id)
+                                  .toList(),
+                              points: poiPoints,
+                              onClusterTap: (center) => _mapController.move(
+                                center,
+                                (_mapController.camera.zoom + 1.5).clamp(
+                                  2.0,
+                                  19.0,
+                                ),
                               ),
                             ),
                           ),
-                        )
-                      else if (layer.isVisible && layer.type == 'borders')
-                        // Not wrapped in Opacity: the fill takes the layer's
-                        // opacity inside the painter, and the outline stays
-                        // crisp regardless (a half-visible border line is just
-                        // a worse border line).
-                        BorderAreasLayer(
-                          key: ValueKey(layer.id),
-                          layer: layer,
-                          shapes: ref.watch(borderShapesProvider(layer.id)),
-                          draft: reshapeDraft,
-                        )
-                      else if (layer.isVisible && layer.type == 'track')
-                        // Not wrapped in Opacity: the painter applies it to the
-                        // stroke itself, which is the only thing a track has.
-                        TracksLayer(
-                          key: ValueKey(layer.id),
-                          layer: layer,
-                          tracks: tracks
-                              .where((t) => t.layerId == layer.id)
-                              .toList(),
-                          pointsByTrack: trackPointsByTrack,
-                        )
-                      else if (layer.isVisible)
-                        RegionLayer(
-                          key: ValueKey(layer.id),
-                          layer: layer,
-                          opacity: layer.opacity,
-                          circles: layer.type == 'circles'
-                              ? circles
-                                    .where((c) => c.layerId == layer.id)
-                                    .toList()
-                              : const <Circle>[],
-                          planes: layer.type == 'planes'
-                              ? planes
-                                    .where((p) => p.layerId == layer.id)
-                                    .toList()
-                              : const <Plane>[],
-                          subspaces: layer.type == 'subspace'
-                              ? subspaces
-                                    .where((s) => s.layerId == layer.id)
-                                    .toList()
-                              : const <Subspace>[],
-                          subspacePoints: layer.type == 'subspace'
-                              ? subspacePoints
-                              : const <String, List<SubspacePoint>>{},
-                          freeLines: layer.type == 'freeline'
-                              ? freeLines
-                                    .where((l) => l.layerId == layer.id)
-                                    .toList()
-                              : const <FreeLine>[],
-                          freeLinePoints: layer.type == 'freeline'
-                              ? freeLinePoints
-                              : const <String, List<FreeLinePoint>>{},
-                          freeAreas: layer.type == 'freearea'
-                              ? freeAreas
-                                    .where((a) => a.layerId == layer.id)
-                                    .toList()
-                              : const <FreeArea>[],
-                          freeAreaPoints: layer.type == 'freearea'
-                              ? freeAreaPoints
-                              : const <String, List<FreeAreaPoint>>{},
-                          heightRegions: layer.type == 'height'
-                              ? heightRegions
-                                    .where((r) => r.layerId == layer.id)
-                                    .toList()
-                              : const <HeightRegion>[],
-                          heightPolygons: layer.type == 'height'
-                              ? heightPolygons
-                              : const <String, List<HeightPolygon>>{},
-                          heightPolygonPoints: layer.type == 'height'
-                              ? heightPolygonPoints
-                              : const <String, List<HeightPolygonPoint>>{},
-                          uncertaintyMeters: uncertainty,
-                        ),
+                      ],
                     // Outline of the selected line's inclusion circle, so the
                     // half-disk it splits is visible while editing.
                     if (selectedFreeLineCircle.isNotEmpty)
@@ -4961,7 +5074,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           : null,
                       onPressed: () => mode == MapMode.draw
                           ? _finishDraw()
-                          : _enterDrawMode(activeLayer!),
+                          : _enterDrawMode(activeLayer),
                       child: const Icon(Icons.gesture),
                     ),
                     const SizedBox(height: 12),
@@ -5027,9 +5140,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       FloatingActionButton.small(
                         heroTag: 'poiImport',
                         tooltip: 'Import nearby POIs from OpenStreetMap',
-                        onPressed: activeLayer == null
-                            ? null
-                            : () => _importPois(activeLayer),
+                        // Reached only when the layer holds one of the three
+                        // types above, which already implies it is non-null.
+                        onPressed: () => _importPois(activeLayer),
                         child: const Icon(Icons.travel_explore),
                       ),
                     ],
@@ -5228,7 +5341,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           .length,
                       layers: [
                         for (final l in layers)
-                          if (l.type == 'poi') l,
+                          if (layerHolds(l, kPoi)) l,
                       ],
                     )
                   : selectedTransitSet != null
@@ -5240,7 +5353,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           .length,
                       layers: [
                         for (final l in layers)
-                          if (l.type == 'transit') l,
+                          if (layerHolds(l, kTransit)) l,
                       ],
                     )
                   : selectedBorderArea != null && selectedBorderLayer != null

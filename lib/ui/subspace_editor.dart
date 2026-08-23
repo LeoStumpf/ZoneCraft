@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/database.dart';
+import '../data/layer_types.dart';
 import '../data/repository.dart';
 import '../geo/coords.dart';
 import '../state/providers.dart';
@@ -128,7 +129,7 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
     final id = widget.subspace.id;
     final mainId = widget.points.where((p) => p.isMain).firstOrNull?.id;
     final subspaceLayers = widget.layers
-        .where((l) => l.type == 'subspace')
+        .where((l) => layerHolds(l, kSubspace))
         .toList();
 
     return EditorSheet(

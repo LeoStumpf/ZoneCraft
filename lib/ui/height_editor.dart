@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../data/database.dart';
 import '../data/height_generator.dart';
+import '../data/layer_types.dart';
 import '../data/repository.dart';
 import '../geo/coords.dart';
 import '../state/providers.dart';
@@ -139,9 +140,7 @@ class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
     final armed = ref.watch(heightPlacementProvider);
     final r = widget.region;
     final id = r.id;
-    final heightLayers = widget.layers
-        .where((l) => l.type == 'height')
-        .toList();
+    final heightLayers = widget.layers.where((l) => layerHolds(l, kHeight)).toList();
     final generated = r.generatedAt != null;
 
     return EditorSheet(

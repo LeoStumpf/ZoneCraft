@@ -243,6 +243,16 @@ enum ObjectKind {
   bool get isElement =>
       this != ObjectKind.poiPoint && this != ObjectKind.transitStop;
 
+  /// Whether selecting one of these opens an editor.
+  ///
+  /// The per-*kind* half of `layerHasEditor`, and the half that matters once a
+  /// layer can hold several kinds: a mixed layer has an editor in general, but
+  /// a track inside it still has none, so Edit mode must not arm against a
+  /// mixed layer whose only contents are tracks. `track` is the standing
+  /// exception — a recording has no property to edit in place — and the two
+  /// sub-element kinds have their own sheet.
+  bool get hasEditor => this != ObjectKind.track;
+
   /// The kind a layer of [layerType] holds, or null for an unknown type.
   static ObjectKind? forLayerType(String layerType) => switch (layerType) {
         'circles' => ObjectKind.circle,

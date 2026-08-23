@@ -5,6 +5,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' hide Circle;
 
 import '../data/database.dart';
+import '../data/layer_types.dart';
 import '../data/transit.dart' show transitStationVisible;
 import '../state/providers.dart';
 import 'object_summary.dart';
@@ -130,248 +131,254 @@ List<HitCandidate> collectCandidates({
   ObjectRef refOf(ObjectKind kind, String id) =>
       ObjectRef(kind: kind, id: id, layerId: layer.id);
 
-  switch (layer.type) {
-    case 'circles':
-      for (final c in circles.where((c) => c.layerId == layer.id)) {
-        if (!c.radiusMeters.isFinite || c.radiusMeters <= 0) continue;
-        if (!c.centerLat.isFinite || !c.centerLng.isFinite) continue;
-        final d = geoDistance.as(
-            LengthUnit.Meter, LatLng(c.centerLat, c.centerLng), tap);
-        if (!d.isFinite) continue;
-        out.add(HitCandidate(
-          ref: refOf(ObjectKind.circle, c.id),
-          inside: d <= c.radiusMeters,
-          edgeDistPx: metersToPixels(camera, tap, (d - c.radiusMeters).abs()),
-          sizeProxyMeters: c.radiusMeters,
-        ));
-      }
-    case 'height':
-      for (final r in heightRegions.where((r) => r.layerId == layer.id)) {
-        if (!r.radiusMeters.isFinite || r.radiusMeters <= 0) continue;
-        if (!r.centerLat.isFinite || !r.centerLng.isFinite) continue;
-        final d = geoDistance.as(
-            LengthUnit.Meter, LatLng(r.centerLat, r.centerLng), tap);
-        if (!d.isFinite) continue;
-        out.add(HitCandidate(
-          ref: refOf(ObjectKind.heightRegion, r.id),
-          inside: d <= r.radiusMeters,
-          edgeDistPx: metersToPixels(camera, tap, (d - r.radiusMeters).abs()),
-          sizeProxyMeters: r.radiusMeters,
-        ));
-      }
-    case 'planes':
-      for (final p in planes.where((p) => p.layerId == layer.id)) {
-        if (!_finite(p.aLat, p.aLng) || !_finite(p.bLat, p.bLng)) continue;
-        final near = p.nearA ? LatLng(p.aLat, p.aLng) : LatLng(p.bLat, p.bLng);
-        final far = p.nearA ? LatLng(p.bLat, p.bLng) : LatLng(p.aLat, p.aLng);
-        final dn = geoDistance.as(LengthUnit.Meter, near, tap);
-        final df = geoDistance.as(LengthUnit.Meter, far, tap);
-        if (!dn.isFinite || !df.isFinite) continue;
-        out.add(HitCandidate(
-          ref: refOf(ObjectKind.plane, p.id),
-          inside: dn <= df,
-          // Distance to the bisector is half the difference of the two.
-          edgeDistPx: metersToPixels(camera, tap, (dn - df).abs() / 2),
-          // A half-plane is unbounded, so it never wins on specificity.
-          sizeProxyMeters: double.infinity,
-        ));
-      }
-    case 'subspace':
-      for (final s in subspaces.where((s) => s.layerId == layer.id)) {
-        final pts = subspacePoints
-            .where((p) => p.subspaceId == s.id && _finite(p.lat, p.lng))
-            .toList();
-        if (pts.length < 2) continue;
-        double? dMain;
-        var dOtherMin = double.infinity;
-        var nearestOther = double.infinity;
-        for (final p in pts) {
-          final d =
-              geoDistance.as(LengthUnit.Meter, LatLng(p.lat, p.lng), tap);
+  // Same predicate the painter uses, driven the same way: a mixed layer
+  // offers every type it holds, a single-type layer exactly its own. When
+  // "what is drawn" and "what can be tapped" were decided separately the two
+  // drifted apart — see `transitStationVisible`.
+  for (final type in layerContentTypes(layer)) {
+    switch (type) {
+      case 'circles':
+        for (final c in circles.where((c) => c.layerId == layer.id)) {
+          if (!c.radiusMeters.isFinite || c.radiusMeters <= 0) continue;
+          if (!c.centerLat.isFinite || !c.centerLng.isFinite) continue;
+          final d = geoDistance.as(
+              LengthUnit.Meter, LatLng(c.centerLat, c.centerLng), tap);
           if (!d.isFinite) continue;
-          if (p.isMain) {
-            dMain = dMain == null ? d : math.min(dMain, d);
-          } else if (d < dOtherMin) {
-            dOtherMin = d;
-          }
+          out.add(HitCandidate(
+            ref: refOf(ObjectKind.circle, c.id),
+            inside: d <= c.radiusMeters,
+            edgeDistPx: metersToPixels(camera, tap, (d - c.radiusMeters).abs()),
+            sizeProxyMeters: c.radiusMeters,
+          ));
         }
-        if (dMain == null || !dOtherMin.isFinite) continue;
-        // How close the neighbours crowd the main point — a rough cell size.
-        final main = pts.where((p) => p.isMain).firstOrNull;
-        if (main != null) {
+      case 'height':
+        for (final r in heightRegions.where((r) => r.layerId == layer.id)) {
+          if (!r.radiusMeters.isFinite || r.radiusMeters <= 0) continue;
+          if (!r.centerLat.isFinite || !r.centerLng.isFinite) continue;
+          final d = geoDistance.as(
+              LengthUnit.Meter, LatLng(r.centerLat, r.centerLng), tap);
+          if (!d.isFinite) continue;
+          out.add(HitCandidate(
+            ref: refOf(ObjectKind.heightRegion, r.id),
+            inside: d <= r.radiusMeters,
+            edgeDistPx: metersToPixels(camera, tap, (d - r.radiusMeters).abs()),
+            sizeProxyMeters: r.radiusMeters,
+          ));
+        }
+      case 'planes':
+        for (final p in planes.where((p) => p.layerId == layer.id)) {
+          if (!_finite(p.aLat, p.aLng) || !_finite(p.bLat, p.bLng)) continue;
+          final near = p.nearA ? LatLng(p.aLat, p.aLng) : LatLng(p.bLat, p.bLng);
+          final far = p.nearA ? LatLng(p.bLat, p.bLng) : LatLng(p.aLat, p.aLng);
+          final dn = geoDistance.as(LengthUnit.Meter, near, tap);
+          final df = geoDistance.as(LengthUnit.Meter, far, tap);
+          if (!dn.isFinite || !df.isFinite) continue;
+          out.add(HitCandidate(
+            ref: refOf(ObjectKind.plane, p.id),
+            inside: dn <= df,
+            // Distance to the bisector is half the difference of the two.
+            edgeDistPx: metersToPixels(camera, tap, (dn - df).abs() / 2),
+            // A half-plane is unbounded, so it never wins on specificity.
+            sizeProxyMeters: double.infinity,
+          ));
+        }
+      case 'subspace':
+        for (final s in subspaces.where((s) => s.layerId == layer.id)) {
+          final pts = subspacePoints
+              .where((p) => p.subspaceId == s.id && _finite(p.lat, p.lng))
+              .toList();
+          if (pts.length < 2) continue;
+          double? dMain;
+          var dOtherMin = double.infinity;
+          var nearestOther = double.infinity;
           for (final p in pts) {
-            if (p.id == main.id) continue;
-            final d = geoDistance.as(LengthUnit.Meter,
-                LatLng(main.lat, main.lng), LatLng(p.lat, p.lng));
-            if (d.isFinite && d < nearestOther) nearestOther = d;
+            final d =
+                geoDistance.as(LengthUnit.Meter, LatLng(p.lat, p.lng), tap);
+            if (!d.isFinite) continue;
+            if (p.isMain) {
+              dMain = dMain == null ? d : math.min(dMain, d);
+            } else if (d < dOtherMin) {
+              dOtherMin = d;
+            }
           }
+          if (dMain == null || !dOtherMin.isFinite) continue;
+          // How close the neighbours crowd the main point — a rough cell size.
+          final main = pts.where((p) => p.isMain).firstOrNull;
+          if (main != null) {
+            for (final p in pts) {
+              if (p.id == main.id) continue;
+              final d = geoDistance.as(LengthUnit.Meter,
+                  LatLng(main.lat, main.lng), LatLng(p.lat, p.lng));
+              if (d.isFinite && d < nearestOther) nearestOther = d;
+            }
+          }
+          out.add(HitCandidate(
+            ref: refOf(ObjectKind.subspace, s.id),
+            inside: dMain <= dOtherMin,
+            // The cell border is equidistant, so it sits half the gap away.
+            edgeDistPx:
+                metersToPixels(camera, tap, (dMain - dOtherMin).abs() / 2),
+            sizeProxyMeters: nearestOther,
+          ));
         }
-        out.add(HitCandidate(
-          ref: refOf(ObjectKind.subspace, s.id),
-          inside: dMain <= dOtherMin,
-          // The cell border is equidistant, so it sits half the gap away.
-          edgeDistPx:
-              metersToPixels(camera, tap, (dMain - dOtherMin).abs() / 2),
-          sizeProxyMeters: nearestOther,
-        ));
-      }
-    case 'freeline':
-      for (final l in freeLines.where((l) => l.layerId == layer.id)) {
-        final pts = (freeLinePoints
-                .where((p) => p.freeLineId == l.id && _finite(p.lat, p.lng))
-                .toList()
-              ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder)))
-            .map((p) => LatLng(p.lat, p.lng))
-            .toList();
-        if (pts.length < 2) continue;
-        var best = double.infinity;
-        for (var i = 0; i < pts.length - 1; i++) {
-          final d = distToSegment(
-            tapPx,
-            camera.latLngToScreenOffset(pts[i]),
-            camera.latLngToScreenOffset(pts[i + 1]),
+      case 'freeline':
+        for (final l in freeLines.where((l) => l.layerId == layer.id)) {
+          final pts = (freeLinePoints
+                  .where((p) => p.freeLineId == l.id && _finite(p.lat, p.lng))
+                  .toList()
+                ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder)))
+              .map((p) => LatLng(p.lat, p.lng))
+              .toList();
+          if (pts.length < 2) continue;
+          var best = double.infinity;
+          for (var i = 0; i < pts.length - 1; i++) {
+            final d = distToSegment(
+              tapPx,
+              camera.latLngToScreenOffset(pts[i]),
+              camera.latLngToScreenOffset(pts[i + 1]),
+            );
+            if (d < best) best = d;
+          }
+          if (!best.isFinite) continue;
+          final inc = effectiveInclusion(
+            lat: l.inclusionLat,
+            lng: l.inclusionLng,
+            radiusMeters: l.inclusionRadiusMeters,
+            points: pts,
           );
-          if (d < best) best = d;
+          out.add(HitCandidate(
+            ref: refOf(ObjectKind.freeLine, l.id),
+            // The drawn line is the object; its half-disk fill is not a hit area
+            // (that would make half the view select the line).
+            inside: false,
+            edgeDistPx: best,
+            sizeProxyMeters: inc.radiusMeters,
+          ));
         }
-        if (!best.isFinite) continue;
-        final inc = effectiveInclusion(
-          lat: l.inclusionLat,
-          lng: l.inclusionLng,
-          radiusMeters: l.inclusionRadiusMeters,
-          points: pts,
-        );
-        out.add(HitCandidate(
-          ref: refOf(ObjectKind.freeLine, l.id),
-          // The drawn line is the object; its half-disk fill is not a hit area
-          // (that would make half the view select the line).
-          inside: false,
-          edgeDistPx: best,
-          sizeProxyMeters: inc.radiusMeters,
-        ));
-      }
-    case 'freearea':
-      for (final a in freeAreas.where((a) => a.layerId == layer.id)) {
-        final raw = (freeAreaPoints
-                .where((p) => p.freeAreaId == a.id && _finite(p.lat, p.lng))
-                .toList()
-              ..sort((x, y) => x.sortOrder.compareTo(y.sortOrder)))
-            .map((p) => LatLng(p.lat, p.lng))
-            .toList();
-        if (raw.length < 3) continue;
-        final contours = areaContours?.call(a) ?? [raw];
-        var inside = false;
-        var best = double.infinity;
-        for (final ring in contours) {
-          if (ring.length < 3) continue;
-          final px = [for (final p in ring) camera.latLngToScreenOffset(p)];
-          // Even-odd across contours, so an offset's holes read as outside.
-          if (pointInPolygon(tapPx, px)) inside = !inside;
-          for (var i = 0; i < px.length; i++) {
-            final d = distToSegment(tapPx, px[i], px[(i + 1) % px.length]);
-            if (d < best) best = d;
+      case 'freearea':
+        for (final a in freeAreas.where((a) => a.layerId == layer.id)) {
+          final raw = (freeAreaPoints
+                  .where((p) => p.freeAreaId == a.id && _finite(p.lat, p.lng))
+                  .toList()
+                ..sort((x, y) => x.sortOrder.compareTo(y.sortOrder)))
+              .map((p) => LatLng(p.lat, p.lng))
+              .toList();
+          if (raw.length < 3) continue;
+          final contours = areaContours?.call(a) ?? [raw];
+          var inside = false;
+          var best = double.infinity;
+          for (final ring in contours) {
+            if (ring.length < 3) continue;
+            final px = [for (final p in ring) camera.latLngToScreenOffset(p)];
+            // Even-odd across contours, so an offset's holes read as outside.
+            if (pointInPolygon(tapPx, px)) inside = !inside;
+            for (var i = 0; i < px.length; i++) {
+              final d = distToSegment(tapPx, px[i], px[(i + 1) % px.length]);
+              if (d < best) best = d;
+            }
           }
+          if (!best.isFinite) continue;
+          out.add(HitCandidate(
+            ref: refOf(ObjectKind.freeArea, a.id),
+            inside: inside,
+            edgeDistPx: best,
+            sizeProxyMeters: ViewBound.ofCorners(raw).diagonalMeters,
+          ));
         }
-        if (!best.isFinite) continue;
-        out.add(HitCandidate(
-          ref: refOf(ObjectKind.freeArea, a.id),
-          inside: inside,
-          edgeDistPx: best,
-          sizeProxyMeters: ViewBound.ofCorners(raw).diagonalMeters,
-        ));
-      }
-    case 'poi':
-      // The marker, not the set: a POI layer's set is a search circle you can't
-      // see, so a tap on the map can only sensibly mean the dot under it.
-      final mine = {
-        for (final st in poiSets)
-          if (st.layerId == layer.id) st.id,
-      };
-      for (final p in poiPoints) {
-        if (!mine.contains(p.poiSetId)) continue;
-        if (!_finite(p.lat, p.lng)) continue;
-        final d = (camera.latLngToScreenOffset(LatLng(p.lat, p.lng)) - tapPx)
-            .distance;
-        if (!d.isFinite) continue;
-        out.add(HitCandidate(
-          ref: refOf(ObjectKind.poiPoint, p.id),
-          // A marker has no interior — only its own disc counts, which is what
-          // stops a tap on empty ground from picking the nearest POI a screen
-          // away.
-          inside: false,
-          edgeDistPx: d,
-          sizeProxyMeters: 0,
-        ));
-      }
-    case 'transit':
-      final visibleMask = {
-        for (final st in transitSets)
-          if (st.layerId == layer.id) st.id: st.visibleModeMask,
-      };
-      for (final st in transitStops) {
-        if (!visibleMask.containsKey(st.setId)) continue;
-        if (!_finite(st.lat, st.lng)) continue;
-        // A station the type filter is hiding is not on screen, so it must not
-        // be tappable — picking an invisible marker is indistinguishable from
-        // the app picking at random. Same predicate the painter culls with, so
-        // the two cannot drift: notably, unticking *every* type hides even the
-        // mode-less stations, which an "is any bit shared?" test would leave
-        // answering taps over blank ground.
-        if (!transitStationVisible(st.modeMask, visibleMask[st.setId])) {
-          continue;
+      case 'poi':
+        // The marker, not the set: a POI layer's set is a search circle you can't
+        // see, so a tap on the map can only sensibly mean the dot under it.
+        final mine = {
+          for (final st in poiSets)
+            if (st.layerId == layer.id) st.id,
+        };
+        for (final p in poiPoints) {
+          if (!mine.contains(p.poiSetId)) continue;
+          if (!_finite(p.lat, p.lng)) continue;
+          final d = (camera.latLngToScreenOffset(LatLng(p.lat, p.lng)) - tapPx)
+              .distance;
+          if (!d.isFinite) continue;
+          out.add(HitCandidate(
+            ref: refOf(ObjectKind.poiPoint, p.id),
+            // A marker has no interior — only its own disc counts, which is what
+            // stops a tap on empty ground from picking the nearest POI a screen
+            // away.
+            inside: false,
+            edgeDistPx: d,
+            sizeProxyMeters: 0,
+          ));
         }
-        final d = (camera.latLngToScreenOffset(LatLng(st.lat, st.lng)) - tapPx)
-            .distance;
-        if (!d.isFinite) continue;
-        out.add(HitCandidate(
-          ref: refOf(ObjectKind.transitStop, st.id),
-          inside: false,
-          edgeDistPx: d,
-          sizeProxyMeters: 0,
-        ));
-      }
-    case 'borders':
-      for (final shape in borderShapes) {
-        // Cull on the stored bounds *before* projecting anything.
-        //
-        // An administrative outline is not a handful of vertices: one state
-        // boundary is 119 238 points, and a municipality layer is ~97 areas.
-        // Projecting every vertex of every area on every tap is seconds of
-        // frozen UI, and it buys nothing — a ring lies inside its own bounding
-        // box, so a tap further than the tap slop from the projected box can
-        // neither be inside the area nor near its outline, and [rankCandidates]
-        // would drop it anyway. This makes the cull exact, not approximate.
-        final box = _projectedBounds(camera, shape);
-        if (box == null || !box.inflate(kEdgeTolerancePx).contains(tapPx)) {
-          continue;
-        }
-        var inside = false;
-        var best = double.infinity;
-        for (final ring in shape.rings) {
-          if (ring.length < 3) continue;
-          final px = [for (final p in ring) camera.latLngToScreenOffset(p)];
-          // Even-odd across rings, matching the painter: a tap in a hole is
-          // outside the area, exactly as it looks.
-          if (pointInPolygon(tapPx, px)) inside = !inside;
-          for (var i = 0; i < px.length; i++) {
-            final d = distToSegment(tapPx, px[i], px[(i + 1) % px.length]);
-            if (d < best) best = d;
+      case 'transit':
+        final visibleMask = {
+          for (final st in transitSets)
+            if (st.layerId == layer.id) st.id: st.visibleModeMask,
+        };
+        for (final st in transitStops) {
+          if (!visibleMask.containsKey(st.setId)) continue;
+          if (!_finite(st.lat, st.lng)) continue;
+          // A station the type filter is hiding is not on screen, so it must not
+          // be tappable — picking an invisible marker is indistinguishable from
+          // the app picking at random. Same predicate the painter culls with, so
+          // the two cannot drift: notably, unticking *every* type hides even the
+          // mode-less stations, which an "is any bit shared?" test would leave
+          // answering taps over blank ground.
+          if (!transitStationVisible(st.modeMask, visibleMask[st.setId])) {
+            continue;
           }
+          final d = (camera.latLngToScreenOffset(LatLng(st.lat, st.lng)) - tapPx)
+              .distance;
+          if (!d.isFinite) continue;
+          out.add(HitCandidate(
+            ref: refOf(ObjectKind.transitStop, st.id),
+            inside: false,
+            edgeDistPx: d,
+            sizeProxyMeters: 0,
+          ));
         }
-        if (!best.isFinite) continue;
-        out.add(HitCandidate(
-          ref: refOf(ObjectKind.borderArea, shape.id),
-          inside: inside,
-          edgeDistPx: best,
-          // The stored bounds, not the ring: an administrative area is
-          // hundreds of points and this only has to order "which of the two
-          // areas under the tap is the smaller one".
-          sizeProxyMeters: geoDistance.as(
-            LengthUnit.Meter,
-            LatLng(shape.south, shape.west),
-            LatLng(shape.north, shape.east),
-          ),
-        ));
-      }
+      case 'borders':
+        for (final shape in borderShapes) {
+          // Cull on the stored bounds *before* projecting anything.
+          //
+          // An administrative outline is not a handful of vertices: one state
+          // boundary is 119 238 points, and a municipality layer is ~97 areas.
+          // Projecting every vertex of every area on every tap is seconds of
+          // frozen UI, and it buys nothing — a ring lies inside its own bounding
+          // box, so a tap further than the tap slop from the projected box can
+          // neither be inside the area nor near its outline, and [rankCandidates]
+          // would drop it anyway. This makes the cull exact, not approximate.
+          final box = _projectedBounds(camera, shape);
+          if (box == null || !box.inflate(kEdgeTolerancePx).contains(tapPx)) {
+            continue;
+          }
+          var inside = false;
+          var best = double.infinity;
+          for (final ring in shape.rings) {
+            if (ring.length < 3) continue;
+            final px = [for (final p in ring) camera.latLngToScreenOffset(p)];
+            // Even-odd across rings, matching the painter: a tap in a hole is
+            // outside the area, exactly as it looks.
+            if (pointInPolygon(tapPx, px)) inside = !inside;
+            for (var i = 0; i < px.length; i++) {
+              final d = distToSegment(tapPx, px[i], px[(i + 1) % px.length]);
+              if (d < best) best = d;
+            }
+          }
+          if (!best.isFinite) continue;
+          out.add(HitCandidate(
+            ref: refOf(ObjectKind.borderArea, shape.id),
+            inside: inside,
+            edgeDistPx: best,
+            // The stored bounds, not the ring: an administrative area is
+            // hundreds of points and this only has to order "which of the two
+            // areas under the tap is the smaller one".
+            sizeProxyMeters: geoDistance.as(
+              LengthUnit.Meter,
+              LatLng(shape.south, shape.west),
+              LatLng(shape.north, shape.east),
+            ),
+          ));
+        }
+    }
   }
   return out;
 }

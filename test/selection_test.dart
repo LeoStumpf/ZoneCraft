@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:zonecraft/state/map_mode.dart';
+import 'package:zonecraft/data/layer_types.dart';
+import 'package:zonecraft/data/repository.dart';
+import 'package:zonecraft/ui/object_summary.dart';
 import 'package:zonecraft/state/providers.dart';
 
 /// Selection is eleven parallel providers with no shared type tag, kept
@@ -190,6 +193,37 @@ void main() {
         ObjectKind.values.where((k) => !k.isElement).toSet(),
         {ObjectKind.poiPoint, ObjectKind.transitStop},
       );
+    });
+
+    test('track is the only kind with no editor', () {
+      // The per-kind half of `layerHasEditor`, and the half that matters on a
+      // combined layer: that layer answers "yes, I have an editor" in general,
+      // so Edit mode has to ask the *kind* before arming — otherwise a
+      // combined layer holding nothing but tracks re-creates the exact failure
+      // `layerHasEditor` exists to prevent (a lit button that does nothing).
+      expect(
+        ObjectKind.values.where((k) => !k.hasEditor).toSet(),
+        {ObjectKind.track},
+      );
+      // Everything the Elements list can show an editor for is an element or a
+      // sub-element with its own sheet.
+      for (final k in ObjectKind.values.where((k) => k.hasEditor)) {
+        expect(layerHasEditor(k.layerType), isTrue, reason: k.name);
+      }
+    });
+
+    test('a combined layer has an editor, and its kinds decide per element',
+        () {
+      expect(layerHasEditor(kMixedType), isTrue);
+      // …but it maps to no single kind, which is why the colour path and Edit
+      // mode both had to move down to the row's own kind.
+      expect(ObjectKind.forLayerType(kMixedType), isNull);
+      expect(ColoredElement.forLayerType(kMixedType), isNull);
+      // The per-kind lookup answers for all ten element kinds instead.
+      for (final k in ObjectKind.values.where((k) => k.isElement)) {
+        expect(ColoredElement.forObjectKindName(k.name), isNotNull,
+            reason: k.name);
+      }
     });
   });
 }

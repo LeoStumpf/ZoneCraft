@@ -866,3 +866,23 @@ String _xml(String s) => s
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;');
+
+/// The layer type that holds an [ExportObject.kind].
+///
+/// The two vocabularies differ — an object is a `circle` while a layer is
+/// `circles`, an object is a `poiset` while a layer is `poi` — so anything
+/// asking "can this layer hold that object" needs the translation. Null for a
+/// kind this build does not know, which a file from a newer version can carry.
+String? layerTypeForExportKind(String kind) => switch (kind) {
+      'circle' => 'circles',
+      'plane' => 'planes',
+      'subspace' => 'subspace',
+      'freeline' => 'freeline',
+      'freearea' => 'freearea',
+      'height' => 'height',
+      'track' => 'track',
+      'poi' => 'poi',
+      'transitstop' => 'transit',
+      'borderarea' => 'borders',
+      _ => null,
+    };

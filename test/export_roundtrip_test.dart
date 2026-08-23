@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 
 import 'package:zonecraft/data/database.dart';
+import 'package:zonecraft/data/layer_types.dart';
 import 'package:zonecraft/data/overpass.dart' show PoiResult;
 import 'package:zonecraft/data/repository.dart';
 import 'package:zonecraft/data/serialization.dart';
@@ -300,6 +301,44 @@ void main() {
     await repo.updateBorderArea(munich.id, labelLat: 48.02, labelLng: 11.07);
     await repo.updateLayer(ids['borders']!, isVisible: false);
 
+    // mixed — one layer holding several types at once. Its objects say what
+    // they are, so the format needs nothing new; what has to survive is that
+    // the *layer* comes back mixed, with every one of its types still on it.
+    ids['mixed'] = await repo.createLayer(
+        name: 'Everything', colorArgb: 0xFF7E57C2, type: kMixedType);
+    await repo.createCircle(
+      layerId: ids['mixed']!,
+      centerLat: 48.15,
+      centerLng: 11.60,
+      radiusMeters: 750,
+      label: 'in the mix',
+    );
+    await repo.createPlane(
+      layerId: ids['mixed']!,
+      aLat: 48.10,
+      aLng: 11.50,
+      bLat: 48.20,
+      bLng: 11.70,
+    );
+    final mixedTrack = await repo.ensureTrackForLayer(ids['mixed']!);
+    await repo.addTrackPoints(
+      mixedTrack,
+      [const LatLng(48.16, 11.61), const LatLng(48.17, 11.62)],
+      segmentIndex: 0,
+    );
+    final mixedPoi = await repo.createPoiSet(
+      layerId: ids['mixed']!,
+      categoryKey: 'star',
+      centerLat: 48.15,
+      centerLng: 11.60,
+      radiusMeters: 0,
+      label: 'Favourites',
+      isManual: true,
+      iconKey: 'star',
+    );
+    await repo.addManualPoiPoint(
+        poiSetId: mixedPoi, lat: 48.155, lng: 11.605, label: 'here');
+
     return ids;
   }
 
@@ -376,7 +415,8 @@ void main() {
   test('the whole database survives an export/import round-trip', () async {
     await seedEverything();
     final before = await snapshot();
-    expect(before, hasLength(10), reason: 'one layer of every type');
+    expect(before, hasLength(11),
+        reason: 'one layer of every type, plus a combined one');
 
     final after = await reimport(await repo.exportData());
     expect(after, hasLength(before.length));
@@ -520,12 +560,65 @@ void main() {
     // not way 240109189.
     expect(await repo.mergeIntoLayer(ids['poi']!, data.layers.single,
         simplify: false), 2);
-    final points = await repo.watchAllPoiPoints().first;
+    // Scoped to this layer's own sets: the seed also puts a hand-placed POI on
+    // the combined layer, which has nothing to do with dedup.
+    final setIds = (await repo.watchAllPoiSets().first)
+        .where((s) => s.layerId == ids['poi']!)
+        .map((s) => s.id)
+        .toSet();
+    final points = (await repo.watchAllPoiPoints().first)
+        .where((p) => setIds.contains(p.poiSetId));
     expect(points.where((p) => p.osmId != null), hasLength(2),
         reason: 'the two identified POIs were recognised, not drawn twice');
     // Everything unidentified has nothing to match on and is kept, as always:
     // the import's third POI plus the two hand-placed ones, twice over.
     expect(points.where((p) => p.osmId == null), hasLength(6));
+  });
+
+  test('a combined layer round-trips with every one of its types', () async {
+    // The format needs nothing new for this — objects already say what they
+    // are — so what is actually at risk is the *layer*: coming back as
+    // 'circles' would strand the plane, the track and the POIs on a layer that
+    // no longer paints them.
+    final ids = await seedEverything();
+    final data = await repo.exportData(onlyLayerId: ids['mixed']!);
+    final layer = data.layers.single;
+    expect(layer.type, kMixedType);
+    expect(
+      layer.objects.map((o) => o.kind).toSet(),
+      {'circle', 'plane', 'track', 'poi'},
+      reason: 'every type on the layer has to be collected, not just the first',
+    );
+
+    final after = await reimport(data);
+    expect(after.single['type'], kMixedType);
+    final objects = after.single['objects'] as List;
+    expect(objects, hasLength(4));
+    final circle = objects.firstWhere((o) => (o as Map)['label'] == 'in the mix');
+    expect((circle as Map)['radiusMeters'], 750);
+  });
+
+  test('a file merges into a combined layer, and refuses a narrower one',
+      () async {
+    final ids = await seedEverything();
+    final circlesFile =
+        (await repo.exportData(onlyLayerId: ids['circles']!)).layers.single;
+
+    // A circles file into a combined layer: allowed, because the target can
+    // hold circles.
+    final before = (await repo.watchAllCircles().first).length;
+    await repo.mergeIntoLayer(ids['mixed']!, circlesFile, simplify: false);
+    expect((await repo.watchAllCircles().first).length,
+        greaterThan(before));
+
+    // A combined file into a circles layer: refused, because it carries planes
+    // and a track that a circles layer cannot hold.
+    final mixedFile =
+        (await repo.exportData(onlyLayerId: ids['mixed']!)).layers.single;
+    await expectLater(
+      repo.mergeIntoLayer(ids['circles']!, mixedFile, simplify: false),
+      throwsArgumentError,
+    );
   });
 
   test('a hand-made POI category comes back hand-made, not as an import',
@@ -708,219 +801,223 @@ void main() {
 Future<List<Map<String, Object?>>> _objectsOf(
     AppDatabase db, Layer layer) async {
   final out = <Map<String, Object?>>[];
-  switch (layer.type) {
-    case 'circles':
-      for (final c in await _rows(db, db.circles, layer.id)) {
-        out.add({
-          'lat': c.centerLat,
-          'lng': c.centerLng,
-          'radiusMeters': c.radiusMeters,
-          'label': c.label,
-          'colorArgb': c.colorArgb,
-          'colorShade': c.colorShade,
-        });
-      }
-    case 'planes':
-      for (final p in await _rows(db, db.planes, layer.id)) {
-        out.add({
-          'a': [p.aLat, p.aLng],
-          'b': [p.bLat, p.bLng],
-          'nearA': p.nearA,
-          'label': p.label,
-          'colorArgb': p.colorArgb,
-          'colorShade': p.colorShade,
-        });
-      }
-    case 'subspace':
-      final pts = await (db.select(db.subspacePoints)
-            ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
-          .get();
-      for (final s in await _rows(db, db.subspaces, layer.id)) {
-        out.add({
-          'label': s.label,
-          'colorArgb': s.colorArgb,
-          'colorShade': s.colorShade,
-          'points': [
-            for (final p in pts.where((p) => p.subspaceId == s.id))
-              {
-                'at': [p.lat, p.lng],
-                'isMain': p.isMain,
-                'label': p.label,
-              },
-          ],
-        });
-      }
-    case 'freeline':
-      final pts = await (db.select(db.freeLinePoints)
-            ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
-          .get();
-      for (final l in await _rows(db, db.freeLines, layer.id)) {
-        out.add({
-          'label': l.label,
-          'offsetMeters': l.offsetMeters,
-          'inclusion': [l.inclusionLat, l.inclusionLng, l.inclusionRadiusMeters],
-          'colorArgb': l.colorArgb,
-          'colorShade': l.colorShade,
-          'points': [
-            for (final p in pts.where((p) => p.freeLineId == l.id))
-              [p.lat, p.lng],
-          ],
-        });
-      }
-    case 'freearea':
-      final pts = await (db.select(db.freeAreaPoints)
-            ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
-          .get();
-      for (final a in await _rows(db, db.freeAreas, layer.id)) {
-        out.add({
-          'label': a.label,
-          'offsetMeters': a.offsetMeters,
-          'colorArgb': a.colorArgb,
-          'colorShade': a.colorShade,
-          'points': [
-            for (final p in pts.where((p) => p.freeAreaId == a.id))
-              [p.lat, p.lng],
-          ],
-        });
-      }
-    case 'track':
-      final pts = await (db.select(db.trackPoints)
-            ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
-          .get();
-      for (final t in await _rows(db, db.tracks, layer.id)) {
-        final mine = pts.where((p) => p.trackId == t.id).toList();
-        // Segment *numbering* is a running counter, so compare the breaks the
-        // painter reads rather than the ids they happen to have.
-        final ranks = <int, int>{};
-        for (final p in mine) {
-          ranks.putIfAbsent(p.segmentIndex, () => ranks.length);
+  // Mirrors the app: a combined layer is snapshotted one content type at a
+  // time, so the round-trip covers every table it holds rather than none.
+  for (final type in layerContentTypesOf(layer.type)) {
+    switch (type) {
+      case 'circles':
+        for (final c in await _rows(db, db.circles, layer.id)) {
+          out.add({
+            'lat': c.centerLat,
+            'lng': c.centerLng,
+            'radiusMeters': c.radiusMeters,
+            'label': c.label,
+            'colorArgb': c.colorArgb,
+            'colorShade': c.colorShade,
+          });
         }
-        out.add({
-          'label': t.label,
-          'colorArgb': t.colorArgb,
-          'colorShade': t.colorShade,
-          'bounds': [t.south, t.west, t.north, t.east],
-          'points': [
-            for (final p in mine)
-              {
-                'at': [p.lat, p.lng],
-                'segmentIndex': ranks[p.segmentIndex],
-              },
-          ],
-        });
-      }
-    case 'height':
-      final polys = await (db.select(db.heightPolygons)
-            ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
-          .get();
-      final pts = await (db.select(db.heightPolygonPoints)
-            ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
-          .get();
-      for (final r in await _rows(db, db.heightRegions, layer.id)) {
-        out.add({
-          'at': [r.centerLat, r.centerLng],
-          'radiusMeters': r.radiusMeters,
-          'thresholdMeters': r.thresholdMeters,
-          'aboveThreshold': r.aboveThreshold,
-          'sampleZoom': r.sampleZoom,
-          'label': r.label,
-          'colorArgb': r.colorArgb,
-          'colorShade': r.colorShade,
-          'generated': r.generatedAt != null,
-          'fills': [
-            for (final poly in polys.where((p) => p.heightRegionId == r.id))
-              [
-                for (final p in pts.where((x) => x.polygonId == poly.id))
-                  [p.lat, p.lng],
-              ],
-          ],
-        });
-      }
-    case 'poi':
-      final pts = await (db.select(db.poiPoints)
-            ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
-          .get();
-      for (final s in await _rows(db, db.poiSets, layer.id)) {
-        out.add({
-          'categoryKey': s.categoryKey,
-          'at': [s.centerLat, s.centerLng],
-          'radiusMeters': s.radiusMeters,
-          'label': s.label,
-          'colorArgb': s.colorArgb,
-          'colorShade': s.colorShade,
-          // v25: hand-made categories. In the snapshot, so the whole-database
-          // round-trip catches a manual set coming back as an import without
-          // anyone having to write a test for it.
-          'isManual': s.isManual,
-          'iconKey': s.iconKey,
-          'points': [
-            for (final p in pts.where((p) => p.poiSetId == s.id))
-              {
-                'at': [p.lat, p.lng],
-                'name': p.name,
-                'osmType': p.osmType,
-                'osmId': p.osmId,
-              },
-          ],
-        });
-      }
-    case 'transit':
-      final stops = await db.select(db.transitStops).get();
-      for (final t in await _rows(db, db.transitSets, layer.id)) {
-        out.add({
-          'box': [t.south, t.west, t.north, t.east],
-          'modeMask': t.modeMask,
-          'visibleModeMask': t.visibleModeMask,
-          'label': t.label,
-          'pending': t.fetchedAt == null,
-          'lastError': t.lastError,
-          'stationCount': t.stationCount,
-          'nodeCount': t.nodeCount,
-          'colorArgb': t.colorArgb,
-          'colorShade': t.colorShade,
-          'stops': _sorted([
-            for (final x in stops.where((x) => x.setId == t.id))
-              {
-                'osmId': x.osmId,
-                'at': [x.lat, x.lng],
-                'name': x.name,
-                'modeMask': x.modeMask,
-                'nodeCount': x.nodeCount,
-                'routeRef': x.routeRef,
-              },
-          ]),
-        });
-      }
-    case 'borders':
-      final sets = await (db.select(db.borderSets)
-            ..where((s) => s.layerId.equals(layer.id)))
-          .get();
-      final areas = await db.select(db.borderAreas).get();
-      for (final s in sets) {
-        out.add({
-          'box': [s.south, s.west, s.north, s.east],
-          'adminLevel': s.adminLevel,
-          'label': s.label,
-          'areaCount': s.areaCount,
-          'pointCount': s.pointCount,
-          'areas': _sorted([
-            for (final a in areas.where((a) => a.setId == s.id))
-              {
-                'osmId': a.osmId,
-                'name': a.name,
-                'colorIndex': a.colorIndex,
-                'bounds': [a.south, a.west, a.north, a.east],
-                'labelLat': a.labelLat,
-                'labelLng': a.labelLng,
-                'pointCount': a.pointCount,
-                'rings': a.rings,
-                'wayIds': a.wayIds,
-                'edited': a.editedAt != null,
-                'colorArgb': a.colorArgb,
-              },
-          ]),
-        });
-      }
+      case 'planes':
+        for (final p in await _rows(db, db.planes, layer.id)) {
+          out.add({
+            'a': [p.aLat, p.aLng],
+            'b': [p.bLat, p.bLng],
+            'nearA': p.nearA,
+            'label': p.label,
+            'colorArgb': p.colorArgb,
+            'colorShade': p.colorShade,
+          });
+        }
+      case 'subspace':
+        final pts = await (db.select(db.subspacePoints)
+              ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
+            .get();
+        for (final s in await _rows(db, db.subspaces, layer.id)) {
+          out.add({
+            'label': s.label,
+            'colorArgb': s.colorArgb,
+            'colorShade': s.colorShade,
+            'points': [
+              for (final p in pts.where((p) => p.subspaceId == s.id))
+                {
+                  'at': [p.lat, p.lng],
+                  'isMain': p.isMain,
+                  'label': p.label,
+                },
+            ],
+          });
+        }
+      case 'freeline':
+        final pts = await (db.select(db.freeLinePoints)
+              ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
+            .get();
+        for (final l in await _rows(db, db.freeLines, layer.id)) {
+          out.add({
+            'label': l.label,
+            'offsetMeters': l.offsetMeters,
+            'inclusion': [l.inclusionLat, l.inclusionLng, l.inclusionRadiusMeters],
+            'colorArgb': l.colorArgb,
+            'colorShade': l.colorShade,
+            'points': [
+              for (final p in pts.where((p) => p.freeLineId == l.id))
+                [p.lat, p.lng],
+            ],
+          });
+        }
+      case 'freearea':
+        final pts = await (db.select(db.freeAreaPoints)
+              ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
+            .get();
+        for (final a in await _rows(db, db.freeAreas, layer.id)) {
+          out.add({
+            'label': a.label,
+            'offsetMeters': a.offsetMeters,
+            'colorArgb': a.colorArgb,
+            'colorShade': a.colorShade,
+            'points': [
+              for (final p in pts.where((p) => p.freeAreaId == a.id))
+                [p.lat, p.lng],
+            ],
+          });
+        }
+      case 'track':
+        final pts = await (db.select(db.trackPoints)
+              ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
+            .get();
+        for (final t in await _rows(db, db.tracks, layer.id)) {
+          final mine = pts.where((p) => p.trackId == t.id).toList();
+          // Segment *numbering* is a running counter, so compare the breaks the
+          // painter reads rather than the ids they happen to have.
+          final ranks = <int, int>{};
+          for (final p in mine) {
+            ranks.putIfAbsent(p.segmentIndex, () => ranks.length);
+          }
+          out.add({
+            'label': t.label,
+            'colorArgb': t.colorArgb,
+            'colorShade': t.colorShade,
+            'bounds': [t.south, t.west, t.north, t.east],
+            'points': [
+              for (final p in mine)
+                {
+                  'at': [p.lat, p.lng],
+                  'segmentIndex': ranks[p.segmentIndex],
+                },
+            ],
+          });
+        }
+      case 'height':
+        final polys = await (db.select(db.heightPolygons)
+              ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
+            .get();
+        final pts = await (db.select(db.heightPolygonPoints)
+              ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
+            .get();
+        for (final r in await _rows(db, db.heightRegions, layer.id)) {
+          out.add({
+            'at': [r.centerLat, r.centerLng],
+            'radiusMeters': r.radiusMeters,
+            'thresholdMeters': r.thresholdMeters,
+            'aboveThreshold': r.aboveThreshold,
+            'sampleZoom': r.sampleZoom,
+            'label': r.label,
+            'colorArgb': r.colorArgb,
+            'colorShade': r.colorShade,
+            'generated': r.generatedAt != null,
+            'fills': [
+              for (final poly in polys.where((p) => p.heightRegionId == r.id))
+                [
+                  for (final p in pts.where((x) => x.polygonId == poly.id))
+                    [p.lat, p.lng],
+                ],
+            ],
+          });
+        }
+      case 'poi':
+        final pts = await (db.select(db.poiPoints)
+              ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
+            .get();
+        for (final s in await _rows(db, db.poiSets, layer.id)) {
+          out.add({
+            'categoryKey': s.categoryKey,
+            'at': [s.centerLat, s.centerLng],
+            'radiusMeters': s.radiusMeters,
+            'label': s.label,
+            'colorArgb': s.colorArgb,
+            'colorShade': s.colorShade,
+            // v25: hand-made categories. In the snapshot, so the whole-database
+            // round-trip catches a manual set coming back as an import without
+            // anyone having to write a test for it.
+            'isManual': s.isManual,
+            'iconKey': s.iconKey,
+            'points': [
+              for (final p in pts.where((p) => p.poiSetId == s.id))
+                {
+                  'at': [p.lat, p.lng],
+                  'name': p.name,
+                  'osmType': p.osmType,
+                  'osmId': p.osmId,
+                },
+            ],
+          });
+        }
+      case 'transit':
+        final stops = await db.select(db.transitStops).get();
+        for (final t in await _rows(db, db.transitSets, layer.id)) {
+          out.add({
+            'box': [t.south, t.west, t.north, t.east],
+            'modeMask': t.modeMask,
+            'visibleModeMask': t.visibleModeMask,
+            'label': t.label,
+            'pending': t.fetchedAt == null,
+            'lastError': t.lastError,
+            'stationCount': t.stationCount,
+            'nodeCount': t.nodeCount,
+            'colorArgb': t.colorArgb,
+            'colorShade': t.colorShade,
+            'stops': _sorted([
+              for (final x in stops.where((x) => x.setId == t.id))
+                {
+                  'osmId': x.osmId,
+                  'at': [x.lat, x.lng],
+                  'name': x.name,
+                  'modeMask': x.modeMask,
+                  'nodeCount': x.nodeCount,
+                  'routeRef': x.routeRef,
+                },
+            ]),
+          });
+        }
+      case 'borders':
+        final sets = await (db.select(db.borderSets)
+              ..where((s) => s.layerId.equals(layer.id)))
+            .get();
+        final areas = await db.select(db.borderAreas).get();
+        for (final s in sets) {
+          out.add({
+            'box': [s.south, s.west, s.north, s.east],
+            'adminLevel': s.adminLevel,
+            'label': s.label,
+            'areaCount': s.areaCount,
+            'pointCount': s.pointCount,
+            'areas': _sorted([
+              for (final a in areas.where((a) => a.setId == s.id))
+                {
+                  'osmId': a.osmId,
+                  'name': a.name,
+                  'colorIndex': a.colorIndex,
+                  'bounds': [a.south, a.west, a.north, a.east],
+                  'labelLat': a.labelLat,
+                  'labelLng': a.labelLng,
+                  'pointCount': a.pointCount,
+                  'rings': a.rings,
+                  'wayIds': a.wayIds,
+                  'edited': a.editedAt != null,
+                  'colorArgb': a.colorArgb,
+                },
+            ]),
+          });
+        }
+    }
   }
   return _sorted(out);
 }

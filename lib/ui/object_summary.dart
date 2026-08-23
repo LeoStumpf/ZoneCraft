@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart' hide Circle;
 
 import '../data/database.dart';
+import '../data/layer_types.dart';
 import '../data/transit.dart';
 import '../state/providers.dart';
 import 'hit_test.dart';
@@ -87,6 +88,7 @@ IconData typeIcon(String layerType) => switch (layerType) {
       'transit' => Icons.directions_transit,
       'borders' => Icons.public,
       'track' => Icons.timeline,
+      'mixed' => Icons.layers_outlined,
       _ => Icons.circle_outlined,
     };
 
@@ -107,7 +109,16 @@ IconData typeIcon(String layerType) => switch (layerType) {
 /// the map's Edit mode have to agree on it: when they didn't, Edit mode armed
 /// tap-to-select against types nothing could select, which is a button that
 /// visibly does nothing.
-bool layerHasEditor(String layerType) => const {
+///
+/// **A mixed layer answers true, and the real gate moves down a level** to
+/// [ObjectKind.hasEditor]: it can hold tracks *and* circles, so "does this
+/// layer have an editor" stops being answerable per layer. Edit mode
+/// additionally requires an element whose *kind* has one, which is what keeps
+/// a mixed layer holding nothing but tracks from re-creating the exact failure
+/// this function exists to prevent.
+bool layerHasEditor(String layerType) =>
+    layerType == kMixedType ||
+    const {
       'circles',
       'planes',
       'subspace',
@@ -250,88 +261,98 @@ List<ObjectSummary> summariseLayer(
   List<Track> tracks = const [],
   List<TrackPoint> trackPoints = const [],
 }) {
-  switch (layer.type) {
-    case 'circles':
-      final rows = _ordered(circles.where((c) => c.layerId == layer.id),
-          (c) => c.createdAt, (c) => c.id);
-      return [
-        for (var i = 0; i < rows.length; i++)
-          _circleSummary(rows[i], layer.id, i),
-      ];
-    case 'planes':
-      final rows = _ordered(planes.where((p) => p.layerId == layer.id),
-          (p) => p.createdAt, (p) => p.id);
-      return [
-        for (var i = 0; i < rows.length; i++)
-          _planeSummary(rows[i], layer.id, i),
-      ];
-    case 'subspace':
-      final rows = _ordered(subspaces.where((s) => s.layerId == layer.id),
-          (s) => s.createdAt, (s) => s.id);
-      return [
-        for (var i = 0; i < rows.length; i++)
-          _subspaceSummary(rows[i], layer.id, i, subspacePoints),
-      ];
-    case 'freeline':
-      final rows = _ordered(freeLines.where((l) => l.layerId == layer.id),
-          (l) => l.createdAt, (l) => l.id);
-      return [
-        for (var i = 0; i < rows.length; i++)
-          _freeLineSummary(rows[i], layer.id, i, freeLinePoints),
-      ];
-    case 'track':
-      final rows = _ordered(tracks.where((t) => t.layerId == layer.id),
-          (t) => t.createdAt, (t) => t.id);
-      return [
-        for (var i = 0; i < rows.length; i++)
-          _trackSummary(rows[i], layer.id, i, trackPoints),
-      ];
-    case 'freearea':
-      final rows = _ordered(freeAreas.where((a) => a.layerId == layer.id),
-          (a) => a.createdAt, (a) => a.id);
-      return [
-        for (var i = 0; i < rows.length; i++)
-          _freeAreaSummary(rows[i], layer.id, i, freeAreaPoints),
-      ];
-    case 'height':
-      final rows = _ordered(heightRegions.where((r) => r.layerId == layer.id),
-          (r) => r.createdAt, (r) => r.id);
-      return [
-        for (var i = 0; i < rows.length; i++)
-          _heightSummary(rows[i], layer.id, i),
-      ];
-    case 'poi':
-      final rows = _ordered(poiSets.where((s) => s.layerId == layer.id),
-          (s) => s.createdAt, (s) => s.id);
-      return [
-        for (var i = 0; i < rows.length; i++)
-          _poiSetSummary(rows[i], layer.id, i, poiPoints),
-      ];
-    case 'transit':
-      final rows = _ordered(transitSets.where((s) => s.layerId == layer.id),
-          (s) => s.createdAt, (s) => s.id);
-      return [
-        for (var i = 0; i < rows.length; i++)
-          _transitSetSummary(rows[i], layer.id, i, transitStops),
-      ];
-    case 'borders':
-      // The imports are bookkeeping; the *areas* are what you came to look at,
-      // so the list names them — "Maxvorstadt", not "Border import 1".
-      final mine = {
-        for (final s in borderSets)
-          if (s.layerId == layer.id) s.id,
-      };
-      final rows = [
-        for (final a in borderAreas)
-          if (mine.contains(a.setId)) a,
-      ]..sort(_byName);
-      return [
-        for (var i = 0; i < rows.length; i++)
-          _borderAreaSummary(rows[i], layer.id, i),
-      ];
-    default:
-      return const [];
+  // One pass per type the layer holds. A closure rather than a top-level
+  // helper so it keeps capturing the row lists this function was handed —
+  // there are eighteen of them, and threading those through a parameter list
+  // would be all of the change and none of the point.
+  List<ObjectSummary> ofType(String type) {
+    switch (type) {
+      case 'circles':
+        final rows = _ordered(circles.where((c) => c.layerId == layer.id),
+            (c) => c.createdAt, (c) => c.id);
+        return [
+          for (var i = 0; i < rows.length; i++)
+            _circleSummary(rows[i], layer.id, i),
+        ];
+      case 'planes':
+        final rows = _ordered(planes.where((p) => p.layerId == layer.id),
+            (p) => p.createdAt, (p) => p.id);
+        return [
+          for (var i = 0; i < rows.length; i++)
+            _planeSummary(rows[i], layer.id, i),
+        ];
+      case 'subspace':
+        final rows = _ordered(subspaces.where((s) => s.layerId == layer.id),
+            (s) => s.createdAt, (s) => s.id);
+        return [
+          for (var i = 0; i < rows.length; i++)
+            _subspaceSummary(rows[i], layer.id, i, subspacePoints),
+        ];
+      case 'freeline':
+        final rows = _ordered(freeLines.where((l) => l.layerId == layer.id),
+            (l) => l.createdAt, (l) => l.id);
+        return [
+          for (var i = 0; i < rows.length; i++)
+            _freeLineSummary(rows[i], layer.id, i, freeLinePoints),
+        ];
+      case 'track':
+        final rows = _ordered(tracks.where((t) => t.layerId == layer.id),
+            (t) => t.createdAt, (t) => t.id);
+        return [
+          for (var i = 0; i < rows.length; i++)
+            _trackSummary(rows[i], layer.id, i, trackPoints),
+        ];
+      case 'freearea':
+        final rows = _ordered(freeAreas.where((a) => a.layerId == layer.id),
+            (a) => a.createdAt, (a) => a.id);
+        return [
+          for (var i = 0; i < rows.length; i++)
+            _freeAreaSummary(rows[i], layer.id, i, freeAreaPoints),
+        ];
+      case 'height':
+        final rows = _ordered(heightRegions.where((r) => r.layerId == layer.id),
+            (r) => r.createdAt, (r) => r.id);
+        return [
+          for (var i = 0; i < rows.length; i++)
+            _heightSummary(rows[i], layer.id, i),
+        ];
+      case 'poi':
+        final rows = _ordered(poiSets.where((s) => s.layerId == layer.id),
+            (s) => s.createdAt, (s) => s.id);
+        return [
+          for (var i = 0; i < rows.length; i++)
+            _poiSetSummary(rows[i], layer.id, i, poiPoints),
+        ];
+      case 'transit':
+        final rows = _ordered(transitSets.where((s) => s.layerId == layer.id),
+            (s) => s.createdAt, (s) => s.id);
+        return [
+          for (var i = 0; i < rows.length; i++)
+            _transitSetSummary(rows[i], layer.id, i, transitStops),
+        ];
+      case 'borders':
+        // The imports are bookkeeping; the *areas* are what you came to look at,
+        // so the list names them — "Maxvorstadt", not "Border import 1".
+        final mine = {
+          for (final s in borderSets)
+            if (s.layerId == layer.id) s.id,
+        };
+        final rows = [
+          for (final a in borderAreas)
+            if (mine.contains(a.setId)) a,
+        ]..sort(_byName);
+        return [
+          for (var i = 0; i < rows.length; i++)
+            _borderAreaSummary(rows[i], layer.id, i),
+        ];
+      default:
+        return const [];
+    }
   }
+
+  // Concatenated in draw order, so the Elements list reads the way the map
+  // is stacked. A single-type layer runs exactly one pass, as before.
+  return [for (final t in layerContentTypes(layer)) ...ofType(t)];
 }
 
 ObjectSummary _circleSummary(Circle c, String layerId, int index) {

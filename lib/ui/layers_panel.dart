@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/borders.dart';
 import '../data/database.dart';
+import '../data/layer_types.dart';
 import '../data/repository.dart';
 import '../geo/coords.dart';
 import '../state/providers.dart';
@@ -202,6 +203,17 @@ class LayersDrawer extends ConsumerWidget {
                               title: Text('Borders layer'),
                             ),
                           ),
+                          const PopupMenuDivider(),
+                          const PopupMenuItem(
+                            value: kMixedType,
+                            child: ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(Icons.layers_outlined),
+                              title: Text('Combined layer'),
+                              subtitle: Text('Holds any mix except borders'),
+                            ),
+                          ),
                         ],
                         child: const Padding(
                           padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -230,7 +242,14 @@ class LayersDrawer extends ConsumerWidget {
                     itemBuilder: (context, index) {
                       final layer = display[index];
                       final int count;
-                      if (layer.type == 'planes') {
+                      if (layer.type == kMixedType) {
+                        // A combined layer's natural unit is the *element* —
+                        // the rows the Elements list shows — because its
+                        // contents have no shared unit to count in. (Every
+                        // other branch below counts each type's own: points
+                        // for a subspace, POIs for an import.)
+                        count = ref.read(layerSummariesProvider(layer.id)).length;
+                      } else if (layer.type == 'planes') {
                         count =
                             planes.where((p) => p.layerId == layer.id).length;
                       } else if (layer.type == 'subspace') {
@@ -369,6 +388,9 @@ class _LayerTile extends ConsumerWidget {
       'poi' => 'POI',
       'transit' => 'station',
       'borders' => 'area',
+      // A combined layer holds several kinds, so the only honest collective
+      // noun is the generic one.
+      kMixedType => 'element',
       _ => 'circle',
     };
     final subtitle =
@@ -502,6 +524,8 @@ class _LayerTile extends ConsumerWidget {
                       ref.read(activeLayerProvider) == layer.id) {
                     ref.read(activeLayerProvider.notifier).select(mergedInto);
                   }
+                case 'makeMixed':
+                  await repo.convertLayerToMixed(layer.id);
                 case 'delete':
                   await repo.deleteLayer(layer.id);
               }
@@ -515,16 +539,21 @@ class _LayerTile extends ConsumerWidget {
               // invert; 'poi'/'transit'/'track' are markers and lines with
               // nothing to invert; 'borders' draws many separate areas, so
               // there is no single region to take the complement of.
-              if (layer.type != 'height' &&
-                  layer.type != 'poi' &&
-                  layer.type != 'transit' &&
-                  layer.type != 'track' &&
-                  layer.type != 'borders')
+              //
+              // A combined layer offers it, and it inverts the **region half**
+              // only — there is no meaningful complement of a marker, and its
+              // own markers stay on top of the fill either way.
+              if (layer.type == kMixedType ||
+                  (layer.type != 'height' &&
+                      layer.type != 'poi' &&
+                      layer.type != 'transit' &&
+                      layer.type != 'track' &&
+                      layer.type != 'borders'))
                 PopupMenuItem(
                   value: 'inverse',
                   child: Text(layer.isInverted ? 'Un-invert' : 'Invert'),
                 ),
-              if (layer.type == 'transit')
+              if (layerHolds(layer, kTransit))
                 const PopupMenuItem(
                     value: 'stations', child: Text('Stations…')),
               if (layer.type == 'borders') ...[
@@ -539,31 +568,42 @@ class _LayerTile extends ConsumerWidget {
                   child: const Text('Show names'),
                 ),
               ],
-              if (layer.type == 'track') ...[
+              if (layerHolds(layer, kTrack))
                 const PopupMenuItem(
                     value: 'trackSettings', child: Text('Track settings…')),
-                // No "Import map feature…" here: that fetches a named place
-                // and a track layer holds recordings, not places. A GPX from
-                // another device is the one thing worth importing.
-                const PopupMenuItem(
-                  value: 'importTrack',
-                  child: Text('Import track…'),
-                ),
-              ],
-              if (layer.type == 'freeline' || layer.type == 'freearea') ...[
+              // "Import map feature…" fetches a *named place*, so it belongs to
+              // the freehand types — a track layer holds recordings, not
+              // places.
+              if (layerHolds(layer, kFreeLine) || layerHolds(layer, kFreeArea))
                 const PopupMenuItem(
                   value: 'importFeature',
                   child: Text('Import map feature…'),
                 ),
+              // One entry, not one per matching type: a combined layer holds
+              // track *and* both freehand types, and the same item listed three
+              // times is a menu bug. Which of them a GPX lands in is decided
+              // once, in [importTrackIntoLayer].
+              if (layerHolds(layer, kTrack) ||
+                  layerHolds(layer, kFreeLine) ||
+                  layerHolds(layer, kFreeArea))
                 const PopupMenuItem(
                   value: 'importTrack',
                   child: Text('Import track…'),
                 ),
-              ],
               const PopupMenuItem(value: 'export', child: Text('Export layer…')),
               if (canCombine)
                 const PopupMenuItem(
                     value: 'combine', child: Text('Combine…')),
+              // Converting is one-way here on purpose: going *back* is only
+              // well defined while the layer holds at most one type, and a
+              // "convert back" that silently refuses most of the time is worse
+              // than not offering it. Combine into a new single-type layer
+              // instead.
+              if (canBecomeMixed(layer.type))
+                const PopupMenuItem(
+                  value: 'makeMixed',
+                  child: Text('Make combined layer'),
+                ),
               const PopupMenuItem(value: 'delete', child: Text('Delete')),
             ],
           ),
@@ -683,8 +723,6 @@ class _LayerTile extends ConsumerWidget {
     WidgetRef ref,
     List<String> overridden,
   ) async {
-    final kind = ColoredElement.forLayerType(layer.type);
-    if (kind == null) return;
     final n = overridden.length;
     final answer = await showDialog<String>(
       context: context,
@@ -714,15 +752,33 @@ class _LayerTile extends ConsumerWidget {
       ),
     );
     if (answer == null || answer == 'keep') return;
-    final repo = ref.read(repositoryProvider);
     if (answer == 'all') {
-      await repo.clearElementColors(kind, overridden);
+      await _clearOverrides(ref, overridden);
       return;
     }
     if (!context.mounted) return;
     final chosen = await _chooseOverrides(context, ref, overridden);
     if (chosen != null && chosen.isNotEmpty) {
-      await repo.clearElementColors(kind, chosen);
+      await _clearOverrides(ref, chosen);
+    }
+  }
+
+  /// Puts [ids] back on their auto shades.
+  ///
+  /// Each id's kind comes from its own summary row rather than from the
+  /// layer's type: a mixed layer's overrides span several tables, so there is
+  /// no single [ColoredElement] the whole list belongs to.
+  Future<void> _clearOverrides(WidgetRef ref, List<String> ids) async {
+    final repo = ref.read(repositoryProvider);
+    final kindById = {
+      for (final s in ref.read(layerSummariesProvider(layer.id)))
+        s.ref.id: s.ref.kind,
+    };
+    for (final id in ids) {
+      final name = kindById[id]?.name;
+      final kind =
+          name == null ? null : ColoredElement.forObjectKindName(name);
+      if (kind != null) await repo.setElementColor(kind, id, null);
     }
   }
 
@@ -795,9 +851,13 @@ class _LayerTile extends ConsumerWidget {
 /// and, for borders, the same admin level, since one layer holds one level.
 /// Mirrors the guard in [Repository.combineLayers], so the menu never offers a
 /// target the repository would refuse.
+/// Mirrors [Repository.combineLayers]'s guard: the target has to be able to
+/// hold everything the source does, which a combined layer does for all but
+/// `borders`.
 bool canCombineLayers(Layer source, Layer target) =>
     target.id != source.id &&
-    target.type == source.type &&
+    layerContentTypes(source)
+        .every((t) => layerTypeHolds(target.type, t)) &&
     (source.type != 'borders' || target.borderLevel == source.borderLevel);
 
 /// Picks the admin level for a new borders layer.

@@ -8,6 +8,7 @@ import 'package:zonecraft/data/overpass.dart' show PoiResult;
 import 'package:zonecraft/data/repository.dart';
 import 'package:zonecraft/data/transit.dart';
 import 'package:zonecraft/state/providers.dart';
+import 'package:zonecraft/data/layer_types.dart';
 import 'package:zonecraft/ui/object_summary.dart';
 
 void main() {
@@ -37,6 +38,35 @@ void main() {
     expect(formatMeters(1500), '1.50 km');
     expect(formatMeters(42000), '42 km');
     expect(formatMeters(double.nan), '—');
+  });
+
+  test('a combined layer lists every type it holds, in draw order', () async {
+    // A switch on `layer.type` returned nothing at all for a combined layer,
+    // which reads as an empty layer rather than a broken one. The order is the
+    // draw order, so the list matches how the map is stacked.
+    final layerId = await repo.createLayer(
+        name: 'Everything', colorArgb: 0xFF0000FF, type: kMixedType);
+    await repo.createCircle(
+        layerId: layerId, centerLat: 48.1, centerLng: 11.5, radiusMeters: 500);
+    await repo.createPlane(
+        layerId: layerId, aLat: 48.0, aLng: 11.0, bLat: 48.2, bLng: 11.4);
+    await repo.createTrack(layerId: layerId);
+
+    final rows = summariseLayer(
+      await layerById(layerId),
+      circles: await db.select(db.circles).get(),
+      planes: await db.select(db.planes).get(),
+      tracks: await db.select(db.tracks).get(),
+    );
+
+    expect(
+      rows.map((r) => r.ref.kind).toList(),
+      [ObjectKind.circle, ObjectKind.plane, ObjectKind.track],
+      reason: 'circles, planes then tracks — kMixedContentTypes order',
+    );
+    // Each row still names its own kind, which is what lets the list show a
+    // per-element icon and resolve a per-element colour.
+    expect(rows.every((r) => r.ref.layerId == layerId), isTrue);
   });
 
   test('formatElevationMeters groups thousands and marks negatives', () {
@@ -460,6 +490,10 @@ void main() {
       for (final type in ['poi', 'transit', 'borders']) {
         expect(layerHasEditor(type), isTrue, reason: type);
       }
+    });
+
+    test('a combined layer has an editor; the per-element gate is the kind', () {
+      expect(layerHasEditor(kMixedType), isTrue);
     });
 
     test('an unknown type has no editor, so Edit mode stays honest', () {

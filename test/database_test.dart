@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 
 import 'package:zonecraft/data/database.dart';
+import 'package:zonecraft/data/layer_types.dart';
 import 'package:zonecraft/data/overpass.dart' show PoiResult;
 import 'package:zonecraft/data/repository.dart';
 import 'package:zonecraft/data/serialization.dart';
@@ -1536,6 +1537,196 @@ void main() {
           .toList()
         ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
       expect(pts.map((p) => p.sortOrder), [0, 1]);
+    });
+  });
+
+  group('combined layers', () {
+    late AppDatabase db;
+    late Repository repo;
+
+    setUp(() {
+      db = AppDatabase.forTesting(NativeDatabase.memory());
+      repo = Repository(db);
+    });
+    tearDown(() => db.close());
+
+    Future<String> mixedLayer() async {
+      final id = await repo.createLayer(
+          name: 'Everything', colorArgb: 0xFF00FF00, type: kMixedType);
+      return id;
+    }
+
+    test('elements of several types can live on one layer', () async {
+      final id = await mixedLayer();
+      await repo.createCircle(
+          layerId: id, centerLat: 48.1, centerLng: 11.5, radiusMeters: 500);
+      await repo.createPlane(
+          layerId: id, aLat: 48.0, aLng: 11.0, bLat: 48.2, bLng: 11.4);
+      await repo.createTrack(layerId: id);
+
+      expect(await repo.watchAllCircles().first, hasLength(1));
+      expect(await repo.watchAllPlanes().first, hasLength(1));
+      expect(await repo.watchAllTracks().first, hasLength(1));
+    });
+
+    test('auto shades stay distinct across types on one layer', () async {
+      // Counting per table would give the first circle and the first plane
+      // both shade 0 — the same colour — which is exactly what the auto shades
+      // exist to prevent.
+      final id = await mixedLayer();
+      await repo.createCircle(
+          layerId: id, centerLat: 48.1, centerLng: 11.5, radiusMeters: 500);
+      await repo.createPlane(
+          layerId: id, aLat: 48.0, aLng: 11.0, bLat: 48.2, bLng: 11.4);
+      await repo.createSubspace(layerId: id);
+
+      final shades = <int>[
+        (await repo.watchAllCircles().first).single.colorShade,
+        (await repo.watchAllPlanes().first).single.colorShade,
+        (await repo.watchAllSubspaces().first).single.colorShade,
+      ];
+      expect(shades.toSet(), hasLength(3), reason: 'shades: $shades');
+    });
+
+    test('a single-type layer still numbers its shades from 0', () async {
+      // The mixed rule must not leak: an ordinary layer keeps the exact
+      // numbering it had, or every existing map would repaint on upgrade.
+      final id = await repo.createLayer(
+          name: 'C', colorArgb: 1, type: 'circles');
+      for (var i = 0; i < 3; i++) {
+        await repo.createCircle(
+            layerId: id, centerLat: 48.1, centerLng: 11.5, radiusMeters: 500);
+      }
+      final shades = (await repo.watchAllCircles().first)
+          .map((c) => c.colorShade)
+          .toList()
+        ..sort();
+      expect(shades, [0, 1, 2]);
+    });
+
+    test('colour overrides are found across every table it holds', () async {
+      final id = await mixedLayer();
+      final circleId = await repo.createCircle(
+          layerId: id, centerLat: 48.1, centerLng: 11.5, radiusMeters: 500);
+      final planeId = await repo.createPlane(
+          layerId: id, aLat: 48.0, aLng: 11.0, bLat: 48.2, bLng: 11.4);
+      await repo.createTrack(layerId: id); // no override
+
+      await repo.setElementColor(ColoredElement.circle, circleId, 0xFFFF0000);
+      await repo.setElementColor(ColoredElement.plane, planeId, 0xFF0000FF);
+
+      final overridden = await repo.elementsWithColorOverride(id, kMixedType);
+      expect(overridden.toSet(), {circleId, planeId});
+    });
+
+    group('combineLayers', () {
+      test('a single-type layer merges into a combined one', () async {
+        final target = await mixedLayer();
+        final source = await repo.createLayer(
+            name: 'C', colorArgb: 1, type: 'circles');
+        await repo.createCircle(
+            layerId: source,
+            centerLat: 48.1,
+            centerLng: 11.5,
+            radiusMeters: 500);
+
+        await repo.combineLayers(sourceId: source, targetId: target);
+
+        final circles = await repo.watchAllCircles().first;
+        expect(circles, hasLength(1), reason: 'the circle must not be lost');
+        expect(circles.single.layerId, target);
+        expect(await repo.watchLayers().first, hasLength(1));
+      });
+
+      test('a combined source keeps every one of its types', () async {
+        // This is the case the old `default:` arm silently destroyed: an
+        // unrecognised source type re-pointed nothing and then lost all its
+        // rows to the cascade when the source layer was deleted.
+        final source = await mixedLayer();
+        await repo.createCircle(
+            layerId: source,
+            centerLat: 48.1,
+            centerLng: 11.5,
+            radiusMeters: 500);
+        await repo.createPlane(
+            layerId: source, aLat: 48.0, aLng: 11.0, bLat: 48.2, bLng: 11.4);
+        await repo.createTrack(layerId: source);
+        final target = await repo.createLayer(
+            name: 'Target', colorArgb: 2, type: kMixedType);
+
+        await repo.combineLayers(sourceId: source, targetId: target);
+
+        expect((await repo.watchAllCircles().first).single.layerId, target);
+        expect((await repo.watchAllPlanes().first).single.layerId, target);
+        expect((await repo.watchAllTracks().first).single.layerId, target);
+      });
+
+      test('a combined source refuses a single-type target', () async {
+        final source = await mixedLayer();
+        final target = await repo.createLayer(
+            name: 'C', colorArgb: 1, type: 'circles');
+        await expectLater(
+          repo.combineLayers(sourceId: source, targetId: target),
+          throwsArgumentError,
+        );
+      });
+
+      test('a borders layer still refuses a combined target', () async {
+        // A combined layer has nowhere to keep the admin level.
+        final source = await repo.createLayer(
+            name: 'B', colorArgb: 1, type: 'borders', borderLevel: '8');
+        final target = await mixedLayer();
+        await expectLater(
+          repo.combineLayers(sourceId: source, targetId: target),
+          throwsArgumentError,
+        );
+      });
+    });
+
+    group('convertLayerToMixed', () {
+      test('it keeps the rows and moves an untouched opacity', () async {
+        final id = await repo.createLayer(
+            name: 'P', colorArgb: 1, type: 'poi'); // default opacity 1.0
+        await repo.createPoiSet(
+          layerId: id,
+          categoryKey: 'cafe',
+          centerLat: 48.1,
+          centerLng: 11.5,
+          radiusMeters: 800,
+        );
+
+        await repo.convertLayerToMixed(id);
+
+        final layer = (await repo.watchLayers().first).single;
+        expect(layer.type, kMixedType);
+        expect(layer.opacity, defaultLayerOpacity(kMixedType),
+            reason: 'a POI layer at 1.0 would make region fills opaque');
+        expect(await repo.watchAllPoiSets().first, hasLength(1));
+      });
+
+      test('an opacity the user chose is kept', () async {
+        final id = await repo.createLayer(
+            name: 'C', colorArgb: 1, type: 'circles');
+        await repo.updateLayer(id, opacity: 0.8);
+
+        await repo.convertLayerToMixed(id);
+
+        expect((await repo.watchLayers().first).single.opacity, 0.8);
+      });
+
+      test('a borders layer refuses', () async {
+        final id = await repo.createLayer(
+            name: 'B', colorArgb: 1, type: 'borders', borderLevel: '8');
+        await expectLater(
+            repo.convertLayerToMixed(id), throwsArgumentError);
+        expect((await repo.watchLayers().first).single.type, 'borders');
+      });
+
+      test('converting an already-combined layer is a no-op', () async {
+        final id = await mixedLayer();
+        await repo.convertLayerToMixed(id);
+        expect((await repo.watchLayers().first).single.type, kMixedType);
+      });
     });
   });
 

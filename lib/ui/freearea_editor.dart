@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/database.dart';
+import '../data/layer_types.dart';
 import '../data/repository.dart';
 import '../geo/coords.dart';
 import 'editor_sheet.dart';
@@ -124,7 +125,7 @@ class _FreeAreaEditorSheetState extends ConsumerState<FreeAreaEditorSheet> {
     final armed = ref.watch(freeAreaPlacementProvider);
     final id = widget.freeArea.id;
     final areaLayers = widget.layers
-        .where((l) => l.type == 'freearea')
+        .where((l) => layerHolds(l, kFreeArea))
         .toList();
 
     return EditorSheet(
