@@ -10,7 +10,7 @@ library;
 
 /// The user-facing version, matching `pubspec.yaml`'s `version:` before the
 /// `+buildNumber`.
-const String kAppVersion = '1.2.0';
+const String kAppVersion = '1.3.0';
 
 /// Shown on the About screen under the version.
 const String kAppTagline =
