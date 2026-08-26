@@ -1,6 +1,6 @@
 # ZoneCraft — Privacy Policy
 
-_Last updated: 2026-08-04_
+_Last updated: 2026-08-27_
 
 ZoneCraft is an offline-first map tool. It has **no account system**, shows **no advertising**,
 and does **not** sell, rent or share your personal data. There is no ZoneCraft server: nothing
@@ -92,12 +92,43 @@ The app sends nothing identifying with these requests beyond what any HTTP clien
 IP address, and a `User-Agent` naming the application. No advertising ID, no device identifier,
 no cookies, no analytics.
 
+## What the app can see about your device
+
+Android hides other installed apps from an app unless it declares, in advance and in its
+manifest, the specific kinds of thing it needs to hand work to. ZoneCraft declares two, and
+they are worth naming because they are the only way it can observe anything at all about what
+else is on your phone:
+
+- **Opening a link.** So that the addresses on the About screen can be tapped, the app asks
+  whether *something* on the device can open an `https` address. The answer it gets is yes or
+  no — not a list of your apps, not which browser, and nothing about any other app you have
+  installed. If the answer is no, the address stays as plain selectable text.
+- **The system text menu.** A default of every Flutter app: when you select text inside
+  ZoneCraft, Android's "share / translate / search" menu is populated by whatever handles
+  plain text on your device.
+
+Neither is a query for the list of installed applications, and ZoneCraft does not hold the
+Android permission that would allow one (`QUERY_ALL_PACKAGES`). Nothing about your device is
+recorded, and nothing is transmitted anywhere — these answers are used once, on screen, and
+discarded.
+
+When you do tap a link, ZoneCraft hands the address to your browser and stops being involved.
+What happens next is between you and that browser, under its own privacy policy.
+
 ## Exporting and sharing your data
 
-**Export** writes your layers to a GeoJSON or KML file and hands it to Android's share sheet.
-Where that file then goes is entirely your choice: nothing is transmitted to us, and the app has
-no visibility into what you do with it. The file is written to the app's temporary directory and
-is removed by the system in the normal course of clearing app caches.
+**Export** writes your layers to a GeoJSON or KML file. You then choose what happens to it:
+**Share** hands it to Android's share sheet, and **Save to file** hands it to Android's document
+picker so you can put it wherever you like. Where the file goes is entirely your choice: nothing
+is transmitted to us, and the app has no visibility into what you do with it afterwards. Either
+way the file is first written to the app's temporary directory, and is removed by the system in
+the normal course of clearing app caches. Saving gives ZoneCraft access to the one file you
+picked and nothing else — it never gains access to a folder or to your storage generally.
+
+**Importing** works the same way in reverse. You can open a file through the app's file picker,
+or share one *into* ZoneCraft from another app — Android grants access to that single file for
+long enough to read it, the app copies it into its own cache to import it, and deletes the copy
+when it is done. It cannot see anything else the sending app holds.
 
 ## Data retention and deletion
 
