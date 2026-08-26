@@ -47,6 +47,60 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="zonecraft"/>
             </intent-filter>
+            <!-- Receiving a geometry file: another app's share sheet (SEND) or
+                 a tap in a file manager (VIEW). Both land in importBytesFlow
+                 via the com.leostumpf.zonecraft/files channel.
+
+                 ACTION_SEND resolves on MIME TYPE ALONE — the uri in
+                 EXTRA_STREAM is invisible to the matcher, so no extension and
+                 no pathPattern can help here. application/octet-stream is in
+                 the list for the same reason it is in `_importGroup` (see
+                 ui/import_actions.dart): Android's extension→MIME map has no
+                 entry for .geojson, so our OWN exports are shared as
+                 octet-stream, and a share target that cannot receive the file
+                 the app just wrote is not a share target. The cost is showing
+                 up in the chooser when an unknown *binary* is shared.
+
+                 text/plain and */* are deliberately absent: text/plain is the
+                 ubiquitous "share this text" intent every browser and
+                 messenger fires, and */* is every photo and video on the
+                 phone. A file that isn't geometry is rejected with a message
+                 either way.
+
+                 These are separate <intent-filter> elements from the
+                 zonecraft:// one above on purpose: <data> cross-products only
+                 within its own filter, so adding a mimeType there would turn
+                 that scheme-only match into a scheme×mime product and
+                 silently kill shared positions. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="application/geo+json"/>
+                <data android:mimeType="application/json"/>
+                <data android:mimeType="application/vnd.google-earth.kml+xml"/>
+                <data android:mimeType="application/vnd.google-earth.kmz"/>
+                <data android:mimeType="application/gpx+xml"/>
+                <data android:mimeType="application/xml"/>
+                <data android:mimeType="text/xml"/>
+                <data android:mimeType="application/octet-stream"/>
+            </intent-filter>
+            <!-- Tapping the file itself ("Open with"). No BROWSABLE: a web
+                 page has no business launching an import, and Chrome's "open
+                 downloaded file" uses DEFAULT with a content: uri anyway. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:scheme="content"/>
+                <data android:scheme="file"/>
+                <data android:mimeType="application/geo+json"/>
+                <data android:mimeType="application/json"/>
+                <data android:mimeType="application/vnd.google-earth.kml+xml"/>
+                <data android:mimeType="application/vnd.google-earth.kmz"/>
+                <data android:mimeType="application/gpx+xml"/>
+                <data android:mimeType="application/xml"/>
+                <data android:mimeType="text/xml"/>
+                <data android:mimeType="application/octet-stream"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

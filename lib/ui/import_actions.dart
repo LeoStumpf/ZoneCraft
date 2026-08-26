@@ -11,6 +11,7 @@ import 'package:share_plus/share_plus.dart';
 import '../data/database.dart';
 import '../data/geo_import.dart';
 import '../data/layer_types.dart';
+import '../data/platform_files.dart';
 import '../data/repository.dart';
 import '../data/serialization.dart';
 import '../geo/border_areas.dart' show outerRings;
@@ -101,7 +102,159 @@ String _thousands(int n) {
   return b.toString();
 }
 
-/// Exports a single [layer] to GeoJSON or KML and opens the share sheet.
+/// Where an export goes once its format is chosen.
+enum ExportDestination {
+  /// The system share sheet (`share_plus`).
+  share,
+
+  /// A location the user picks, via Android's document picker.
+  save,
+}
+
+/// What [askExportChoice] answers: a format and a destination.
+class ExportChoice {
+  const ExportChoice(this.format, this.destination);
+
+  /// `'geojson'` or `'kml'` — also the file extension.
+  final String format;
+  final ExportDestination destination;
+
+  bool get isKml => format == 'kml';
+
+  /// The GeoJSON type stays `application/geo+json` (RFC 7946) rather than the
+  /// more widely known `application/json`, because of how Android's document
+  /// picker names the file it creates: `FileUtils.buildUniqueFile` replaces
+  /// the title's extension with the one the MIME maps to unless they already
+  /// agree. Android has no extension mapping for `geo+json` — the same gap
+  /// that forces `application/octet-stream` into [_importGroup] — so there is
+  /// nothing to swap in and `x.geojson` is saved verbatim. Under
+  /// `application/json` the same file would be saved as `x.geojson.json`.
+  String get mimeType => isKml
+      ? 'application/vnd.google-earth.kml+xml'
+      : 'application/geo+json';
+}
+
+/// Remembered for the session only: whoever saved once probably wants to save
+/// again, and a destination is not worth an `AppSettings` column.
+ExportDestination _lastDestination = ExportDestination.share;
+
+/// The one export dialog, shared by the per-layer and the whole-database
+/// export. Returns null when cancelled.
+///
+/// Destination is a mode on the dialog rather than a second dialog or a
+/// doubled list of rows: sharing is the common case and stays two taps, while
+/// saving costs one more and is visible without being modal. The control is
+/// only built where a save is possible, so a platform without one sees exactly
+/// the dialog this app has always had.
+Future<ExportChoice?> askExportChoice(
+  BuildContext context, {
+  required String title,
+}) {
+  var destination = platformFilesSupported
+      ? _lastDestination
+      : ExportDestination.share;
+  return showDialog<ExportChoice>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setInner) => SimpleDialog(
+        title: Text(title),
+        children: [
+          if (platformFilesSupported)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+              // Labels only, inside a horizontal scroller: a SegmentedButton
+              // with icons overflows a dialog at a large system font, and a
+              // dialog clips as silently as a bottom sheet does.
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SegmentedButton<ExportDestination>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(
+                      value: ExportDestination.share,
+                      label: Text('Share'),
+                    ),
+                    ButtonSegment(
+                      value: ExportDestination.save,
+                      label: Text('Save to file'),
+                    ),
+                  ],
+                  selected: {destination},
+                  onSelectionChanged: (s) => setInner(() {
+                    destination = s.first;
+                    _lastDestination = s.first;
+                  }),
+                ),
+              ),
+            ),
+          SimpleDialogOption(
+            onPressed: () =>
+                Navigator.pop(ctx, ExportChoice('geojson', destination)),
+            child: const Text('GeoJSON (re-importable)'),
+          ),
+          SimpleDialogOption(
+            onPressed: () =>
+                Navigator.pop(ctx, ExportChoice('kml', destination)),
+            child: const Text('KML (Google Earth / Maps)'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// `2026-08-26T14-31-05` — a file name's worth of "when".
+String exportStamp() =>
+    DateTime.now().toIso8601String().split('.').first.replaceAll(':', '-');
+
+/// A layer name reduced to something a file system will keep verbatim.
+String exportSafeName(String name) =>
+    name.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
+
+/// Writes [data] in the chosen format and either shares it or hands it to the
+/// system document picker. Shows its own snackbars.
+///
+/// [fileStem] is the name without its extension. The temp file is written
+/// either way: it is what `share_plus` needs, and what the platform save
+/// streams from.
+Future<void> deliverExport(
+  BuildContext context,
+  ExportData data,
+  ExportChoice choice, {
+  required String fileStem,
+  required String subject,
+}) async {
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    final content = choice.isKml
+        ? exportToKml(data)
+        : exportToGeoJson(data);
+    final dir = await getTemporaryDirectory();
+    final fileName = '$fileStem.${choice.format}';
+    final file = File('${dir.path}/$fileName');
+    await file.writeAsString(content);
+    if (choice.destination == ExportDestination.save) {
+      final saved = await saveFileToDisk(
+        sourcePath: file.path,
+        suggestedName: fileName,
+        mimeType: choice.mimeType,
+      );
+      if (saved == null) return; // backed out of the picker: say nothing
+      messenger.showSnackBar(SnackBar(content: Text('Saved $saved')));
+    } else {
+      await SharePlus.instance.share(
+        ShareParams(
+          subject: subject,
+          files: [XFile(file.path, mimeType: choice.mimeType)],
+        ),
+      );
+    }
+  } catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text('Export failed: $e')));
+  }
+}
+
+/// Exports a single [layer] to GeoJSON or KML, then shares or saves it.
 Future<void> exportSingleLayer(
   BuildContext context,
   Repository repo,
@@ -118,51 +271,18 @@ Future<void> exportSingleLayer(
   }
   if (!await confirmLargeExport(context, data)) return;
   if (!context.mounted) return;
-  final fmt = await showDialog<String>(
-    context: context,
-    builder: (ctx) => SimpleDialog(
-      title: Text('Export “${layer.name}” as'),
-      children: [
-        SimpleDialogOption(
-          onPressed: () => Navigator.pop(ctx, 'geojson'),
-          child: const Text('GeoJSON (re-importable)'),
-        ),
-        SimpleDialogOption(
-          onPressed: () => Navigator.pop(ctx, 'kml'),
-          child: const Text('KML (Google Earth / Maps)'),
-        ),
-      ],
-    ),
+  final choice = await askExportChoice(
+    context,
+    title: 'Export “${layer.name}” as',
   );
-  if (fmt == null) return;
-  try {
-    final isKml = fmt == 'kml';
-    final content = isKml ? exportToKml(data) : exportToGeoJson(data);
-    final stamp = DateTime.now()
-        .toIso8601String()
-        .split('.')
-        .first
-        .replaceAll(':', '-');
-    final safeName = layer.name.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
-    final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/zonecraft-$safeName-$stamp.$fmt');
-    await file.writeAsString(content);
-    await SharePlus.instance.share(
-      ShareParams(
-        subject: 'ZoneCraft layer: ${layer.name}',
-        files: [
-          XFile(
-            file.path,
-            mimeType: isKml
-                ? 'application/vnd.google-earth.kml+xml'
-                : 'application/geo+json',
-          ),
-        ],
-      ),
-    );
-  } catch (e) {
-    messenger.showSnackBar(SnackBar(content: Text('Export failed: $e')));
-  }
+  if (choice == null || !context.mounted) return;
+  await deliverExport(
+    context,
+    data,
+    choice,
+    fileStem: 'zonecraft-${exportSafeName(layer.name)}-${exportStamp()}',
+    subject: 'ZoneCraft layer: ${layer.name}',
+  );
 }
 
 /// Prompts for the inclusion-circle radius applied to freshly imported
@@ -443,28 +563,56 @@ Future<void> importFeatureFlow(
   }
 }
 
-/// Imports a whole layer from a file: tries ZoneCraft GeoJSON first, then falls
-/// back to generic geometry. Asks the user whether to add it as a new layer or
-/// merge into an existing same-type one. [layers] is the current layer list
-/// (for the merge target picker).
+/// Imports a whole layer from a file the user picks: tries ZoneCraft GeoJSON
+/// first, then falls back to generic geometry. Asks whether to add it as a new
+/// layer or merge into an existing same-type one. [layers] is the current layer
+/// list (for the merge target picker).
 Future<void> importLayerFlow(
   BuildContext context,
   Repository repo,
   List<Layer> layers,
 ) async {
   final messenger = ScaffoldMessenger.of(context);
+  final XFile? picked;
+  final Uint8List bytes;
   try {
-    final picked = await openFile(acceptedTypeGroups: const [_importGroup]);
+    picked = await openFile(acceptedTypeGroups: const [_importGroup]);
     if (picked == null) return;
-    final bytes = await picked.readAsBytes();
+    bytes = await picked.readAsBytes();
+  } catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text('Import failed: $e')));
+    return;
+  }
+  if (!context.mounted) return;
+  await importBytesFlow(context, repo, layers, name: picked.name, bytes: bytes);
+}
 
+/// The same import with the file already in hand.
+///
+/// [importLayerFlow] above and a file another app shared into ZoneCraft (see
+/// `data/platform_files.dart`, consumed in `map_screen`) both run *this*, so a
+/// shared file and a picked one are the same import: same ZoneCraft-GeoJSON-
+/// first order, same freehand-line radius prompt, same new-or-merge choice,
+/// same thinning rule.
+///
+/// [name] is only ever a file name — [parseExternalGeometry] sniffs its
+/// extension and a synthesized layer is named after its stem.
+Future<void> importBytesFlow(
+  BuildContext context,
+  Repository repo,
+  List<Layer> layers, {
+  required String name,
+  required Uint8List bytes,
+}) async {
+  final messenger = ScaffoldMessenger.of(context);
+  try {
     // 1. Prefer our own tagged GeoJSON (lossless, all object types).
     ExportData? data = importFromGeoJson(
       utf8.decode(bytes, allowMalformed: true),
     );
     final fromZonecraft = data != null;
     // 2. Fall back to generic geometry → synthesize freehand layers.
-    data ??= _syntheticLayers(picked.name, bytes);
+    data ??= _syntheticLayers(name, bytes);
     if (data == null || data.layers.isEmpty || data.objectCount == 0) {
       messenger.showSnackBar(
         const SnackBar(

@@ -1,13 +1,8 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../data/database.dart';
 import '../data/repository.dart';
-import '../data/serialization.dart';
 import '../data/tile_source.dart';
 import '../geo/coords.dart';
 import '../state/providers.dart';
@@ -115,51 +110,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
     if (!await confirmLargeExport(context, data)) return;
     if (!mounted) return;
-    final fmt = await showDialog<String>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('Export as'),
-        children: [
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(ctx, 'geojson'),
-            child: const Text('GeoJSON (re-importable)'),
-          ),
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(ctx, 'kml'),
-            child: const Text('KML (Google Earth / Maps)'),
-          ),
-        ],
-      ),
+    final choice = await askExportChoice(context, title: 'Export as');
+    if (choice == null || !mounted) return;
+    await deliverExport(
+      context,
+      data,
+      choice,
+      fileStem: 'zonecraft-${exportStamp()}',
+      subject: 'ZoneCraft export',
     );
-    if (fmt == null) return;
-
-    try {
-      final isKml = fmt == 'kml';
-      final content = isKml ? exportToKml(data) : exportToGeoJson(data);
-      final stamp = DateTime.now()
-          .toIso8601String()
-          .split('.')
-          .first
-          .replaceAll(':', '-');
-      final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/zonecraft-$stamp.$fmt');
-      await file.writeAsString(content);
-      await SharePlus.instance.share(
-        ShareParams(
-          subject: 'ZoneCraft export',
-          files: [
-            XFile(
-              file.path,
-              mimeType: isKml
-                  ? 'application/vnd.google-earth.kml+xml'
-                  : 'application/geo+json',
-            ),
-          ],
-        ),
-      );
-    } catch (e) {
-      _snack('Export failed: $e');
-    }
   }
 
   /// Picks a geometry file (ZoneCraft GeoJSON, generic GeoJSON, KML/KMZ or GPX)

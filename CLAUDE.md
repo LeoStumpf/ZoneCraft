@@ -185,6 +185,41 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   scheme, not a verified https App Link (that needs a domain), so the message also carries
   plain coordinates. `kMinFocusZoom` is a **floor**: Locate me and a received link never zoom
   you out.
+- **Receiving a shared file, and saving one** (`data/platform_files.dart` +
+  `MainActivity.kt`, the app's **only** platform code — one `MethodChannel`, no new
+  dependency, no new permission, no schema change). `ACTION_SEND`/`ACTION_VIEW` filters put
+  ZoneCraft in other apps' share sheets, and `ACTION_CREATE_DOCUMENT` gives an export a
+  **Save to file** beside Share (`file_selector_android` implements `openFile` but throws
+  `UnimplementedError` from `getSaveLocation`, which is why saving was impossible before).
+  The load-bearing details:
+  - **The new filters are separate `<intent-filter>` elements.** `<data>` cross-products
+    within its own filter, so a `mimeType` added to the `zonecraft://` filter would turn its
+    scheme-only match into a scheme×mime product and kill shared positions — silently, and
+    only on a device. `test/android_manifest_test.dart` guards it.
+  - **`ACTION_SEND` resolves on MIME alone** (the `EXTRA_STREAM` uri is invisible to the
+    matcher), and Android's extension map has no entry for `.geojson` — so our own exports
+    are shared as `application/octet-stream`, which is why that type is declared, exactly as
+    in `_importGroup`. `text/plain` and `*/*` are refused: the first is every "share this
+    text", the second every photo.
+  - **The GeoJSON MIME stays `application/geo+json`.** DocumentsUI swaps the title's
+    extension for the one the MIME maps to unless they agree; Android has no mapping for
+    `geo+json`, so `x.geojson` is saved verbatim — `application/json` would write
+    `x.geojson.json`.
+  - **Delivery is pull, never push**: Kotlin caches the uri, Dart pulls at startup and on
+    every resume. `onNewIntent` always precedes `onResume` (singleTop redelivery cycles
+    pause/resume even when already foreground), so no EventChannel is needed. `onNewIntent`
+    must `super` first — that keeps app_links alive — then `setIntent`, which the framework
+    does not do. `restored` (captured *before* `super.onCreate`) stops a recents restore
+    replaying the import.
+  - **`FlutterActivity extends android.app.Activity`, not `ComponentActivity`** — no
+    `registerForActivityResult`; `onActivityResult` must call **`super` first** or geolocator
+    and file_selector stop receiving their results.
+  - **The `content:` uri never reaches Dart** (its grant is task-scoped and revocable): Kotlin
+    copies to `cacheDir` and passes a path plus the provider's display name, which the import
+    needs because `parseExternalGeometry` sniffs its extension.
+  - **`importBytesFlow` is the one import routine** — picker and share both enter it, so
+    `simplify: !fromZonecraft` (and the export fixed point) cannot drift.
+    **`askExportChoice`/`deliverExport` are the one export routine** for both scopes.
 - **What is drawn and what can be tapped share one predicate.** `transitStationVisible`
   (`data/transit.dart`) is read by both `transit_layer` and `hit_test`; when it existed twice
   the copies disagreed on the empty filter, leaving mode-less stations tappable over blank
@@ -270,7 +305,10 @@ lib/
                (height_generator.dart); public-transport Overpass client
                (transit.dart); administrative-area Overpass client (borders.dart);
                the shared location gate + position stream (location.dart) — the
-               only file that talks to geolocator besides map_screen
+               only file that talks to geolocator besides map_screen;
+               the Android file channel (platform_files.dart) — receiving a
+               shared file and saving one through the document picker, the only
+               file that talks to MainActivity.kt
   geo/         geodesicCircle(), plane half-plane + subspace Voronoi-cell
                geometry, freehand line/area region geometry (freeline.dart,
                freearea.dart), height contouring/marching-squares (height.dart),

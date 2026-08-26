@@ -23,6 +23,7 @@ import '../data/overpass.dart';
 import '../data/overpass_client.dart'
     show OverpassCancel, OverpassOutcome, kOverpassPreferenceMaxElapsed;
 import '../data/layer_types.dart';
+import '../data/platform_files.dart';
 import '../data/repository.dart' show Repository;
 import '../data/shared_point.dart';
 import '../data/tile_source.dart';
@@ -46,6 +47,7 @@ import 'imported_point_editor.dart';
 import 'poi_set_editor.dart';
 import 'transit_set_editor.dart';
 import 'hit_test.dart';
+import 'import_actions.dart';
 import 'import_progress.dart';
 import 'layers_panel.dart';
 import 'object_summary.dart';
@@ -87,6 +89,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// Deep-link subscription (`zonecraft://…`); the app's only one besides
   /// the track recorder's position stream.
   StreamSubscription<Uri>? _linkSub;
+  /// Guards against a second shared file stacking its dialogs on the first's.
+  bool _importingSharedFile = false;
   /// Guards the share FAB while a position fix is in flight.
   bool _sharing = false;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -258,6 +262,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
       headers: {'User-Agent': tileUserAgent},
     );
     _listenForSharedLinks();
+    // A file another app shared into ZoneCraft: pulled once now and again on
+    // every resume. The platform side hands it over exactly once (see
+    // data/platform_files.dart), so the two pulls cannot double-import. After
+    // the first frame, so the dialogs push onto a mounted route.
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => unawaited(_consumeSharedFile()),
+    );
   }
 
   /// Picks up `zonecraft://p?…` links — the one that launched the app and any
@@ -289,6 +300,49 @@ class _MapScreenState extends ConsumerState<MapScreen>
     ref.read(receivedPointProvider.notifier).receive(point);
   }
 
+  /// Imports a file another app shared into ZoneCraft, through the same
+  /// routine as the file picker. Silent when nothing was shared, which is
+  /// every launch and every resume but the interesting ones.
+  ///
+  /// Sharing a file *into* the app is the consent, so there is no extra "really
+  /// import?" step — the picker path has none either.
+  Future<void> _consumeSharedFile() async {
+    if (_importingSharedFile || !mounted) return;
+    final IncomingFile? file;
+    try {
+      file = await takeSharedFile();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Couldn't read the shared file")),
+      );
+      return;
+    }
+    if (file == null || !mounted) return;
+    _importingSharedFile = true;
+    try {
+      final bytes = await file.readBytes();
+      if (!mounted) return;
+      final layers = ref.read(layersProvider).asData?.value ?? const <Layer>[];
+      await importBytesFlow(
+        context,
+        ref.read(repositoryProvider),
+        layers,
+        name: file.importName,
+        bytes: bytes,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Import failed: $e')));
+      }
+    } finally {
+      _importingSharedFile = false;
+      unawaited(file.dispose());
+    }
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // Persist the view when the app is backgrounded/closed so it reopens here.
@@ -297,6 +351,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
         state == AppLifecycleState.hidden) {
       _saveCamera();
     }
+    // onNewIntent always runs before onResume, so a file shared into the
+    // already-running app is waiting by the time this fires — which is why the
+    // platform side needs no push channel.
+    if (state == AppLifecycleState.resumed) unawaited(_consumeSharedFile());
   }
 
   @override
