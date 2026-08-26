@@ -118,5 +118,12 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- So the About screen's links can be opened. Since API 30 a package
+             is invisible unless it is queried for, and url_launcher's
+             canLaunchUrl returns false for every browser without this. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
     </queries>
 </manifest>

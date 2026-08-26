@@ -52,6 +52,9 @@ dependencies:
   image: ^4.3.0
   flutter_map_dragmarker: ^8.0.3
   app_links: ^7.2.1
+  # Opens the About screen's links. Needs the https <intent> in the Android
+  # manifest's <queries> block, or canLaunchUrl sees no browser at all.
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:

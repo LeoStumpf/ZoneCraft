@@ -68,6 +68,19 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   `overpass.dart`** (POI imports) — all three return `OverpassOutcome` and drive the shared
   `ui/import_progress.dart` dialog. The endpoint that last answered is remembered in
   `AppSettings.transitEndpoint` (old name, shared use).
+- **ZoneCraft is AGPL-3.0-or-later** (`LICENSE` is the verbatim FSF text). **Every
+  non-generated `.dart` file carries the 15-line licence header** — `test/license_test.dart`
+  fails when a new one does not, and also fails if the docs drift back to the old licence.
+  Generated code (`*.g.dart`, `test/generated_migrations/`) is deliberately exempt: a header
+  there would not survive the next `build_runner` run. The licence covers ZoneCraft's own code
+  only; bundled packages keep theirs (`THIRD_PARTY_NOTICES.md` and the in-app **Open-source
+  licences** page, which is Flutter's `showLicensePage`).
+- **The About screen's links are real links** (`url_launcher`). They need the `https`
+  `<intent>` in the Android manifest's `<queries>` block: since API 30 a package is invisible
+  unless queried for, so without it `canLaunchUrl` reports no browser and every link silently
+  does nothing. `_AboutScreenState` probes that **once** for the whole screen — all the links
+  are `https`, so the answer is the same for each — and falls back to selectable text rather
+  than a link that would do nothing.
 - **No telemetry, ever.** No crash reporting, no analytics, no advertising id. Sentry was
   wired in and deliberately removed: `PRIVACY.md` and the Play Data safety form can now
   answer "none", which is worth more than the diagnostics were. Anything added back has to

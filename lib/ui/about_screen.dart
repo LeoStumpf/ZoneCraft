@@ -1,4 +1,23 @@
+// ZoneCraft — composable zone layers on OpenStreetMap.
+// Copyright (C) 2026 Leo Stumpf <leo.m.stumpf@gmail.com>
+//
+// This program is free software: you can redistribute it and/or modify it
+// under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or (at your
+// option) any later version.
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+// FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+// License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../app_info.dart';
 import '../data/tile_source.dart';
@@ -12,11 +31,44 @@ import '../data/tile_source.dart';
 /// being honoured. Saying so here is cheaper than answering it once per user,
 /// and it keeps the claims in one place where they can be kept true.
 ///
-/// URLs are selectable text rather than links: `url_launcher` is not a
-/// dependency, and adding one (plus its Android intent-query manifest entries)
-/// to make four addresses tappable is not a trade worth making.
-class AboutScreen extends StatelessWidget {
+/// URLs are tappable and still selectable: every one of them is a claim the
+/// user may want to check, and a claim you cannot follow is worth less. Opening
+/// them needs `url_launcher` *and* the `https` `<intent>` in the Android
+/// manifest's `<queries>` block — since API 30 a package is invisible unless
+/// queried for, so without it `canLaunchUrl` reports no browser at all and
+/// every link silently does nothing. When there is genuinely nothing to open
+/// (a desktop test host, a device with no browser) the row stays selectable
+/// text rather than pretending to be a link.
+class AboutScreen extends StatefulWidget {
   const AboutScreen({super.key});
+
+  @override
+  State<AboutScreen> createState() => _AboutScreenState();
+}
+
+class _AboutScreenState extends State<AboutScreen> {
+  /// Whether anything on this device can open an `https` URL. Probed once for
+  /// the whole screen rather than per row: every link here is `https`, so the
+  /// answer is the same for all of them, and six `FutureBuilder`s would flicker
+  /// six times for one fact.
+  bool _canOpenLinks = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_probeLinkSupport());
+  }
+
+  Future<void> _probeLinkSupport() async {
+    var can = false;
+    try {
+      can = await canLaunchUrl(Uri.parse('https://openstreetmap.org'));
+    } catch (_) {
+      // No platform implementation (a test host, a desktop build): links stay
+      // plain text, which is what this screen did before they were tappable.
+    }
+    if (mounted && can) setState(() => _canOpenLinks = true);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -56,40 +108,47 @@ class AboutScreen extends StatelessWidget {
             'Everything is fetched on demand, only when you ask for it. '
                 'Nothing is downloaded on a timer, on map movement, or in the '
                 'background.',
-            children: const [
+            children: [
               _Service(
                 icon: Icons.map_outlined,
                 name: 'OpenStreetMap tiles',
-                url: 'tile.openstreetmap.org',
+                urls: const ['tile.openstreetmap.org'],
                 body: 'The base map. Map data and tiles © OpenStreetMap '
                     'contributors, licensed under the Open Database License '
                     '(ODbL).',
+                canOpen: _canOpenLinks,
               ),
               _Service(
                 icon: Icons.travel_explore,
                 name: 'Overpass API',
-                url: 'overpass-api.de · overpass.kumi.systems · '
-                    'overpass.private.coffee',
+                urls: const [
+                  'overpass-api.de',
+                  'overpass.kumi.systems',
+                  'overpass.private.coffee',
+                ],
                 body: 'Points of interest, transit stations and '
                     'administrative areas, fetched once per import and then '
                     'stored on the device. Three community instances are '
                     'tried in turn, because whichever one is busy is the '
                     'variable.',
+                canOpen: _canOpenLinks,
               ),
               _Service(
                 icon: Icons.search,
                 name: 'Nominatim',
-                url: 'nominatim.openstreetmap.org',
+                urls: const ['nominatim.openstreetmap.org'],
                 body: 'Finds a place by name when you import a feature such '
                     'as a city border or a river.',
+                canOpen: _canOpenLinks,
               ),
               _Service(
                 icon: Icons.terrain,
                 name: 'AWS Terrain Tiles',
-                url: 's3.amazonaws.com/elevation-tiles-prod',
+                urls: const ['s3.amazonaws.com/elevation-tiles-prod'],
                 body: 'Elevation for height layers and the elevation probe. '
                     'A public open-data set aggregated from SRTM, NED and '
                     'others.',
+                canOpen: _canOpenLinks,
               ),
             ],
           ),
@@ -154,18 +213,50 @@ class AboutScreen extends StatelessWidget {
           ),
 
           _Section(
-            'Licences',
-            'Map data © OpenStreetMap contributors, licensed under the ODbL. '
-                'ZoneCraft is built on open-source packages; the full list, '
-                'with their licences and the attribution required by each data '
-                'source, is in THIRD_PARTY_NOTICES.md in the project '
-                'repository.',
-            children: const [
+            'Licence',
+            'ZoneCraft is free software: you can redistribute it and modify '
+                'it under the terms of the GNU Affero General Public License, '
+                'either version 3 or (at your option) any later version. It '
+                'comes with absolutely no warranty. The full text ships as '
+                'LICENSE in the source repository.',
+            children: [
+              _Service(
+                icon: Icons.balance,
+                name: 'GNU AGPL v3 or later',
+                urls: const ['www.gnu.org/licenses/agpl-3.0.html'],
+                body: 'The AGPL requires that anyone you give the app to can '
+                    'get its source under the same terms.',
+                canOpen: _canOpenLinks,
+              ),
               _Service(
                 icon: Icons.code,
                 name: 'Source',
-                url: 'github.com/LeoStumpf/ZoneCraft',
-                body: '',
+                urls: const ['github.com/LeoStumpf/ZoneCraft'],
+                body: 'The complete corresponding source, as the licence '
+                    'requires.',
+                canOpen: _canOpenLinks,
+              ),
+            ],
+          ),
+
+          _Section(
+            'Other licences',
+            'ZoneCraft\u2019s own licence does not cover what it is built on. '
+                'Map data © OpenStreetMap contributors, licensed under the '
+                'Open Database License (ODbL). The open-source packages keep '
+                'their own licences, reproduced in full below.',
+            children: [
+              _Action(
+                icon: Icons.article_outlined,
+                label: 'Open-source licences',
+                detail: 'Every bundled package and its licence text.',
+                onTap: () => showLicensePage(
+                  context: context,
+                  applicationName: 'ZoneCraft',
+                  applicationVersion: kAppVersion,
+                  applicationLegalese:
+                      '© 2026 Leo Stumpf\nGNU AGPL v3 or later',
+                ),
               ),
             ],
           ),
@@ -201,18 +292,28 @@ class _Section extends StatelessWidget {
 }
 
 /// One external service: what it is, what it is for, and where it lives.
+///
+/// [urls] are bare hosts as displayed; each opens as `https://<host>`. They are
+/// listed one per line rather than joined, because a joined run of hosts has no
+/// sensible single destination.
 class _Service extends StatelessWidget {
   const _Service({
     required this.icon,
     required this.name,
-    required this.url,
+    required this.urls,
     required this.body,
+    this.canOpen = false,
   });
 
   final IconData icon;
   final String name;
-  final String url;
+  final List<String> urls;
   final String body;
+
+  /// Whether this device can open an `https` URL at all — see
+  /// [_AboutScreenState._probeLinkSupport]. False keeps the row as selectable
+  /// text instead of a link that would do nothing when tapped.
+  final bool canOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -234,11 +335,7 @@ class _Service extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(name, style: theme.textTheme.bodyLarge),
-                SelectableText(
-                  url,
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.primary),
-                ),
+                for (final url in urls) _Url(url, canOpen: canOpen),
                 if (body.isNotEmpty) ...[
                   const SizedBox(height: 2),
                   Text(body, style: theme.textTheme.bodySmall),
@@ -247,6 +344,119 @@ class _Service extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// One address: a link where one can be opened, selectable text where it
+/// cannot.
+class _Url extends StatelessWidget {
+  const _Url(this.host, {required this.canOpen});
+
+  final String host;
+  final bool canOpen;
+
+  Future<void> _open(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    var opened = false;
+    try {
+      opened = await launchUrl(
+        Uri.parse('https://$host'),
+        // A browser, not a web view inside ZoneCraft: these are other people's
+        // sites and belong in the user's own browser, with its own history,
+        // logins and blocking.
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {
+      opened = false;
+    }
+    if (!opened) {
+      messenger.showSnackBar(
+        SnackBar(content: Text("Couldn't open $host")),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final style = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.primary,
+      decoration: canOpen ? TextDecoration.underline : null,
+      decorationColor: theme.colorScheme.primary,
+    );
+    if (!canOpen) return SelectableText(host, style: style);
+    return Semantics(
+      link: true,
+      child: InkWell(
+        onTap: () => unawaited(_open(context)),
+        // The row is a line of small text; without this the ripple bleeds
+        // across the full column width.
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Text(host, style: style),
+        ),
+      ),
+    );
+  }
+}
+
+/// A row that does something in-app rather than pointing somewhere.
+class _Action extends StatelessWidget {
+  const _Action({
+    required this.icon,
+    required this.label,
+    required this.detail,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String detail;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Icon(icon, size: 20, color: theme.colorScheme.primary),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: theme.textTheme.bodyLarge
+                          ?.copyWith(color: theme.colorScheme.primary),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(detail, style: theme.textTheme.bodySmall),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right,
+                size: 20,
+                color: theme.colorScheme.outline,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

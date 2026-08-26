@@ -1,6 +1,7 @@
 # Third-party notices
 
-ZoneCraft's own code is released under the Beer-Ware License (see [`LICENSE`](LICENSE)). The
+ZoneCraft's own code is released under the GNU Affero General Public License, version 3 or
+later (see [`LICENSE`](LICENSE)); that licence covers ZoneCraft's code only. The
 app builds on third-party open-source packages and uses OpenStreetMap data and tiles whose
 copyright/license notices must be retained. This file collects those attributions.
 

@@ -233,10 +233,31 @@ imports you ask for. Full detail in [`PRIVACY.md`](PRIVACY.md).
 
 ## License
 
-ZoneCraft is released under the **Beer-Ware License (Revision 42)** — see [`LICENSE`](LICENSE).
-Do whatever you want with the code; if we meet some day and you think it's worth it, buy me a
-beer. 🍺
+ZoneCraft is free software, released under the **GNU Affero General Public License, version 3
+or (at your option) any later version** — see [`LICENSE`](LICENSE) for the full text.
 
-It builds on open-source packages and OpenStreetMap data whose attribution must be retained —
-see [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) (their full license texts are also
-viewable on the app's in-app licenses page).
+You may use, study, share and modify it. If you distribute it — or a modified version — you
+must pass on the same freedoms and make the complete corresponding source available under the
+same licence. The AGPL adds one thing over the plain GPL: if you run a modified version as a
+network service, its users are entitled to that source too. ZoneCraft has no server and talks
+to no backend of its own, so in practice that clause rarely bites, but it is the guarantee the
+licence is chosen for.
+
+    ZoneCraft — composable zone layers on OpenStreetMap.
+    Copyright (C) 2026 Leo Stumpf
+
+    This program is free software: you can redistribute it and/or modify it under the terms
+    of the GNU Affero General Public License as published by the Free Software Foundation,
+    either version 3 of the License, or (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+    without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    See the GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License along with this
+    program.  If not, see <https://www.gnu.org/licenses/>.
+
+**ZoneCraft's licence does not cover what it is built on.** The open-source packages keep their
+own licences, and OpenStreetMap data carries its own attribution requirements — see
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). Their full texts are also viewable in the
+app, under **Settings → About → Open-source licences**.
