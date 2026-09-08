@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:async';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -197,6 +199,11 @@ class _LayerObjectsList extends ConsumerWidget {
           s,
         ),
       ),
+      // The shortcut for the one action people reach for most. It runs the
+      // *same* confirm the menu entry does — a long-press must not become the
+      // one unconfirmed delete path in the app. The menu entry stays: a
+      // gesture nothing announces cannot be the only way to find this.
+      onLongPress: () => unawaited(_delete(context, ref, s)),
       trailing: PopupMenuButton<String>(
         onSelected: (value) async {
           switch (value) {

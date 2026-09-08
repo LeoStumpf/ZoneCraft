@@ -202,7 +202,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
   static const _hitTest = geoDistance;
 
   /// The user's last known position, shown as a marker. Null until the user
-  /// opts in via the "Locate me" button. We never request location at launch.
+  /// opts in via the "Locate me" button. We never request location at launch,
+  /// and [_hideMyLocation] puts it back to null so the opt-in is reversible.
   LatLng? _myPosition;
   bool _locating = false;
   bool _mapReady = false;
@@ -637,6 +638,21 @@ class _MapScreenState extends ConsumerState<MapScreen>
     } finally {
       if (mounted) setState(() => _locating = false);
     }
+  }
+
+  /// Takes the position marker back off the map.
+  ///
+  /// The opt-in has to be reversible: [_myPosition] used to be write-only, so
+  /// one tap on Locate me left the blue marker — and, once the terrain lookup
+  /// answered, the "You: 512 m" readout — on screen for the rest of the
+  /// session with nothing to turn them off. Clearing [_myElevation] too is
+  /// what actually retires that readout; the banner's condition reads it, not
+  /// the position.
+  void _hideMyLocation() {
+    setState(() {
+      _myPosition = null;
+      _myElevation = null;
+    });
   }
 
   /// Starts or stops recording into [layer].
@@ -3939,6 +3955,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
     // needs its own button there — it used to be what Add did.
     final isPoiLayer =
         activeLayer != null && layerHolds(activeLayer, kPoi);
+    // Freehand layers import *by name* (a district, a river) rather than by
+    // radius. That flow was drawer-only, so a circle layer had an import
+    // button on screen and a freehand one had nothing — the same action, two
+    // very different distances away. `layerHolds` rather than a type test, so
+    // a combined layer holding freehand content gets it too.
+    final canImportFeature = activeLayer != null &&
+        (layerHolds(activeLayer, kFreeLine) ||
+            layerHolds(activeLayer, kFreeArea));
 
     // Edit mode arms tap-to-select, so it is meaningful only when the active
     // layer has an editor *and* holds something to select. Left always-on it
@@ -5105,17 +5129,35 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   ],
                   // (The compass lives on the map itself, top-right, and only
                   // while the map is rotated — see the map chrome above.)
+                  // A toggle, lit while the marker is up, in the shape the
+                  // probe and distance buttons already use — tapping it again
+                  // is the only way to put your position away, and the lit
+                  // state is what says there is something to put away.
                   FloatingActionButton.small(
                     heroTag: 'locate',
-                    tooltip: 'Locate me',
-                    onPressed: _locating ? null : _locateMe,
+                    tooltip: _myPosition != null
+                        ? 'Hide my location'
+                        : 'Locate me',
+                    backgroundColor: _myPosition != null
+                        ? Theme.of(context).colorScheme.primary
+                        : null,
+                    foregroundColor: _myPosition != null
+                        ? Theme.of(context).colorScheme.onPrimary
+                        : null,
+                    onPressed: _locating
+                        ? null
+                        : (_myPosition != null
+                            ? _hideMyLocation
+                            : _locateMe),
                     child: _locating
                         ? const SizedBox(
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(Icons.my_location),
+                        : Icon(_myPosition != null
+                            ? Icons.location_disabled
+                            : Icons.my_location),
                   ),
                   const SizedBox(height: 12),
                   // Next to Locate on purpose: both answer "where am I", one
@@ -5235,6 +5277,26 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         mode == MapMode.edit ? Icons.edit : Icons.edit_outlined,
                       ),
                     ),
+                    if (canImportFeature) ...[
+                      const SizedBox(width: 12),
+                      FloatingActionButton.small(
+                        heroTag: 'featureImport',
+                        tooltip: 'Import a map feature by name',
+                        // Same flow the layers drawer offers, same arguments:
+                        // this adds a route to it, it does not fork it. The
+                        // full layer list is only for the fallback picker (a
+                        // line asked for from an area layer, or vice versa).
+                        onPressed: () => unawaited(
+                          importFeatureFlow(
+                            context,
+                            ref.read(repositoryProvider),
+                            layers,
+                            into: activeLayer,
+                          ),
+                        ),
+                        child: const Icon(Icons.search),
+                      ),
+                    ],
                     if (isCircleLayer || isSubspaceLayer || isPoiLayer) ...[
                       const SizedBox(width: 12),
                       FloatingActionButton.small(

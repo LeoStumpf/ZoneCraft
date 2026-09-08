@@ -377,6 +377,36 @@ class LayersDrawer extends ConsumerWidget {
   }
 }
 
+/// Where a "move layer" menu item sends the layer, in map-stack terms:
+/// `toTop` is drawn last, over everything else.
+enum LayerMove { toTop, up, down, toBottom }
+
+/// [ids] — a layer stack **bottom-to-top** — with [id] moved by [move].
+///
+/// Pure, because this is the one place the feature can be wrong: the drawer
+/// renders the stack upside down (top layer first), so an ordering computed
+/// against what is on screen would be reversed. Taking and returning the
+/// bottom-to-top order — the order [Repository.watchLayers] hands out and
+/// [Repository.reorderLayers] expects back — means the reversal never enters
+/// the arithmetic at all.
+///
+/// Returns [ids] unchanged when [id] is absent or already where it is going,
+/// so a caller can use identity to decide whether a write is needed.
+List<String> movedLayerOrder(List<String> ids, String id, LayerMove move) {
+  final i = ids.indexOf(id);
+  if (i < 0) return ids;
+  final j = switch (move) {
+    LayerMove.toBottom => 0,
+    LayerMove.down => i - 1,
+    LayerMove.up => i + 1,
+    LayerMove.toTop => ids.length - 1,
+  }.clamp(0, ids.length - 1);
+  if (j == i) return ids;
+  return [...ids]
+    ..removeAt(i)
+    ..insert(j, id);
+}
+
 class _LayerTile extends ConsumerWidget {
   const _LayerTile({
     super.key,
@@ -544,11 +574,34 @@ class _LayerTile extends ConsumerWidget {
                   }
                 case 'makeMixed':
                   await repo.convertLayerToMixed(layer.id);
+                case 'toTop':
+                  await _move(ref, repo, LayerMove.toTop);
+                case 'up':
+                  await _move(ref, repo, LayerMove.up);
+                case 'down':
+                  await _move(ref, repo, LayerMove.down);
+                case 'toBottom':
+                  await _move(ref, repo, LayerMove.toBottom);
                 case 'delete':
                   await repo.deleteLayer(layer.id);
               }
             },
             itemBuilder: (_) => [
+              // Explicit stacking, because dragging a tile is fiddly on a
+              // phone and impossible to aim at "all the way to the top" with
+              // twenty layers. The wording names the *map* stack, which is
+              // what `sortOrder` means; the drawer showing it upside down
+              // (top layer first) is presentation.
+              if (!_isTop(ref)) ...[
+                const PopupMenuItem(value: 'toTop', child: Text('Move to top')),
+                const PopupMenuItem(value: 'up', child: Text('Move up')),
+              ],
+              if (!_isBottom(ref)) ...[
+                const PopupMenuItem(value: 'down', child: Text('Move down')),
+                const PopupMenuItem(
+                    value: 'toBottom', child: Text('Move to bottom')),
+              ],
+              if (!_isTop(ref) || !_isBottom(ref)) const PopupMenuDivider(),
               const PopupMenuItem(value: 'rename', child: Text('Rename')),
               const PopupMenuItem(value: 'color', child: Text('Colour')),
               const PopupMenuItem(
@@ -632,6 +685,37 @@ class _LayerTile extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  /// This layer's neighbours, bottom-to-top — the order [Repository.watchLayers]
+  /// hands out and the order [Repository.reorderLayers] expects back.
+  ///
+  /// Everything about stacking is computed against *this* list, never against
+  /// the drawer's `layers.reversed` display list. Mixing the two is the one
+  /// off-by-one this feature can have, and the fix is to never hold both.
+  List<Layer> _stack(WidgetRef ref) =>
+      ref.read(layersProvider).asData?.value ?? const <Layer>[];
+
+  bool _isTop(WidgetRef ref) {
+    final stack = _stack(ref);
+    return stack.isEmpty || stack.last.id == layer.id;
+  }
+
+  bool _isBottom(WidgetRef ref) {
+    final stack = _stack(ref);
+    return stack.isEmpty || stack.first.id == layer.id;
+  }
+
+  /// Moves this layer within the stack and persists the whole new order.
+  ///
+  /// Reuses [Repository.reorderLayers] verbatim — the same batch the drag
+  /// gesture writes — so there is exactly one way a layer's `sortOrder` is
+  /// ever assigned. A move that changes nothing writes nothing.
+  Future<void> _move(WidgetRef ref, Repository repo, LayerMove move) async {
+    final ids = _stack(ref).map((l) => l.id).toList();
+    final moved = movedLayerOrder(ids, layer.id, move);
+    if (identical(moved, ids)) return;
+    await repo.reorderLayers(moved);
   }
 
   /// Opens this layer's element list and applies whatever it asks for.
