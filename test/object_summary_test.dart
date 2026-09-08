@@ -519,4 +519,56 @@ void main() {
       expect(layerHasEditor('something-new'), isFalse);
     });
   });
+  // Per-element draw order (v26) made the list's order and the elements'
+  // *names* two different things. Before it they were the same, and keeping
+  // them the same would mean sending Circle 1 to the front renamed it
+  // "Circle 3" — and renamed the others — silently rewriting the identity of
+  // every unlabelled element on a map somebody already made. This is the
+  // assertion that stops that.
+  group('stack order and naming are separate', () {
+    Future<(String, List<String>)> threeCircles() async {
+      final l = await repo.createLayer(name: 'L', colorArgb: 0xFF43A047);
+      final ids = <String>[];
+      for (var i = 0; i < 3; i++) {
+        ids.add(await repo.createCircle(
+            layerId: l, centerLat: 48.1, centerLng: 11.5, radiusMeters: 100));
+        await stampCircle(ids.last, DateTime.utc(2026, 1, i + 1));
+      }
+      return (l, ids);
+    }
+
+    Future<List<ObjectSummary>> rowsOf(String layerId) async => summariseLayer(
+          await layerById(layerId),
+          circles: await repo.watchAllCircles().first,
+        );
+
+    test('reordering does not renumber the positional names', () async {
+      final (l, ids) = await threeCircles();
+      expect((await rowsOf(l)).map((r) => r.title),
+          ['Circle 1', 'Circle 2', 'Circle 3']);
+
+      await repo.moveElementZ(ColoredElement.circle, ids.first, ZMove.toFront);
+
+      final rows = await rowsOf(l);
+      // The row order followed the stack...
+      expect(rows.map((r) => r.ref.id), [ids[1], ids[2], ids[0]]);
+      // ...but every element kept the number it was born with.
+      expect(rows.map((r) => r.title), ['Circle 2', 'Circle 3', 'Circle 1']);
+    });
+
+    test('the list reads bottom-of-map first', () async {
+      final (l, ids) = await threeCircles();
+      await repo.moveElementZ(ColoredElement.circle, ids.last, ZMove.toBack);
+      expect((await rowsOf(l)).map((r) => r.ref.id),
+          [ids[2], ids[0], ids[1]]);
+    });
+
+    test('an untouched layer still lists in creation order', () async {
+      // Every pre-v26 map migrated in with z = the order it already painted,
+      // so nothing about an existing Elements list may look different.
+      final (l, ids) = await threeCircles();
+      expect((await rowsOf(l)).map((r) => r.ref.id), ids);
+    });
+  });
+
 }

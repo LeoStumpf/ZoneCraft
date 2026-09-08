@@ -165,6 +165,7 @@ void main() {
             layerId: 'L',
             createdAt: DateTime(2026),
             colorShade: 0,
+            zOrder: 0,
           ),
         ],
         // ~1.1 km apart in latitude, twice.
@@ -206,6 +207,7 @@ void main() {
         layerId: 'L',
         createdAt: DateTime(2026),
         colorShade: 0,
+        zOrder: 0,
       );
       String lengthOf(List<TrackPoint> pts) => summariseLayer(
             layer,

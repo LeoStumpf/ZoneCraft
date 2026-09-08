@@ -186,6 +186,7 @@ void main() {
           colorShade: 0,
           isManual: isManual,
           iconKey: iconKey,
+          zOrder: 0,
         );
 
     testWidgets('it names the category, the count and the circle that ran',
@@ -276,6 +277,7 @@ void main() {
           nodeCount: 9,
           createdAt: DateTime(2026),
           colorShade: 0,
+          zOrder: 0,
         );
 
     testWidgets('only the types the import actually fetched get a tick box',

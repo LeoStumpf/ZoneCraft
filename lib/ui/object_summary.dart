@@ -203,9 +203,15 @@ String _titleOr(String? label, String noun, int index) =>
 
 String _plural(int n, String noun) => '$n $noun${n == 1 ? '' : 's'}';
 
-/// Sorts a layer's objects into a stable, user-visible order. There is no
-/// object-level `sortOrder` column, so creation order (tie-broken by id) is the
-/// order — which is also what the positional names ("Circle 3") count.
+/// Sorts a layer's objects into **creation** order, tie-broken by id.
+///
+/// This is what the positional names ("Circle 3") count, and it is deliberately
+/// *not* the order the rows are listed in any more. Before per-element z-order
+/// the two were the same thing; keeping them the same would mean that sending
+/// Circle 1 to the front renamed it "Circle 3" — and renamed the others —
+/// silently rewriting the identity of every unlabelled element on a map
+/// somebody already made. Reordering the stack must no more rename an element
+/// than recolouring it does.
 List<T> _ordered<T>(
   Iterable<T> rows,
   DateTime Function(T) createdAt,
@@ -213,6 +219,41 @@ List<T> _ordered<T>(
 ) {
   final list = rows.toList()
     ..sort((a, b) {
+      final c = createdAt(a).compareTo(createdAt(b));
+      return c != 0 ? c : id(a).compareTo(id(b));
+    });
+  return list;
+}
+
+/// `id -> the number its positional name counts`, from [_ordered].
+Map<String, int> _creationRank<T>(
+  Iterable<T> rows,
+  DateTime Function(T) createdAt,
+  String Function(T) id,
+) {
+  final byCreation = _ordered(rows, createdAt, id);
+  return {
+    for (var i = 0; i < byCreation.length; i++) id(byCreation[i]): i,
+  };
+}
+
+/// Sorts a layer's objects into **stack** order: bottom of the map first.
+///
+/// Ascending z on purpose. The list has always read the way the map is stacked
+/// (see the concatenation comment below), and flipping it to the front-first
+/// convention would reverse every existing map's Elements list for cosmetic
+/// reasons. The cost is that "bring to front" moves a row *down*, which is why
+/// the menu wording names the map rather than the list.
+List<T> _stacked<T>(
+  Iterable<T> rows,
+  int Function(T) zOrder,
+  DateTime Function(T) createdAt,
+  String Function(T) id,
+) {
+  final list = rows.toList()
+    ..sort((a, b) {
+      final z = zOrder(a).compareTo(zOrder(b));
+      if (z != 0) return z;
       final c = createdAt(a).compareTo(createdAt(b));
       return c != 0 ? c : id(a).compareTo(id(b));
     });
@@ -285,67 +326,76 @@ List<ObjectSummary> summariseLayer(
   List<ObjectSummary> ofType(String type) {
     switch (type) {
       case 'circles':
-        final rows = _ordered(circles.where((c) => c.layerId == layer.id),
-            (c) => c.createdAt, (c) => c.id);
+        final mine = circles.where((c) => c.layerId == layer.id);
+          final rank = _creationRank(mine, (c) => c.createdAt, (c) => c.id);
+          final rows =
+              _stacked(mine, (c) => c.zOrder, (c) => c.createdAt, (c) => c.id);
         return [
-          for (var i = 0; i < rows.length; i++)
-            _circleSummary(rows[i], layer.id, i),
+          for (final r in rows) _circleSummary(r, layer.id, rank[r.id]!),
         ];
       case 'planes':
-        final rows = _ordered(planes.where((p) => p.layerId == layer.id),
-            (p) => p.createdAt, (p) => p.id);
+        final mine = planes.where((p) => p.layerId == layer.id);
+          final rank = _creationRank(mine, (p) => p.createdAt, (p) => p.id);
+          final rows =
+              _stacked(mine, (p) => p.zOrder, (p) => p.createdAt, (p) => p.id);
         return [
-          for (var i = 0; i < rows.length; i++)
-            _planeSummary(rows[i], layer.id, i),
+          for (final r in rows) _planeSummary(r, layer.id, rank[r.id]!),
         ];
       case 'subspace':
-        final rows = _ordered(subspaces.where((s) => s.layerId == layer.id),
-            (s) => s.createdAt, (s) => s.id);
+        final mine = subspaces.where((s) => s.layerId == layer.id);
+          final rank = _creationRank(mine, (s) => s.createdAt, (s) => s.id);
+          final rows =
+              _stacked(mine, (s) => s.zOrder, (s) => s.createdAt, (s) => s.id);
         return [
-          for (var i = 0; i < rows.length; i++)
-            _subspaceSummary(rows[i], layer.id, i, subspacePoints),
+          for (final r in rows) _subspaceSummary(r, layer.id, rank[r.id]!, subspacePoints),
         ];
       case 'freeline':
-        final rows = _ordered(freeLines.where((l) => l.layerId == layer.id),
-            (l) => l.createdAt, (l) => l.id);
+        final mine = freeLines.where((l) => l.layerId == layer.id);
+          final rank = _creationRank(mine, (l) => l.createdAt, (l) => l.id);
+          final rows =
+              _stacked(mine, (l) => l.zOrder, (l) => l.createdAt, (l) => l.id);
         return [
-          for (var i = 0; i < rows.length; i++)
-            _freeLineSummary(rows[i], layer.id, i, freeLinePoints),
+          for (final r in rows) _freeLineSummary(r, layer.id, rank[r.id]!, freeLinePoints),
         ];
       case 'track':
-        final rows = _ordered(tracks.where((t) => t.layerId == layer.id),
-            (t) => t.createdAt, (t) => t.id);
+        final mine = tracks.where((t) => t.layerId == layer.id);
+          final rank = _creationRank(mine, (t) => t.createdAt, (t) => t.id);
+          final rows =
+              _stacked(mine, (t) => t.zOrder, (t) => t.createdAt, (t) => t.id);
         return [
-          for (var i = 0; i < rows.length; i++)
-            _trackSummary(rows[i], layer.id, i, trackPoints),
+          for (final r in rows) _trackSummary(r, layer.id, rank[r.id]!, trackPoints),
         ];
       case 'freearea':
-        final rows = _ordered(freeAreas.where((a) => a.layerId == layer.id),
-            (a) => a.createdAt, (a) => a.id);
+        final mine = freeAreas.where((a) => a.layerId == layer.id);
+          final rank = _creationRank(mine, (a) => a.createdAt, (a) => a.id);
+          final rows =
+              _stacked(mine, (a) => a.zOrder, (a) => a.createdAt, (a) => a.id);
         return [
-          for (var i = 0; i < rows.length; i++)
-            _freeAreaSummary(rows[i], layer.id, i, freeAreaPoints),
+          for (final r in rows) _freeAreaSummary(r, layer.id, rank[r.id]!, freeAreaPoints),
         ];
       case 'height':
-        final rows = _ordered(heightRegions.where((r) => r.layerId == layer.id),
-            (r) => r.createdAt, (r) => r.id);
+        final mine = heightRegions.where((r) => r.layerId == layer.id);
+          final rank = _creationRank(mine, (r) => r.createdAt, (r) => r.id);
+          final rows =
+              _stacked(mine, (r) => r.zOrder, (r) => r.createdAt, (r) => r.id);
         return [
-          for (var i = 0; i < rows.length; i++)
-            _heightSummary(rows[i], layer.id, i),
+          for (final r in rows) _heightSummary(r, layer.id, rank[r.id]!),
         ];
       case 'poi':
-        final rows = _ordered(poiSets.where((s) => s.layerId == layer.id),
-            (s) => s.createdAt, (s) => s.id);
+        final mine = poiSets.where((s) => s.layerId == layer.id);
+          final rank = _creationRank(mine, (s) => s.createdAt, (s) => s.id);
+          final rows =
+              _stacked(mine, (s) => s.zOrder, (s) => s.createdAt, (s) => s.id);
         return [
-          for (var i = 0; i < rows.length; i++)
-            _poiSetSummary(rows[i], layer.id, i, poiPoints),
+          for (final r in rows) _poiSetSummary(r, layer.id, rank[r.id]!, poiPoints),
         ];
       case 'transit':
-        final rows = _ordered(transitSets.where((s) => s.layerId == layer.id),
-            (s) => s.createdAt, (s) => s.id);
+        final mine = transitSets.where((s) => s.layerId == layer.id);
+          final rank = _creationRank(mine, (s) => s.createdAt, (s) => s.id);
+          final rows =
+              _stacked(mine, (s) => s.zOrder, (s) => s.createdAt, (s) => s.id);
         return [
-          for (var i = 0; i < rows.length; i++)
-            _transitSetSummary(rows[i], layer.id, i, transitStops),
+          for (final r in rows) _transitSetSummary(r, layer.id, rank[r.id]!, transitStops),
         ];
       case 'borders':
         // The imports are bookkeeping; the *areas* are what you came to look at,

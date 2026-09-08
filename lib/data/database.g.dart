@@ -963,6 +963,16 @@ class $CirclesTable extends Circles with TableInfo<$CirclesTable, Circle> {
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _zOrderMeta = const VerificationMeta('zOrder');
+  @override
+  late final GeneratedColumn<int> zOrder = GeneratedColumn<int>(
+    'z_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -974,6 +984,7 @@ class $CirclesTable extends Circles with TableInfo<$CirclesTable, Circle> {
     createdAt,
     colorArgb,
     colorShade,
+    zOrder,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1051,6 +1062,12 @@ class $CirclesTable extends Circles with TableInfo<$CirclesTable, Circle> {
         colorShade.isAcceptableOrUnknown(data['color_shade']!, _colorShadeMeta),
       );
     }
+    if (data.containsKey('z_order')) {
+      context.handle(
+        _zOrderMeta,
+        zOrder.isAcceptableOrUnknown(data['z_order']!, _zOrderMeta),
+      );
+    }
     return context;
   }
 
@@ -1096,6 +1113,10 @@ class $CirclesTable extends Circles with TableInfo<$CirclesTable, Circle> {
         DriftSqlType.int,
         data['${effectivePrefix}color_shade'],
       )!,
+      zOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}z_order'],
+      )!,
     );
   }
 
@@ -1125,6 +1146,18 @@ class Circle extends DataClass implements Insertable<Circle> {
   /// layer. **0 is the layer colour exactly**, which is what every row
   /// migrating in from v21 gets — an untouched map must look untouched.
   final int colorShade;
+
+  /// Where this element sits in its layer's stack (v26). **Higher is drawn
+  /// later, i.e. in front**, and the scope is one layer *and one table*: a
+  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// because that is the only order its separate painters can honour.
+  ///
+  /// Deliberately not [colorShade], which used to imply this: that column also
+  /// picks the auto shade, so moving an element forward would have recoloured
+  /// it. Assigned one past the layer's current maximum on create, so a new
+  /// element lands on top — which is what "the newest element wins an overlap"
+  /// already meant, now said out loud instead of inferred.
+  final int zOrder;
   const Circle({
     required this.id,
     required this.layerId,
@@ -1135,6 +1168,7 @@ class Circle extends DataClass implements Insertable<Circle> {
     required this.createdAt,
     this.colorArgb,
     required this.colorShade,
+    required this.zOrder,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1152,6 +1186,7 @@ class Circle extends DataClass implements Insertable<Circle> {
       map['color_argb'] = Variable<int>(colorArgb);
     }
     map['color_shade'] = Variable<int>(colorShade);
+    map['z_order'] = Variable<int>(zOrder);
     return map;
   }
 
@@ -1170,6 +1205,7 @@ class Circle extends DataClass implements Insertable<Circle> {
           ? const Value.absent()
           : Value(colorArgb),
       colorShade: Value(colorShade),
+      zOrder: Value(zOrder),
     );
   }
 
@@ -1188,6 +1224,7 @@ class Circle extends DataClass implements Insertable<Circle> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       colorArgb: serializer.fromJson<int?>(json['colorArgb']),
       colorShade: serializer.fromJson<int>(json['colorShade']),
+      zOrder: serializer.fromJson<int>(json['zOrder']),
     );
   }
   @override
@@ -1203,6 +1240,7 @@ class Circle extends DataClass implements Insertable<Circle> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'colorArgb': serializer.toJson<int?>(colorArgb),
       'colorShade': serializer.toJson<int>(colorShade),
+      'zOrder': serializer.toJson<int>(zOrder),
     };
   }
 
@@ -1216,6 +1254,7 @@ class Circle extends DataClass implements Insertable<Circle> {
     DateTime? createdAt,
     Value<int?> colorArgb = const Value.absent(),
     int? colorShade,
+    int? zOrder,
   }) => Circle(
     id: id ?? this.id,
     layerId: layerId ?? this.layerId,
@@ -1226,6 +1265,7 @@ class Circle extends DataClass implements Insertable<Circle> {
     createdAt: createdAt ?? this.createdAt,
     colorArgb: colorArgb.present ? colorArgb.value : this.colorArgb,
     colorShade: colorShade ?? this.colorShade,
+    zOrder: zOrder ?? this.zOrder,
   );
   Circle copyWithCompanion(CirclesCompanion data) {
     return Circle(
@@ -1242,6 +1282,7 @@ class Circle extends DataClass implements Insertable<Circle> {
       colorShade: data.colorShade.present
           ? data.colorShade.value
           : this.colorShade,
+      zOrder: data.zOrder.present ? data.zOrder.value : this.zOrder,
     );
   }
 
@@ -1256,7 +1297,8 @@ class Circle extends DataClass implements Insertable<Circle> {
           ..write('label: $label, ')
           ..write('createdAt: $createdAt, ')
           ..write('colorArgb: $colorArgb, ')
-          ..write('colorShade: $colorShade')
+          ..write('colorShade: $colorShade, ')
+          ..write('zOrder: $zOrder')
           ..write(')'))
         .toString();
   }
@@ -1272,6 +1314,7 @@ class Circle extends DataClass implements Insertable<Circle> {
     createdAt,
     colorArgb,
     colorShade,
+    zOrder,
   );
   @override
   bool operator ==(Object other) =>
@@ -1285,7 +1328,8 @@ class Circle extends DataClass implements Insertable<Circle> {
           other.label == this.label &&
           other.createdAt == this.createdAt &&
           other.colorArgb == this.colorArgb &&
-          other.colorShade == this.colorShade);
+          other.colorShade == this.colorShade &&
+          other.zOrder == this.zOrder);
 }
 
 class CirclesCompanion extends UpdateCompanion<Circle> {
@@ -1298,6 +1342,7 @@ class CirclesCompanion extends UpdateCompanion<Circle> {
   final Value<DateTime> createdAt;
   final Value<int?> colorArgb;
   final Value<int> colorShade;
+  final Value<int> zOrder;
   final Value<int> rowid;
   const CirclesCompanion({
     this.id = const Value.absent(),
@@ -1309,6 +1354,7 @@ class CirclesCompanion extends UpdateCompanion<Circle> {
     this.createdAt = const Value.absent(),
     this.colorArgb = const Value.absent(),
     this.colorShade = const Value.absent(),
+    this.zOrder = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   CirclesCompanion.insert({
@@ -1321,6 +1367,7 @@ class CirclesCompanion extends UpdateCompanion<Circle> {
     this.createdAt = const Value.absent(),
     this.colorArgb = const Value.absent(),
     this.colorShade = const Value.absent(),
+    this.zOrder = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        layerId = Value(layerId),
@@ -1337,6 +1384,7 @@ class CirclesCompanion extends UpdateCompanion<Circle> {
     Expression<DateTime>? createdAt,
     Expression<int>? colorArgb,
     Expression<int>? colorShade,
+    Expression<int>? zOrder,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1349,6 +1397,7 @@ class CirclesCompanion extends UpdateCompanion<Circle> {
       if (createdAt != null) 'created_at': createdAt,
       if (colorArgb != null) 'color_argb': colorArgb,
       if (colorShade != null) 'color_shade': colorShade,
+      if (zOrder != null) 'z_order': zOrder,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1363,6 +1412,7 @@ class CirclesCompanion extends UpdateCompanion<Circle> {
     Value<DateTime>? createdAt,
     Value<int?>? colorArgb,
     Value<int>? colorShade,
+    Value<int>? zOrder,
     Value<int>? rowid,
   }) {
     return CirclesCompanion(
@@ -1375,6 +1425,7 @@ class CirclesCompanion extends UpdateCompanion<Circle> {
       createdAt: createdAt ?? this.createdAt,
       colorArgb: colorArgb ?? this.colorArgb,
       colorShade: colorShade ?? this.colorShade,
+      zOrder: zOrder ?? this.zOrder,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1409,6 +1460,9 @@ class CirclesCompanion extends UpdateCompanion<Circle> {
     if (colorShade.present) {
       map['color_shade'] = Variable<int>(colorShade.value);
     }
+    if (zOrder.present) {
+      map['z_order'] = Variable<int>(zOrder.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1427,6 +1481,7 @@ class CirclesCompanion extends UpdateCompanion<Circle> {
           ..write('createdAt: $createdAt, ')
           ..write('colorArgb: $colorArgb, ')
           ..write('colorShade: $colorShade, ')
+          ..write('zOrder: $zOrder, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1554,6 +1609,16 @@ class $PlanesTable extends Planes with TableInfo<$PlanesTable, Plane> {
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _zOrderMeta = const VerificationMeta('zOrder');
+  @override
+  late final GeneratedColumn<int> zOrder = GeneratedColumn<int>(
+    'z_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1567,6 +1632,7 @@ class $PlanesTable extends Planes with TableInfo<$PlanesTable, Plane> {
     createdAt,
     colorArgb,
     colorShade,
+    zOrder,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1655,6 +1721,12 @@ class $PlanesTable extends Planes with TableInfo<$PlanesTable, Plane> {
         colorShade.isAcceptableOrUnknown(data['color_shade']!, _colorShadeMeta),
       );
     }
+    if (data.containsKey('z_order')) {
+      context.handle(
+        _zOrderMeta,
+        zOrder.isAcceptableOrUnknown(data['z_order']!, _zOrderMeta),
+      );
+    }
     return context;
   }
 
@@ -1708,6 +1780,10 @@ class $PlanesTable extends Planes with TableInfo<$PlanesTable, Plane> {
         DriftSqlType.int,
         data['${effectivePrefix}color_shade'],
       )!,
+      zOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}z_order'],
+      )!,
     );
   }
 
@@ -1739,6 +1815,18 @@ class Plane extends DataClass implements Insertable<Plane> {
   /// layer. **0 is the layer colour exactly**, which is what every row
   /// migrating in from v21 gets — an untouched map must look untouched.
   final int colorShade;
+
+  /// Where this element sits in its layer's stack (v26). **Higher is drawn
+  /// later, i.e. in front**, and the scope is one layer *and one table*: a
+  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// because that is the only order its separate painters can honour.
+  ///
+  /// Deliberately not [colorShade], which used to imply this: that column also
+  /// picks the auto shade, so moving an element forward would have recoloured
+  /// it. Assigned one past the layer's current maximum on create, so a new
+  /// element lands on top — which is what "the newest element wins an overlap"
+  /// already meant, now said out loud instead of inferred.
+  final int zOrder;
   const Plane({
     required this.id,
     required this.layerId,
@@ -1751,6 +1839,7 @@ class Plane extends DataClass implements Insertable<Plane> {
     required this.createdAt,
     this.colorArgb,
     required this.colorShade,
+    required this.zOrder,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1770,6 +1859,7 @@ class Plane extends DataClass implements Insertable<Plane> {
       map['color_argb'] = Variable<int>(colorArgb);
     }
     map['color_shade'] = Variable<int>(colorShade);
+    map['z_order'] = Variable<int>(zOrder);
     return map;
   }
 
@@ -1790,6 +1880,7 @@ class Plane extends DataClass implements Insertable<Plane> {
           ? const Value.absent()
           : Value(colorArgb),
       colorShade: Value(colorShade),
+      zOrder: Value(zOrder),
     );
   }
 
@@ -1810,6 +1901,7 @@ class Plane extends DataClass implements Insertable<Plane> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       colorArgb: serializer.fromJson<int?>(json['colorArgb']),
       colorShade: serializer.fromJson<int>(json['colorShade']),
+      zOrder: serializer.fromJson<int>(json['zOrder']),
     );
   }
   @override
@@ -1827,6 +1919,7 @@ class Plane extends DataClass implements Insertable<Plane> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'colorArgb': serializer.toJson<int?>(colorArgb),
       'colorShade': serializer.toJson<int>(colorShade),
+      'zOrder': serializer.toJson<int>(zOrder),
     };
   }
 
@@ -1842,6 +1935,7 @@ class Plane extends DataClass implements Insertable<Plane> {
     DateTime? createdAt,
     Value<int?> colorArgb = const Value.absent(),
     int? colorShade,
+    int? zOrder,
   }) => Plane(
     id: id ?? this.id,
     layerId: layerId ?? this.layerId,
@@ -1854,6 +1948,7 @@ class Plane extends DataClass implements Insertable<Plane> {
     createdAt: createdAt ?? this.createdAt,
     colorArgb: colorArgb.present ? colorArgb.value : this.colorArgb,
     colorShade: colorShade ?? this.colorShade,
+    zOrder: zOrder ?? this.zOrder,
   );
   Plane copyWithCompanion(PlanesCompanion data) {
     return Plane(
@@ -1870,6 +1965,7 @@ class Plane extends DataClass implements Insertable<Plane> {
       colorShade: data.colorShade.present
           ? data.colorShade.value
           : this.colorShade,
+      zOrder: data.zOrder.present ? data.zOrder.value : this.zOrder,
     );
   }
 
@@ -1886,7 +1982,8 @@ class Plane extends DataClass implements Insertable<Plane> {
           ..write('label: $label, ')
           ..write('createdAt: $createdAt, ')
           ..write('colorArgb: $colorArgb, ')
-          ..write('colorShade: $colorShade')
+          ..write('colorShade: $colorShade, ')
+          ..write('zOrder: $zOrder')
           ..write(')'))
         .toString();
   }
@@ -1904,6 +2001,7 @@ class Plane extends DataClass implements Insertable<Plane> {
     createdAt,
     colorArgb,
     colorShade,
+    zOrder,
   );
   @override
   bool operator ==(Object other) =>
@@ -1919,7 +2017,8 @@ class Plane extends DataClass implements Insertable<Plane> {
           other.label == this.label &&
           other.createdAt == this.createdAt &&
           other.colorArgb == this.colorArgb &&
-          other.colorShade == this.colorShade);
+          other.colorShade == this.colorShade &&
+          other.zOrder == this.zOrder);
 }
 
 class PlanesCompanion extends UpdateCompanion<Plane> {
@@ -1934,6 +2033,7 @@ class PlanesCompanion extends UpdateCompanion<Plane> {
   final Value<DateTime> createdAt;
   final Value<int?> colorArgb;
   final Value<int> colorShade;
+  final Value<int> zOrder;
   final Value<int> rowid;
   const PlanesCompanion({
     this.id = const Value.absent(),
@@ -1947,6 +2047,7 @@ class PlanesCompanion extends UpdateCompanion<Plane> {
     this.createdAt = const Value.absent(),
     this.colorArgb = const Value.absent(),
     this.colorShade = const Value.absent(),
+    this.zOrder = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   PlanesCompanion.insert({
@@ -1961,6 +2062,7 @@ class PlanesCompanion extends UpdateCompanion<Plane> {
     this.createdAt = const Value.absent(),
     this.colorArgb = const Value.absent(),
     this.colorShade = const Value.absent(),
+    this.zOrder = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        layerId = Value(layerId),
@@ -1980,6 +2082,7 @@ class PlanesCompanion extends UpdateCompanion<Plane> {
     Expression<DateTime>? createdAt,
     Expression<int>? colorArgb,
     Expression<int>? colorShade,
+    Expression<int>? zOrder,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1994,6 +2097,7 @@ class PlanesCompanion extends UpdateCompanion<Plane> {
       if (createdAt != null) 'created_at': createdAt,
       if (colorArgb != null) 'color_argb': colorArgb,
       if (colorShade != null) 'color_shade': colorShade,
+      if (zOrder != null) 'z_order': zOrder,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2010,6 +2114,7 @@ class PlanesCompanion extends UpdateCompanion<Plane> {
     Value<DateTime>? createdAt,
     Value<int?>? colorArgb,
     Value<int>? colorShade,
+    Value<int>? zOrder,
     Value<int>? rowid,
   }) {
     return PlanesCompanion(
@@ -2024,6 +2129,7 @@ class PlanesCompanion extends UpdateCompanion<Plane> {
       createdAt: createdAt ?? this.createdAt,
       colorArgb: colorArgb ?? this.colorArgb,
       colorShade: colorShade ?? this.colorShade,
+      zOrder: zOrder ?? this.zOrder,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2064,6 +2170,9 @@ class PlanesCompanion extends UpdateCompanion<Plane> {
     if (colorShade.present) {
       map['color_shade'] = Variable<int>(colorShade.value);
     }
+    if (zOrder.present) {
+      map['z_order'] = Variable<int>(zOrder.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2084,6 +2193,7 @@ class PlanesCompanion extends UpdateCompanion<Plane> {
           ..write('createdAt: $createdAt, ')
           ..write('colorArgb: $colorArgb, ')
           ..write('colorShade: $colorShade, ')
+          ..write('zOrder: $zOrder, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2923,6 +3033,16 @@ class $SubspacesTable extends Subspaces
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _zOrderMeta = const VerificationMeta('zOrder');
+  @override
+  late final GeneratedColumn<int> zOrder = GeneratedColumn<int>(
+    'z_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -2931,6 +3051,7 @@ class $SubspacesTable extends Subspaces
     createdAt,
     colorArgb,
     colorShade,
+    zOrder,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2981,6 +3102,12 @@ class $SubspacesTable extends Subspaces
         colorShade.isAcceptableOrUnknown(data['color_shade']!, _colorShadeMeta),
       );
     }
+    if (data.containsKey('z_order')) {
+      context.handle(
+        _zOrderMeta,
+        zOrder.isAcceptableOrUnknown(data['z_order']!, _zOrderMeta),
+      );
+    }
     return context;
   }
 
@@ -3014,6 +3141,10 @@ class $SubspacesTable extends Subspaces
         DriftSqlType.int,
         data['${effectivePrefix}color_shade'],
       )!,
+      zOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}z_order'],
+      )!,
     );
   }
 
@@ -3040,6 +3171,18 @@ class Subspace extends DataClass implements Insertable<Subspace> {
   /// layer. **0 is the layer colour exactly**, which is what every row
   /// migrating in from v21 gets — an untouched map must look untouched.
   final int colorShade;
+
+  /// Where this element sits in its layer's stack (v26). **Higher is drawn
+  /// later, i.e. in front**, and the scope is one layer *and one table*: a
+  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// because that is the only order its separate painters can honour.
+  ///
+  /// Deliberately not [colorShade], which used to imply this: that column also
+  /// picks the auto shade, so moving an element forward would have recoloured
+  /// it. Assigned one past the layer's current maximum on create, so a new
+  /// element lands on top — which is what "the newest element wins an overlap"
+  /// already meant, now said out loud instead of inferred.
+  final int zOrder;
   const Subspace({
     required this.id,
     required this.layerId,
@@ -3047,6 +3190,7 @@ class Subspace extends DataClass implements Insertable<Subspace> {
     required this.createdAt,
     this.colorArgb,
     required this.colorShade,
+    required this.zOrder,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3061,6 +3205,7 @@ class Subspace extends DataClass implements Insertable<Subspace> {
       map['color_argb'] = Variable<int>(colorArgb);
     }
     map['color_shade'] = Variable<int>(colorShade);
+    map['z_order'] = Variable<int>(zOrder);
     return map;
   }
 
@@ -3076,6 +3221,7 @@ class Subspace extends DataClass implements Insertable<Subspace> {
           ? const Value.absent()
           : Value(colorArgb),
       colorShade: Value(colorShade),
+      zOrder: Value(zOrder),
     );
   }
 
@@ -3091,6 +3237,7 @@ class Subspace extends DataClass implements Insertable<Subspace> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       colorArgb: serializer.fromJson<int?>(json['colorArgb']),
       colorShade: serializer.fromJson<int>(json['colorShade']),
+      zOrder: serializer.fromJson<int>(json['zOrder']),
     );
   }
   @override
@@ -3103,6 +3250,7 @@ class Subspace extends DataClass implements Insertable<Subspace> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'colorArgb': serializer.toJson<int?>(colorArgb),
       'colorShade': serializer.toJson<int>(colorShade),
+      'zOrder': serializer.toJson<int>(zOrder),
     };
   }
 
@@ -3113,6 +3261,7 @@ class Subspace extends DataClass implements Insertable<Subspace> {
     DateTime? createdAt,
     Value<int?> colorArgb = const Value.absent(),
     int? colorShade,
+    int? zOrder,
   }) => Subspace(
     id: id ?? this.id,
     layerId: layerId ?? this.layerId,
@@ -3120,6 +3269,7 @@ class Subspace extends DataClass implements Insertable<Subspace> {
     createdAt: createdAt ?? this.createdAt,
     colorArgb: colorArgb.present ? colorArgb.value : this.colorArgb,
     colorShade: colorShade ?? this.colorShade,
+    zOrder: zOrder ?? this.zOrder,
   );
   Subspace copyWithCompanion(SubspacesCompanion data) {
     return Subspace(
@@ -3131,6 +3281,7 @@ class Subspace extends DataClass implements Insertable<Subspace> {
       colorShade: data.colorShade.present
           ? data.colorShade.value
           : this.colorShade,
+      zOrder: data.zOrder.present ? data.zOrder.value : this.zOrder,
     );
   }
 
@@ -3142,14 +3293,15 @@ class Subspace extends DataClass implements Insertable<Subspace> {
           ..write('label: $label, ')
           ..write('createdAt: $createdAt, ')
           ..write('colorArgb: $colorArgb, ')
-          ..write('colorShade: $colorShade')
+          ..write('colorShade: $colorShade, ')
+          ..write('zOrder: $zOrder')
           ..write(')'))
         .toString();
   }
 
   @override
   int get hashCode =>
-      Object.hash(id, layerId, label, createdAt, colorArgb, colorShade);
+      Object.hash(id, layerId, label, createdAt, colorArgb, colorShade, zOrder);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -3159,7 +3311,8 @@ class Subspace extends DataClass implements Insertable<Subspace> {
           other.label == this.label &&
           other.createdAt == this.createdAt &&
           other.colorArgb == this.colorArgb &&
-          other.colorShade == this.colorShade);
+          other.colorShade == this.colorShade &&
+          other.zOrder == this.zOrder);
 }
 
 class SubspacesCompanion extends UpdateCompanion<Subspace> {
@@ -3169,6 +3322,7 @@ class SubspacesCompanion extends UpdateCompanion<Subspace> {
   final Value<DateTime> createdAt;
   final Value<int?> colorArgb;
   final Value<int> colorShade;
+  final Value<int> zOrder;
   final Value<int> rowid;
   const SubspacesCompanion({
     this.id = const Value.absent(),
@@ -3177,6 +3331,7 @@ class SubspacesCompanion extends UpdateCompanion<Subspace> {
     this.createdAt = const Value.absent(),
     this.colorArgb = const Value.absent(),
     this.colorShade = const Value.absent(),
+    this.zOrder = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   SubspacesCompanion.insert({
@@ -3186,6 +3341,7 @@ class SubspacesCompanion extends UpdateCompanion<Subspace> {
     this.createdAt = const Value.absent(),
     this.colorArgb = const Value.absent(),
     this.colorShade = const Value.absent(),
+    this.zOrder = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        layerId = Value(layerId);
@@ -3196,6 +3352,7 @@ class SubspacesCompanion extends UpdateCompanion<Subspace> {
     Expression<DateTime>? createdAt,
     Expression<int>? colorArgb,
     Expression<int>? colorShade,
+    Expression<int>? zOrder,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -3205,6 +3362,7 @@ class SubspacesCompanion extends UpdateCompanion<Subspace> {
       if (createdAt != null) 'created_at': createdAt,
       if (colorArgb != null) 'color_argb': colorArgb,
       if (colorShade != null) 'color_shade': colorShade,
+      if (zOrder != null) 'z_order': zOrder,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -3216,6 +3374,7 @@ class SubspacesCompanion extends UpdateCompanion<Subspace> {
     Value<DateTime>? createdAt,
     Value<int?>? colorArgb,
     Value<int>? colorShade,
+    Value<int>? zOrder,
     Value<int>? rowid,
   }) {
     return SubspacesCompanion(
@@ -3225,6 +3384,7 @@ class SubspacesCompanion extends UpdateCompanion<Subspace> {
       createdAt: createdAt ?? this.createdAt,
       colorArgb: colorArgb ?? this.colorArgb,
       colorShade: colorShade ?? this.colorShade,
+      zOrder: zOrder ?? this.zOrder,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -3250,6 +3410,9 @@ class SubspacesCompanion extends UpdateCompanion<Subspace> {
     if (colorShade.present) {
       map['color_shade'] = Variable<int>(colorShade.value);
     }
+    if (zOrder.present) {
+      map['z_order'] = Variable<int>(zOrder.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -3265,6 +3428,7 @@ class SubspacesCompanion extends UpdateCompanion<Subspace> {
           ..write('createdAt: $createdAt, ')
           ..write('colorArgb: $colorArgb, ')
           ..write('colorShade: $colorShade, ')
+          ..write('zOrder: $zOrder, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -3900,6 +4064,16 @@ class $FreeLinesTable extends FreeLines
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _zOrderMeta = const VerificationMeta('zOrder');
+  @override
+  late final GeneratedColumn<int> zOrder = GeneratedColumn<int>(
+    'z_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -3912,6 +4086,7 @@ class $FreeLinesTable extends FreeLines
     createdAt,
     colorArgb,
     colorShade,
+    zOrder,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3998,6 +4173,12 @@ class $FreeLinesTable extends FreeLines
         colorShade.isAcceptableOrUnknown(data['color_shade']!, _colorShadeMeta),
       );
     }
+    if (data.containsKey('z_order')) {
+      context.handle(
+        _zOrderMeta,
+        zOrder.isAcceptableOrUnknown(data['z_order']!, _zOrderMeta),
+      );
+    }
     return context;
   }
 
@@ -4047,6 +4228,10 @@ class $FreeLinesTable extends FreeLines
         DriftSqlType.int,
         data['${effectivePrefix}color_shade'],
       )!,
+      zOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}z_order'],
+      )!,
     );
   }
 
@@ -4084,6 +4269,18 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
   /// layer. **0 is the layer colour exactly**, which is what every row
   /// migrating in from v21 gets — an untouched map must look untouched.
   final int colorShade;
+
+  /// Where this element sits in its layer's stack (v26). **Higher is drawn
+  /// later, i.e. in front**, and the scope is one layer *and one table*: a
+  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// because that is the only order its separate painters can honour.
+  ///
+  /// Deliberately not [colorShade], which used to imply this: that column also
+  /// picks the auto shade, so moving an element forward would have recoloured
+  /// it. Assigned one past the layer's current maximum on create, so a new
+  /// element lands on top — which is what "the newest element wins an overlap"
+  /// already meant, now said out loud instead of inferred.
+  final int zOrder;
   const FreeLine({
     required this.id,
     required this.layerId,
@@ -4095,6 +4292,7 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
     required this.createdAt,
     this.colorArgb,
     required this.colorShade,
+    required this.zOrder,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -4119,6 +4317,7 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
       map['color_argb'] = Variable<int>(colorArgb);
     }
     map['color_shade'] = Variable<int>(colorShade);
+    map['z_order'] = Variable<int>(zOrder);
     return map;
   }
 
@@ -4144,6 +4343,7 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
           ? const Value.absent()
           : Value(colorArgb),
       colorShade: Value(colorShade),
+      zOrder: Value(zOrder),
     );
   }
 
@@ -4165,6 +4365,7 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       colorArgb: serializer.fromJson<int?>(json['colorArgb']),
       colorShade: serializer.fromJson<int>(json['colorShade']),
+      zOrder: serializer.fromJson<int>(json['zOrder']),
     );
   }
   @override
@@ -4183,6 +4384,7 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'colorArgb': serializer.toJson<int?>(colorArgb),
       'colorShade': serializer.toJson<int>(colorShade),
+      'zOrder': serializer.toJson<int>(zOrder),
     };
   }
 
@@ -4197,6 +4399,7 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
     DateTime? createdAt,
     Value<int?> colorArgb = const Value.absent(),
     int? colorShade,
+    int? zOrder,
   }) => FreeLine(
     id: id ?? this.id,
     layerId: layerId ?? this.layerId,
@@ -4210,6 +4413,7 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
     createdAt: createdAt ?? this.createdAt,
     colorArgb: colorArgb.present ? colorArgb.value : this.colorArgb,
     colorShade: colorShade ?? this.colorShade,
+    zOrder: zOrder ?? this.zOrder,
   );
   FreeLine copyWithCompanion(FreeLinesCompanion data) {
     return FreeLine(
@@ -4233,6 +4437,7 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
       colorShade: data.colorShade.present
           ? data.colorShade.value
           : this.colorShade,
+      zOrder: data.zOrder.present ? data.zOrder.value : this.zOrder,
     );
   }
 
@@ -4248,7 +4453,8 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
           ..write('inclusionRadiusMeters: $inclusionRadiusMeters, ')
           ..write('createdAt: $createdAt, ')
           ..write('colorArgb: $colorArgb, ')
-          ..write('colorShade: $colorShade')
+          ..write('colorShade: $colorShade, ')
+          ..write('zOrder: $zOrder')
           ..write(')'))
         .toString();
   }
@@ -4265,6 +4471,7 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
     createdAt,
     colorArgb,
     colorShade,
+    zOrder,
   );
   @override
   bool operator ==(Object other) =>
@@ -4279,7 +4486,8 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
           other.inclusionRadiusMeters == this.inclusionRadiusMeters &&
           other.createdAt == this.createdAt &&
           other.colorArgb == this.colorArgb &&
-          other.colorShade == this.colorShade);
+          other.colorShade == this.colorShade &&
+          other.zOrder == this.zOrder);
 }
 
 class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
@@ -4293,6 +4501,7 @@ class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
   final Value<DateTime> createdAt;
   final Value<int?> colorArgb;
   final Value<int> colorShade;
+  final Value<int> zOrder;
   final Value<int> rowid;
   const FreeLinesCompanion({
     this.id = const Value.absent(),
@@ -4305,6 +4514,7 @@ class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
     this.createdAt = const Value.absent(),
     this.colorArgb = const Value.absent(),
     this.colorShade = const Value.absent(),
+    this.zOrder = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   FreeLinesCompanion.insert({
@@ -4318,6 +4528,7 @@ class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
     this.createdAt = const Value.absent(),
     this.colorArgb = const Value.absent(),
     this.colorShade = const Value.absent(),
+    this.zOrder = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        layerId = Value(layerId);
@@ -4332,6 +4543,7 @@ class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
     Expression<DateTime>? createdAt,
     Expression<int>? colorArgb,
     Expression<int>? colorShade,
+    Expression<int>? zOrder,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -4346,6 +4558,7 @@ class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
       if (createdAt != null) 'created_at': createdAt,
       if (colorArgb != null) 'color_argb': colorArgb,
       if (colorShade != null) 'color_shade': colorShade,
+      if (zOrder != null) 'z_order': zOrder,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -4361,6 +4574,7 @@ class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
     Value<DateTime>? createdAt,
     Value<int?>? colorArgb,
     Value<int>? colorShade,
+    Value<int>? zOrder,
     Value<int>? rowid,
   }) {
     return FreeLinesCompanion(
@@ -4375,6 +4589,7 @@ class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
       createdAt: createdAt ?? this.createdAt,
       colorArgb: colorArgb ?? this.colorArgb,
       colorShade: colorShade ?? this.colorShade,
+      zOrder: zOrder ?? this.zOrder,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -4414,6 +4629,9 @@ class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
     if (colorShade.present) {
       map['color_shade'] = Variable<int>(colorShade.value);
     }
+    if (zOrder.present) {
+      map['z_order'] = Variable<int>(zOrder.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -4433,6 +4651,7 @@ class FreeLinesCompanion extends UpdateCompanion<FreeLine> {
           ..write('createdAt: $createdAt, ')
           ..write('colorArgb: $colorArgb, ')
           ..write('colorShade: $colorShade, ')
+          ..write('zOrder: $zOrder, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -4923,6 +5142,16 @@ class $TracksTable extends Tracks with TableInfo<$TracksTable, Track> {
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _zOrderMeta = const VerificationMeta('zOrder');
+  @override
+  late final GeneratedColumn<int> zOrder = GeneratedColumn<int>(
+    'z_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _southMeta = const VerificationMeta('south');
   @override
   late final GeneratedColumn<double> south = GeneratedColumn<double>(
@@ -4967,6 +5196,7 @@ class $TracksTable extends Tracks with TableInfo<$TracksTable, Track> {
     createdAt,
     colorArgb,
     colorShade,
+    zOrder,
     south,
     west,
     north,
@@ -5019,6 +5249,12 @@ class $TracksTable extends Tracks with TableInfo<$TracksTable, Track> {
       context.handle(
         _colorShadeMeta,
         colorShade.isAcceptableOrUnknown(data['color_shade']!, _colorShadeMeta),
+      );
+    }
+    if (data.containsKey('z_order')) {
+      context.handle(
+        _zOrderMeta,
+        zOrder.isAcceptableOrUnknown(data['z_order']!, _zOrderMeta),
       );
     }
     if (data.containsKey('south')) {
@@ -5078,6 +5314,10 @@ class $TracksTable extends Tracks with TableInfo<$TracksTable, Track> {
         DriftSqlType.int,
         data['${effectivePrefix}color_shade'],
       )!,
+      zOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}z_order'],
+      )!,
       south: attachedDatabase.typeMapping.read(
         DriftSqlType.double,
         data['${effectivePrefix}south'],
@@ -5115,6 +5355,18 @@ class Track extends DataClass implements Insertable<Track> {
   /// Which auto shade this element takes; **0 is the layer colour exactly**.
   final int colorShade;
 
+  /// Where this element sits in its layer's stack (v26). **Higher is drawn
+  /// later, i.e. in front**, and the scope is one layer *and one table*: a
+  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// because that is the only order its separate painters can honour.
+  ///
+  /// Deliberately not [colorShade], which used to imply this: that column also
+  /// picks the auto shade, so moving an element forward would have recoloured
+  /// it. Assigned one past the layer's current maximum on create, so a new
+  /// element lands on top — which is what "the newest element wins an overlap"
+  /// already meant, now said out loud instead of inferred.
+  final int zOrder;
+
   /// Denormalised bounds of every point, for viewport culling — the
   /// [BorderAreas] precedent. Null while the track is still empty, which is
   /// also how the painter knows there is nothing to draw.
@@ -5129,6 +5381,7 @@ class Track extends DataClass implements Insertable<Track> {
     required this.createdAt,
     this.colorArgb,
     required this.colorShade,
+    required this.zOrder,
     this.south,
     this.west,
     this.north,
@@ -5147,6 +5400,7 @@ class Track extends DataClass implements Insertable<Track> {
       map['color_argb'] = Variable<int>(colorArgb);
     }
     map['color_shade'] = Variable<int>(colorShade);
+    map['z_order'] = Variable<int>(zOrder);
     if (!nullToAbsent || south != null) {
       map['south'] = Variable<double>(south);
     }
@@ -5174,6 +5428,7 @@ class Track extends DataClass implements Insertable<Track> {
           ? const Value.absent()
           : Value(colorArgb),
       colorShade: Value(colorShade),
+      zOrder: Value(zOrder),
       south: south == null && nullToAbsent
           ? const Value.absent()
           : Value(south),
@@ -5197,6 +5452,7 @@ class Track extends DataClass implements Insertable<Track> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       colorArgb: serializer.fromJson<int?>(json['colorArgb']),
       colorShade: serializer.fromJson<int>(json['colorShade']),
+      zOrder: serializer.fromJson<int>(json['zOrder']),
       south: serializer.fromJson<double?>(json['south']),
       west: serializer.fromJson<double?>(json['west']),
       north: serializer.fromJson<double?>(json['north']),
@@ -5213,6 +5469,7 @@ class Track extends DataClass implements Insertable<Track> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'colorArgb': serializer.toJson<int?>(colorArgb),
       'colorShade': serializer.toJson<int>(colorShade),
+      'zOrder': serializer.toJson<int>(zOrder),
       'south': serializer.toJson<double?>(south),
       'west': serializer.toJson<double?>(west),
       'north': serializer.toJson<double?>(north),
@@ -5227,6 +5484,7 @@ class Track extends DataClass implements Insertable<Track> {
     DateTime? createdAt,
     Value<int?> colorArgb = const Value.absent(),
     int? colorShade,
+    int? zOrder,
     Value<double?> south = const Value.absent(),
     Value<double?> west = const Value.absent(),
     Value<double?> north = const Value.absent(),
@@ -5238,6 +5496,7 @@ class Track extends DataClass implements Insertable<Track> {
     createdAt: createdAt ?? this.createdAt,
     colorArgb: colorArgb.present ? colorArgb.value : this.colorArgb,
     colorShade: colorShade ?? this.colorShade,
+    zOrder: zOrder ?? this.zOrder,
     south: south.present ? south.value : this.south,
     west: west.present ? west.value : this.west,
     north: north.present ? north.value : this.north,
@@ -5253,6 +5512,7 @@ class Track extends DataClass implements Insertable<Track> {
       colorShade: data.colorShade.present
           ? data.colorShade.value
           : this.colorShade,
+      zOrder: data.zOrder.present ? data.zOrder.value : this.zOrder,
       south: data.south.present ? data.south.value : this.south,
       west: data.west.present ? data.west.value : this.west,
       north: data.north.present ? data.north.value : this.north,
@@ -5269,6 +5529,7 @@ class Track extends DataClass implements Insertable<Track> {
           ..write('createdAt: $createdAt, ')
           ..write('colorArgb: $colorArgb, ')
           ..write('colorShade: $colorShade, ')
+          ..write('zOrder: $zOrder, ')
           ..write('south: $south, ')
           ..write('west: $west, ')
           ..write('north: $north, ')
@@ -5285,6 +5546,7 @@ class Track extends DataClass implements Insertable<Track> {
     createdAt,
     colorArgb,
     colorShade,
+    zOrder,
     south,
     west,
     north,
@@ -5300,6 +5562,7 @@ class Track extends DataClass implements Insertable<Track> {
           other.createdAt == this.createdAt &&
           other.colorArgb == this.colorArgb &&
           other.colorShade == this.colorShade &&
+          other.zOrder == this.zOrder &&
           other.south == this.south &&
           other.west == this.west &&
           other.north == this.north &&
@@ -5313,6 +5576,7 @@ class TracksCompanion extends UpdateCompanion<Track> {
   final Value<DateTime> createdAt;
   final Value<int?> colorArgb;
   final Value<int> colorShade;
+  final Value<int> zOrder;
   final Value<double?> south;
   final Value<double?> west;
   final Value<double?> north;
@@ -5325,6 +5589,7 @@ class TracksCompanion extends UpdateCompanion<Track> {
     this.createdAt = const Value.absent(),
     this.colorArgb = const Value.absent(),
     this.colorShade = const Value.absent(),
+    this.zOrder = const Value.absent(),
     this.south = const Value.absent(),
     this.west = const Value.absent(),
     this.north = const Value.absent(),
@@ -5338,6 +5603,7 @@ class TracksCompanion extends UpdateCompanion<Track> {
     this.createdAt = const Value.absent(),
     this.colorArgb = const Value.absent(),
     this.colorShade = const Value.absent(),
+    this.zOrder = const Value.absent(),
     this.south = const Value.absent(),
     this.west = const Value.absent(),
     this.north = const Value.absent(),
@@ -5352,6 +5618,7 @@ class TracksCompanion extends UpdateCompanion<Track> {
     Expression<DateTime>? createdAt,
     Expression<int>? colorArgb,
     Expression<int>? colorShade,
+    Expression<int>? zOrder,
     Expression<double>? south,
     Expression<double>? west,
     Expression<double>? north,
@@ -5365,6 +5632,7 @@ class TracksCompanion extends UpdateCompanion<Track> {
       if (createdAt != null) 'created_at': createdAt,
       if (colorArgb != null) 'color_argb': colorArgb,
       if (colorShade != null) 'color_shade': colorShade,
+      if (zOrder != null) 'z_order': zOrder,
       if (south != null) 'south': south,
       if (west != null) 'west': west,
       if (north != null) 'north': north,
@@ -5380,6 +5648,7 @@ class TracksCompanion extends UpdateCompanion<Track> {
     Value<DateTime>? createdAt,
     Value<int?>? colorArgb,
     Value<int>? colorShade,
+    Value<int>? zOrder,
     Value<double?>? south,
     Value<double?>? west,
     Value<double?>? north,
@@ -5393,6 +5662,7 @@ class TracksCompanion extends UpdateCompanion<Track> {
       createdAt: createdAt ?? this.createdAt,
       colorArgb: colorArgb ?? this.colorArgb,
       colorShade: colorShade ?? this.colorShade,
+      zOrder: zOrder ?? this.zOrder,
       south: south ?? this.south,
       west: west ?? this.west,
       north: north ?? this.north,
@@ -5422,6 +5692,9 @@ class TracksCompanion extends UpdateCompanion<Track> {
     if (colorShade.present) {
       map['color_shade'] = Variable<int>(colorShade.value);
     }
+    if (zOrder.present) {
+      map['z_order'] = Variable<int>(zOrder.value);
+    }
     if (south.present) {
       map['south'] = Variable<double>(south.value);
     }
@@ -5449,6 +5722,7 @@ class TracksCompanion extends UpdateCompanion<Track> {
           ..write('createdAt: $createdAt, ')
           ..write('colorArgb: $colorArgb, ')
           ..write('colorShade: $colorShade, ')
+          ..write('zOrder: $zOrder, ')
           ..write('south: $south, ')
           ..write('west: $west, ')
           ..write('north: $north, ')
@@ -6012,6 +6286,16 @@ class $FreeAreasTable extends FreeAreas
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _zOrderMeta = const VerificationMeta('zOrder');
+  @override
+  late final GeneratedColumn<int> zOrder = GeneratedColumn<int>(
+    'z_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -6021,6 +6305,7 @@ class $FreeAreasTable extends FreeAreas
     createdAt,
     colorArgb,
     colorShade,
+    zOrder,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -6080,6 +6365,12 @@ class $FreeAreasTable extends FreeAreas
         colorShade.isAcceptableOrUnknown(data['color_shade']!, _colorShadeMeta),
       );
     }
+    if (data.containsKey('z_order')) {
+      context.handle(
+        _zOrderMeta,
+        zOrder.isAcceptableOrUnknown(data['z_order']!, _zOrderMeta),
+      );
+    }
     return context;
   }
 
@@ -6117,6 +6408,10 @@ class $FreeAreasTable extends FreeAreas
         DriftSqlType.int,
         data['${effectivePrefix}color_shade'],
       )!,
+      zOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}z_order'],
+      )!,
     );
   }
 
@@ -6146,6 +6441,18 @@ class FreeArea extends DataClass implements Insertable<FreeArea> {
   /// layer. **0 is the layer colour exactly**, which is what every row
   /// migrating in from v21 gets — an untouched map must look untouched.
   final int colorShade;
+
+  /// Where this element sits in its layer's stack (v26). **Higher is drawn
+  /// later, i.e. in front**, and the scope is one layer *and one table*: a
+  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// because that is the only order its separate painters can honour.
+  ///
+  /// Deliberately not [colorShade], which used to imply this: that column also
+  /// picks the auto shade, so moving an element forward would have recoloured
+  /// it. Assigned one past the layer's current maximum on create, so a new
+  /// element lands on top — which is what "the newest element wins an overlap"
+  /// already meant, now said out loud instead of inferred.
+  final int zOrder;
   const FreeArea({
     required this.id,
     required this.layerId,
@@ -6154,6 +6461,7 @@ class FreeArea extends DataClass implements Insertable<FreeArea> {
     required this.createdAt,
     this.colorArgb,
     required this.colorShade,
+    required this.zOrder,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -6169,6 +6477,7 @@ class FreeArea extends DataClass implements Insertable<FreeArea> {
       map['color_argb'] = Variable<int>(colorArgb);
     }
     map['color_shade'] = Variable<int>(colorShade);
+    map['z_order'] = Variable<int>(zOrder);
     return map;
   }
 
@@ -6185,6 +6494,7 @@ class FreeArea extends DataClass implements Insertable<FreeArea> {
           ? const Value.absent()
           : Value(colorArgb),
       colorShade: Value(colorShade),
+      zOrder: Value(zOrder),
     );
   }
 
@@ -6201,6 +6511,7 @@ class FreeArea extends DataClass implements Insertable<FreeArea> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       colorArgb: serializer.fromJson<int?>(json['colorArgb']),
       colorShade: serializer.fromJson<int>(json['colorShade']),
+      zOrder: serializer.fromJson<int>(json['zOrder']),
     );
   }
   @override
@@ -6214,6 +6525,7 @@ class FreeArea extends DataClass implements Insertable<FreeArea> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'colorArgb': serializer.toJson<int?>(colorArgb),
       'colorShade': serializer.toJson<int>(colorShade),
+      'zOrder': serializer.toJson<int>(zOrder),
     };
   }
 
@@ -6225,6 +6537,7 @@ class FreeArea extends DataClass implements Insertable<FreeArea> {
     DateTime? createdAt,
     Value<int?> colorArgb = const Value.absent(),
     int? colorShade,
+    int? zOrder,
   }) => FreeArea(
     id: id ?? this.id,
     layerId: layerId ?? this.layerId,
@@ -6233,6 +6546,7 @@ class FreeArea extends DataClass implements Insertable<FreeArea> {
     createdAt: createdAt ?? this.createdAt,
     colorArgb: colorArgb.present ? colorArgb.value : this.colorArgb,
     colorShade: colorShade ?? this.colorShade,
+    zOrder: zOrder ?? this.zOrder,
   );
   FreeArea copyWithCompanion(FreeAreasCompanion data) {
     return FreeArea(
@@ -6247,6 +6561,7 @@ class FreeArea extends DataClass implements Insertable<FreeArea> {
       colorShade: data.colorShade.present
           ? data.colorShade.value
           : this.colorShade,
+      zOrder: data.zOrder.present ? data.zOrder.value : this.zOrder,
     );
   }
 
@@ -6259,7 +6574,8 @@ class FreeArea extends DataClass implements Insertable<FreeArea> {
           ..write('offsetMeters: $offsetMeters, ')
           ..write('createdAt: $createdAt, ')
           ..write('colorArgb: $colorArgb, ')
-          ..write('colorShade: $colorShade')
+          ..write('colorShade: $colorShade, ')
+          ..write('zOrder: $zOrder')
           ..write(')'))
         .toString();
   }
@@ -6273,6 +6589,7 @@ class FreeArea extends DataClass implements Insertable<FreeArea> {
     createdAt,
     colorArgb,
     colorShade,
+    zOrder,
   );
   @override
   bool operator ==(Object other) =>
@@ -6284,7 +6601,8 @@ class FreeArea extends DataClass implements Insertable<FreeArea> {
           other.offsetMeters == this.offsetMeters &&
           other.createdAt == this.createdAt &&
           other.colorArgb == this.colorArgb &&
-          other.colorShade == this.colorShade);
+          other.colorShade == this.colorShade &&
+          other.zOrder == this.zOrder);
 }
 
 class FreeAreasCompanion extends UpdateCompanion<FreeArea> {
@@ -6295,6 +6613,7 @@ class FreeAreasCompanion extends UpdateCompanion<FreeArea> {
   final Value<DateTime> createdAt;
   final Value<int?> colorArgb;
   final Value<int> colorShade;
+  final Value<int> zOrder;
   final Value<int> rowid;
   const FreeAreasCompanion({
     this.id = const Value.absent(),
@@ -6304,6 +6623,7 @@ class FreeAreasCompanion extends UpdateCompanion<FreeArea> {
     this.createdAt = const Value.absent(),
     this.colorArgb = const Value.absent(),
     this.colorShade = const Value.absent(),
+    this.zOrder = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   FreeAreasCompanion.insert({
@@ -6314,6 +6634,7 @@ class FreeAreasCompanion extends UpdateCompanion<FreeArea> {
     this.createdAt = const Value.absent(),
     this.colorArgb = const Value.absent(),
     this.colorShade = const Value.absent(),
+    this.zOrder = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        layerId = Value(layerId);
@@ -6325,6 +6646,7 @@ class FreeAreasCompanion extends UpdateCompanion<FreeArea> {
     Expression<DateTime>? createdAt,
     Expression<int>? colorArgb,
     Expression<int>? colorShade,
+    Expression<int>? zOrder,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -6335,6 +6657,7 @@ class FreeAreasCompanion extends UpdateCompanion<FreeArea> {
       if (createdAt != null) 'created_at': createdAt,
       if (colorArgb != null) 'color_argb': colorArgb,
       if (colorShade != null) 'color_shade': colorShade,
+      if (zOrder != null) 'z_order': zOrder,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -6347,6 +6670,7 @@ class FreeAreasCompanion extends UpdateCompanion<FreeArea> {
     Value<DateTime>? createdAt,
     Value<int?>? colorArgb,
     Value<int>? colorShade,
+    Value<int>? zOrder,
     Value<int>? rowid,
   }) {
     return FreeAreasCompanion(
@@ -6357,6 +6681,7 @@ class FreeAreasCompanion extends UpdateCompanion<FreeArea> {
       createdAt: createdAt ?? this.createdAt,
       colorArgb: colorArgb ?? this.colorArgb,
       colorShade: colorShade ?? this.colorShade,
+      zOrder: zOrder ?? this.zOrder,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -6385,6 +6710,9 @@ class FreeAreasCompanion extends UpdateCompanion<FreeArea> {
     if (colorShade.present) {
       map['color_shade'] = Variable<int>(colorShade.value);
     }
+    if (zOrder.present) {
+      map['z_order'] = Variable<int>(zOrder.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -6401,6 +6729,7 @@ class FreeAreasCompanion extends UpdateCompanion<FreeArea> {
           ..write('createdAt: $createdAt, ')
           ..write('colorArgb: $colorArgb, ')
           ..write('colorShade: $colorShade, ')
+          ..write('zOrder: $zOrder, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -6975,6 +7304,16 @@ class $HeightRegionsTable extends HeightRegions
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _zOrderMeta = const VerificationMeta('zOrder');
+  @override
+  late final GeneratedColumn<int> zOrder = GeneratedColumn<int>(
+    'z_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -6990,6 +7329,7 @@ class $HeightRegionsTable extends HeightRegions
     createdAt,
     colorArgb,
     colorShade,
+    zOrder,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -7100,6 +7440,12 @@ class $HeightRegionsTable extends HeightRegions
         colorShade.isAcceptableOrUnknown(data['color_shade']!, _colorShadeMeta),
       );
     }
+    if (data.containsKey('z_order')) {
+      context.handle(
+        _zOrderMeta,
+        zOrder.isAcceptableOrUnknown(data['z_order']!, _zOrderMeta),
+      );
+    }
     return context;
   }
 
@@ -7161,6 +7507,10 @@ class $HeightRegionsTable extends HeightRegions
         DriftSqlType.int,
         data['${effectivePrefix}color_shade'],
       )!,
+      zOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}z_order'],
+      )!,
     );
   }
 
@@ -7202,6 +7552,18 @@ class HeightRegion extends DataClass implements Insertable<HeightRegion> {
   /// layer. **0 is the layer colour exactly**, which is what every row
   /// migrating in from v21 gets — an untouched map must look untouched.
   final int colorShade;
+
+  /// Where this element sits in its layer's stack (v26). **Higher is drawn
+  /// later, i.e. in front**, and the scope is one layer *and one table*: a
+  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// because that is the only order its separate painters can honour.
+  ///
+  /// Deliberately not [colorShade], which used to imply this: that column also
+  /// picks the auto shade, so moving an element forward would have recoloured
+  /// it. Assigned one past the layer's current maximum on create, so a new
+  /// element lands on top — which is what "the newest element wins an overlap"
+  /// already meant, now said out loud instead of inferred.
+  final int zOrder;
   const HeightRegion({
     required this.id,
     required this.layerId,
@@ -7216,6 +7578,7 @@ class HeightRegion extends DataClass implements Insertable<HeightRegion> {
     required this.createdAt,
     this.colorArgb,
     required this.colorShade,
+    required this.zOrder,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -7239,6 +7602,7 @@ class HeightRegion extends DataClass implements Insertable<HeightRegion> {
       map['color_argb'] = Variable<int>(colorArgb);
     }
     map['color_shade'] = Variable<int>(colorShade);
+    map['z_order'] = Variable<int>(zOrder);
     return map;
   }
 
@@ -7263,6 +7627,7 @@ class HeightRegion extends DataClass implements Insertable<HeightRegion> {
           ? const Value.absent()
           : Value(colorArgb),
       colorShade: Value(colorShade),
+      zOrder: Value(zOrder),
     );
   }
 
@@ -7285,6 +7650,7 @@ class HeightRegion extends DataClass implements Insertable<HeightRegion> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       colorArgb: serializer.fromJson<int?>(json['colorArgb']),
       colorShade: serializer.fromJson<int>(json['colorShade']),
+      zOrder: serializer.fromJson<int>(json['zOrder']),
     );
   }
   @override
@@ -7304,6 +7670,7 @@ class HeightRegion extends DataClass implements Insertable<HeightRegion> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'colorArgb': serializer.toJson<int?>(colorArgb),
       'colorShade': serializer.toJson<int>(colorShade),
+      'zOrder': serializer.toJson<int>(zOrder),
     };
   }
 
@@ -7321,6 +7688,7 @@ class HeightRegion extends DataClass implements Insertable<HeightRegion> {
     DateTime? createdAt,
     Value<int?> colorArgb = const Value.absent(),
     int? colorShade,
+    int? zOrder,
   }) => HeightRegion(
     id: id ?? this.id,
     layerId: layerId ?? this.layerId,
@@ -7335,6 +7703,7 @@ class HeightRegion extends DataClass implements Insertable<HeightRegion> {
     createdAt: createdAt ?? this.createdAt,
     colorArgb: colorArgb.present ? colorArgb.value : this.colorArgb,
     colorShade: colorShade ?? this.colorShade,
+    zOrder: zOrder ?? this.zOrder,
   );
   HeightRegion copyWithCompanion(HeightRegionsCompanion data) {
     return HeightRegion(
@@ -7363,6 +7732,7 @@ class HeightRegion extends DataClass implements Insertable<HeightRegion> {
       colorShade: data.colorShade.present
           ? data.colorShade.value
           : this.colorShade,
+      zOrder: data.zOrder.present ? data.zOrder.value : this.zOrder,
     );
   }
 
@@ -7381,7 +7751,8 @@ class HeightRegion extends DataClass implements Insertable<HeightRegion> {
           ..write('generatedAt: $generatedAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('colorArgb: $colorArgb, ')
-          ..write('colorShade: $colorShade')
+          ..write('colorShade: $colorShade, ')
+          ..write('zOrder: $zOrder')
           ..write(')'))
         .toString();
   }
@@ -7401,6 +7772,7 @@ class HeightRegion extends DataClass implements Insertable<HeightRegion> {
     createdAt,
     colorArgb,
     colorShade,
+    zOrder,
   );
   @override
   bool operator ==(Object other) =>
@@ -7418,7 +7790,8 @@ class HeightRegion extends DataClass implements Insertable<HeightRegion> {
           other.generatedAt == this.generatedAt &&
           other.createdAt == this.createdAt &&
           other.colorArgb == this.colorArgb &&
-          other.colorShade == this.colorShade);
+          other.colorShade == this.colorShade &&
+          other.zOrder == this.zOrder);
 }
 
 class HeightRegionsCompanion extends UpdateCompanion<HeightRegion> {
@@ -7435,6 +7808,7 @@ class HeightRegionsCompanion extends UpdateCompanion<HeightRegion> {
   final Value<DateTime> createdAt;
   final Value<int?> colorArgb;
   final Value<int> colorShade;
+  final Value<int> zOrder;
   final Value<int> rowid;
   const HeightRegionsCompanion({
     this.id = const Value.absent(),
@@ -7450,6 +7824,7 @@ class HeightRegionsCompanion extends UpdateCompanion<HeightRegion> {
     this.createdAt = const Value.absent(),
     this.colorArgb = const Value.absent(),
     this.colorShade = const Value.absent(),
+    this.zOrder = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   HeightRegionsCompanion.insert({
@@ -7466,6 +7841,7 @@ class HeightRegionsCompanion extends UpdateCompanion<HeightRegion> {
     this.createdAt = const Value.absent(),
     this.colorArgb = const Value.absent(),
     this.colorShade = const Value.absent(),
+    this.zOrder = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        layerId = Value(layerId),
@@ -7486,6 +7862,7 @@ class HeightRegionsCompanion extends UpdateCompanion<HeightRegion> {
     Expression<DateTime>? createdAt,
     Expression<int>? colorArgb,
     Expression<int>? colorShade,
+    Expression<int>? zOrder,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -7502,6 +7879,7 @@ class HeightRegionsCompanion extends UpdateCompanion<HeightRegion> {
       if (createdAt != null) 'created_at': createdAt,
       if (colorArgb != null) 'color_argb': colorArgb,
       if (colorShade != null) 'color_shade': colorShade,
+      if (zOrder != null) 'z_order': zOrder,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -7520,6 +7898,7 @@ class HeightRegionsCompanion extends UpdateCompanion<HeightRegion> {
     Value<DateTime>? createdAt,
     Value<int?>? colorArgb,
     Value<int>? colorShade,
+    Value<int>? zOrder,
     Value<int>? rowid,
   }) {
     return HeightRegionsCompanion(
@@ -7536,6 +7915,7 @@ class HeightRegionsCompanion extends UpdateCompanion<HeightRegion> {
       createdAt: createdAt ?? this.createdAt,
       colorArgb: colorArgb ?? this.colorArgb,
       colorShade: colorShade ?? this.colorShade,
+      zOrder: zOrder ?? this.zOrder,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -7582,6 +7962,9 @@ class HeightRegionsCompanion extends UpdateCompanion<HeightRegion> {
     if (colorShade.present) {
       map['color_shade'] = Variable<int>(colorShade.value);
     }
+    if (zOrder.present) {
+      map['z_order'] = Variable<int>(zOrder.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -7604,6 +7987,7 @@ class HeightRegionsCompanion extends UpdateCompanion<HeightRegion> {
           ..write('createdAt: $createdAt, ')
           ..write('colorArgb: $colorArgb, ')
           ..write('colorShade: $colorShade, ')
+          ..write('zOrder: $zOrder, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -8455,6 +8839,16 @@ class $PoiSetsTable extends PoiSets with TableInfo<$PoiSetsTable, PoiSet> {
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _zOrderMeta = const VerificationMeta('zOrder');
+  @override
+  late final GeneratedColumn<int> zOrder = GeneratedColumn<int>(
+    'z_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _isManualMeta = const VerificationMeta(
     'isManual',
   );
@@ -8493,6 +8887,7 @@ class $PoiSetsTable extends PoiSets with TableInfo<$PoiSetsTable, PoiSet> {
     createdAt,
     colorArgb,
     colorShade,
+    zOrder,
     isManual,
     iconKey,
   ];
@@ -8583,6 +8978,12 @@ class $PoiSetsTable extends PoiSets with TableInfo<$PoiSetsTable, PoiSet> {
         colorShade.isAcceptableOrUnknown(data['color_shade']!, _colorShadeMeta),
       );
     }
+    if (data.containsKey('z_order')) {
+      context.handle(
+        _zOrderMeta,
+        zOrder.isAcceptableOrUnknown(data['z_order']!, _zOrderMeta),
+      );
+    }
     if (data.containsKey('is_manual')) {
       context.handle(
         _isManualMeta,
@@ -8644,6 +9045,10 @@ class $PoiSetsTable extends PoiSets with TableInfo<$PoiSetsTable, PoiSet> {
         DriftSqlType.int,
         data['${effectivePrefix}color_shade'],
       )!,
+      zOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}z_order'],
+      )!,
       isManual: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_manual'],
@@ -8685,6 +9090,18 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
   /// migrating in from v21 gets — an untouched map must look untouched.
   final int colorShade;
 
+  /// Where this element sits in its layer's stack (v26). **Higher is drawn
+  /// later, i.e. in front**, and the scope is one layer *and one table*: a
+  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// because that is the only order its separate painters can honour.
+  ///
+  /// Deliberately not [colorShade], which used to imply this: that column also
+  /// picks the auto shade, so moving an element forward would have recoloured
+  /// it. Assigned one past the layer's current maximum on create, so a new
+  /// element lands on top — which is what "the newest element wins an overlap"
+  /// already meant, now said out loud instead of inferred.
+  final int zOrder;
+
   /// A category the user made rather than an Overpass import (v25).
   ///
   /// The distinction is what keeps an import honest: a fetched set is a
@@ -8712,6 +9129,7 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
     required this.createdAt,
     this.colorArgb,
     required this.colorShade,
+    required this.zOrder,
     required this.isManual,
     this.iconKey,
   });
@@ -8732,6 +9150,7 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
       map['color_argb'] = Variable<int>(colorArgb);
     }
     map['color_shade'] = Variable<int>(colorShade);
+    map['z_order'] = Variable<int>(zOrder);
     map['is_manual'] = Variable<bool>(isManual);
     if (!nullToAbsent || iconKey != null) {
       map['icon_key'] = Variable<String>(iconKey);
@@ -8755,6 +9174,7 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
           ? const Value.absent()
           : Value(colorArgb),
       colorShade: Value(colorShade),
+      zOrder: Value(zOrder),
       isManual: Value(isManual),
       iconKey: iconKey == null && nullToAbsent
           ? const Value.absent()
@@ -8778,6 +9198,7 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       colorArgb: serializer.fromJson<int?>(json['colorArgb']),
       colorShade: serializer.fromJson<int>(json['colorShade']),
+      zOrder: serializer.fromJson<int>(json['zOrder']),
       isManual: serializer.fromJson<bool>(json['isManual']),
       iconKey: serializer.fromJson<String?>(json['iconKey']),
     );
@@ -8796,6 +9217,7 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'colorArgb': serializer.toJson<int?>(colorArgb),
       'colorShade': serializer.toJson<int>(colorShade),
+      'zOrder': serializer.toJson<int>(zOrder),
       'isManual': serializer.toJson<bool>(isManual),
       'iconKey': serializer.toJson<String?>(iconKey),
     };
@@ -8812,6 +9234,7 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
     DateTime? createdAt,
     Value<int?> colorArgb = const Value.absent(),
     int? colorShade,
+    int? zOrder,
     bool? isManual,
     Value<String?> iconKey = const Value.absent(),
   }) => PoiSet(
@@ -8825,6 +9248,7 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
     createdAt: createdAt ?? this.createdAt,
     colorArgb: colorArgb.present ? colorArgb.value : this.colorArgb,
     colorShade: colorShade ?? this.colorShade,
+    zOrder: zOrder ?? this.zOrder,
     isManual: isManual ?? this.isManual,
     iconKey: iconKey.present ? iconKey.value : this.iconKey,
   );
@@ -8846,6 +9270,7 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
       colorShade: data.colorShade.present
           ? data.colorShade.value
           : this.colorShade,
+      zOrder: data.zOrder.present ? data.zOrder.value : this.zOrder,
       isManual: data.isManual.present ? data.isManual.value : this.isManual,
       iconKey: data.iconKey.present ? data.iconKey.value : this.iconKey,
     );
@@ -8864,6 +9289,7 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
           ..write('createdAt: $createdAt, ')
           ..write('colorArgb: $colorArgb, ')
           ..write('colorShade: $colorShade, ')
+          ..write('zOrder: $zOrder, ')
           ..write('isManual: $isManual, ')
           ..write('iconKey: $iconKey')
           ..write(')'))
@@ -8882,6 +9308,7 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
     createdAt,
     colorArgb,
     colorShade,
+    zOrder,
     isManual,
     iconKey,
   );
@@ -8899,6 +9326,7 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
           other.createdAt == this.createdAt &&
           other.colorArgb == this.colorArgb &&
           other.colorShade == this.colorShade &&
+          other.zOrder == this.zOrder &&
           other.isManual == this.isManual &&
           other.iconKey == this.iconKey);
 }
@@ -8914,6 +9342,7 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
   final Value<DateTime> createdAt;
   final Value<int?> colorArgb;
   final Value<int> colorShade;
+  final Value<int> zOrder;
   final Value<bool> isManual;
   final Value<String?> iconKey;
   final Value<int> rowid;
@@ -8928,6 +9357,7 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
     this.createdAt = const Value.absent(),
     this.colorArgb = const Value.absent(),
     this.colorShade = const Value.absent(),
+    this.zOrder = const Value.absent(),
     this.isManual = const Value.absent(),
     this.iconKey = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -8943,6 +9373,7 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
     this.createdAt = const Value.absent(),
     this.colorArgb = const Value.absent(),
     this.colorShade = const Value.absent(),
+    this.zOrder = const Value.absent(),
     this.isManual = const Value.absent(),
     this.iconKey = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -8963,6 +9394,7 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
     Expression<DateTime>? createdAt,
     Expression<int>? colorArgb,
     Expression<int>? colorShade,
+    Expression<int>? zOrder,
     Expression<bool>? isManual,
     Expression<String>? iconKey,
     Expression<int>? rowid,
@@ -8978,6 +9410,7 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
       if (createdAt != null) 'created_at': createdAt,
       if (colorArgb != null) 'color_argb': colorArgb,
       if (colorShade != null) 'color_shade': colorShade,
+      if (zOrder != null) 'z_order': zOrder,
       if (isManual != null) 'is_manual': isManual,
       if (iconKey != null) 'icon_key': iconKey,
       if (rowid != null) 'rowid': rowid,
@@ -8995,6 +9428,7 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
     Value<DateTime>? createdAt,
     Value<int?>? colorArgb,
     Value<int>? colorShade,
+    Value<int>? zOrder,
     Value<bool>? isManual,
     Value<String?>? iconKey,
     Value<int>? rowid,
@@ -9010,6 +9444,7 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
       createdAt: createdAt ?? this.createdAt,
       colorArgb: colorArgb ?? this.colorArgb,
       colorShade: colorShade ?? this.colorShade,
+      zOrder: zOrder ?? this.zOrder,
       isManual: isManual ?? this.isManual,
       iconKey: iconKey ?? this.iconKey,
       rowid: rowid ?? this.rowid,
@@ -9049,6 +9484,9 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
     if (colorShade.present) {
       map['color_shade'] = Variable<int>(colorShade.value);
     }
+    if (zOrder.present) {
+      map['z_order'] = Variable<int>(zOrder.value);
+    }
     if (isManual.present) {
       map['is_manual'] = Variable<bool>(isManual.value);
     }
@@ -9074,6 +9512,7 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
           ..write('createdAt: $createdAt, ')
           ..write('colorArgb: $colorArgb, ')
           ..write('colorShade: $colorShade, ')
+          ..write('zOrder: $zOrder, ')
           ..write('isManual: $isManual, ')
           ..write('iconKey: $iconKey, ')
           ..write('rowid: $rowid')
@@ -9824,6 +10263,16 @@ class $TransitSetsTable extends TransitSets
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _zOrderMeta = const VerificationMeta('zOrder');
+  @override
+  late final GeneratedColumn<int> zOrder = GeneratedColumn<int>(
+    'z_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -9842,6 +10291,7 @@ class $TransitSetsTable extends TransitSets
     createdAt,
     colorArgb,
     colorShade,
+    zOrder,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -9968,6 +10418,12 @@ class $TransitSetsTable extends TransitSets
         colorShade.isAcceptableOrUnknown(data['color_shade']!, _colorShadeMeta),
       );
     }
+    if (data.containsKey('z_order')) {
+      context.handle(
+        _zOrderMeta,
+        zOrder.isAcceptableOrUnknown(data['z_order']!, _zOrderMeta),
+      );
+    }
     return context;
   }
 
@@ -10041,6 +10497,10 @@ class $TransitSetsTable extends TransitSets
         DriftSqlType.int,
         data['${effectivePrefix}color_shade'],
       )!,
+      zOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}z_order'],
+      )!,
     );
   }
 
@@ -10097,6 +10557,18 @@ class TransitSet extends DataClass implements Insertable<TransitSet> {
   /// layer. **0 is the layer colour exactly**, which is what every row
   /// migrating in from v21 gets — an untouched map must look untouched.
   final int colorShade;
+
+  /// Where this element sits in its layer's stack (v26). **Higher is drawn
+  /// later, i.e. in front**, and the scope is one layer *and one table*: a
+  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// because that is the only order its separate painters can honour.
+  ///
+  /// Deliberately not [colorShade], which used to imply this: that column also
+  /// picks the auto shade, so moving an element forward would have recoloured
+  /// it. Assigned one past the layer's current maximum on create, so a new
+  /// element lands on top — which is what "the newest element wins an overlap"
+  /// already meant, now said out loud instead of inferred.
+  final int zOrder;
   const TransitSet({
     required this.id,
     required this.layerId,
@@ -10114,6 +10586,7 @@ class TransitSet extends DataClass implements Insertable<TransitSet> {
     required this.createdAt,
     this.colorArgb,
     required this.colorShade,
+    required this.zOrder,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -10142,6 +10615,7 @@ class TransitSet extends DataClass implements Insertable<TransitSet> {
       map['color_argb'] = Variable<int>(colorArgb);
     }
     map['color_shade'] = Variable<int>(colorShade);
+    map['z_order'] = Variable<int>(zOrder);
     return map;
   }
 
@@ -10171,6 +10645,7 @@ class TransitSet extends DataClass implements Insertable<TransitSet> {
           ? const Value.absent()
           : Value(colorArgb),
       colorShade: Value(colorShade),
+      zOrder: Value(zOrder),
     );
   }
 
@@ -10196,6 +10671,7 @@ class TransitSet extends DataClass implements Insertable<TransitSet> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       colorArgb: serializer.fromJson<int?>(json['colorArgb']),
       colorShade: serializer.fromJson<int>(json['colorShade']),
+      zOrder: serializer.fromJson<int>(json['zOrder']),
     );
   }
   @override
@@ -10218,6 +10694,7 @@ class TransitSet extends DataClass implements Insertable<TransitSet> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'colorArgb': serializer.toJson<int?>(colorArgb),
       'colorShade': serializer.toJson<int>(colorShade),
+      'zOrder': serializer.toJson<int>(zOrder),
     };
   }
 
@@ -10238,6 +10715,7 @@ class TransitSet extends DataClass implements Insertable<TransitSet> {
     DateTime? createdAt,
     Value<int?> colorArgb = const Value.absent(),
     int? colorShade,
+    int? zOrder,
   }) => TransitSet(
     id: id ?? this.id,
     layerId: layerId ?? this.layerId,
@@ -10255,6 +10733,7 @@ class TransitSet extends DataClass implements Insertable<TransitSet> {
     createdAt: createdAt ?? this.createdAt,
     colorArgb: colorArgb.present ? colorArgb.value : this.colorArgb,
     colorShade: colorShade ?? this.colorShade,
+    zOrder: zOrder ?? this.zOrder,
   );
   TransitSet copyWithCompanion(TransitSetsCompanion data) {
     return TransitSet(
@@ -10280,6 +10759,7 @@ class TransitSet extends DataClass implements Insertable<TransitSet> {
       colorShade: data.colorShade.present
           ? data.colorShade.value
           : this.colorShade,
+      zOrder: data.zOrder.present ? data.zOrder.value : this.zOrder,
     );
   }
 
@@ -10301,7 +10781,8 @@ class TransitSet extends DataClass implements Insertable<TransitSet> {
           ..write('nodeCount: $nodeCount, ')
           ..write('createdAt: $createdAt, ')
           ..write('colorArgb: $colorArgb, ')
-          ..write('colorShade: $colorShade')
+          ..write('colorShade: $colorShade, ')
+          ..write('zOrder: $zOrder')
           ..write(')'))
         .toString();
   }
@@ -10324,6 +10805,7 @@ class TransitSet extends DataClass implements Insertable<TransitSet> {
     createdAt,
     colorArgb,
     colorShade,
+    zOrder,
   );
   @override
   bool operator ==(Object other) =>
@@ -10344,7 +10826,8 @@ class TransitSet extends DataClass implements Insertable<TransitSet> {
           other.nodeCount == this.nodeCount &&
           other.createdAt == this.createdAt &&
           other.colorArgb == this.colorArgb &&
-          other.colorShade == this.colorShade);
+          other.colorShade == this.colorShade &&
+          other.zOrder == this.zOrder);
 }
 
 class TransitSetsCompanion extends UpdateCompanion<TransitSet> {
@@ -10364,6 +10847,7 @@ class TransitSetsCompanion extends UpdateCompanion<TransitSet> {
   final Value<DateTime> createdAt;
   final Value<int?> colorArgb;
   final Value<int> colorShade;
+  final Value<int> zOrder;
   final Value<int> rowid;
   const TransitSetsCompanion({
     this.id = const Value.absent(),
@@ -10382,6 +10866,7 @@ class TransitSetsCompanion extends UpdateCompanion<TransitSet> {
     this.createdAt = const Value.absent(),
     this.colorArgb = const Value.absent(),
     this.colorShade = const Value.absent(),
+    this.zOrder = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   TransitSetsCompanion.insert({
@@ -10401,6 +10886,7 @@ class TransitSetsCompanion extends UpdateCompanion<TransitSet> {
     this.createdAt = const Value.absent(),
     this.colorArgb = const Value.absent(),
     this.colorShade = const Value.absent(),
+    this.zOrder = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        layerId = Value(layerId),
@@ -10426,6 +10912,7 @@ class TransitSetsCompanion extends UpdateCompanion<TransitSet> {
     Expression<DateTime>? createdAt,
     Expression<int>? colorArgb,
     Expression<int>? colorShade,
+    Expression<int>? zOrder,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -10445,6 +10932,7 @@ class TransitSetsCompanion extends UpdateCompanion<TransitSet> {
       if (createdAt != null) 'created_at': createdAt,
       if (colorArgb != null) 'color_argb': colorArgb,
       if (colorShade != null) 'color_shade': colorShade,
+      if (zOrder != null) 'z_order': zOrder,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -10466,6 +10954,7 @@ class TransitSetsCompanion extends UpdateCompanion<TransitSet> {
     Value<DateTime>? createdAt,
     Value<int?>? colorArgb,
     Value<int>? colorShade,
+    Value<int>? zOrder,
     Value<int>? rowid,
   }) {
     return TransitSetsCompanion(
@@ -10485,6 +10974,7 @@ class TransitSetsCompanion extends UpdateCompanion<TransitSet> {
       createdAt: createdAt ?? this.createdAt,
       colorArgb: colorArgb ?? this.colorArgb,
       colorShade: colorShade ?? this.colorShade,
+      zOrder: zOrder ?? this.zOrder,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -10540,6 +11030,9 @@ class TransitSetsCompanion extends UpdateCompanion<TransitSet> {
     if (colorShade.present) {
       map['color_shade'] = Variable<int>(colorShade.value);
     }
+    if (zOrder.present) {
+      map['z_order'] = Variable<int>(zOrder.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -10565,6 +11058,7 @@ class TransitSetsCompanion extends UpdateCompanion<TransitSet> {
           ..write('createdAt: $createdAt, ')
           ..write('colorArgb: $colorArgb, ')
           ..write('colorShade: $colorShade, ')
+          ..write('zOrder: $zOrder, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -15305,6 +15799,7 @@ typedef $$CirclesTableCreateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<int?> colorArgb,
       Value<int> colorShade,
+      Value<int> zOrder,
       Value<int> rowid,
     });
 typedef $$CirclesTableUpdateCompanionBuilder =
@@ -15318,6 +15813,7 @@ typedef $$CirclesTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<int?> colorArgb,
       Value<int> colorShade,
+      Value<int> zOrder,
       Value<int> rowid,
     });
 
@@ -15390,6 +15886,11 @@ class $$CirclesTableFilterComposer
 
   ColumnFilters<int> get colorShade => $composableBuilder(
     column: $table.colorShade,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get zOrder => $composableBuilder(
+    column: $table.zOrder,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -15466,6 +15967,11 @@ class $$CirclesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get zOrder => $composableBuilder(
+    column: $table.zOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$LayersTableOrderingComposer get layerId {
     final $$LayersTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -15526,6 +16032,9 @@ class $$CirclesTableAnnotationComposer
     column: $table.colorShade,
     builder: (column) => column,
   );
+
+  GeneratedColumn<int> get zOrder =>
+      $composableBuilder(column: $table.zOrder, builder: (column) => column);
 
   $$LayersTableAnnotationComposer get layerId {
     final $$LayersTableAnnotationComposer composer = $composerBuilder(
@@ -15588,6 +16097,7 @@ class $$CirclesTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int?> colorArgb = const Value.absent(),
                 Value<int> colorShade = const Value.absent(),
+                Value<int> zOrder = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CirclesCompanion(
                 id: id,
@@ -15599,6 +16109,7 @@ class $$CirclesTableTableManager
                 createdAt: createdAt,
                 colorArgb: colorArgb,
                 colorShade: colorShade,
+                zOrder: zOrder,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -15612,6 +16123,7 @@ class $$CirclesTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int?> colorArgb = const Value.absent(),
                 Value<int> colorShade = const Value.absent(),
+                Value<int> zOrder = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CirclesCompanion.insert(
                 id: id,
@@ -15623,6 +16135,7 @@ class $$CirclesTableTableManager
                 createdAt: createdAt,
                 colorArgb: colorArgb,
                 colorShade: colorShade,
+                zOrder: zOrder,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -15705,6 +16218,7 @@ typedef $$PlanesTableCreateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<int?> colorArgb,
       Value<int> colorShade,
+      Value<int> zOrder,
       Value<int> rowid,
     });
 typedef $$PlanesTableUpdateCompanionBuilder =
@@ -15720,6 +16234,7 @@ typedef $$PlanesTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<int?> colorArgb,
       Value<int> colorShade,
+      Value<int> zOrder,
       Value<int> rowid,
     });
 
@@ -15802,6 +16317,11 @@ class $$PlanesTableFilterComposer
 
   ColumnFilters<int> get colorShade => $composableBuilder(
     column: $table.colorShade,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get zOrder => $composableBuilder(
+    column: $table.zOrder,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -15888,6 +16408,11 @@ class $$PlanesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get zOrder => $composableBuilder(
+    column: $table.zOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$LayersTableOrderingComposer get layerId {
     final $$LayersTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -15953,6 +16478,9 @@ class $$PlanesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<int> get zOrder =>
+      $composableBuilder(column: $table.zOrder, builder: (column) => column);
+
   $$LayersTableAnnotationComposer get layerId {
     final $$LayersTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -16016,6 +16544,7 @@ class $$PlanesTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int?> colorArgb = const Value.absent(),
                 Value<int> colorShade = const Value.absent(),
+                Value<int> zOrder = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PlanesCompanion(
                 id: id,
@@ -16029,6 +16558,7 @@ class $$PlanesTableTableManager
                 createdAt: createdAt,
                 colorArgb: colorArgb,
                 colorShade: colorShade,
+                zOrder: zOrder,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -16044,6 +16574,7 @@ class $$PlanesTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int?> colorArgb = const Value.absent(),
                 Value<int> colorShade = const Value.absent(),
+                Value<int> zOrder = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PlanesCompanion.insert(
                 id: id,
@@ -16057,6 +16588,7 @@ class $$PlanesTableTableManager
                 createdAt: createdAt,
                 colorArgb: colorArgb,
                 colorShade: colorShade,
+                zOrder: zOrder,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -16475,6 +17007,7 @@ typedef $$SubspacesTableCreateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<int?> colorArgb,
       Value<int> colorShade,
+      Value<int> zOrder,
       Value<int> rowid,
     });
 typedef $$SubspacesTableUpdateCompanionBuilder =
@@ -16485,6 +17018,7 @@ typedef $$SubspacesTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<int?> colorArgb,
       Value<int> colorShade,
+      Value<int> zOrder,
       Value<int> rowid,
     });
 
@@ -16563,6 +17097,11 @@ class $$SubspacesTableFilterComposer
 
   ColumnFilters<int> get colorShade => $composableBuilder(
     column: $table.colorShade,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get zOrder => $composableBuilder(
+    column: $table.zOrder,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -16649,6 +17188,11 @@ class $$SubspacesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get zOrder => $composableBuilder(
+    column: $table.zOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$LayersTableOrderingComposer get layerId {
     final $$LayersTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -16698,6 +17242,9 @@ class $$SubspacesTableAnnotationComposer
     column: $table.colorShade,
     builder: (column) => column,
   );
+
+  GeneratedColumn<int> get zOrder =>
+      $composableBuilder(column: $table.zOrder, builder: (column) => column);
 
   $$LayersTableAnnotationComposer get layerId {
     final $$LayersTableAnnotationComposer composer = $composerBuilder(
@@ -16782,6 +17329,7 @@ class $$SubspacesTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int?> colorArgb = const Value.absent(),
                 Value<int> colorShade = const Value.absent(),
+                Value<int> zOrder = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SubspacesCompanion(
                 id: id,
@@ -16790,6 +17338,7 @@ class $$SubspacesTableTableManager
                 createdAt: createdAt,
                 colorArgb: colorArgb,
                 colorShade: colorShade,
+                zOrder: zOrder,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -16800,6 +17349,7 @@ class $$SubspacesTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int?> colorArgb = const Value.absent(),
                 Value<int> colorShade = const Value.absent(),
+                Value<int> zOrder = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SubspacesCompanion.insert(
                 id: id,
@@ -16808,6 +17358,7 @@ class $$SubspacesTableTableManager
                 createdAt: createdAt,
                 colorArgb: colorArgb,
                 colorShade: colorShade,
+                zOrder: zOrder,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -17297,6 +17848,7 @@ typedef $$FreeLinesTableCreateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<int?> colorArgb,
       Value<int> colorShade,
+      Value<int> zOrder,
       Value<int> rowid,
     });
 typedef $$FreeLinesTableUpdateCompanionBuilder =
@@ -17311,6 +17863,7 @@ typedef $$FreeLinesTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<int?> colorArgb,
       Value<int> colorShade,
+      Value<int> zOrder,
       Value<int> rowid,
     });
 
@@ -17409,6 +17962,11 @@ class $$FreeLinesTableFilterComposer
 
   ColumnFilters<int> get colorShade => $composableBuilder(
     column: $table.colorShade,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get zOrder => $composableBuilder(
+    column: $table.zOrder,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -17515,6 +18073,11 @@ class $$FreeLinesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get zOrder => $composableBuilder(
+    column: $table.zOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$LayersTableOrderingComposer get layerId {
     final $$LayersTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -17584,6 +18147,9 @@ class $$FreeLinesTableAnnotationComposer
     column: $table.colorShade,
     builder: (column) => column,
   );
+
+  GeneratedColumn<int> get zOrder =>
+      $composableBuilder(column: $table.zOrder, builder: (column) => column);
 
   $$LayersTableAnnotationComposer get layerId {
     final $$LayersTableAnnotationComposer composer = $composerBuilder(
@@ -17672,6 +18238,7 @@ class $$FreeLinesTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int?> colorArgb = const Value.absent(),
                 Value<int> colorShade = const Value.absent(),
+                Value<int> zOrder = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FreeLinesCompanion(
                 id: id,
@@ -17684,6 +18251,7 @@ class $$FreeLinesTableTableManager
                 createdAt: createdAt,
                 colorArgb: colorArgb,
                 colorShade: colorShade,
+                zOrder: zOrder,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -17698,6 +18266,7 @@ class $$FreeLinesTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int?> colorArgb = const Value.absent(),
                 Value<int> colorShade = const Value.absent(),
+                Value<int> zOrder = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FreeLinesCompanion.insert(
                 id: id,
@@ -17710,6 +18279,7 @@ class $$FreeLinesTableTableManager
                 createdAt: createdAt,
                 colorArgb: colorArgb,
                 colorShade: colorShade,
+                zOrder: zOrder,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -18157,6 +18727,7 @@ typedef $$TracksTableCreateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<int?> colorArgb,
       Value<int> colorShade,
+      Value<int> zOrder,
       Value<double?> south,
       Value<double?> west,
       Value<double?> north,
@@ -18171,6 +18742,7 @@ typedef $$TracksTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<int?> colorArgb,
       Value<int> colorShade,
+      Value<int> zOrder,
       Value<double?> south,
       Value<double?> west,
       Value<double?> north,
@@ -18250,6 +18822,11 @@ class $$TracksTableFilterComposer
 
   ColumnFilters<int> get colorShade => $composableBuilder(
     column: $table.colorShade,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get zOrder => $composableBuilder(
+    column: $table.zOrder,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -18356,6 +18933,11 @@ class $$TracksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get zOrder => $composableBuilder(
+    column: $table.zOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<double> get south => $composableBuilder(
     column: $table.south,
     builder: (column) => ColumnOrderings(column),
@@ -18425,6 +19007,9 @@ class $$TracksTableAnnotationComposer
     column: $table.colorShade,
     builder: (column) => column,
   );
+
+  GeneratedColumn<int> get zOrder =>
+      $composableBuilder(column: $table.zOrder, builder: (column) => column);
 
   GeneratedColumn<double> get south =>
       $composableBuilder(column: $table.south, builder: (column) => column);
@@ -18521,6 +19106,7 @@ class $$TracksTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int?> colorArgb = const Value.absent(),
                 Value<int> colorShade = const Value.absent(),
+                Value<int> zOrder = const Value.absent(),
                 Value<double?> south = const Value.absent(),
                 Value<double?> west = const Value.absent(),
                 Value<double?> north = const Value.absent(),
@@ -18533,6 +19119,7 @@ class $$TracksTableTableManager
                 createdAt: createdAt,
                 colorArgb: colorArgb,
                 colorShade: colorShade,
+                zOrder: zOrder,
                 south: south,
                 west: west,
                 north: north,
@@ -18547,6 +19134,7 @@ class $$TracksTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int?> colorArgb = const Value.absent(),
                 Value<int> colorShade = const Value.absent(),
+                Value<int> zOrder = const Value.absent(),
                 Value<double?> south = const Value.absent(),
                 Value<double?> west = const Value.absent(),
                 Value<double?> north = const Value.absent(),
@@ -18559,6 +19147,7 @@ class $$TracksTableTableManager
                 createdAt: createdAt,
                 colorArgb: colorArgb,
                 colorShade: colorShade,
+                zOrder: zOrder,
                 south: south,
                 west: west,
                 north: north,
@@ -19014,6 +19603,7 @@ typedef $$FreeAreasTableCreateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<int?> colorArgb,
       Value<int> colorShade,
+      Value<int> zOrder,
       Value<int> rowid,
     });
 typedef $$FreeAreasTableUpdateCompanionBuilder =
@@ -19025,6 +19615,7 @@ typedef $$FreeAreasTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<int?> colorArgb,
       Value<int> colorShade,
+      Value<int> zOrder,
       Value<int> rowid,
     });
 
@@ -19108,6 +19699,11 @@ class $$FreeAreasTableFilterComposer
 
   ColumnFilters<int> get colorShade => $composableBuilder(
     column: $table.colorShade,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get zOrder => $composableBuilder(
+    column: $table.zOrder,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -19199,6 +19795,11 @@ class $$FreeAreasTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get zOrder => $composableBuilder(
+    column: $table.zOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$LayersTableOrderingComposer get layerId {
     final $$LayersTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -19253,6 +19854,9 @@ class $$FreeAreasTableAnnotationComposer
     column: $table.colorShade,
     builder: (column) => column,
   );
+
+  GeneratedColumn<int> get zOrder =>
+      $composableBuilder(column: $table.zOrder, builder: (column) => column);
 
   $$LayersTableAnnotationComposer get layerId {
     final $$LayersTableAnnotationComposer composer = $composerBuilder(
@@ -19338,6 +19942,7 @@ class $$FreeAreasTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int?> colorArgb = const Value.absent(),
                 Value<int> colorShade = const Value.absent(),
+                Value<int> zOrder = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FreeAreasCompanion(
                 id: id,
@@ -19347,6 +19952,7 @@ class $$FreeAreasTableTableManager
                 createdAt: createdAt,
                 colorArgb: colorArgb,
                 colorShade: colorShade,
+                zOrder: zOrder,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -19358,6 +19964,7 @@ class $$FreeAreasTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int?> colorArgb = const Value.absent(),
                 Value<int> colorShade = const Value.absent(),
+                Value<int> zOrder = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FreeAreasCompanion.insert(
                 id: id,
@@ -19367,6 +19974,7 @@ class $$FreeAreasTableTableManager
                 createdAt: createdAt,
                 colorArgb: colorArgb,
                 colorShade: colorShade,
+                zOrder: zOrder,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -19821,6 +20429,7 @@ typedef $$HeightRegionsTableCreateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<int?> colorArgb,
       Value<int> colorShade,
+      Value<int> zOrder,
       Value<int> rowid,
     });
 typedef $$HeightRegionsTableUpdateCompanionBuilder =
@@ -19838,6 +20447,7 @@ typedef $$HeightRegionsTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<int?> colorArgb,
       Value<int> colorShade,
+      Value<int> zOrder,
       Value<int> rowid,
     });
 
@@ -19955,6 +20565,11 @@ class $$HeightRegionsTableFilterComposer
 
   ColumnFilters<int> get colorShade => $composableBuilder(
     column: $table.colorShade,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get zOrder => $composableBuilder(
+    column: $table.zOrder,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -20076,6 +20691,11 @@ class $$HeightRegionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get zOrder => $composableBuilder(
+    column: $table.zOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$LayersTableOrderingComposer get layerId {
     final $$LayersTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -20156,6 +20776,9 @@ class $$HeightRegionsTableAnnotationComposer
     column: $table.colorShade,
     builder: (column) => column,
   );
+
+  GeneratedColumn<int> get zOrder =>
+      $composableBuilder(column: $table.zOrder, builder: (column) => column);
 
   $$LayersTableAnnotationComposer get layerId {
     final $$LayersTableAnnotationComposer composer = $composerBuilder(
@@ -20247,6 +20870,7 @@ class $$HeightRegionsTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int?> colorArgb = const Value.absent(),
                 Value<int> colorShade = const Value.absent(),
+                Value<int> zOrder = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HeightRegionsCompanion(
                 id: id,
@@ -20262,6 +20886,7 @@ class $$HeightRegionsTableTableManager
                 createdAt: createdAt,
                 colorArgb: colorArgb,
                 colorShade: colorShade,
+                zOrder: zOrder,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -20279,6 +20904,7 @@ class $$HeightRegionsTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int?> colorArgb = const Value.absent(),
                 Value<int> colorShade = const Value.absent(),
+                Value<int> zOrder = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HeightRegionsCompanion.insert(
                 id: id,
@@ -20294,6 +20920,7 @@ class $$HeightRegionsTableTableManager
                 createdAt: createdAt,
                 colorArgb: colorArgb,
                 colorShade: colorShade,
+                zOrder: zOrder,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -21182,6 +21809,7 @@ typedef $$PoiSetsTableCreateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<int?> colorArgb,
       Value<int> colorShade,
+      Value<int> zOrder,
       Value<bool> isManual,
       Value<String?> iconKey,
       Value<int> rowid,
@@ -21198,6 +21826,7 @@ typedef $$PoiSetsTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<int?> colorArgb,
       Value<int> colorShade,
+      Value<int> zOrder,
       Value<bool> isManual,
       Value<String?> iconKey,
       Value<int> rowid,
@@ -21295,6 +21924,11 @@ class $$PoiSetsTableFilterComposer
 
   ColumnFilters<int> get colorShade => $composableBuilder(
     column: $table.colorShade,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get zOrder => $composableBuilder(
+    column: $table.zOrder,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -21411,6 +22045,11 @@ class $$PoiSetsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get zOrder => $composableBuilder(
+    column: $table.zOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isManual => $composableBuilder(
     column: $table.isManual,
     builder: (column) => ColumnOrderings(column),
@@ -21486,6 +22125,9 @@ class $$PoiSetsTableAnnotationComposer
     column: $table.colorShade,
     builder: (column) => column,
   );
+
+  GeneratedColumn<int> get zOrder =>
+      $composableBuilder(column: $table.zOrder, builder: (column) => column);
 
   GeneratedColumn<bool> get isManual =>
       $composableBuilder(column: $table.isManual, builder: (column) => column);
@@ -21580,6 +22222,7 @@ class $$PoiSetsTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int?> colorArgb = const Value.absent(),
                 Value<int> colorShade = const Value.absent(),
+                Value<int> zOrder = const Value.absent(),
                 Value<bool> isManual = const Value.absent(),
                 Value<String?> iconKey = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -21594,6 +22237,7 @@ class $$PoiSetsTableTableManager
                 createdAt: createdAt,
                 colorArgb: colorArgb,
                 colorShade: colorShade,
+                zOrder: zOrder,
                 isManual: isManual,
                 iconKey: iconKey,
                 rowid: rowid,
@@ -21610,6 +22254,7 @@ class $$PoiSetsTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int?> colorArgb = const Value.absent(),
                 Value<int> colorShade = const Value.absent(),
+                Value<int> zOrder = const Value.absent(),
                 Value<bool> isManual = const Value.absent(),
                 Value<String?> iconKey = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -21624,6 +22269,7 @@ class $$PoiSetsTableTableManager
                 createdAt: createdAt,
                 colorArgb: colorArgb,
                 colorShade: colorShade,
+                zOrder: zOrder,
                 isManual: isManual,
                 iconKey: iconKey,
                 rowid: rowid,
@@ -22118,6 +22764,7 @@ typedef $$TransitSetsTableCreateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<int?> colorArgb,
       Value<int> colorShade,
+      Value<int> zOrder,
       Value<int> rowid,
     });
 typedef $$TransitSetsTableUpdateCompanionBuilder =
@@ -22138,6 +22785,7 @@ typedef $$TransitSetsTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<int?> colorArgb,
       Value<int> colorShade,
+      Value<int> zOrder,
       Value<int> rowid,
     });
 
@@ -22263,6 +22911,11 @@ class $$TransitSetsTableFilterComposer
 
   ColumnFilters<int> get colorShade => $composableBuilder(
     column: $table.colorShade,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get zOrder => $composableBuilder(
+    column: $table.zOrder,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -22399,6 +23052,11 @@ class $$TransitSetsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get zOrder => $composableBuilder(
+    column: $table.zOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$LayersTableOrderingComposer get layerId {
     final $$LayersTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -22482,6 +23140,9 @@ class $$TransitSetsTableAnnotationComposer
     column: $table.colorShade,
     builder: (column) => column,
   );
+
+  GeneratedColumn<int> get zOrder =>
+      $composableBuilder(column: $table.zOrder, builder: (column) => column);
 
   $$LayersTableAnnotationComposer get layerId {
     final $$LayersTableAnnotationComposer composer = $composerBuilder(
@@ -22576,6 +23237,7 @@ class $$TransitSetsTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int?> colorArgb = const Value.absent(),
                 Value<int> colorShade = const Value.absent(),
+                Value<int> zOrder = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TransitSetsCompanion(
                 id: id,
@@ -22594,6 +23256,7 @@ class $$TransitSetsTableTableManager
                 createdAt: createdAt,
                 colorArgb: colorArgb,
                 colorShade: colorShade,
+                zOrder: zOrder,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -22614,6 +23277,7 @@ class $$TransitSetsTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int?> colorArgb = const Value.absent(),
                 Value<int> colorShade = const Value.absent(),
+                Value<int> zOrder = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TransitSetsCompanion.insert(
                 id: id,
@@ -22632,6 +23296,7 @@ class $$TransitSetsTableTableManager
                 createdAt: createdAt,
                 colorArgb: colorArgb,
                 colorShade: colorShade,
+                zOrder: zOrder,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

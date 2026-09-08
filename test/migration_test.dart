@@ -30,7 +30,7 @@ import 'generated_migrations/schema.dart';
 /// any of that was `scripts/build.sh --install` re-installing over the one
 /// development phone, i.e. exactly one upgrade path on exactly one database.
 ///
-/// With **six** snapshots (v20 … v25) this now does what one snapshot could not:
+/// With **seven** snapshots (v20 … v26) this now does what one snapshot could not:
 /// it opens a real older database, runs the app's own `onUpgrade` against it,
 /// and compares the result to the next version's independently-dumped shape. That is what
 /// catches a column added to a table class without the matching
@@ -45,7 +45,7 @@ import 'generated_migrations/schema.dart';
 /// dart run drift_dev schema generate drift_schemas/ test/generated_migrations/
 /// ```
 ///
-/// then add the v25 → v26 step below. A snapshot must be taken *before* that
+/// then add the v26 → v27 step below. A snapshot must be taken *before* that
 /// version ships; it cannot be reconstructed afterwards.
 void main() {
   late SchemaVerifier verifier;
@@ -54,10 +54,10 @@ void main() {
     verifier = SchemaVerifier(GeneratedHelper());
   });
 
-  test('the schema the table classes build matches the v25 snapshot', () async {
+  test('the schema the table classes build matches the v26 snapshot', () async {
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 25);
+    await verifier.migrateAndValidate(db, 26);
   });
 
   test('v20 → today upgrades a real database, and keeps its rows', () async {
@@ -86,7 +86,7 @@ void main() {
     // Validated against the *current* version, not v21: opening a database runs
     // the whole remaining chain, so this is the real "upgrade from an old
     // install" path rather than a snapshot-to-snapshot hop.
-    await verifier.migrateAndValidate(db, 25);
+    await verifier.migrateAndValidate(db, 26);
 
     final rows = await db.select(db.poiPoints).get();
     expect(rows, hasLength(1), reason: 'the upgrade must not drop POIs');
@@ -112,7 +112,7 @@ void main() {
 
     final db = AppDatabase.forTesting(old.newConnection());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 25);
+    await verifier.migrateAndValidate(db, 26);
 
     final circle = (await db.select(db.circles).get()).single;
     expect(circle.label, 'Home', reason: 'the upgrade must not drop circles');
@@ -146,7 +146,7 @@ void main() {
 
     final db = AppDatabase.forTesting(old.newConnection());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 25);
+    await verifier.migrateAndValidate(db, 26);
 
     final area = (await db.select(db.borderAreas).get()).single;
     expect(area.name, 'Maxvorstadt', reason: 'the upgrade must not drop areas');
@@ -167,7 +167,7 @@ void main() {
 
     final db = AppDatabase.forTesting(old.newConnection());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 25);
+    await verifier.migrateAndValidate(db, 26);
 
     final layer = (await db.select(db.layers).get()).single;
     expect(layer.name, 'Lines', reason: 'the upgrade must not drop layers');
@@ -195,7 +195,7 @@ void main() {
 
     final db = AppDatabase.forTesting(old.newConnection());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 25);
+    await verifier.migrateAndValidate(db, 26);
 
     final set = (await db.select(db.poiSets).get()).single;
     expect(set.label, 'Cafés', reason: 'the upgrade must not drop imports');
@@ -203,7 +203,50 @@ void main() {
     expect(set.iconKey, isNull, reason: 'an import icons itself by category');
   });
 
-  test('a v25 database opens, writes and reads back', () async {
+  test('v25 → today backfills the stack in the order it already painted', () async {
+    // The v26 change gives elements a draw order they never had. The whole
+    // promise of the backfill is that an existing map renders *identically*
+    // afterwards, so the order it writes has to be the order the painter
+    // already used: colour groups ranked by `color_shade`, the per-layer
+    // creation counter. Anything else silently restacks somebody's map on
+    // upgrade — the one failure this feature can cause and nobody would report
+    // as a bug, only as "it looks wrong now".
+    final old = await verifier.schemaAt(25);
+    old.rawDatabase.execute(
+      "INSERT INTO layers (id, name, color_argb, sort_order, type) "
+      "VALUES ('l1', 'Circles', 4278190335, 0, 'circles')",
+    );
+    // Deliberately inserted newest-first, so a migration that just used rowid
+    // would get the answer backwards.
+    for (final (id, shade) in const [('c3', 2), ('c1', 0), ('c2', 1)]) {
+      old.rawDatabase.execute(
+        "INSERT INTO circles (id, layer_id, center_lat, center_lng, "
+        "radius_meters, created_at, color_shade) "
+        "VALUES ('$id', 'l1', 48.1, 11.5, 100.0, 0, $shade)",
+      );
+    }
+    // A second layer proves the rank is per layer, not global: its lone circle
+    // must come out at 0, not at 3.
+    old.rawDatabase.execute(
+      "INSERT INTO layers (id, name, color_argb, sort_order, type) "
+      "VALUES ('l2', 'More', 4278190335, 1, 'circles')",
+    );
+    old.rawDatabase.execute(
+      "INSERT INTO circles (id, layer_id, center_lat, center_lng, "
+      "radius_meters, created_at, color_shade) "
+      "VALUES ('c9', 'l2', 48.1, 11.5, 100.0, 0, 0)",
+    );
+
+    final db = AppDatabase.forTesting(old.newConnection());
+    addTearDown(db.close);
+    await verifier.migrateAndValidate(db, 26);
+
+    final rows = await db.select(db.circles).get();
+    final z = {for (final c in rows) c.id: c.zOrder};
+    expect(z, {'c1': 0, 'c2': 1, 'c3': 2, 'c9': 0});
+  });
+
+  test('a v26 database opens, writes and reads back', () async {
     // `migrateAndValidate` proves the *shape*; this proves the thing opens and
     // the foreign keys the cascade deletes depend on are actually on.
     final db = AppDatabase.forTesting(NativeDatabase.memory());

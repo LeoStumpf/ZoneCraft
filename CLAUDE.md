@@ -142,9 +142,11 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   exactly**, which is what every pre-v22 row migrated in as, so an old map is untouched. With
   no override an element paints an auto *shade* of the layer colour (same hue, van der Corput
   lightness), so new elements tell each other apart and all follow a layer recolour. The
-  region painter runs **one pass per distinct colour**, ordered by each group's newest member
-  (`colorShade` is the per-layer creation counter) and composited with `BlendMode.src` inside
-  one `saveLayer`, so the newest element wins an overlap and fills stay flat. Inverted layers
+  region painter runs **one pass per run of consecutive same-colour elements** in the layer's
+  stack order (`ui/paint_order.dart`'s `colorRuns`), composited with `BlendMode.src` inside
+  one `saveLayer`, so the front-most element wins an overlap and fills stay flat. Global
+  colour *groups* could not express green → blue → green, which is the first thing a
+  reorder produces. Inverted layers
   stay single-colour: their fill is the complement, which belongs to no element.
 - **Point rows reach the renderer pre-grouped by owner** (`state/providers.dart`'s
   `*By*Provider`s build `Map<ownerId, List<point>>` once per stream emission). `RegionLayer`

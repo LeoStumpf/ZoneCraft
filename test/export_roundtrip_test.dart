@@ -456,6 +456,47 @@ void main() {
     }
   });
 
+  // Draw order (v26) is carried by the file's *feature sequence*, not by a
+  // property — exactly how `colorShade` already travels. That only works if the
+  // exporter emits back-to-front and the importer assigns z in file order, so
+  // the fixed point has to hold after a reorder too, not just from a freshly
+  // seeded database where the two happen to coincide.
+  test('a reordered layer stays a fixed point, and keeps its stack', () async {
+    final ids = await seedEverything();
+    final circles = (await repo.watchAllCircles().first)
+        .where((c) => c.layerId == _id(ids, 'circles'))
+        .toList();
+    // Nothing to reorder means nothing is being tested.
+    expect(circles.length, greaterThan(1));
+    await repo.moveElementZ(
+        ColoredElement.circle, circles.first.id, ZMove.toFront);
+    final wanted = [
+      for (final c in (await repo.watchAllCircles().first)
+          .where((c) => c.layerId == _id(ids, 'circles')))
+        c.radiusMeters,
+    ];
+
+    final once = exportToGeoJson(await repo.exportData());
+    final fresh = AppDatabase.forTesting(NativeDatabase.memory());
+    final freshRepo = Repository(fresh);
+    await freshRepo.importData(importFromGeoJson(once)!, simplify: false);
+
+    // The stack survived: same elements, same order, on the far side. Filtered
+    // to the single-type circles layer — `seedEverything` also puts circles on
+    // the mixed one, and those are a different stack.
+    final freshLayer = (await freshRepo.watchLayers().first)
+        .firstWhere((l) => l.type == 'circles');
+    final got = [
+      for (final c in await freshRepo.watchAllCircles().first)
+        if (c.layerId == freshLayer.id) c.radiusMeters,
+    ];
+    expect(got, wanted);
+
+    final twice = exportToGeoJson(await freshRepo.exportData());
+    await fresh.close();
+    expect(twice, once);
+  });
+
   test('export is a fixed point: export -> import -> export is identical',
       () async {
     await seedEverything();

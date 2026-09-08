@@ -22,7 +22,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/database.dart';
 import '../data/layer_types.dart';
-import '../data/repository.dart' show ColoredElement;
+import '../data/repository.dart' show ColoredElement, ZMove;
 import '../state/providers.dart';
 import 'import_actions.dart' show convertBorderAreaFlow;
 import 'element_color.dart';
@@ -163,7 +163,7 @@ class _LayerObjectsList extends ConsumerWidget {
                     else
                       for (var i = 0; i < summaries.length; i++) ...[
                         if (i > 0) const Divider(height: 1),
-                        _row(context, ref, summaries[i], canEdit: canEdit),
+                        _row(context, ref, summaries, i, canEdit: canEdit),
                       ],
                   ],
                 ),
@@ -175,9 +175,32 @@ class _LayerObjectsList extends ConsumerWidget {
   Widget _row(
     BuildContext context,
     WidgetRef ref,
-    ObjectSummary s, {
+    List<ObjectSummary> summaries,
+    int index, {
     required bool canEdit,
   }) {
+    final s = summaries[index];
+    // Stacking is per (layer, table), so a row can only move past rows of its
+    // own kind — on a mixed layer a POI has no position relative to a circle to
+    // begin with. Whether the ends are hidden is decided here rather than in
+    // ObjectSummary because it is a fact about the *list*, not the element.
+    final kind = ColoredElement.forObjectKindName(s.ref.kind.name);
+    final sameKind = [
+      for (final o in summaries)
+        if (o.ref.kind == s.ref.kind) o.ref.id,
+    ];
+    final at = sameKind.indexOf(s.ref.id);
+    // Border areas are listed by name, not by stack (finding "Maxvorstadt"
+    // among 97 is the actual task there), so a "move up" would point at a row
+    // that does not move. Their z is honoured on the map; it just is not
+    // editable from a list that is not in that order — and areas at one admin
+    // level do not overlap anyway.
+    final canStack = kind != null &&
+        kind != ColoredElement.borderArea &&
+        sameKind.length > 1 &&
+        at >= 0;
+    final canMoveBack = canStack && at > 0;
+    final canMoveForward = canStack && at < sameKind.length - 1;
     return ListTile(
       // The *element's* icon, not the layer's: a combined layer's rows are
       // of different kinds, and one shared icon would make the list
@@ -215,6 +238,14 @@ class _LayerObjectsList extends ConsumerWidget {
               Navigator.pop(context, ElementResult(ElementAction.retry, s));
             case 'toFreehand':
               await _convertToFreehand(context, ref, s);
+            case 'toFront':
+              await _move(ref, kind, s, ZMove.toFront);
+            case 'forward':
+              await _move(ref, kind, s, ZMove.forward);
+            case 'backward':
+              await _move(ref, kind, s, ZMove.backward);
+            case 'toBack':
+              await _move(ref, kind, s, ZMove.toBack);
             case 'color':
               await _pickElementColor(context, ref, s);
             case 'rename':
@@ -236,6 +267,19 @@ class _LayerObjectsList extends ConsumerWidget {
               value: 'toFreehand',
               child: Text('Convert to freehand area…'),
             ),
+          // Named against the map, not against the list: the list reads
+              // bottom-of-map first, so "front" is *down* it.
+          if (canMoveForward) ...[
+            const PopupMenuItem(
+                value: 'toFront', child: Text('Bring to front')),
+            const PopupMenuItem(value: 'forward', child: Text('Bring forward')),
+          ],
+          if (canMoveBack) ...[
+            const PopupMenuItem(
+                value: 'backward', child: Text('Send backward')),
+            const PopupMenuItem(value: 'toBack', child: Text('Send to back')),
+          ],
+          if (canMoveBack || canMoveForward) const PopupMenuDivider(),
           const PopupMenuItem(value: 'color', child: Text('Colour…')),
           const PopupMenuItem(value: 'rename', child: Text('Rename…')),
           const PopupMenuItem(value: 'delete', child: Text('Delete')),
@@ -351,6 +395,18 @@ class _LayerObjectsList extends ConsumerWidget {
       case ObjectKind.transitStop:
         await repo.updateTransitStop(s.ref.id, name: label);
     }
+  }
+
+  /// Restacks one element. The sheet rebuilds off `layerSummariesProvider`,
+  /// which watches the row streams, so there is nothing to refresh by hand.
+  Future<void> _move(
+    WidgetRef ref,
+    ColoredElement? kind,
+    ObjectSummary s,
+    ZMove move,
+  ) async {
+    if (kind == null) return;
+    await ref.read(repositoryProvider).moveElementZ(kind, s.ref.id, move);
   }
 
   Future<void> _delete(

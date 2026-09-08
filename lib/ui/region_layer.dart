@@ -25,6 +25,7 @@ import '../geo/subspace.dart';
 import 'area_geometry.dart';
 import 'camera_viewport.dart';
 import 'element_color.dart';
+import 'paint_order.dart';
 import 'region_geometry.dart';
 import 'screen_clip.dart';
 
@@ -287,39 +288,34 @@ class _RegionPainter extends CustomPainter {
     );
   }
 
-  /// The layer's elements grouped by the colour they actually paint in, oldest
-  /// group first.
+  /// The layer's elements split into paint passes, back to front.
   ///
-  /// That order is what makes "the newest element wins an overlap" well
-  /// defined: `colorShade` is the per-layer creation counter, so a group sits
-  /// where its newest member does and the last pass painted holds the most
-  /// recent element. One group — every layer with untouched colours, and so
-  /// every layer that predates v22 — collapses to exactly the old single pass.
+  /// [items] arrives in the layer's **stack order** — the repository's streams
+  /// order every element table by `(z_order, created_at, id)` — so the passes
+  /// are simply [colorRuns] over it, and the last pass painted holds whatever
+  /// the user put in front. Grouping used to be global-by-colour and ordered by
+  /// `colorShade`, which meant "newest wins" and nothing else was expressible;
+  /// runs keep that as the default (a layer nobody has reordered is still in
+  /// creation order) while letting an element be moved.
   ///
   /// **Inverted layers are always one group in the layer colour.** Their fill is
   /// the complement of everything, a single region that belongs to no element,
-  /// so there is nothing for an element colour to mean there.
+  /// so there is nothing for an element colour — or an element order — to mean
+  /// there.
   List<({Color color, List<T> items})> _byColor<T>(
     List<T> items,
     int? Function(T) argbOf,
     int Function(T) shadeOf,
   ) {
     if (inverted) return [(color: color, items: items)];
-    final byKey = <int, List<T>>{};
-    final newest = <int, int>{};
-    for (final it in items) {
-      final key = elementColor(
+    return colorRuns(
+      items,
+      (it) => elementColor(
         colorArgb: argbOf(it),
         shadeIndex: shadeOf(it),
         layerColor: color,
-      ).toARGB32();
-      (byKey[key] ??= <T>[]).add(it);
-      final shade = shadeOf(it);
-      if (shade > (newest[key] ?? -1)) newest[key] = shade;
-    }
-    final keys = byKey.keys.toList()
-      ..sort((a, b) => newest[a]!.compareTo(newest[b]!));
-    return [for (final k in keys) (color: Color(k), items: byKey[k]!)];
+      ),
+    );
   }
 
   /// Runs one paint pass per colour group. With more than one they all go into

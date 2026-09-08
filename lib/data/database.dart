@@ -128,6 +128,18 @@ class Circles extends Table {
   /// migrating in from v21 gets — an untouched map must look untouched.
   IntColumn get colorShade => integer().withDefault(const Constant(0))();
 
+  /// Where this element sits in its layer's stack (v26). **Higher is drawn
+  /// later, i.e. in front**, and the scope is one layer *and one table*: a
+  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// because that is the only order its separate painters can honour.
+  ///
+  /// Deliberately not [colorShade], which used to imply this: that column also
+  /// picks the auto shade, so moving an element forward would have recoloured
+  /// it. Assigned one past the layer's current maximum on create, so a new
+  /// element lands on top — which is what "the newest element wins an overlap"
+  /// already meant, now said out loud instead of inferred.
+  IntColumn get zOrder => integer().withDefault(const Constant(0))();
+
 
   @override
   Set<Column> get primaryKey => {id};
@@ -160,6 +172,18 @@ class Planes extends Table {
   /// migrating in from v21 gets — an untouched map must look untouched.
   IntColumn get colorShade => integer().withDefault(const Constant(0))();
 
+  /// Where this element sits in its layer's stack (v26). **Higher is drawn
+  /// later, i.e. in front**, and the scope is one layer *and one table*: a
+  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// because that is the only order its separate painters can honour.
+  ///
+  /// Deliberately not [colorShade], which used to imply this: that column also
+  /// picks the auto shade, so moving an element forward would have recoloured
+  /// it. Assigned one past the layer's current maximum on create, so a new
+  /// element lands on top — which is what "the newest element wins an overlap"
+  /// already meant, now said out loud instead of inferred.
+  IntColumn get zOrder => integer().withDefault(const Constant(0))();
+
 
   @override
   Set<Column> get primaryKey => {id};
@@ -187,6 +211,18 @@ class Subspaces extends Table {
   /// layer. **0 is the layer colour exactly**, which is what every row
   /// migrating in from v21 gets — an untouched map must look untouched.
   IntColumn get colorShade => integer().withDefault(const Constant(0))();
+
+  /// Where this element sits in its layer's stack (v26). **Higher is drawn
+  /// later, i.e. in front**, and the scope is one layer *and one table*: a
+  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// because that is the only order its separate painters can honour.
+  ///
+  /// Deliberately not [colorShade], which used to imply this: that column also
+  /// picks the auto shade, so moving an element forward would have recoloured
+  /// it. Assigned one past the layer's current maximum on create, so a new
+  /// element lands on top — which is what "the newest element wins an overlap"
+  /// already meant, now said out loud instead of inferred.
+  IntColumn get zOrder => integer().withDefault(const Constant(0))();
 
 
   @override
@@ -247,6 +283,18 @@ class FreeLines extends Table {
   /// migrating in from v21 gets — an untouched map must look untouched.
   IntColumn get colorShade => integer().withDefault(const Constant(0))();
 
+  /// Where this element sits in its layer's stack (v26). **Higher is drawn
+  /// later, i.e. in front**, and the scope is one layer *and one table*: a
+  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// because that is the only order its separate painters can honour.
+  ///
+  /// Deliberately not [colorShade], which used to imply this: that column also
+  /// picks the auto shade, so moving an element forward would have recoloured
+  /// it. Assigned one past the layer's current maximum on create, so a new
+  /// element lands on top — which is what "the newest element wins an overlap"
+  /// already meant, now said out loud instead of inferred.
+  IntColumn get zOrder => integer().withDefault(const Constant(0))();
+
 
   @override
   Set<Column> get primaryKey => {id};
@@ -286,6 +334,18 @@ class Tracks extends Table {
 
   /// Which auto shade this element takes; **0 is the layer colour exactly**.
   IntColumn get colorShade => integer().withDefault(const Constant(0))();
+
+  /// Where this element sits in its layer's stack (v26). **Higher is drawn
+  /// later, i.e. in front**, and the scope is one layer *and one table*: a
+  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// because that is the only order its separate painters can honour.
+  ///
+  /// Deliberately not [colorShade], which used to imply this: that column also
+  /// picks the auto shade, so moving an element forward would have recoloured
+  /// it. Assigned one past the layer's current maximum on create, so a new
+  /// element lands on top — which is what "the newest element wins an overlap"
+  /// already meant, now said out loud instead of inferred.
+  IntColumn get zOrder => integer().withDefault(const Constant(0))();
 
   /// Denormalised bounds of every point, for viewport culling — the
   /// [BorderAreas] precedent. Null while the track is still empty, which is
@@ -351,6 +411,18 @@ class FreeAreas extends Table {
   /// migrating in from v21 gets — an untouched map must look untouched.
   IntColumn get colorShade => integer().withDefault(const Constant(0))();
 
+  /// Where this element sits in its layer's stack (v26). **Higher is drawn
+  /// later, i.e. in front**, and the scope is one layer *and one table*: a
+  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// because that is the only order its separate painters can honour.
+  ///
+  /// Deliberately not [colorShade], which used to imply this: that column also
+  /// picks the auto shade, so moving an element forward would have recoloured
+  /// it. Assigned one past the layer's current maximum on create, so a new
+  /// element lands on top — which is what "the newest element wins an overlap"
+  /// already meant, now said out loud instead of inferred.
+  IntColumn get zOrder => integer().withDefault(const Constant(0))();
+
 
   @override
   Set<Column> get primaryKey => {id};
@@ -409,6 +481,18 @@ class HeightRegions extends Table {
   /// layer. **0 is the layer colour exactly**, which is what every row
   /// migrating in from v21 gets — an untouched map must look untouched.
   IntColumn get colorShade => integer().withDefault(const Constant(0))();
+
+  /// Where this element sits in its layer's stack (v26). **Higher is drawn
+  /// later, i.e. in front**, and the scope is one layer *and one table*: a
+  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// because that is the only order its separate painters can honour.
+  ///
+  /// Deliberately not [colorShade], which used to imply this: that column also
+  /// picks the auto shade, so moving an element forward would have recoloured
+  /// it. Assigned one past the layer's current maximum on create, so a new
+  /// element lands on top — which is what "the newest element wins an overlap"
+  /// already meant, now said out loud instead of inferred.
+  IntColumn get zOrder => integer().withDefault(const Constant(0))();
 
 
   @override
@@ -470,6 +554,18 @@ class PoiSets extends Table {
   /// layer. **0 is the layer colour exactly**, which is what every row
   /// migrating in from v21 gets — an untouched map must look untouched.
   IntColumn get colorShade => integer().withDefault(const Constant(0))();
+
+  /// Where this element sits in its layer's stack (v26). **Higher is drawn
+  /// later, i.e. in front**, and the scope is one layer *and one table*: a
+  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// because that is the only order its separate painters can honour.
+  ///
+  /// Deliberately not [colorShade], which used to imply this: that column also
+  /// picks the auto shade, so moving an element forward would have recoloured
+  /// it. Assigned one past the layer's current maximum on create, so a new
+  /// element lands on top — which is what "the newest element wins an overlap"
+  /// already meant, now said out loud instead of inferred.
+  IntColumn get zOrder => integer().withDefault(const Constant(0))();
 
   /// A category the user made rather than an Overpass import (v25).
   ///
@@ -577,6 +673,18 @@ class TransitSets extends Table {
   /// layer. **0 is the layer colour exactly**, which is what every row
   /// migrating in from v21 gets — an untouched map must look untouched.
   IntColumn get colorShade => integer().withDefault(const Constant(0))();
+
+  /// Where this element sits in its layer's stack (v26). **Higher is drawn
+  /// later, i.e. in front**, and the scope is one layer *and one table*: a
+  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// because that is the only order its separate painters can honour.
+  ///
+  /// Deliberately not [colorShade], which used to imply this: that column also
+  /// picks the auto shade, so moving an element forward would have recoloured
+  /// it. Assigned one past the layer's current maximum on create, so a new
+  /// element lands on top — which is what "the newest element wins an overlap"
+  /// already meant, now said out loud instead of inferred.
+  IntColumn get zOrder => integer().withDefault(const Constant(0))();
 
 
   @override
@@ -870,7 +978,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 25;
+  int get schemaVersion => 26;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1056,6 +1164,58 @@ class AppDatabase extends _$AppDatabase {
             // which is exactly what those columns mean for an import.
             await m.addColumn(poiSets, poiSets.isManual);
             await m.addColumn(poiSets, poiSets.iconKey);
+          }
+          if (from < 26) {
+            // Per-element draw order. Existing maps must render pixel-for-pixel
+            // as they did, so every row is backfilled with the order it already
+            // paints in: the region painter groups by colour and orders the
+            // groups by `color_shade` (the per-layer creation counter), so
+            // ranking each layer's rows by (color_shade, created_at, id)
+            // reproduces exactly today's stack. Where several elements share a
+            // colour they union flat, so any total order over *them* is a new
+            // fact rather than a changed one.
+            // `createTable` in an earlier block builds **today's** table, so a
+            // table this upgrade run has just created already has the column
+            // and adding it again is a hard SQL error. Each add is therefore
+            // guarded by the version its table was introduced in: at or above
+            // it, the table came from the old database and needs the column;
+            // below it, `createTable` above already put it there.
+            await m.addColumn(circles, circles.zOrder); // in the first schema
+            if (from >= 2) await m.addColumn(planes, planes.zOrder);
+            if (from >= 5) await m.addColumn(subspaces, subspaces.zOrder);
+            if (from >= 9) await m.addColumn(freeLines, freeLines.zOrder);
+            if (from >= 9) await m.addColumn(freeAreas, freeAreas.zOrder);
+            if (from >= 11) {
+              await m.addColumn(heightRegions, heightRegions.zOrder);
+            }
+            if (from >= 15) await m.addColumn(poiSets, poiSets.zOrder);
+            if (from >= 19) await m.addColumn(transitSets, transitSets.zOrder);
+            if (from >= 24) await m.addColumn(tracks, tracks.zOrder);
+            for (final table in const [
+              'circles',
+              'planes',
+              'subspaces',
+              'free_lines',
+              'free_areas',
+              'height_regions',
+              'poi_sets',
+              'transit_sets',
+              'tracks',
+            ]) {
+              // A correlated count is O(n^2) in a layer's element count, which
+              // is tens — not the thousands a *point* table holds. These are
+              // element tables only.
+              await customStatement(
+                'UPDATE $table SET z_order = ('
+                'SELECT COUNT(*) FROM $table o '
+                'WHERE o.layer_id = $table.layer_id AND ('
+                'o.color_shade < $table.color_shade OR '
+                '(o.color_shade = $table.color_shade AND '
+                'o.created_at < $table.created_at) OR '
+                '(o.color_shade = $table.color_shade AND '
+                'o.created_at = $table.created_at AND o.id < $table.id)))',
+              );
+            }
           }
         },
         beforeOpen: (details) async {

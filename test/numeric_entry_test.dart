@@ -89,6 +89,7 @@ void main() {
           radiusMeters: radius,
           createdAt: DateTime(2026),
           colorShade: 0,
+          zOrder: 0,
         ),
         layers: [layer],
       );

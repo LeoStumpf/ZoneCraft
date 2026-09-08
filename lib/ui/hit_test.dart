@@ -79,12 +79,19 @@ class HitCandidate {
     required this.inside,
     required this.edgeDistPx,
     required this.sizeProxyMeters,
+    this.z = 0,
   });
 
   final ObjectRef ref;
   final bool inside;
   final double edgeDistPx;
   final double sizeProxyMeters;
+
+  /// The element's place in its layer's stack — higher is drawn in front.
+  ///
+  /// A **tie-break only**; see [rankCandidates] for why it must never outrank
+  /// size. Defaults to 0 so a candidate built without one simply ties.
+  final int z;
 }
 
 /// Orders candidates by what the user most likely meant, best first.
@@ -94,6 +101,15 @@ class HitCandidate {
 /// 2. Otherwise anything containing the point, smallest first — this
 ///    generalises the old "smallest circle wins", and is what stops a
 ///    continent-sized half-plane from swallowing every tap.
+///
+/// Ties inside each of those two buckets are broken by stack order, front
+/// first, so two coincident circles of the same radius resolve to the one you
+/// can actually see. It is deliberately **only** a tie-break: promoted above
+/// `sizeProxyMeters` it would let a large element in front swallow taps meant
+/// for a small one behind it, which is exactly the failure the size rule exists
+/// to prevent. The kind ordinal sits between the two because `z` is scoped per
+/// table — a circle's z and a plane's z are not comparable — and without it the
+/// comparator would not be a total order on a mixed layer.
 ///
 /// Pure, so the arbitration is unit-testable without a camera.
 List<HitCandidate> rankCandidates(
@@ -110,8 +126,19 @@ List<HitCandidate> rankCandidates(
       within.add(c);
     }
   }
-  onEdge.sort((a, b) => a.edgeDistPx.compareTo(b.edgeDistPx));
-  within.sort((a, b) => a.sizeProxyMeters.compareTo(b.sizeProxyMeters));
+  int byStack(HitCandidate a, HitCandidate b) {
+    final k = a.ref.kind.index.compareTo(b.ref.kind.index);
+    return k != 0 ? k : b.z.compareTo(a.z);
+  }
+
+  onEdge.sort((a, b) {
+    final d = a.edgeDistPx.compareTo(b.edgeDistPx);
+    return d != 0 ? d : byStack(a, b);
+  });
+  within.sort((a, b) {
+    final d = a.sizeProxyMeters.compareTo(b.sizeProxyMeters);
+    return d != 0 ? d : byStack(a, b);
+  });
   final ranked = [...onEdge, ...within];
   return ranked.length <= max ? ranked : ranked.sublist(0, max);
 }
@@ -165,6 +192,7 @@ List<HitCandidate> collectCandidates({
             inside: d <= c.radiusMeters,
             edgeDistPx: metersToPixels(camera, tap, (d - c.radiusMeters).abs()),
             sizeProxyMeters: c.radiusMeters,
+            z: c.zOrder,
           ));
         }
       case 'height':
@@ -179,6 +207,7 @@ List<HitCandidate> collectCandidates({
             inside: d <= r.radiusMeters,
             edgeDistPx: metersToPixels(camera, tap, (d - r.radiusMeters).abs()),
             sizeProxyMeters: r.radiusMeters,
+            z: r.zOrder,
           ));
         }
       case 'planes':
@@ -196,6 +225,7 @@ List<HitCandidate> collectCandidates({
             edgeDistPx: metersToPixels(camera, tap, (dn - df).abs() / 2),
             // A half-plane is unbounded, so it never wins on specificity.
             sizeProxyMeters: double.infinity,
+            z: p.zOrder,
           ));
         }
       case 'subspace':
@@ -235,6 +265,7 @@ List<HitCandidate> collectCandidates({
             edgeDistPx:
                 metersToPixels(camera, tap, (dMain - dOtherMin).abs() / 2),
             sizeProxyMeters: nearestOther,
+            z: s.zOrder,
           ));
         }
       case 'freeline':
@@ -269,6 +300,7 @@ List<HitCandidate> collectCandidates({
             inside: false,
             edgeDistPx: best,
             sizeProxyMeters: inc.radiusMeters,
+            z: l.zOrder,
           ));
         }
       case 'freearea':
@@ -299,6 +331,7 @@ List<HitCandidate> collectCandidates({
             inside: inside,
             edgeDistPx: best,
             sizeProxyMeters: ViewBound.ofCorners(raw).diagonalMeters,
+            z: a.zOrder,
           ));
         }
       case 'poi':

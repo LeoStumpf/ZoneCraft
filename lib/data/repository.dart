@@ -241,6 +241,11 @@ class Repository {
     String targetId,
   ) async {
     final to = Value(targetId);
+    // Stack the incoming elements **above** the target's, rather than letting
+    // the two layers' independent z numbering interleave into an order neither
+    // of them had. One statement per table, O(1), and it preserves each side's
+    // internal order — which is what "combine this into that" means.
+    await _liftZAbove(type, sourceId, targetId);
     switch (type) {
       case kCircles:
         await (_db.update(_db.circles)
@@ -308,7 +313,12 @@ class Repository {
   // --- Circles --------------------------------------------------------------
 
   Stream<List<Circle>> watchAllCircles() {
-    return _db.select(_db.circles).watch();
+    return (_db.select(_db.circles)
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.zOrder),
+            (t) => OrderingTerm(expression: t.createdAt),
+            (t) => OrderingTerm(expression: t.id),
+          ])).watch();
   }
 
   // --- Per-element colour (v22) ---------------------------------------------
@@ -436,6 +446,134 @@ class Repository {
         k.table,
   ];
 
+  /// Shifts [sourceId]'s elements of [type] past the top of [targetId]'s, so
+  /// the two stacks concatenate when the rows are re-pointed.
+  ///
+  /// Silently does nothing for a type with no `z_order` (`borders`, whose areas
+  /// do not overlap at one admin level, and the point tables): the caller is
+  /// exhaustive over types, this is only about the ones that stack.
+  Future<void> _liftZAbove(
+      String type, String sourceId, String targetId) async {
+    final kind = ColoredElement.forLayerType(type);
+    if (kind == null || kind == ColoredElement.borderArea) return;
+    final row = await _db.customSelect(
+      'SELECT COALESCE(MAX(z_order), -1) + 1 AS next '
+      'FROM ${kind.table} WHERE layer_id = ?',
+      variables: [Variable<String>(targetId)],
+    ).getSingle();
+    final offset = row.read<int>('next');
+    if (offset == 0) return;
+    await _db.customUpdate(
+      'UPDATE ${kind.table} SET z_order = z_order + ? WHERE layer_id = ?',
+      variables: [Variable<int>(offset), Variable<String>(sourceId)],
+      updates: {_tableOf(kind)},
+    );
+  }
+
+  /// The stack slot a new element of [table] takes in [layerId]: one past the
+  /// highest already used, so a new element lands **in front**.
+  ///
+  /// Unlike [_nextColorShade] this never looks across a mixed layer's other
+  /// tables. The scope of a `z_order` is one layer *and one table*, because a
+  /// mixed layer draws its kinds in fixed passes (regions -> tracks -> markers)
+  /// and no number stored here could make a marker go behind a circle. Sharing
+  /// the counter across tables would only invent an ordering nothing honours.
+  ///
+  /// Deliberately **not** gapless from zero: a delete must never restack the
+  /// layer. [reorderElements] is what collapses the gaps, and only when the
+  /// user actually moves something.
+  Future<int> _nextZOrder(String table, String layerId) async {
+    final row = await _db.customSelect(
+      'SELECT COALESCE(MAX(z_order), -1) + 1 AS next '
+      'FROM $table WHERE layer_id = ?',
+      variables: [Variable<String>(layerId)],
+    ).getSingle();
+    return row.read<int>('next');
+  }
+
+  /// The ids of [layerId]'s elements of [kind], back-to-front.
+  Future<List<String>> _stackedIds(ColoredElement kind, String layerId) async {
+    final rows = await _db.customSelect(
+      'SELECT id FROM ${kind.table} WHERE layer_id = ? '
+      'ORDER BY z_order, created_at, id',
+      variables: [Variable<String>(layerId)],
+    ).get();
+    return [for (final r in rows) r.read<String>('id')];
+  }
+
+  /// The layer an element belongs to, or null if there is no such row.
+  Future<String?> _layerOfElement(ColoredElement kind, String id) async {
+    final row = await _db.customSelect(
+      'SELECT layer_id FROM ${kind.table} WHERE id = ?',
+      variables: [Variable<String>(id)],
+    ).getSingleOrNull();
+    return row?.read<String?>('layer_id');
+  }
+
+  /// Moves one element within its layer's stack.
+  ///
+  /// Renumbers the whole layer **gaplessly**, exactly as [reorderLayers] does
+  /// for layers — one batch, one transaction, one mental model — and that is
+  /// also what heals the ties an import or a [combineLayers] can leave behind.
+  /// A move that changes nothing writes nothing.
+  Future<void> moveElementZ(ColoredElement kind, String id, ZMove move) async {
+    final layerId = await _layerOfElement(kind, id);
+    if (layerId == null) return;
+    final ids = await _stackedIds(kind, layerId);
+    final i = ids.indexOf(id);
+    if (i < 0) return;
+    final j = switch (move) {
+      ZMove.toBack => 0,
+      ZMove.backward => i - 1,
+      ZMove.forward => i + 1,
+      ZMove.toFront => ids.length - 1,
+    }.clamp(0, ids.length - 1);
+    if (j == i) return;
+    ids
+      ..removeAt(i)
+      ..insert(j, id);
+    await reorderElements(kind, ids);
+  }
+
+  /// The drift table behind a [ColoredElement], for telling the stream layer
+  /// which one a raw statement touched.
+  ///
+  /// A raw `customStatement` writes the row and says nothing, so every open
+  /// query stream keeps serving its cached snapshot: the map and the Elements
+  /// list would show the old stack until something else happened to dirty the
+  /// table. [customUpdate]'s `updates:` is how drift is told, and this is what
+  /// it needs to be told *with*.
+  TableInfo<Table, dynamic> _tableOf(ColoredElement kind) => switch (kind) {
+        ColoredElement.circle => _db.circles,
+        ColoredElement.plane => _db.planes,
+        ColoredElement.subspace => _db.subspaces,
+        ColoredElement.freeLine => _db.freeLines,
+        ColoredElement.freeArea => _db.freeAreas,
+        ColoredElement.heightRegion => _db.heightRegions,
+        ColoredElement.poiSet => _db.poiSets,
+        ColoredElement.transitSet => _db.transitSets,
+        ColoredElement.track => _db.tracks,
+        ColoredElement.borderArea => _db.borderAreas,
+      };
+
+  /// Persists a whole stack. [orderedIds] is back-to-front, the same direction
+  /// [reorderLayers] takes.
+  ///
+  /// One transaction, so a half-renumbered layer is never observable.
+  Future<void> reorderElements(
+      ColoredElement kind, List<String> orderedIds) async {
+    final table = {_tableOf(kind)};
+    await _db.transaction(() async {
+      for (var i = 0; i < orderedIds.length; i++) {
+        await _db.customUpdate(
+          'UPDATE ${kind.table} SET z_order = ? WHERE id = ?',
+          variables: [Variable<int>(i), Variable<String>(orderedIds[i])],
+          updates: table,
+        );
+      }
+    });
+  }
+
   Future<String> createCircle({
     required String layerId,
     required double centerLat,
@@ -445,6 +583,7 @@ class Repository {
   }) async {
     final id = _uuid.v4();
     final shade = await _nextColorShade('circles', layerId);
+    final z = await _nextZOrder('circles', layerId);
     await _db.into(_db.circles).insert(
           CirclesCompanion.insert(
             id: id,
@@ -454,6 +593,7 @@ class Repository {
             radiusMeters: radiusMeters,
             label: Value(label),
             colorShade: Value(shade),
+            zOrder: Value(z),
           ),
         );
     return id;
@@ -466,8 +606,14 @@ class Repository {
     double? radiusMeters,
     String? layerId,
     Value<String?> label = const Value.absent(),
-  }) {
-    return (_db.update(_db.circles)..where((c) => c.id.equals(id))).write(
+  }) async {
+    // Moving an element to another layer: the z it carried means nothing
+    // there, so it takes a fresh slot on top — which is what moving something
+    // into a layer means. Carrying the old number across would bury it under
+    // whatever the target already held.
+    final z =
+        layerId == null ? null : await _nextZOrder('circles', layerId);
+    await (_db.update(_db.circles)..where((c) => c.id.equals(id))).write(
       CirclesCompanion(
         centerLat:
             centerLat == null ? const Value.absent() : Value(centerLat),
@@ -476,6 +622,7 @@ class Repository {
         radiusMeters:
             radiusMeters == null ? const Value.absent() : Value(radiusMeters),
         layerId: layerId == null ? const Value.absent() : Value(layerId),
+        zOrder: z == null ? const Value.absent() : Value(z),
         label: label,
       ),
     );
@@ -488,7 +635,12 @@ class Repository {
   // --- Planes ---------------------------------------------------------------
 
   Stream<List<Plane>> watchAllPlanes() {
-    return _db.select(_db.planes).watch();
+    return (_db.select(_db.planes)
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.zOrder),
+            (t) => OrderingTerm(expression: t.createdAt),
+            (t) => OrderingTerm(expression: t.id),
+          ])).watch();
   }
 
   Future<String> createPlane({
@@ -502,6 +654,7 @@ class Repository {
   }) async {
     final id = _uuid.v4();
     final shade = await _nextColorShade('planes', layerId);
+    final z = await _nextZOrder('planes', layerId);
     await _db.into(_db.planes).insert(
           PlanesCompanion.insert(
             id: id,
@@ -513,6 +666,7 @@ class Repository {
             nearA: Value(nearA),
             label: Value(label),
             colorShade: Value(shade),
+            zOrder: Value(z),
           ),
         );
     return id;
@@ -527,8 +681,14 @@ class Repository {
     bool? nearA,
     String? layerId,
     Value<String?> label = const Value.absent(),
-  }) {
-    return (_db.update(_db.planes)..where((p) => p.id.equals(id))).write(
+  }) async {
+    // Moving an element to another layer: the z it carried means nothing
+    // there, so it takes a fresh slot on top — which is what moving something
+    // into a layer means. Carrying the old number across would bury it under
+    // whatever the target already held.
+    final z =
+        layerId == null ? null : await _nextZOrder('planes', layerId);
+    await (_db.update(_db.planes)..where((p) => p.id.equals(id))).write(
       PlanesCompanion(
         aLat: aLat == null ? const Value.absent() : Value(aLat),
         aLng: aLng == null ? const Value.absent() : Value(aLng),
@@ -536,6 +696,7 @@ class Repository {
         bLng: bLng == null ? const Value.absent() : Value(bLng),
         nearA: nearA == null ? const Value.absent() : Value(nearA),
         layerId: layerId == null ? const Value.absent() : Value(layerId),
+        zOrder: z == null ? const Value.absent() : Value(z),
         label: label,
       ),
     );
@@ -548,7 +709,12 @@ class Repository {
   // --- Subspaces ------------------------------------------------------------
 
   Stream<List<Subspace>> watchAllSubspaces() {
-    return _db.select(_db.subspaces).watch();
+    return (_db.select(_db.subspaces)
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.zOrder),
+            (t) => OrderingTerm(expression: t.createdAt),
+            (t) => OrderingTerm(expression: t.id),
+          ])).watch();
   }
 
   /// All points across every subspace, ordered by their [SubspacePoints.sortOrder].
@@ -561,12 +727,14 @@ class Repository {
   Future<String> createSubspace({required String layerId, String? label}) async {
     final id = _uuid.v4();
     final shade = await _nextColorShade('subspaces', layerId);
+    final z = await _nextZOrder('subspaces', layerId);
     await _db.into(_db.subspaces).insert(
           SubspacesCompanion.insert(
             id: id,
             layerId: layerId,
             label: Value(label),
             colorShade: Value(shade),
+            zOrder: Value(z),
           ),
         );
     return id;
@@ -576,10 +744,17 @@ class Repository {
     String id, {
     String? layerId,
     Value<String?> label = const Value.absent(),
-  }) {
-    return (_db.update(_db.subspaces)..where((s) => s.id.equals(id))).write(
+  }) async {
+    // Moving an element to another layer: the z it carried means nothing
+    // there, so it takes a fresh slot on top — which is what moving something
+    // into a layer means. Carrying the old number across would bury it under
+    // whatever the target already held.
+    final z =
+        layerId == null ? null : await _nextZOrder('subspaces', layerId);
+    await (_db.update(_db.subspaces)..where((s) => s.id.equals(id))).write(
       SubspacesCompanion(
         layerId: layerId == null ? const Value.absent() : Value(layerId),
+        zOrder: z == null ? const Value.absent() : Value(z),
         label: label,
       ),
     );
@@ -662,7 +837,12 @@ class Repository {
   // --- Freehand lines -------------------------------------------------------
 
   Stream<List<FreeLine>> watchAllFreeLines() {
-    return _db.select(_db.freeLines).watch();
+    return (_db.select(_db.freeLines)
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.zOrder),
+            (t) => OrderingTerm(expression: t.createdAt),
+            (t) => OrderingTerm(expression: t.id),
+          ])).watch();
   }
 
   /// All points across every freehand line, ordered by [FreeLinePoints.sortOrder].
@@ -681,6 +861,7 @@ class Repository {
   }) async {
     final id = _uuid.v4();
     final shade = await _nextColorShade('free_lines', layerId);
+    final z = await _nextZOrder('free_lines', layerId);
     await _db.into(_db.freeLines).insert(
           FreeLinesCompanion.insert(
             id: id,
@@ -690,6 +871,7 @@ class Repository {
             inclusionLng: Value(inclusionLng),
             inclusionRadiusMeters: Value(inclusionRadiusMeters),
             colorShade: Value(shade),
+            zOrder: Value(z),
           ),
         );
     return id;
@@ -703,10 +885,17 @@ class Repository {
     double? inclusionLng,
     double? inclusionRadiusMeters,
     Value<String?> label = const Value.absent(),
-  }) {
-    return (_db.update(_db.freeLines)..where((l) => l.id.equals(id))).write(
+  }) async {
+    // Moving an element to another layer: the z it carried means nothing
+    // there, so it takes a fresh slot on top — which is what moving something
+    // into a layer means. Carrying the old number across would bury it under
+    // whatever the target already held.
+    final z =
+        layerId == null ? null : await _nextZOrder('free_lines', layerId);
+    await (_db.update(_db.freeLines)..where((l) => l.id.equals(id))).write(
       FreeLinesCompanion(
         layerId: layerId == null ? const Value.absent() : Value(layerId),
+        zOrder: z == null ? const Value.absent() : Value(z),
         offsetMeters:
             offsetMeters == null ? const Value.absent() : Value(offsetMeters),
         inclusionLat:
@@ -836,7 +1025,12 @@ class Repository {
   // --- Tracks ---------------------------------------------------------------
 
   Stream<List<Track>> watchAllTracks() {
-    return _db.select(_db.tracks).watch();
+    return (_db.select(_db.tracks)
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.zOrder),
+            (t) => OrderingTerm(expression: t.createdAt),
+            (t) => OrderingTerm(expression: t.id),
+          ])).watch();
   }
 
   /// Every recorded fix across all tracks, ordered by [TrackPoints.sortOrder].
@@ -852,12 +1046,14 @@ class Repository {
   }) async {
     final id = _uuid.v4();
     final shade = await _nextColorShade('tracks', layerId);
+    final z = await _nextZOrder('tracks', layerId);
     await _db.into(_db.tracks).insert(
           TracksCompanion.insert(
             id: id,
             layerId: layerId,
             label: Value(label),
             colorShade: Value(shade),
+            zOrder: Value(z),
           ),
         );
     return id;
@@ -882,10 +1078,17 @@ class Repository {
     String id, {
     String? layerId,
     Value<String?> label = const Value.absent(),
-  }) {
-    return (_db.update(_db.tracks)..where((t) => t.id.equals(id))).write(
+  }) async {
+    // Moving an element to another layer: the z it carried means nothing
+    // there, so it takes a fresh slot on top — which is what moving something
+    // into a layer means. Carrying the old number across would bury it under
+    // whatever the target already held.
+    final z =
+        layerId == null ? null : await _nextZOrder('tracks', layerId);
+    await (_db.update(_db.tracks)..where((t) => t.id.equals(id))).write(
       TracksCompanion(
         layerId: layerId == null ? const Value.absent() : Value(layerId),
+        zOrder: z == null ? const Value.absent() : Value(z),
         label: label,
       ),
     );
@@ -1024,7 +1227,12 @@ class Repository {
   // --- Freehand areas -------------------------------------------------------
 
   Stream<List<FreeArea>> watchAllFreeAreas() {
-    return _db.select(_db.freeAreas).watch();
+    return (_db.select(_db.freeAreas)
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.zOrder),
+            (t) => OrderingTerm(expression: t.createdAt),
+            (t) => OrderingTerm(expression: t.id),
+          ])).watch();
   }
 
   /// All points across every freehand area, ordered by [FreeAreaPoints.sortOrder].
@@ -1037,12 +1245,14 @@ class Repository {
   Future<String> createFreeArea({required String layerId, String? label}) async {
     final id = _uuid.v4();
     final shade = await _nextColorShade('free_areas', layerId);
+    final z = await _nextZOrder('free_areas', layerId);
     await _db.into(_db.freeAreas).insert(
           FreeAreasCompanion.insert(
             id: id,
             layerId: layerId,
             label: Value(label),
             colorShade: Value(shade),
+            zOrder: Value(z),
           ),
         );
     return id;
@@ -1053,10 +1263,17 @@ class Repository {
     String? layerId,
     double? offsetMeters,
     Value<String?> label = const Value.absent(),
-  }) {
-    return (_db.update(_db.freeAreas)..where((a) => a.id.equals(id))).write(
+  }) async {
+    // Moving an element to another layer: the z it carried means nothing
+    // there, so it takes a fresh slot on top — which is what moving something
+    // into a layer means. Carrying the old number across would bury it under
+    // whatever the target already held.
+    final z =
+        layerId == null ? null : await _nextZOrder('free_areas', layerId);
+    await (_db.update(_db.freeAreas)..where((a) => a.id.equals(id))).write(
       FreeAreasCompanion(
         layerId: layerId == null ? const Value.absent() : Value(layerId),
+        zOrder: z == null ? const Value.absent() : Value(z),
         offsetMeters:
             offsetMeters == null ? const Value.absent() : Value(offsetMeters),
         label: label,
@@ -1178,7 +1395,12 @@ class Repository {
   // --- Height regions -------------------------------------------------------
 
   Stream<List<HeightRegion>> watchAllHeightRegions() {
-    return _db.select(_db.heightRegions).watch();
+    return (_db.select(_db.heightRegions)
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.zOrder),
+            (t) => OrderingTerm(expression: t.createdAt),
+            (t) => OrderingTerm(expression: t.id),
+          ])).watch();
   }
 
   /// All generated height polygons across every region, ordered.
@@ -1207,6 +1429,7 @@ class Repository {
   }) async {
     final id = _uuid.v4();
     final shade = await _nextColorShade('height_regions', layerId);
+    final z = await _nextZOrder('height_regions', layerId);
     await _db.into(_db.heightRegions).insert(
           HeightRegionsCompanion.insert(
             id: id,
@@ -1219,6 +1442,7 @@ class Repository {
             sampleZoom: Value(sampleZoom),
             label: Value(label),
             colorShade: Value(shade),
+            zOrder: Value(z),
           ),
         );
     return id;
@@ -1237,16 +1461,23 @@ class Repository {
     bool? aboveThreshold,
     int? sampleZoom,
     Value<String?> label = const Value.absent(),
-  }) {
+  }) async {
     final geometryChanged = centerLat != null ||
         centerLng != null ||
         radiusMeters != null ||
         thresholdMeters != null ||
         aboveThreshold != null ||
         sampleZoom != null;
-    return (_db.update(_db.heightRegions)..where((r) => r.id.equals(id))).write(
+    // Moving an element to another layer: the z it carried means nothing
+    // there, so it takes a fresh slot on top — which is what moving something
+    // into a layer means. Carrying the old number across would bury it under
+    // whatever the target already held.
+    final z =
+        layerId == null ? null : await _nextZOrder('height_regions', layerId);
+    await (_db.update(_db.heightRegions)..where((r) => r.id.equals(id))).write(
       HeightRegionsCompanion(
         layerId: layerId == null ? const Value.absent() : Value(layerId),
+        zOrder: z == null ? const Value.absent() : Value(z),
         centerLat: centerLat == null ? const Value.absent() : Value(centerLat),
         centerLng: centerLng == null ? const Value.absent() : Value(centerLng),
         radiusMeters:
@@ -1313,7 +1544,12 @@ class Repository {
   // --- POI sets -------------------------------------------------------------
 
   Stream<List<PoiSet>> watchAllPoiSets() {
-    return _db.select(_db.poiSets).watch();
+    return (_db.select(_db.poiSets)
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.zOrder),
+            (t) => OrderingTerm(expression: t.createdAt),
+            (t) => OrderingTerm(expression: t.id),
+          ])).watch();
   }
 
   /// All stored POIs across every set, ordered by [PoiPoints.sortOrder].
@@ -1343,6 +1579,7 @@ class Repository {
   }) async {
     final id = _uuid.v4();
     final shade = await _nextColorShade('poi_sets', layerId);
+    final z = await _nextZOrder('poi_sets', layerId);
     await _db.into(_db.poiSets).insert(
           PoiSetsCompanion.insert(
             id: id,
@@ -1353,6 +1590,7 @@ class Repository {
             radiusMeters: radiusMeters,
             label: Value(label),
             colorShade: Value(shade),
+            zOrder: Value(z),
             isManual: Value(isManual),
             iconKey: Value(iconKey),
           ),
@@ -1506,9 +1744,16 @@ class Repository {
     String? categoryKey,
     Value<String?> iconKey = const Value.absent(),
   }) async {
+    // Moving an element to another layer: the z it carried means nothing
+    // there, so it takes a fresh slot on top — which is what moving something
+    // into a layer means. Carrying the old number across would bury it under
+    // whatever the target already held.
+    final z =
+        layerId == null ? null : await _nextZOrder('poi_sets', layerId);
     await (_db.update(_db.poiSets)..where((s) => s.id.equals(id))).write(
       PoiSetsCompanion(
         layerId: layerId == null ? const Value.absent() : Value(layerId),
+        zOrder: z == null ? const Value.absent() : Value(z),
         label: label,
         categoryKey:
             categoryKey == null ? const Value.absent() : Value(categoryKey),
@@ -1543,7 +1788,12 @@ class Repository {
   // --- Transit sets ---------------------------------------------------------
 
   Stream<List<TransitSet>> watchAllTransitSets() {
-    return _db.select(_db.transitSets).watch();
+    return (_db.select(_db.transitSets)
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.zOrder),
+            (t) => OrderingTerm(expression: t.createdAt),
+            (t) => OrderingTerm(expression: t.id),
+          ])).watch();
   }
 
   Stream<List<TransitStop>> watchAllTransitStops() {
@@ -1565,6 +1815,7 @@ class Repository {
   }) async {
     final id = _uuid.v4();
     final shade = await _nextColorShade('transit_sets', layerId);
+    final z = await _nextZOrder('transit_sets', layerId);
     await _db.into(_db.transitSets).insert(
           TransitSetsCompanion.insert(
             id: id,
@@ -1577,6 +1828,7 @@ class Repository {
             visibleModeMask: Value(visibleModeMask),
             label: Value(label),
             colorShade: Value(shade),
+            zOrder: Value(z),
           ),
         );
     return id;
@@ -1684,9 +1936,16 @@ class Repository {
     String? layerId,
     Value<String?> label = const Value.absent(),
   }) async {
+    // Moving an element to another layer: the z it carried means nothing
+    // there, so it takes a fresh slot on top — which is what moving something
+    // into a layer means. Carrying the old number across would bury it under
+    // whatever the target already held.
+    final z =
+        layerId == null ? null : await _nextZOrder('transit_sets', layerId);
     await (_db.update(_db.transitSets)..where((s) => s.id.equals(id))).write(
       TransitSetsCompanion(
         layerId: layerId == null ? const Value.absent() : Value(layerId),
+        zOrder: z == null ? const Value.absent() : Value(z),
         label: label,
       ),
     );
@@ -2251,34 +2510,79 @@ class Repository {
       layersQuery.where((l) => l.id.equals(onlyLayerId));
     }
     final layers = await layersQuery.get();
-    final circles = await _db.select(_db.circles).get();
-    final planes = await _db.select(_db.planes).get();
-    final subspaces = await _db.select(_db.subspaces).get();
+    final circles = await (_db.select(_db.circles)
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.zOrder),
+            (t) => OrderingTerm(expression: t.createdAt),
+            (t) => OrderingTerm(expression: t.id),
+          ])).get();
+    final planes = await (_db.select(_db.planes)
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.zOrder),
+            (t) => OrderingTerm(expression: t.createdAt),
+            (t) => OrderingTerm(expression: t.id),
+          ])).get();
+    final subspaces = await (_db.select(_db.subspaces)
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.zOrder),
+            (t) => OrderingTerm(expression: t.createdAt),
+            (t) => OrderingTerm(expression: t.id),
+          ])).get();
     final subPoints = await (_db.select(_db.subspacePoints)
           ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
         .get();
-    final freeLines = await _db.select(_db.freeLines).get();
+    final freeLines = await (_db.select(_db.freeLines)
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.zOrder),
+            (t) => OrderingTerm(expression: t.createdAt),
+            (t) => OrderingTerm(expression: t.id),
+          ])).get();
     final flPoints = await (_db.select(_db.freeLinePoints)
           ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
         .get();
-    final tracks = await _db.select(_db.tracks).get();
+    final tracks = await (_db.select(_db.tracks)
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.zOrder),
+            (t) => OrderingTerm(expression: t.createdAt),
+            (t) => OrderingTerm(expression: t.id),
+          ])).get();
     final trackPoints = await (_db.select(_db.trackPoints)
           ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
         .get();
-    final freeAreas = await _db.select(_db.freeAreas).get();
+    final freeAreas = await (_db.select(_db.freeAreas)
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.zOrder),
+            (t) => OrderingTerm(expression: t.createdAt),
+            (t) => OrderingTerm(expression: t.id),
+          ])).get();
     final faPoints = await (_db.select(_db.freeAreaPoints)
           ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
         .get();
-    final heightRegions = await _db.select(_db.heightRegions).get();
+    final heightRegions = await (_db.select(_db.heightRegions)
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.zOrder),
+            (t) => OrderingTerm(expression: t.createdAt),
+            (t) => OrderingTerm(expression: t.id),
+          ])).get();
     final heightPolygons = await (_db.select(_db.heightPolygons)
           ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
         .get();
     final heightPolygonPoints = await (_db.select(_db.heightPolygonPoints)
           ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
         .get();
-    final transitSets = await _db.select(_db.transitSets).get();
+    final transitSets = await (_db.select(_db.transitSets)
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.zOrder),
+            (t) => OrderingTerm(expression: t.createdAt),
+            (t) => OrderingTerm(expression: t.id),
+          ])).get();
     final transitStops = await _db.select(_db.transitStops).get();
-    final poiSets = await _db.select(_db.poiSets).get();
+    final poiSets = await (_db.select(_db.poiSets)
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.zOrder),
+            (t) => OrderingTerm(expression: t.createdAt),
+            (t) => OrderingTerm(expression: t.id),
+          ])).get();
     final poiPoints = await (_db.select(_db.poiPoints)
           ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
         .get();
@@ -3124,6 +3428,13 @@ class Repository {
 ///
 /// A data-layer twin of the UI's `ObjectKind`: the repository can't reach into
 /// `state/providers.dart`, and only these nine kinds have a colour to set.
+/// Where a "move element" action sends an element within its layer's stack.
+///
+/// `toFront` is drawn last, so it wins an overlap. The Elements list reads
+/// bottom-of-map first, so front is *down* the list — the menu wording names
+/// the map rather than the list for that reason.
+enum ZMove { toFront, forward, backward, toBack }
+
 enum ColoredElement {
   circle('circles', 'circles'),
   plane('planes', 'planes'),

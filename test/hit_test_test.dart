@@ -34,12 +34,14 @@ HitCandidate candidate(
   double edgeDistPx = 1000,
   double sizeProxyMeters = double.infinity,
   ObjectKind kind = ObjectKind.circle,
+  int z = 0,
 }) {
   return HitCandidate(
     ref: ObjectRef(kind: kind, id: id, layerId: 'L'),
     inside: inside,
     edgeDistPx: edgeDistPx,
     sizeProxyMeters: sizeProxyMeters,
+    z: z,
   );
 }
 
@@ -85,6 +87,36 @@ void main() {
   });
 
   group('rankCandidates', () {
+    // v26 gave elements a draw order, so the genuinely ambiguous case — two
+    // coincident shapes of the same size — can finally be arbitrated in favour
+    // of the one the user can actually see.
+    test('a tie is broken in favour of the element in front', () {
+      final ranked = rankCandidates([
+        candidate('back', inside: true, edgeDistPx: 900, sizeProxyMeters: 500, z: 0),
+        candidate('front', inside: true, edgeDistPx: 900, sizeProxyMeters: 500, z: 3),
+      ]);
+      expect(idsOf(ranked).first, 'front');
+    });
+
+    test('a tie on the edge bucket is broken the same way', () {
+      final ranked = rankCandidates([
+        candidate('back', edgeDistPx: 3, z: 0),
+        candidate('front', edgeDistPx: 3, z: 9),
+      ]);
+      expect(idsOf(ranked).first, 'front');
+    });
+
+    // The one thing z must never do. Promoted above `sizeProxyMeters` it would
+    // let a big element in front swallow taps meant for a small one behind it,
+    // which is exactly the failure the size rule exists to prevent.
+    test('being in front never beats being the smaller target', () {
+      final ranked = rankCandidates([
+        candidate('big-front', inside: true, edgeDistPx: 900, sizeProxyMeters: 5e5, z: 99),
+        candidate('small-back', inside: true, edgeDistPx: 900, sizeProxyMeters: 200, z: 0),
+      ]);
+      expect(idsOf(ranked).first, 'small-back');
+    });
+
     test('boundary proximity wins over containment', () {
       // A tap 4 px from a small circle's rim, also deep inside a huge region.
       final ranked = rankCandidates([
@@ -181,6 +213,7 @@ void main() {
       createdAt: DateTime(2026),
       colorShade: 0,
       isManual: false,
+      zOrder: 0,
     );
     PoiPoint poi(String id, LatLng at) => PoiPoint(
           id: id,
@@ -246,6 +279,7 @@ void main() {
           nodeCount: 1,
           createdAt: DateTime(2026),
           colorShade: 0,
+          zOrder: 0,
         );
     final stop = TransitStop(
       id: 's1',
@@ -454,6 +488,7 @@ void main() {
       radiusMeters: 400,
       createdAt: DateTime(2026),
       colorShade: 0,
+      zOrder: 0,
     );
     final plane = db.Plane(
       id: 'p1',
@@ -465,6 +500,7 @@ void main() {
       nearA: true,
       createdAt: DateTime(2026),
       colorShade: 0,
+      zOrder: 0,
     );
 
     test('it offers every type the layer holds, from one tap', () {

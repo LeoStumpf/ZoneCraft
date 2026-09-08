@@ -39,9 +39,11 @@ const kMixedType = 'mixed';
 /// The order is the answer to "what happens when a circle and a POI share a
 /// layer": the region composite is ground, a track is a line drawn on it, and
 /// markers are labels that have to stay legible on top. It is deliberately
-/// fixed rather than per-element — no element table has a z-order column, and
-/// nothing in the request needs one. Region-vs-region overlap keeps its own
-/// existing rule (the painter's colour groups, newest last).
+/// fixed rather than per-element, and stays that way: the per-element `z_order`
+/// added in v26 is scoped to one layer **and one table**, because each kind is
+/// drawn by its own painter in its own pass and no number stored on a row could
+/// make a marker go behind a circle. So a POI still cannot be sent behind a
+/// circle; what z_order orders is elements *within* a kind.
 ///
 /// **`borders` is excluded.** `Layers.borderLevel` is a per-layer property and
 /// "no two neighbours share a colour" is only meaningful within one admin

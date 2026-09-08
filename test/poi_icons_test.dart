@@ -34,6 +34,7 @@ void main() {
         colorShade: 0,
         isManual: manual,
         iconKey: iconKey,
+        zOrder: 0,
       );
 
   group('the catalogue', () {

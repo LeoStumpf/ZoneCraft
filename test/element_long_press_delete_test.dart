@@ -66,6 +66,7 @@ void main() {
     label: 'Marienplatz',
     createdAt: DateTime.utc(2026),
     colorShade: 0,
+    zOrder: 0,
   );
 
   setUp(() {
