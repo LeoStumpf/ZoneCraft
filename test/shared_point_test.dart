@@ -136,6 +136,50 @@ void main() {
     });
   });
 
+  // ZoneCraft now offers itself for every geo: and openstreetmap.org link, so
+  // what it can and cannot read out of one stopped being an internal detail:
+  // a shape it silently fails on opens the app to a map that did not move.
+  group('map links from other apps', () {
+    test('an osm.org address-bar link, whose position is in the fragment', () {
+      final p = decodeSharedPointLink(
+          'https://www.openstreetmap.org/#map=17/48.13700/11.57500')!;
+      expect(p.latLng.latitude, closeTo(48.137, 1e-6));
+      expect(p.latLng.longitude, closeTo(11.575, 1e-6));
+    });
+
+    test('the fragment can carry more than the position', () {
+      final p = decodeSharedPointLink(
+          'https://www.openstreetmap.org/#map=12/-33.8688/151.2093&layers=N')!;
+      expect(p.latLng.latitude, closeTo(-33.8688, 1e-6));
+      expect(p.latLng.longitude, closeTo(151.2093, 1e-6));
+    });
+
+    // The marker form still wins where both could apply — it names a *point*,
+    // while the fragment only names where the map was looking.
+    test('mlat/mlon is preferred over the fragment', () {
+      final p = decodeSharedPointLink(
+          'https://www.openstreetmap.org/?mlat=1.5&mlon=2.5#map=17/9/9')!;
+      expect(p.latLng.latitude, closeTo(1.5, 1e-9));
+      expect(p.latLng.longitude, closeTo(2.5, 1e-9));
+    });
+
+    // A link with no position in it must decode to null rather than to
+    // something plausible — the caller turns null into a message, and a wrong
+    // position would be worse than no position.
+    test('links with no readable position decode to null', () {
+      expect(decodeSharedPointLink('https://www.openstreetmap.org/node/240109189'),
+          isNull);
+      expect(decodeSharedPointLink('https://www.openstreetmap.org/'), isNull);
+      expect(decodeSharedPointLink('https://www.openstreetmap.org/#map='), isNull);
+    });
+
+    test('a geo: URI with an uncertainty suffix', () {
+      final p = decodeSharedPointLink('geo:48.137,11.575;u=35')!;
+      expect(p.latLng.latitude, closeTo(48.137, 1e-6));
+      expect(p.latLng.longitude, closeTo(11.575, 1e-6));
+    });
+  });
+
   group('shareMessage', () {
     test('leads with the name when there is one, the coordinate when not', () {
       expect(

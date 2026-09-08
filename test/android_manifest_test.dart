@@ -73,6 +73,64 @@ void main() {
     );
   });
 
+  Set<String> schemes(XmlElement f) => f
+      .findElements('data')
+      .map((d) => d.getAttribute('android:scheme'))
+      .whereType<String>()
+      .toSet();
+
+  Set<String> hosts(XmlElement f) => f
+      .findElements('data')
+      .map((d) => d.getAttribute('android:host'))
+      .whereType<String>()
+      .toSet();
+
+  // The standard map intent. Without it ZoneCraft is absent from the chooser
+  // that Maps, the ride apps and every "open in…" list appear in.
+  test('geo: is claimed, on its own filter and with no mime type', () {
+    final geo = withAction('android.intent.action.VIEW')
+        .where((f) => schemes(f).contains('geo'))
+        .toList();
+    expect(geo, hasLength(1));
+    // Its own filter: sharing one with `zonecraft` or with the file schemes
+    // would cross-product them into matches nobody intended.
+    expect(schemes(geo.single), <String>{'geo'});
+    expect(mimeTypes(geo.single), isEmpty);
+    expect(
+      geo.single
+          .findElements('category')
+          .map((c) => c.getAttribute('android:name')),
+      contains('android.intent.category.BROWSABLE'),
+    );
+  });
+
+  test('openstreetmap.org links are claimed, and only those hosts', () {
+    final osm = withAction('android.intent.action.VIEW')
+        .where((f) => hosts(f).isNotEmpty)
+        .toList();
+    expect(osm, hasLength(1));
+    expect(
+      hosts(osm.single),
+      <String>{'www.openstreetmap.org', 'openstreetmap.org', 'osm.org'},
+    );
+    expect(mimeTypes(osm.single), isEmpty);
+    // No autoVerify: verifying an App Link needs assetlinks.json on a domain
+    // we control, and openstreetmap.org is not ours. Unverified means Android
+    // offers a chooser instead of hijacking the link, which is correct here.
+    expect(osm.single.getAttribute('android:autoVerify'), isNull);
+  });
+
+  // The https scheme must never appear on a filter that also names a mime
+  // type or another scheme's host — that is the cross-product trap again.
+  test('the file-open filter still claims only content: and file:', () {
+    final fileOpen = withAction('android.intent.action.VIEW')
+        .where((f) => mimeTypes(f).isNotEmpty)
+        .toList();
+    expect(fileOpen, hasLength(1));
+    expect(schemes(fileOpen.single), <String>{'content', 'file'});
+    expect(hosts(fileOpen.single), isEmpty);
+  });
+
   // text/plain is the "share this text" intent every browser and messenger
   // fires; */* is every photo on the phone. Either would put ZoneCraft in
   // share sheets it has no business being in.

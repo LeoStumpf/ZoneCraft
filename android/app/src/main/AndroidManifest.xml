@@ -47,6 +47,42 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="zonecraft"/>
             </intent-filter>
+            <!-- Opening a place from somewhere else: the standard geo: intent
+                 every map-aware app emits, and an ordinary openstreetmap.org
+                 link. This is what puts ZoneCraft in the chooser next to Maps
+                 and the ride apps when a coordinate or an OSM URL is tapped.
+
+                 SEPARATE <intent-filter> elements, and separate from the
+                 zonecraft:// one above, on purpose: <data> cross-products
+                 WITHIN a filter, so folding these in would turn that
+                 scheme-only match into a scheme x host product and silently
+                 kill shared positions — on a device, with no error.
+                 test/android_manifest_test.dart guards exactly that.
+
+                 No Kotlin change is needed: MainActivity.incomingUri() only
+                 claims content:/file: uris, so a geo:/https VIEW intent falls
+                 through to app_links, the same route zonecraft:// takes. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="geo"/>
+            </intent-filter>
+            <!-- Not an App Link (no android:autoVerify): verifying one needs a
+                 domain we control serving .well-known/assetlinks.json, and
+                 openstreetmap.org is not ours. Unverified means Android offers
+                 a chooser rather than opening ZoneCraft straight away, which is
+                 the right behaviour for someone else's site anyway. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https"/>
+                <data android:scheme="http"/>
+                <data android:host="www.openstreetmap.org"/>
+                <data android:host="openstreetmap.org"/>
+                <data android:host="osm.org"/>
+            </intent-filter>
             <!-- Receiving a geometry file: another app's share sheet (SEND) or
                  a tap in a file manager (VIEW). Both land in importBytesFlow
                  via the com.leostumpf.zonecraft/files channel.

@@ -156,11 +156,35 @@ SharedPoint? _decodeUri(String text) {
       // onward from one of those still round-trips.
       final lat = double.tryParse(q['mlat'] ?? '');
       final lon = double.tryParse(q['mlon'] ?? '');
-      if (lat == null || lon == null) return null;
-      return SharedPoint.named(lat, lon);
+      if (lat != null && lon != null) return SharedPoint.named(lat, lon);
+      // `#map=17/48.137/11.575` — the shape osm.org actually puts in the
+      // address bar, and so the one a "copy link" from the site produces.
+      // It is a *fragment*, which never reaches the query parameters, and
+      // reading it is what makes an ordinary OSM link openable here at all.
+      return _decodeOsmFragment(uri.fragment);
     default:
       return null;
   }
+}
+
+/// The `map=<zoom>/<lat>/<lon>` part of an OpenStreetMap URL fragment.
+///
+/// The fragment can carry more than the position — `&layers=`, `&node=` — so
+/// it is split on `&` rather than parsed whole. The zoom is deliberately
+/// dropped: `kMinFocusZoom` is a floor and a received link must never zoom the
+/// user out, so honouring a link's `z=3` would undo that promise.
+SharedPoint? _decodeOsmFragment(String fragment) {
+  if (fragment.isEmpty) return null;
+  for (final part in fragment.split('&')) {
+    if (!part.startsWith('map=')) continue;
+    final bits = part.substring(4).split('/');
+    if (bits.length < 3) return null;
+    final lat = double.tryParse(bits[1]);
+    final lon = double.tryParse(bits[2]);
+    if (lat == null || lon == null) return null;
+    return SharedPoint.named(lat, lon);
+  }
+  return null;
 }
 
 SharedPoint? _decodeBare(String text) {

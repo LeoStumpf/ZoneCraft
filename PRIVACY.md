@@ -130,6 +130,19 @@ or share one *into* ZoneCraft from another app — Android grants access to that
 long enough to read it, the app copies it into its own cache to import it, and deletes the copy
 when it is done. It cannot see anything else the sending app holds.
 
+## Opening a place from another app
+
+ZoneCraft offers itself as a handler for `geo:` coordinates and for
+`openstreetmap.org` links, so a place you tap elsewhere can be opened here. Android shows you a
+chooser and nothing happens unless you pick ZoneCraft — the links are not "verified App Links",
+which would require a domain we control, so ZoneCraft can never quietly take over a link you
+meant for another app.
+
+When you do pick it, the app reads the coordinates out of the link and **offers** them: the map
+moves there and a card appears. Nothing is written to your database until you choose to add it to
+a layer, and nothing about the link is transmitted anywhere. A link ZoneCraft cannot read a
+position from is reported as such and discarded.
+
 ## Data retention and deletion
 
 Your content is kept until you delete it. There is nothing to request from us, because we hold

@@ -338,7 +338,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
   void _consumeSharedUri(Uri uri) {
     if (!mounted) return;
     final point = decodeSharedPointLink(uri.toString());
-    if (point == null) return;
+    if (point == null) {
+      // Say so. Now that ZoneCraft offers itself for every geo: and
+      // openstreetmap.org link, it will be handed shapes it cannot read — an
+      // `/node/123` permalink needs the network to resolve, a search URL has no
+      // position in it at all. Dropping those silently opens the app to a map
+      // that did not move, which is indistinguishable from a crash.
+      _hint('That link has no position in it that ZoneCraft can read.');
+      return;
+    }
     ref.read(receivedPointProvider.notifier).receive(point);
   }
 
