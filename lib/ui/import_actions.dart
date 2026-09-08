@@ -20,6 +20,7 @@ import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart' show XTypeGroup, openFile;
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart' show LatLng;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -30,6 +31,7 @@ import '../data/layer_types.dart';
 import '../data/platform_files.dart';
 import '../data/repository.dart';
 import '../data/serialization.dart';
+import '../state/import_preview.dart';
 import '../geo/border_areas.dart' show outerRings;
 import '../geo/coords.dart';
 import 'feature_search_dialog.dart';
@@ -594,8 +596,9 @@ Future<void> importFeatureFlow(
 Future<void> importLayerFlow(
   BuildContext context,
   Repository repo,
-  List<Layer> layers,
-) async {
+  List<Layer> layers, {
+  WidgetRef? ref,
+}) async {
   final messenger = ScaffoldMessenger.of(context);
   final XFile? picked;
   final Uint8List bytes;
@@ -611,7 +614,8 @@ Future<void> importLayerFlow(
     return;
   }
   if (!context.mounted) return;
-  await importBytesFlow(context, repo, layers, name: picked.name, bytes: bytes);
+  await importBytesFlow(context, repo, layers,
+      name: picked.name, bytes: bytes, ref: ref);
 }
 
 /// The same import with the file already in hand.
@@ -624,12 +628,17 @@ Future<void> importLayerFlow(
 ///
 /// [name] is only ever a file name — [parseExternalGeometry] sniffs its
 /// extension and a synthesized layer is named after its stem.
+///
+/// Given a [ref], the parsed geometry is **shown on the map and confirmed**
+/// before anything is written (see [PendingImport]); without one the import
+/// goes straight through, which is what a caller with no map to draw on does.
 Future<void> importBytesFlow(
   BuildContext context,
   Repository repo,
   List<Layer> layers, {
   required String name,
   required Uint8List bytes,
+  WidgetRef? ref,
 }) async {
   final messenger = ScaffoldMessenger.of(context);
   try {
@@ -689,6 +698,13 @@ Future<void> importBytesFlow(
         : const _ImportChoice.newLayer();
     if (target == null) return; // cancelled
 
+    // Everything above only *read* the file. This is the last moment before
+    // the database changes, so it is where the geometry goes on the map and
+    // the question gets asked — an import used to be a leap, with the only way
+    // to see where a file landed being to let it land.
+    if (ref != null && !await _confirmOnMap(ref, data)) return;
+    if (!context.mounted) return;
+
     // Our own GeoJSON comes back verbatim: thinning what this app wrote would
     // change the shape on every round-trip. A generic file still gets the RDP
     // pass — that is where the GPS jitter and the thousand-point city outlines
@@ -723,6 +739,23 @@ Future<void> importBytesFlow(
   // ignore: avoid_catches_without_on_clauses
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text('Import failed: $e')));
+  }
+}
+
+/// Puts [data]'s geometry on the map and waits for Keep or Discard.
+///
+/// Returns true when there is nothing to show — a file of points, or one whose
+/// objects carry no drawable outline — because an empty preview would be a
+/// worse answer than none, and refusing to import on those grounds would be
+/// worse still.
+Future<bool> _confirmOnMap(WidgetRef ref, ExportData data) async {
+  final preview = previewOf(data);
+  if (preview == null) return true;
+  ref.read(pendingImportProvider.notifier).offer(preview);
+  try {
+    return await preview.decision;
+  } finally {
+    ref.read(pendingImportProvider.notifier).clear();
   }
 }
 

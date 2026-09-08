@@ -85,28 +85,34 @@ BorderBboxVerdict checkBorderBbox(
 }
 
 /// Asks which area to import administrative areas for, at [level].
-Future<BorderImportConfig?> showBorderImportDialog(
-  BuildContext context, {
-  required LatLngBounds initial,
-  required BorderLevel level,
-}) {
-  return showDialog<BorderImportConfig>(
-    context: context,
-    builder: (_) => _BorderImportDialog(initial: initial, level: level),
-  );
-}
-
-class _BorderImportDialog extends StatefulWidget {
-  const _BorderImportDialog({required this.initial, required this.level});
+///
+/// A **bottom sheet over the live map** for the same reason as
+/// [TransitImportSheet]: the box is a thing on the ground, and it is worth
+/// seeing here more than anywhere — the copy below has to warn in words that
+/// an imported area can reach well past the box, which is far easier to
+/// believe with the box drawn. [onPreview] reports it on every edit, null
+/// while it is unusable.
+///
+/// Calls [onDone] exactly once — with the config, or null when cancelled.
+class BorderImportSheet extends StatefulWidget {
+  const BorderImportSheet({
+    super.key,
+    required this.initial,
+    required this.level,
+    required this.onPreview,
+    required this.onDone,
+  });
 
   final LatLngBounds initial;
   final BorderLevel level;
+  final ValueChanged<LatLngBounds?> onPreview;
+  final ValueChanged<BorderImportConfig?> onDone;
 
   @override
-  State<_BorderImportDialog> createState() => _BorderImportDialogState();
+  State<BorderImportSheet> createState() => _BorderImportSheetState();
 }
 
-class _BorderImportDialogState extends State<_BorderImportDialog> {
+class _BorderImportSheetState extends State<BorderImportSheet> {
   late final TextEditingController _south;
   late final TextEditingController _west;
   late final TextEditingController _north;
@@ -121,8 +127,26 @@ class _BorderImportDialogState extends State<_BorderImportDialog> {
     _north = TextEditingController(text: f(widget.initial.north));
     _east = TextEditingController(text: f(widget.initial.east));
     for (final c in [_south, _west, _north, _east]) {
-      c.addListener(() => setState(() {}));
+      c.addListener(_boxChanged);
     }
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => widget.onPreview(_boxOrNull()));
+  }
+
+  void _boxChanged() {
+    setState(() {});
+    widget.onPreview(_boxOrNull());
+  }
+
+  /// The box as typed, or null while it is not a usable one — the same
+  /// "usable" [checkBorderBbox] means, so the map stops drawing a box exactly
+  /// when the sheet stops accepting one.
+  LatLngBounds? _boxOrNull() {
+    final s = _v(_south), w = _v(_west), n = _v(_north), e = _v(_east);
+    if (s == null || w == null || n == null || e == null) return null;
+    if (![s, w, n, e].every((v) => v.isFinite)) return null;
+    if (s >= n || w >= e) return null;
+    return LatLngBounds(LatLng(s, w), LatLng(n, e));
   }
 
   @override
@@ -148,7 +172,7 @@ class _BorderImportDialogState extends State<_BorderImportDialog> {
 
   void _submit() {
     if (!_canImport) return;
-    Navigator.of(context).pop(
+    widget.onDone(
       BorderImportConfig(
         south: _v(_south)!,
         west: _v(_west)!,
@@ -179,15 +203,34 @@ class _BorderImportDialogState extends State<_BorderImportDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final level = widget.level;
-    return AlertDialog(
-      title: const Text('Import borders'),
-      content: SizedBox(
-        width: 420,
-        child: SingleChildScrollView(
+    return Material(
+      color: theme.colorScheme.surface,
+      elevation: 8,
+      child: SafeArea(
+        top: false,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.5,
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text('Import borders',
+                        style: theme.textTheme.titleMedium),
+                  ),
+                  IconButton(
+                    tooltip: 'Cancel',
+                    icon: const Icon(Icons.close),
+                    onPressed: () => widget.onDone(null),
+                  ),
+                ],
+              ),
               Text('Area', style: theme.textTheme.labelLarge),
               const SizedBox(height: 4),
               Row(
@@ -226,20 +269,26 @@ class _BorderImportDialogState extends State<_BorderImportDialog> {
               ),
               const SizedBox(height: 8),
               _costLine(theme),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => widget.onDone(null),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: _canImport ? _submit : null,
+                    child: const Text('Import'),
+                  ),
+                ],
+              ),
             ],
+          ),
           ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _canImport ? _submit : null,
-          child: const Text('Import'),
-        ),
-      ],
     );
   }
 

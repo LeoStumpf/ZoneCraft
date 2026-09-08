@@ -144,6 +144,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   /// one.
   Future<void> _import() async {
     final layers = ref.read(layersProvider).asData?.value ?? const <Layer>[];
+    // Deliberately no `ref:` — and so no map preview. Settings is a full-screen
+    // route *over* the map, so a preview drawn there would be invisible and its
+    // Keep/Discard bar unreachable, which would not be a worse preview but a
+    // hang. The same import from the layers drawer sits over the map and does
+    // preview; this route stays the direct one.
     await importLayerFlow(context, _repo, layers);
   }
 

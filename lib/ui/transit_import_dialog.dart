@@ -124,26 +124,32 @@ BboxVerdict checkBbox(
 }
 
 /// Asks which area to import stations for.
-Future<TransitImportConfig?> showTransitImportDialog(
-  BuildContext context, {
-  required LatLngBounds initial,
-}) {
-  return showDialog<TransitImportConfig>(
-    context: context,
-    builder: (_) => _TransitImportDialog(initial: initial),
-  );
-}
-
-class _TransitImportDialog extends StatefulWidget {
-  const _TransitImportDialog({required this.initial});
+///
+/// A **bottom sheet over the live map**, not a dialog: the four S/W/N/E fields
+/// describe a box on the ground, and until this sheet existed the rubber band
+/// drawn during the two corner taps vanished the instant the dialog opened —
+/// so editing those numbers, or arriving from the "import what you can see"
+/// path that never drew a band at all, was blind. [onPreview] reports the box
+/// on every edit, null while it is unusable.
+///
+/// Calls [onDone] exactly once — with the config, or null when cancelled.
+class TransitImportSheet extends StatefulWidget {
+  const TransitImportSheet({
+    super.key,
+    required this.initial,
+    required this.onPreview,
+    required this.onDone,
+  });
 
   final LatLngBounds initial;
+  final ValueChanged<LatLngBounds?> onPreview;
+  final ValueChanged<TransitImportConfig?> onDone;
 
   @override
-  State<_TransitImportDialog> createState() => _TransitImportDialogState();
+  State<TransitImportSheet> createState() => _TransitImportSheetState();
 }
 
-class _TransitImportDialogState extends State<_TransitImportDialog> {
+class _TransitImportSheetState extends State<TransitImportSheet> {
   late final TextEditingController _south;
   late final TextEditingController _west;
   late final TextEditingController _north;
@@ -168,6 +174,19 @@ class _TransitImportDialogState extends State<_TransitImportDialog> {
       c.addListener(_boxChanged);
     }
     _modes = recommendedImportModes(_diagonal);
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => widget.onPreview(_boxOrNull()));
+  }
+
+  /// The box as typed, or null while it is not a usable one. Deliberately the
+  /// same "usable" [checkBbox] means by `malformed`/`misordered`, so the map
+  /// stops showing a box exactly when the sheet stops accepting one.
+  LatLngBounds? _boxOrNull() {
+    final s = _v(_south), w = _v(_west), n = _v(_north), e = _v(_east);
+    if (s == null || w == null || n == null || e == null) return null;
+    if (![s, w, n, e].every((v) => v.isFinite)) return null;
+    if (s >= n || w >= e) return null;
+    return LatLngBounds(LatLng(s, w), LatLng(n, e));
   }
 
   @override
@@ -182,6 +201,7 @@ class _TransitImportDialogState extends State<_TransitImportDialog> {
     setState(() {
       if (!_chosen) _modes = recommendedImportModes(_diagonal);
     });
+    widget.onPreview(_boxOrNull());
   }
 
   double? _v(TextEditingController c) => parseDecimal(c.text.trim());
@@ -210,7 +230,7 @@ class _TransitImportDialogState extends State<_TransitImportDialog> {
 
   void _submit() {
     if (!_canImport) return;
-    Navigator.of(context).pop(
+    widget.onDone(
       TransitImportConfig(
         south: _v(_south)!,
         west: _v(_west)!,
@@ -241,15 +261,36 @@ class _TransitImportDialogState extends State<_TransitImportDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return AlertDialog(
-      title: const Text('Import transit stations'),
-      content: SizedBox(
-        width: 420,
-        child: SingleChildScrollView(
+    return Material(
+      color: theme.colorScheme.surface,
+      elevation: 8,
+      child: SafeArea(
+        top: false,
+        child: ConstrainedBox(
+          // Half the viewport at most: the rest is where the box being
+          // described is drawn.
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.5,
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text('Import transit stations',
+                        style: theme.textTheme.titleMedium),
+                  ),
+                  IconButton(
+                    tooltip: 'Cancel',
+                    icon: const Icon(Icons.close),
+                    onPressed: () => widget.onDone(null),
+                  ),
+                ],
+              ),
               Text('Area', style: theme.textTheme.labelLarge),
               const SizedBox(height: 4),
               Row(
@@ -316,20 +357,26 @@ class _TransitImportDialogState extends State<_TransitImportDialog> {
               ),
               for (final m in transitModes) _modeTile(theme, m),
               _modesLine(theme),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => widget.onDone(null),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: _canImport ? _submit : null,
+                    child: const Text('Import'),
+                  ),
+                ],
+              ),
             ],
+          ),
           ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _canImport ? _submit : null,
-          child: const Text('Import'),
-        ),
-      ],
     );
   }
 

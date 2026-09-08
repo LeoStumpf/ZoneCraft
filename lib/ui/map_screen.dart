@@ -49,6 +49,7 @@ import '../geo/coords.dart';
 import '../geo/geodesic.dart';
 import '../geo/tiles.dart';
 import '../state/map_mode.dart';
+import '../state/import_preview.dart';
 import '../state/providers.dart';
 import '../state/track_recorder.dart';
 import 'circle_editor.dart';
@@ -67,6 +68,7 @@ import 'import_actions.dart';
 import 'import_progress.dart';
 import 'layers_panel.dart';
 import 'object_summary.dart';
+import 'pending_import_sheet.dart';
 import 'plane_editor.dart';
 import 'draw_stroke.dart';
 import 'poi_import_dialog.dart';
@@ -141,6 +143,27 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// corner is the map centre (a phone has no hover), so the rubber band
   /// follows as you pan.
   LatLng? _pendingBoxA;
+
+  /// The circle an Overpass import is about to search, while its sheet is open.
+  ///
+  /// Only the radius is stored: the centre is [_importCircleCentre] when Add
+  /// mode aimed at a tap, and otherwise the **live** map centre, which is also
+  /// what the fetch reads once the sheet closes. Keeping it live rather than
+  /// snapshotting it is what makes the ring honest — pan while choosing and the
+  /// ring follows, because the search would too.
+  double? _importCircleRadius;
+  LatLng? _importCircleCentre;
+
+  /// The box a transit or borders import is about to cover, while its sheet is
+  /// open. The rubber band drawn during the two corner taps used to vanish the
+  /// moment the dialog opened, and the "import what you can see" path never
+  /// drew one at all — so this is the same band, kept up for the half of the
+  /// flow where the numbers are actually edited.
+  LatLngBounds? _importBoxPreview;
+
+  /// The import options sheet currently on screen, if any. It owns the
+  /// Scaffold's `bottomSheet` slot while it is up — see [_showImportSheet].
+  Widget? _importSheet;
 
   /// Everything placed in the current Add session, newest last: the object each
   /// tap belongs to (for "Edit last") and how to undo that one tap.
@@ -352,6 +375,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
         layers,
         name: file.importName,
         bytes: bytes,
+        ref: ref,
       );
     // As above, for the parse-and-write half.
     // ignore: avoid_catches_without_on_clauses
@@ -1469,6 +1493,52 @@ class _MapScreenState extends ConsumerState<MapScreen>
     return id;
   }
 
+  /// Runs an import's options sheet over the live map and waits for its answer.
+  ///
+  /// The sheet goes in the Scaffold's own `bottomSheet` slot rather than
+  /// through `showModalBottomSheet` or `showBottomSheet`. A **modal** sheet
+  /// puts a barrier over the map that swallows gestures even when it is drawn
+  /// transparent, and the whole point here is that the map underneath stays
+  /// pannable while the area is being chosen; `showBottomSheet` throws outright
+  /// when the Scaffold already has a `bottomSheet`, which this one does the
+  /// moment anything is selected. Owning the slot avoids both.
+  ///
+  /// [build] is handed the `done` callback the sheet must call exactly once —
+  /// it cannot pop a route, because it is not one.
+  Future<T?> _showImportSheet<T>(
+    Widget Function(void Function(T?) done) build,
+  ) {
+    final completer = Completer<T?>();
+    void done(T? value) {
+      if (!completer.isCompleted) completer.complete(value);
+      if (mounted) setState(() => _importSheet = null);
+    }
+
+    setState(() => _importSheet = build(done));
+    return completer.future;
+  }
+
+  /// Runs a box import's sheet with its box drawn on the map throughout.
+  ///
+  /// Seeds the preview with [initial] so the band is already up as the sheet
+  /// arrives — arriving from "import what you can see" would otherwise show
+  /// nothing until the first keystroke — and takes it down when the sheet
+  /// closes, whichever way it closed.
+  Future<T?> _showBoxImportSheet<T>(
+    LatLngBounds initial,
+    Widget Function(void Function(T?) done, ValueChanged<LatLngBounds?> preview)
+        build,
+  ) async {
+    setState(() => _importBoxPreview = initial);
+    final result = await _showImportSheet<T>(
+      (done) => build(done, (b) {
+        if (mounted) setState(() => _importBoxPreview = b);
+      }),
+    );
+    if (mounted) setState(() => _importBoxPreview = null);
+    return result;
+  }
+
   /// Imports nearby POIs into [layer]: prompts for a category + radius,
   /// fetches POIs of that type around the map centre **once**, then creates —
   /// per layer type — one named circle per POI (circles), appended named
@@ -1478,11 +1548,25 @@ class _MapScreenState extends ConsumerState<MapScreen>
   Future<void> _importPois(Layer layer, {LatLng? at}) async {
     final isCircleLayer = layer.type == 'circles';
     final isPoiLayer = layer.type == 'poi';
-    final config = await showPoiImportDialog(
-      context,
-      needsCircleRadius: isCircleLayer,
-      allCategories: isPoiLayer,
+    setState(() => _importCircleCentre = at);
+    final config = await _showImportSheet<PoiImportConfig>(
+      (done) => PoiImportSheet(
+        needsCircleRadius: isCircleLayer,
+        allCategories: isPoiLayer,
+        onPreview: (r) {
+          if (mounted) setState(() => _importCircleRadius = r);
+        },
+        onDone: done,
+      ),
     );
+    // The ring belongs to the sheet, not to the import: it comes down the
+    // moment the choosing is over, cancelled or not.
+    if (mounted) {
+      setState(() {
+        _importCircleRadius = null;
+        _importCircleCentre = null;
+      });
+    }
     if (config == null || !mounted) return;
 
     final center = at ?? _mapController.camera.center;
@@ -1656,7 +1740,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// The set row is written **before** the fetch, so a failure leaves a retry
   /// row on the layer instead of a snackbar the user might miss.
   Future<void> _importTransit(Layer layer, {required LatLngBounds box}) async {
-    final config = await showTransitImportDialog(context, initial: box);
+    final config = await _showBoxImportSheet<TransitImportConfig>(
+      box,
+      (done, preview) => TransitImportSheet(
+        initial: box,
+        onPreview: preview,
+        onDone: done,
+      ),
+    );
     if (config == null || !mounted) return;
     await _runTransitImport(
       layerId: layer.id,
@@ -1857,10 +1948,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
       _hint('This layer has no border level set — make a new borders layer.');
       return;
     }
-    final config = await showBorderImportDialog(
-      context,
-      initial: box,
-      level: level,
+    final config = await _showBoxImportSheet<BorderImportConfig>(
+      box,
+      (done, preview) => BorderImportSheet(
+        initial: box,
+        level: level,
+        onPreview: preview,
+        onDone: done,
+      ),
     );
     if (config == null || !mounted) return;
 
@@ -3745,6 +3840,25 @@ class _MapScreenState extends ConsumerState<MapScreen>
       });
     });
 
+    // A file about to be imported: put all of it on screen, so "is that the
+    // right place?" is answerable at a glance. `kMinFocusZoom` is a floor
+    // everywhere else in this file, but not here — a GPX of a whole country
+    // has to be allowed to zoom *out*, or the preview would show one corner of
+    // itself and answer nothing.
+    ref.listen(pendingImportProvider, (previous, next) {
+      if (next == null || identical(previous, next)) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_mapReady) return;
+        if (hasAnySelection(ref)) setState(_clearSelection);
+        _mapController.fitCamera(
+          CameraFit.bounds(
+            bounds: next.bounds,
+            padding: const EdgeInsets.all(48),
+          ),
+        );
+      });
+    });
+
     ref.listen(pendingFocusProvider, (_, req) {
       if (req == null) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -3802,6 +3916,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final mode = ref.watch(mapModeProvider);
     final recording = ref.watch(trackRecordingProvider);
     final receivedPoint = ref.watch(receivedPointProvider);
+    final pendingImport = ref.watch(pendingImportProvider);
     // Whether a map tap currently *does* something — see [_interactionOptions].
     final tapPlaces =
         mode != MapMode.view ||
@@ -4106,7 +4221,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       // An import box's live corner *is* the map centre, so it
                       // has to follow the camera. Only runs while a corner is
                       // buffered.
-                      if (_pendingBoxA != null) setState(() {});
+                      if (_pendingBoxA != null ||
+                          (_importCircleRadius != null &&
+                              _importCircleCentre == null)) {
+                        setState(() {});
+                      }
                       // Prefetch tiles once the map settles.
                       _schedulePrefetch();
                     },
@@ -4349,6 +4468,73 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             ],
                             color: Colors.black87,
                             strokeWidth: 1.5,
+                          ),
+                        ],
+                      ),
+                    // A file's geometry, before any of it is written. Drawn
+                    // over everything in a colour that is not a layer colour:
+                    // this is a question, not content.
+                    if (pendingImport != null) ...[
+                      PolylineLayer(
+                        polylines: [
+                          for (final run in pendingImport.lines)
+                            Polyline(
+                              points: run,
+                              color: Theme.of(context).colorScheme.tertiary,
+                              strokeWidth: 3,
+                            ),
+                        ],
+                      ),
+                      PolygonLayer(
+                        polygons: [
+                          for (final c in pendingImport.circles)
+                            Polygon(
+                              points: geodesicCircle(c.center, c.radiusMeters),
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .tertiary
+                                  .withValues(alpha: 0.15),
+                              borderColor:
+                                  Theme.of(context).colorScheme.tertiary,
+                              borderStrokeWidth: 3,
+                            ),
+                        ],
+                      ),
+                    ],
+                    // POI import: the circle the query is about to cover,
+                    // drawn while its sheet is open. Same geometry the fetch
+                    // uses, so what you see is what is asked for.
+                    if (_importCircleRadius != null)
+                      PolygonLayer(
+                        polygons: [
+                          Polygon(
+                            points: geodesicCircle(
+                              _importCircleCentre ??
+                                  _mapController.camera.center,
+                              _importCircleRadius!,
+                            ),
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.primary.withValues(alpha: 0.12),
+                            borderColor: Theme.of(context).colorScheme.primary,
+                            borderStrokeWidth: 2,
+                          ),
+                        ],
+                      ),
+                    // The box an import sheet is describing right now.
+                    if (_importBoxPreview != null)
+                      PolygonLayer(
+                        polygons: [
+                          Polygon(
+                            points: _bboxRing(
+                              _importBoxPreview!.southWest,
+                              _importBoxPreview!.northEast,
+                            ),
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.primary.withValues(alpha: 0.12),
+                            borderColor: Theme.of(context).colorScheme.primary,
+                            borderStrokeWidth: 2,
                           ),
                         ],
                       ),
@@ -5102,7 +5288,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
       // FABs would overlap it — so show them only when nothing is selected.
       // Hidden while a sheet is up — an editor or a shared place — because the
       // FAB column sits on top of it and buries the buttons the sheet offers.
-      floatingActionButton: hasSelection || receivedPoint != null
+      floatingActionButton:
+          hasSelection || receivedPoint != null || pendingImport != null
           ? null
           : Column(
               mainAxisSize: MainAxisSize.min,
@@ -5376,7 +5563,17 @@ class _MapScreenState extends ConsumerState<MapScreen>
                 ),
               ],
             ),
-      bottomSheet: !hasSelection
+      // An import sheet outranks everything: it is a question already being
+      // asked, and it comes down as soon as it is answered.
+      bottomSheet: (pendingImport == null
+              ? null
+              : PendingImportSheet(
+                  pending: pendingImport,
+                  onKeep: () => pendingImport.answer(keep: true),
+                  onDiscard: () => pendingImport.answer(keep: false),
+                )) ??
+          _importSheet ??
+          (!hasSelection
           // A shared position. An arriving one clears the selection (see the
           // listener above), so in practice these two never compete; the order
           // here only decides what happens if something is selected *after*.
@@ -5525,7 +5722,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       layer: selectedBorderLayer,
                     )
                   : const SizedBox.shrink(),
-            ),
+            )),
     );
   }
 }

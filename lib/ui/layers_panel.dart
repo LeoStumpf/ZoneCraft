@@ -122,7 +122,7 @@ class LayersDrawer extends ConsumerWidget {
                         tooltip: 'Import layer from file',
                         icon: const Icon(Icons.file_open_outlined),
                         onPressed: () =>
-                            importLayerFlow(context, repo, layers),
+                            importLayerFlow(context, repo, layers, ref: ref),
                       ),
                       // (Importing a named map feature is not here any more: it
                       // always produces freehand geometry, so it lives on the
