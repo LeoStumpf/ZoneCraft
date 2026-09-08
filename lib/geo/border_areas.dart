@@ -307,6 +307,9 @@ List<List<LatLng>> decodeRings(String json) {
   final dynamic decoded;
   try {
     decoded = jsonDecode(json);
+  // A corrupt row must not take the map down, whatever shape the corruption
+  // takes.
+  // ignore: avoid_catches_without_on_clauses
   } catch (_) {
     return const [];
   }

@@ -306,6 +306,11 @@ Future<OverpassOutcome<T>> overpassPost<T>(
           // rather than downloaded in full and then refused.
           return OverpassOutcome.failed(oversizeMessage ??
               'That area returns too much data — pick a smaller box.');
+        // The two failures that *do* say something about the query are typed and
+        // caught above. Anything else — timeout, socket, malformed chunk — says only
+        // that this endpoint is unwell, so it must fall through to the next one
+        // regardless of its type.
+        // ignore: avoid_catches_without_on_clauses
         } catch (_) {
           // A timeout or socket error says nothing about the *query*, so try
           // the next instance rather than blaming the user's connection — and
@@ -416,7 +421,7 @@ Future<_Response> _send(
       chunks.add(chunk);
       received += chunk.length;
       if (maxBytes != null && received > maxBytes) {
-        sub.cancel();
+        unawaited(sub.cancel());
         if (!done.isCompleted) done.completeError(const _OversizeException());
         return;
       }
@@ -435,7 +440,7 @@ Future<_Response> _send(
   // not only the connect.
   final StreamSubscription<void>? cancelSub =
       cancel?.future.asStream().listen((_) {
-    sub.cancel();
+    unawaited(sub.cancel());
     if (!done.isCompleted) done.completeError(const _CancelledException());
   });
 

@@ -84,6 +84,9 @@ Future<double?> queryElevation({
         bytes = resp.bodyBytes;
         await repo.putTile(url, bytes);
       }
+    // Offline, server error and "slower than the spinner is willing to wait" are
+    // different exceptions with one meaning: this tile is missing.
+    // ignore: avoid_catches_without_on_clauses
     } catch (_) {
       // Offline, server error, or the tile took longer than we're willing to
       // make the caller's spinner wait.
@@ -137,6 +140,8 @@ Future<HeightGenResult> generateHeightRegion({
             bytes = resp.bodyBytes;
             await repo.putTile(url, bytes);
           }
+        // As above — a missing tile reads as sea level, whatever the reason.
+        // ignore: avoid_catches_without_on_clauses
         } catch (_) {
           // Offline / server error / too slow: leave this tile missing
           // (sea level).

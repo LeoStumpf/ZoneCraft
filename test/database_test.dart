@@ -227,7 +227,7 @@ void main() {
     expect(initial.basemapVisible, isTrue);
     expect(initial.basemapOpacity, 1.0);
     await repo.updateUncertainty(600);
-    await repo.updateBasemapVisible(false);
+    await repo.updateBasemapVisible(visible: false);
     await repo.updateBasemapOpacity(0.3);
     final saved = await repo.watchSettings().first;
     expect(saved.basemapVisible, isFalse);
@@ -615,8 +615,9 @@ void main() {
     // Still readable as plain named points by any other tool.
     final gj = jsonDecode(exportToGeoJson(data)) as Map<String, dynamic>;
     final kinds = {
-      for (final f in gj['features'] as List)
-        (f as Map)['geometry']['type'] as String,
+      for (final f in gj['features']! as List)
+        ((f as Map<String, Object?>)['geometry']! as Map<String, Object?>)['type']!
+            as String,
     };
     expect(kinds, {'MultiPoint'});
     expect(exportToKml(data), contains('Pasing Bahnhof'));
@@ -1189,8 +1190,9 @@ void main() {
     // one.
     final gj = jsonDecode(exportToGeoJson(data)) as Map<String, dynamic>;
     final kinds = {
-      for (final f in gj['features'] as List)
-        (f as Map)['geometry']['type'] as String,
+      for (final f in gj['features']! as List)
+        ((f as Map<String, Object?>)['geometry']! as Map<String, Object?>)['type']!
+            as String,
     };
     expect(kinds, {'MultiPolygon'});
     expect(exportToKml(data), contains('München'));

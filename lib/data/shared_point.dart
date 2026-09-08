@@ -75,7 +75,8 @@ String encodeSharedPointLink(SharedPoint p) => Uri(
       queryParameters: {
         'lat': p.lat.toStringAsFixed(6),
         'lng': p.lng.toStringAsFixed(6),
-        if (p.name != null) 'n': p.name!,
+        // Null-aware element: an unnamed point simply has no `n` parameter.
+        'n': ?p.name,
       },
     ).toString();
 

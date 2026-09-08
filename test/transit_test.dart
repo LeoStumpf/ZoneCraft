@@ -97,10 +97,10 @@ void main() {
       final bus = transitModes.first;
       final tram = transitModes[1];
       var mask = 0;
-      mask = transitMaskWith(mask, bus, true);
-      mask = transitMaskWith(mask, tram, true);
+      mask = transitMaskWith(mask, bus, on: true);
+      mask = transitMaskWith(mask, tram, on: true);
       expect(transitModesFromMask(mask), {bus, tram});
-      mask = transitMaskWith(mask, bus, false);
+      mask = transitMaskWith(mask, bus, on: false);
       expect(transitModesFromMask(mask), {tram});
       expect(transitModesFromMask(0), isEmpty);
     });

@@ -153,7 +153,7 @@ void main() {
     // handles on whatever gets selected next.
     await withRef(tester, (ref, container) {
       selectObject(ref, ObjectKind.borderArea, 'a1');
-      ref.read(borderReshapeProvider.notifier).arm(true);
+      ref.read(borderReshapeProvider.notifier).arm(on: true);
       clearSelection(ref);
       expect(container.read(borderReshapeProvider), isFalse);
       expect(container.read(selectedBorderAreaProvider), isNull);

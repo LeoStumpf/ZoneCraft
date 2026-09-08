@@ -218,7 +218,7 @@ class _RegionPainter extends CustomPainter {
       _passes(
         canvas,
         _byColor(heightRegions, (r) => r.colorArgb, (r) => r.colorShade),
-        (c, items, replace) =>
+        (c, items, {required replace}) =>
             _paintHeight(canvas, c, items, replace: replace),
       );
       return;
@@ -238,7 +238,7 @@ class _RegionPainter extends CustomPainter {
       _passes(
         canvas,
         _byColor(freeAreas, (a) => a.colorArgb, (a) => a.colorShade),
-        (c, items, replace) => _paintFreeAreas(
+        (c, items, {required replace}) => _paintFreeAreas(
           canvas,
           c,
           [for (final a in items) resolved[a.id]!],
@@ -255,7 +255,7 @@ class _RegionPainter extends CustomPainter {
       _passes(
         canvas,
         _byColor(freeLines, (l) => l.colorArgb, (l) => l.colorShade),
-        (c, items, replace) =>
+        (c, items, {required replace}) =>
             _paintFreeLines(canvas, c, items, replace: replace),
       );
       return;
@@ -265,7 +265,7 @@ class _RegionPainter extends CustomPainter {
       _passes(
         canvas,
         _byColor(circles, (c) => c.colorArgb, (c) => c.colorShade),
-        (c, items, replace) =>
+        (c, items, {required replace}) =>
             _paintUnbounded(canvas, c, circles: items, replace: replace),
       );
       return;
@@ -274,7 +274,7 @@ class _RegionPainter extends CustomPainter {
       _passes(
         canvas,
         _byColor(planes, (p) => p.colorArgb, (p) => p.colorShade),
-        (c, items, replace) =>
+        (c, items, {required replace}) =>
             _paintUnbounded(canvas, c, planes: items, replace: replace),
       );
       return;
@@ -282,7 +282,7 @@ class _RegionPainter extends CustomPainter {
     _passes(
       canvas,
       _byColor(subspaces, (s) => s.colorArgb, (s) => s.colorShade),
-      (c, items, replace) =>
+      (c, items, {required replace}) =>
           _paintUnbounded(canvas, c, subspaces: items, replace: replace),
     );
   }
@@ -330,13 +330,14 @@ class _RegionPainter extends CustomPainter {
   void _passes<T>(
     Canvas canvas,
     List<({Color color, List<T> items})> groups,
-    void Function(Color color, List<T> items, bool replace) paintPass,
+    void Function(Color color, List<T> items, {required bool replace})
+        paintPass,
   ) {
     if (groups.isEmpty) return;
     final multi = groups.length > 1;
     if (multi) canvas.saveLayer(_clip, Paint());
     for (final g in groups) {
-      paintPass(g.color, g.items, multi);
+      paintPass(g.color, g.items, replace: multi);
     }
     if (multi) canvas.restore();
   }
@@ -508,6 +509,9 @@ class _RegionPainter extends CustomPainter {
   static Path? _tryCombine(PathOperation op, Path a, Path b) {
     try {
       return Path.combine(op, a, b);
+    // Skia path-ops fails unpredictably on near-coincident input. The exception
+    // type is not the point; the null is.
+    // ignore: avoid_catches_without_on_clauses
     } catch (_) {
       return null;
     }

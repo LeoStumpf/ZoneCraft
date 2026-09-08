@@ -34,6 +34,7 @@ import 'region_geometry.dart';
 /// it only reads Drift row objects that callers already have in hand.
 
 /// Identifies one object: its type tag plus its row id and owning layer.
+@immutable
 class ObjectRef {
   const ObjectRef({
     required this.kind,

@@ -299,6 +299,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
       try {
         final initial = await links.getInitialLink();
         if (initial != null) _consumeSharedUri(initial);
+      // No initial link, or no platform channel to ask. Both are ordinary.
+      // ignore: avoid_catches_without_on_clauses
       } catch (_) {
         // No initial link, or the platform channel is unavailable.
       }
@@ -327,6 +329,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final IncomingFile? file;
     try {
       file = await takeSharedFile();
+    // A share hand-off can fail in the platform channel or in the copy; either
+    // way the file did not arrive and the user is told.
+    // ignore: avoid_catches_without_on_clauses
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -347,6 +352,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
         name: file.importName,
         bytes: bytes,
       );
+    // As above, for the parse-and-write half.
+    // ignore: avoid_catches_without_on_clauses
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -598,7 +605,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (!c.latitude.isFinite || !c.longitude.isFinite || !cam.zoom.isFinite) {
       return;
     }
-    ref.read(repositoryProvider).saveCamera(c.latitude, c.longitude, cam.zoom);
+    unawaited(
+      ref.read(repositoryProvider).saveCamera(c.latitude, c.longitude, cam.zoom)
+    );
   }
 
   /// Opt-in location. Only ever runs on an explicit button tap. Requests
@@ -702,6 +711,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
         return null;
       }
       return LatLng(pos.latitude, pos.longitude);
+    // geolocator throws a family of typed errors (service off, permission gone,
+    // timeout) that all end in the same hint; the non-finite guard above is the
+    // only case worth its own message.
+    // ignore: avoid_catches_without_on_clauses
     } catch (e) {
       _hint('Could not get your location.');
       return null;
@@ -1105,7 +1118,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
     List<PopupMenuEntry<String>> items, [
     String? subtitle,
   ]) {
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final overlay =
+        Overlay.of(context).context.findRenderObject()! as RenderBox;
     return showMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(
@@ -1782,6 +1796,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   '${transitModeLabels(hidden).toLowerCase()} hidden for now '
                   '(Stations… to show).',
       );
+    // A write failure used to become an unhandled async error with no message at
+    // all, whatever its type.
+    // ignore: avoid_catches_without_on_clauses
     } catch (e) {
       // A write failure used to become an unhandled async error with no
       // message at all. Say so, and leave the retry row behind.
@@ -1937,6 +1954,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
             : '${describeImportTally(tally, 'areas')} Colour areas in the '
                   'layer menu to fill them.',
       );
+    // As above: the import is on screen, so a failure has to close the progress
+    // dialog and say something.
+    // ignore: avoid_catches_without_on_clauses
     } catch (e) {
       progress.close();
       if (mounted) _hint('Could not save the import.');
@@ -1984,24 +2004,28 @@ class _MapScreenState extends ConsumerState<MapScreen>
         : layer.type;
     switch (type) {
       case 'poi':
-        _importPois(layer);
+        unawaited(_importPois(layer));
       case 'transit':
         // The no-aim analogue of two corner taps: import what you can see.
-        _importTransit(layer, box: _mapController.camera.visibleBounds);
+        unawaited(
+          _importTransit(layer, box: _mapController.camera.visibleBounds)
+        );
       case 'borders':
-        _importBorders(layer, box: _mapController.camera.visibleBounds);
+        unawaited(
+          _importBorders(layer, box: _mapController.camera.visibleBounds)
+        );
       case 'subspace':
-        _addSubspaceAt(c, layer, subspaces);
+        unawaited(_addSubspaceAt(c, layer, subspaces));
       case 'freeline':
-        _addFreeLineAt(c, layer, freeLines);
+        unawaited(_addFreeLineAt(c, layer, freeLines));
       case 'freearea':
-        _addFreeAreaAt(c, layer, freeAreas);
+        unawaited(_addFreeAreaAt(c, layer, freeAreas));
       case 'height':
-        _addHeightRegionAt(c, layer);
+        unawaited(_addHeightRegionAt(c, layer));
       case 'planes':
-        _addPlaneAt(c, layer);
+        unawaited(_addPlaneAt(c, layer));
       default:
-        _addCircleAt(c, layer);
+        unawaited(_addCircleAt(c, layer));
     }
   }
 
@@ -2887,7 +2911,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
               lat: latlng.latitude,
               lng: latlng.longitude,
             );
-        ref.read(poiPointPlacementProvider.notifier).arm(false);
+        ref.read(poiPointPlacementProvider.notifier).arm(on: false);
         return true;
       }
     }
@@ -2903,7 +2927,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
               centerLat: latlng.latitude,
               centerLng: latlng.longitude,
             );
-        ref.read(circlePlacementProvider.notifier).arm(false);
+        ref.read(circlePlacementProvider.notifier).arm(on: false);
         return true;
       }
     }
@@ -2919,7 +2943,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
               centerLat: latlng.latitude,
               centerLng: latlng.longitude,
             );
-        ref.read(heightPlacementProvider.notifier).arm(false);
+        ref.read(heightPlacementProvider.notifier).arm(on: false);
         return true;
       }
     }
@@ -2935,7 +2959,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
               inclusionLat: latlng.latitude,
               inclusionLng: latlng.longitude,
             );
-        ref.read(freeLineCenterPlacementProvider.notifier).arm(false);
+        ref.read(freeLineCenterPlacementProvider.notifier).arm(on: false);
         return true;
       }
     }
@@ -3559,7 +3583,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
         if (st == null) return null;
         final modes = transitModeLabels(st.modeMask);
         return st.name?.isNotEmpty == true ? '${st.name} · $modes' : modes;
-      default:
+      // Every other kind carries its own subtitle; this helper only supplements
+      // the two imported point kinds.
+      case _:
         return null;
     }
   }
@@ -5164,7 +5190,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       tooltip: toolsExpanded ? 'Hide tools' : 'Show tools',
                       onPressed: () => ref
                           .read(repositoryProvider)
-                          .updateToolsExpanded(!toolsExpanded),
+                          .updateToolsExpanded(expanded: !toolsExpanded),
                       child: Icon(
                         toolsExpanded ? Icons.unfold_less : Icons.unfold_more,
                       ),

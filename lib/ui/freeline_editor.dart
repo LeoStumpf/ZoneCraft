@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:async';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -137,7 +139,7 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
   }
 
   void _armCenter() {
-    ref.read(freeLineCenterPlacementProvider.notifier).arm(true);
+    ref.read(freeLineCenterPlacementProvider.notifier).arm(on: true);
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
       ..showSnackBar(
@@ -151,12 +153,12 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
     // Persist a stable centre alongside the radius, so a line whose circle was
     // only ever derived (legacy/unset) stops drifting when its points change.
     final inc = _inclusion;
-    _repo.updateFreeLine(
-      widget.freeLine.id,
-      inclusionRadiusMeters: r,
-      inclusionLat: widget.freeLine.inclusionLat ?? inc.center.latitude,
-      inclusionLng: widget.freeLine.inclusionLng ?? inc.center.longitude,
-    );
+    unawaited(_repo.updateFreeLine(
+        widget.freeLine.id,
+        inclusionRadiusMeters: r,
+        inclusionLat: widget.freeLine.inclusionLat ?? inc.center.latitude,
+        inclusionLng: widget.freeLine.inclusionLng ?? inc.center.longitude,
+      ));
   }
 
   Future<void> _deletePoint(FreeLinePoint p) async {
@@ -310,7 +312,7 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
                 onChanged: (s) {
                   final n = parseDecimal(s);
                   if (n != null && n.isFinite) {
-                    _repo.updateFreeLine(id, offsetMeters: n);
+                    unawaited(_repo.updateFreeLine(id, offsetMeters: n));
                   }
                 },
               ),
@@ -325,7 +327,9 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
           ),
           onChanged: (s) {
             final t = s.trim();
-            _repo.updateFreeLine(id, label: Value(t.isEmpty ? null : t));
+            unawaited(
+              _repo.updateFreeLine(id, label: Value(t.isEmpty ? null : t))
+            );
           },
         ),
       ],
@@ -351,11 +355,11 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
             onChanged: (s) {
               final ll = parseLatLng(s);
               if (ll != null) {
-                _repo.updateFreeLinePoint(
-                  p.id,
-                  lat: ll.latitude,
-                  lng: ll.longitude,
-                );
+                unawaited(_repo.updateFreeLinePoint(
+                    p.id,
+                    lat: ll.latitude,
+                    lng: ll.longitude,
+                  ));
               }
             },
           ),
@@ -408,11 +412,15 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
           onSelected: (v) {
             switch (v) {
               case 'up':
-                _repo.swapFreeLinePointOrder(p.id, widget.points[index - 1].id);
+                unawaited(
+                  _repo.swapFreeLinePointOrder(p.id, widget.points[index - 1].id)
+                );
               case 'down':
-                _repo.swapFreeLinePointOrder(p.id, widget.points[index + 1].id);
+                unawaited(
+                  _repo.swapFreeLinePointOrder(p.id, widget.points[index + 1].id)
+                );
               case 'remove':
-                _deletePoint(p);
+                unawaited(_deletePoint(p));
             }
           },
         ),

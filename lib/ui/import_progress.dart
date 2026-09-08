@@ -127,22 +127,22 @@ ImportProgress showImportProgress(
 }) {
   final navigator = Navigator.of(context, rootNavigator: true);
   final notifier = ValueNotifier<String>(message);
-  showDialog<void>(
-    context: context,
-    barrierDismissible: false,
-    useRootNavigator: true,
-    builder: (_) => PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) onCancel?.call();
-      },
-      child: _ImportProgressDialog(
-        title: title,
-        message: notifier,
-        onCancel: onCancel,
+  unawaited(showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      useRootNavigator: true,
+      builder: (_) => PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) onCancel?.call();
+        },
+        child: _ImportProgressDialog(
+          title: title,
+          message: notifier,
+          onCancel: onCancel,
+        ),
       ),
-    ),
-  );
+    ));
   return ImportProgress._(notifier, navigator.pop);
 }
 

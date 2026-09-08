@@ -83,11 +83,14 @@ List<ImportedFeature> parseGeoJsonGeometry(String text) {
   Object? root;
   try {
     root = jsonDecode(text);
+  // A file the user picked is arbitrary bytes. Every way it can fail to be
+  // GeoJSON means the same empty result.
+  // ignore: avoid_catches_without_on_clauses
   } catch (_) {
     return const [];
   }
   final out = <ImportedFeature>[];
-  void handleGeometry(Map geom, String? label) {
+  void handleGeometry(Map<String, dynamic> geom, String? label) {
     final type = geom['type'];
     final c = geom['coordinates'];
     switch (type) {
@@ -127,14 +130,14 @@ List<ImportedFeature> parseGeoJsonGeometry(String text) {
         final geoms = geom['geometries'];
         if (geoms is List) {
           for (final g in geoms) {
-            if (g is Map) handleGeometry(g, label);
+            if (g is Map<String, dynamic>) handleGeometry(g, label);
           }
         }
     }
   }
 
   void handle(Object? node) {
-    if (node is! Map) return;
+    if (node is! Map<String, dynamic>) return;
     final type = node['type'];
     if (type == 'FeatureCollection') {
       final feats = node['features'];
@@ -145,8 +148,8 @@ List<ImportedFeature> parseGeoJsonGeometry(String text) {
       }
     } else if (type == 'Feature') {
       final geom = node['geometry'];
-      final label = (node['properties'] as Map?)?['name'] as String?;
-      if (geom is Map) handleGeometry(geom, label);
+      final label = (node['properties'] as Map<String, dynamic>?)?['name'] as String?;
+      if (geom is Map<String, dynamic>) handleGeometry(geom, label);
     } else if (type is String) {
       handleGeometry(node, null); // bare geometry
     }
@@ -193,6 +196,9 @@ List<ImportedFeature> parseKml(String text) {
   final XmlDocument doc;
   try {
     doc = XmlDocument.parse(text);
+  // As above: an arbitrary file that is not KML fails in arbitrary ways, and
+  // they all mean "nothing to import".
+  // ignore: avoid_catches_without_on_clauses
   } catch (_) {
     return const [];
   }
@@ -233,6 +239,9 @@ List<ImportedFeature> parseKmz(Uint8List bytes) {
   final Archive archive;
   try {
     archive = ZipDecoder().decodeBytes(bytes);
+  // A KMZ that is not a readable zip fails inside the decoder in ways that are
+  // not worth enumerating; none of them are ours to fix.
+  // ignore: avoid_catches_without_on_clauses
   } catch (_) {
     return const [];
   }
@@ -274,6 +283,8 @@ List<ImportedFeature> parseGpx(String text) {
   final XmlDocument doc;
   try {
     doc = XmlDocument.parse(text);
+  // As above, for GPX.
+  // ignore: avoid_catches_without_on_clauses
   } catch (_) {
     return const [];
   }

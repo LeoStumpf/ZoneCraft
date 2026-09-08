@@ -16,6 +16,8 @@
 
 import 'dart:math' as math;
 
+import 'package:meta/meta.dart';
+
 /// Web-Mercator "slippy map" tile maths, used by the offline-prefetch logic to
 /// enumerate which `{z}/{x}/{y}` tiles cover a viewport. Pure and dependency-free
 /// so it's easy to unit-test. See <https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames>.
@@ -41,6 +43,7 @@ int tileYFor(double lat, int z) {
 }
 
 /// A `{z}/{x}/{y}` tile column/row pair (the zoom is carried by the caller).
+@immutable
 class TileCoord {
   const TileCoord(this.x, this.y);
   final int x;

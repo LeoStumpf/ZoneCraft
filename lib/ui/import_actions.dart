@@ -265,6 +265,9 @@ Future<void> deliverExport(
         ),
       );
     }
+  // An export reaches the user as a message whatever went wrong — a share sheet
+  // that failed silently is indistinguishable from one that never opened.
+  // ignore: avoid_catches_without_on_clauses
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text('Export failed: $e')));
   }
@@ -461,6 +464,8 @@ Future<void> importTrackIntoLayer(
         ),
       ),
     );
+  // Same contract as the export above: a failed import says so.
+  // ignore: avoid_catches_without_on_clauses
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text('Import failed: $e')));
   }
@@ -574,6 +579,9 @@ Future<void> importFeatureFlow(
         ),
       ),
     );
+  // Same contract: Overpass, the parser and the write can all fail, and the
+  // user needs one sentence rather than three code paths.
+  // ignore: avoid_catches_without_on_clauses
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text('Import failed: $e')));
   }
@@ -595,6 +603,9 @@ Future<void> importLayerFlow(
     picked = await openFile(acceptedTypeGroups: const [_importGroup]);
     if (picked == null) return;
     bytes = await picked.readAsBytes();
+  // The document picker throws platform-specific errors (a revoked grant, a
+  // provider that died); all of them mean the file did not arrive.
+  // ignore: avoid_catches_without_on_clauses
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text('Import failed: $e')));
     return;
@@ -700,10 +711,16 @@ Future<void> importBytesFlow(
         ),
       ),
     );
+  // ArgumentError is how the importer reports a *rejected file* — data, not a
+  // programming mistake — so it is caught deliberately to be shown.
+  // ignore: avoid_catching_errors
   } on ArgumentError catch (e) {
     messenger.showSnackBar(
       SnackBar(content: Text('Import failed: ${e.message}')),
     );
+  // The rejection above is typed; this is the backstop that keeps any other
+  // failure from becoming an unhandled async error.
+  // ignore: avoid_catches_without_on_clauses
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text('Import failed: $e')));
   }
@@ -770,6 +787,8 @@ Future<void> convertBorderAreaFlow(
         ),
       ),
     );
+  // Same contract: a failed conversion says so rather than doing nothing.
+  // ignore: avoid_catches_without_on_clauses
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text('Convert failed: $e')));
   }

@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:async';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -240,7 +242,7 @@ class _FreeAreaEditorSheetState extends ConsumerState<FreeAreaEditorSheet> {
                 onChanged: (s) {
                   final n = parseDecimal(s);
                   if (n != null && n.isFinite) {
-                    _repo.updateFreeArea(id, offsetMeters: n);
+                    unawaited(_repo.updateFreeArea(id, offsetMeters: n));
                   }
                 },
               ),
@@ -255,7 +257,9 @@ class _FreeAreaEditorSheetState extends ConsumerState<FreeAreaEditorSheet> {
           ),
           onChanged: (s) {
             final t = s.trim();
-            _repo.updateFreeArea(id, label: Value(t.isEmpty ? null : t));
+            unawaited(
+              _repo.updateFreeArea(id, label: Value(t.isEmpty ? null : t))
+            );
           },
         ),
       ],
@@ -281,11 +285,11 @@ class _FreeAreaEditorSheetState extends ConsumerState<FreeAreaEditorSheet> {
             onChanged: (s) {
               final ll = parseLatLng(s);
               if (ll != null) {
-                _repo.updateFreeAreaPoint(
-                  p.id,
-                  lat: ll.latitude,
-                  lng: ll.longitude,
-                );
+                unawaited(_repo.updateFreeAreaPoint(
+                    p.id,
+                    lat: ll.latitude,
+                    lng: ll.longitude,
+                  ));
               }
             },
           ),
@@ -338,11 +342,15 @@ class _FreeAreaEditorSheetState extends ConsumerState<FreeAreaEditorSheet> {
           onSelected: (v) {
             switch (v) {
               case 'up':
-                _repo.swapFreeAreaPointOrder(p.id, widget.points[index - 1].id);
+                unawaited(
+                  _repo.swapFreeAreaPointOrder(p.id, widget.points[index - 1].id)
+                );
               case 'down':
-                _repo.swapFreeAreaPointOrder(p.id, widget.points[index + 1].id);
+                unawaited(
+                  _repo.swapFreeAreaPointOrder(p.id, widget.points[index + 1].id)
+                );
               case 'remove':
-                _deletePoint(p);
+                unawaited(_deletePoint(p));
             }
           },
         ),

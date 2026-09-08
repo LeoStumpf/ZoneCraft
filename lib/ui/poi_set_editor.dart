@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:async';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -171,7 +173,9 @@ class _PoiSetEditorSheetState extends ConsumerState<PoiSetEditorSheet> {
           ),
           onChanged: (t) {
             final v = t.trim();
-            _repo.updatePoiSet(s.id, label: Value(v.isEmpty ? null : v));
+            unawaited(
+              _repo.updatePoiSet(s.id, label: Value(v.isEmpty ? null : v))
+            );
           },
         ),
         const SizedBox(height: 8),

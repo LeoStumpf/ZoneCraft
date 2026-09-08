@@ -170,7 +170,7 @@ Set<PoiCategory> poiCategoriesFromMask(int mask) =>
     {for (final c in poiCategories) if (mask & c.bit != 0) c};
 
 /// [mask] with [c] turned on/off.
-int poiMaskWith(int mask, PoiCategory c, bool on) =>
+int poiMaskWith(int mask, PoiCategory c, {required bool on}) =>
     on ? (mask | c.bit) : (mask & ~c.bit);
 
 /// One resolved POI: a position, the [categoryKey] that matched it, and the
@@ -220,6 +220,9 @@ List<PoiResult> decodePoiResults(String json) {
   final dynamic decoded;
   try {
     decoded = jsonDecode(json);
+  // A non-JSON body is a server or proxy error page. Structural surprise is the
+  // expected case here, not an exceptional one.
+  // ignore: avoid_catches_without_on_clauses
   } catch (_) {
     return out;
   }
@@ -278,6 +281,8 @@ List<PoiResult> parseOverpassResponse(
   final dynamic decoded;
   try {
     decoded = jsonDecode(body);
+  // As above.
+  // ignore: avoid_catches_without_on_clauses
   } catch (_) {
     return out;
   }

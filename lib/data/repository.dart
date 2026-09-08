@@ -1902,6 +1902,8 @@ class Repository {
     final dynamic decoded;
     try {
       decoded = jsonDecode(json);
+    // A corrupt row costs a colour, not the map, however it is corrupt.
+    // ignore: avoid_catches_without_on_clauses
     } catch (_) {
       return const [];
     }
@@ -2098,7 +2100,7 @@ class Repository {
   }
 
   /// Upserts the utility-FAB expand/collapse choice into the settings row.
-  Future<void> updateToolsExpanded(bool expanded) {
+  Future<void> updateToolsExpanded({required bool expanded}) {
     return _db.into(_db.appSettings).insertOnConflictUpdate(
           AppSettingsCompanion.insert(
             id: const Value(1),
@@ -2108,7 +2110,7 @@ class Repository {
   }
 
   /// Upserts the base-map visibility toggle into the single settings row.
-  Future<void> updateBasemapVisible(bool visible) {
+  Future<void> updateBasemapVisible({required bool visible}) {
     return _db.into(_db.appSettings).insertOnConflictUpdate(
           AppSettingsCompanion.insert(
             id: const Value(1),

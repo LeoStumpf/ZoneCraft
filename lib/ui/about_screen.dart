@@ -63,6 +63,9 @@ class _AboutScreenState extends State<AboutScreen> {
     var can = false;
     try {
       can = await canLaunchUrl(Uri.parse('https://openstreetmap.org'));
+    // With no platform implementation at all (a test host, a desktop build)
+    // canLaunchUrl throws rather than answering false.
+    // ignore: avoid_catches_without_on_clauses
     } catch (_) {
       // No platform implementation (a test host, a desktop build): links stay
       // plain text, which is what this screen did before they were tappable.
@@ -368,6 +371,9 @@ class _Url extends StatelessWidget {
         // logins and blocking.
         mode: LaunchMode.externalApplication,
       );
+    // A missing browser and a refusing one both mean the link did not open, and
+    // the fallback is the same either way.
+    // ignore: avoid_catches_without_on_clauses
     } catch (_) {
       opened = false;
     }

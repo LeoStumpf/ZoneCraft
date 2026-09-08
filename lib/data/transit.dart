@@ -217,7 +217,7 @@ TransitMode? transitModeByKey(String key) =>
 Set<TransitMode> transitModesFromMask(int mask) =>
     {for (final m in transitModes) if (mask & m.bit != 0) m};
 
-int transitMaskWith(int mask, TransitMode m, bool on) =>
+int transitMaskWith(int mask, TransitMode m, {required bool on}) =>
     on ? (mask | m.bit) : (mask & ~m.bit);
 
 int transitMaskOf(Iterable<TransitMode> modes) =>
@@ -470,7 +470,7 @@ String buildTransitStopsQuery({
 
 // --- Parsing ----------------------------------------------------------------
 
-String? _tag(Map tags, String key) {
+String? _tag(Map<String, dynamic> tags, String key) {
   final v = tags[key];
   if (v is! String) return null;
   final t = v.trim();
@@ -490,7 +490,7 @@ double? _num(dynamic v) {
 /// 97 % of Munich's stops tag this directly (`bus=yes`, `train=yes`, …). For the
 /// rest, fall back to what kind of stop it is — a `railway=tram_stop` is a tram
 /// stop whether or not anyone wrote `tram=yes`.
-int stopModeMask(Map tags) {
+int stopModeMask(Map<String, dynamic> tags) {
   var mask = 0;
   for (final entry in _modeByTag.entries) {
     if (tags[entry.key] == 'yes') mask |= entry.value.bit;
@@ -564,6 +564,9 @@ List<TransitStationData>? parseTransitStations(String body,
   final dynamic decoded;
   try {
     decoded = jsonDecode(body);
+  // As in borders.dart: a malformed body must stay distinguishable from an
+  // area that genuinely has no stations.
+  // ignore: avoid_catches_without_on_clauses
   } catch (_) {
     return null;
   }
@@ -579,7 +582,7 @@ List<TransitStationData>? parseTransitStations(String body,
     final lng = _num(e['lon']);
     if (id == null || lat == null || lng == null) continue;
     final tags = e['tags'];
-    final t = tags is Map ? tags : const {};
+    final t = tags is Map<String, dynamic> ? tags : const <String, dynamic>{};
     raw.add(TransitStopNode(
       osmId: id,
       lat: lat,

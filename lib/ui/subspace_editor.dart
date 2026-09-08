@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:async';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -213,7 +215,9 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
           child: RadioGroup<String>(
             groupValue: mainId,
             onChanged: (v) {
-              if (v != null) _repo.setMainPoint(widget.subspace.id, v);
+              if (v != null) {
+                unawaited(_repo.setMainPoint(widget.subspace.id, v));
+              }
             },
             child: ListView.separated(
               shrinkWrap: true,
@@ -244,7 +248,9 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
           ),
           onChanged: (s) {
             final t = s.trim();
-            _repo.updateSubspace(id, label: Value(t.isEmpty ? null : t));
+            unawaited(
+              _repo.updateSubspace(id, label: Value(t.isEmpty ? null : t))
+            );
           },
         ),
       ],
@@ -312,11 +318,11 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
             onChanged: (s) {
               final ll = parseLatLng(s);
               if (ll != null) {
-                _repo.updateSubspacePoint(
-                  p.id,
-                  lat: ll.latitude,
-                  lng: ll.longitude,
-                );
+                unawaited(_repo.updateSubspacePoint(
+                    p.id,
+                    lat: ll.latitude,
+                    lng: ll.longitude,
+                  ));
               }
             },
           ),

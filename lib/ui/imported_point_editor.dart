@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:async';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -124,7 +126,7 @@ class _ImportedPointEditorSheetState
   }
 
   void _armPlacement() {
-    ref.read(poiPointPlacementProvider.notifier).arm(true);
+    ref.read(poiPointPlacementProvider.notifier).arm(on: true);
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
       ..showSnackBar(
@@ -133,12 +135,17 @@ class _ImportedPointEditorSheetState
   }
 
   void _close() {
-    ref.read(poiPointPlacementProvider.notifier).arm(false);
+    ref.read(poiPointPlacementProvider.notifier).arm(on: false);
+    // Name both kinds. A `default:` here cleared the *transit* selection for
+    // anything that was not a POI, so a third kind routed to this editor would
+    // silently deselect the wrong thing.
     switch (widget.kind) {
       case ObjectKind.poiPoint:
         ref.read(selectedPoiPointProvider.notifier).select(null);
-      default:
+      case ObjectKind.transitStop:
         ref.read(selectedTransitStopProvider.notifier).select(null);
+      case _:
+        break;
     }
   }
 
@@ -209,11 +216,11 @@ class _ImportedPointEditorSheetState
                   onChanged: (t) {
                     final p = parseLatLng(t);
                     if (p == null) return; // half-typed; ignore until valid
-                    _repo.moveManualPoiPoint(
-                      id: widget.id,
-                      lat: p.latitude,
-                      lng: p.longitude,
-                    );
+                    unawaited(_repo.moveManualPoiPoint(
+                        id: widget.id,
+                        lat: p.latitude,
+                        lng: p.longitude,
+                      ));
                   },
                 ),
               ),

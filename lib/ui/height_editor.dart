@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:async';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -127,6 +129,10 @@ class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
       );
     } on HeightGenException catch (e) {
       _snack(e.message);
+    // The failure we can explain is typed and handled above. This is the backstop
+    // that puts everything else in front of the user instead of dropping it into
+    // an unhandled async error.
+    // ignore: avoid_catches_without_on_clauses
     } catch (e) {
       _snack('Generation failed: $e');
     } finally {
@@ -136,7 +142,7 @@ class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
   }
 
   void _armCenter() {
-    ref.read(heightPlacementProvider.notifier).arm(true);
+    ref.read(heightPlacementProvider.notifier).arm(on: true);
     _snack('Tap the map to place the area centre');
   }
 
@@ -223,11 +229,11 @@ class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
                 onChanged: (s) {
                   final ll = parseLatLng(s);
                   if (ll != null) {
-                    _repo.updateHeightRegion(
-                      id,
-                      centerLat: ll.latitude,
-                      centerLng: ll.longitude,
-                    );
+                    unawaited(_repo.updateHeightRegion(
+                        id,
+                        centerLat: ll.latitude,
+                        centerLng: ll.longitude,
+                      ));
                   }
                 },
               ),
@@ -262,7 +268,7 @@ class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
                 onChanged: (s) {
                   final n = parseDecimal(s);
                   if (n != null && n.isFinite && n > 0) {
-                    _repo.updateHeightRegion(id, radiusMeters: n);
+                    unawaited(_repo.updateHeightRegion(id, radiusMeters: n));
                   }
                 },
               ),
@@ -282,7 +288,7 @@ class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
                 onChanged: (s) {
                   final n = parseDecimal(s);
                   if (n != null && n.isFinite) {
-                    _repo.updateHeightRegion(id, thresholdMeters: n);
+                    unawaited(_repo.updateHeightRegion(id, thresholdMeters: n));
                   }
                 },
               ),
@@ -310,7 +316,9 @@ class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
                 DropdownMenuItem(value: 14, child: Text('Fine')),
               ],
               onChanged: (v) {
-                if (v != null) _repo.updateHeightRegion(id, sampleZoom: v);
+                if (v != null) {
+                  unawaited(_repo.updateHeightRegion(id, sampleZoom: v));
+                }
               },
             ),
           ],
@@ -323,7 +331,9 @@ class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
           ),
           onChanged: (s) {
             final t = s.trim();
-            _repo.updateHeightRegion(id, label: Value(t.isEmpty ? null : t));
+            unawaited(
+              _repo.updateHeightRegion(id, label: Value(t.isEmpty ? null : t))
+            );
           },
         ),
         const SizedBox(height: 12),
@@ -362,7 +372,7 @@ class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
   }
 
   void _close() {
-    ref.read(heightPlacementProvider.notifier).arm(false);
+    ref.read(heightPlacementProvider.notifier).arm(on: false);
     ref.read(selectedHeightRegionProvider.notifier).select(null);
   }
 }

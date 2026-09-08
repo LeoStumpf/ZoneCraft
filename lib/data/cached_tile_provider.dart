@@ -73,6 +73,9 @@ class CachedTileProvider extends TileProvider {
         await _repo.putTile(url, resp.bodyBytes);
         return true;
       }
+    // Every way this can fail — offline, rate-limited, socket reset, unwritable
+    // cache — means the same thing: the tile is not cached. The map still draws.
+    // ignore: avoid_catches_without_on_clauses
     } catch (_) {
       // Offline / rate-limited / server error: silently skip.
     }
@@ -117,6 +120,9 @@ class _CachedTileImage extends ImageProvider<_CachedTileImage> {
     if (cached != null && cached.isNotEmpty) {
       try {
         return await decodeBytes(cached);
+      // A corrupt cache entry can fail to decode in any number of ways, and all of
+      // them mean refetch.
+      // ignore: avoid_catches_without_on_clauses
       } catch (_) {
         // Corrupt cache entry: fall through and refetch.
       }

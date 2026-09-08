@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:async';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -91,7 +93,7 @@ class _BorderAreaEditorSheetState extends ConsumerState<BorderAreaEditorSheet> {
   }
 
   void _close() {
-    ref.read(borderReshapeProvider.notifier).arm(false);
+    ref.read(borderReshapeProvider.notifier).arm(on: false);
     ref.read(selectedBorderAreaProvider.notifier).select(null);
   }
 
@@ -172,7 +174,9 @@ class _BorderAreaEditorSheetState extends ConsumerState<BorderAreaEditorSheet> {
           ),
           onChanged: (s) {
             final t = s.trim();
-            _repo.updateBorderArea(a.id, name: Value(t.isEmpty ? null : t));
+            unawaited(
+              _repo.updateBorderArea(a.id, name: Value(t.isEmpty ? null : t))
+            );
           },
         ),
         const SizedBox(height: 8),
@@ -199,7 +203,7 @@ class _BorderAreaEditorSheetState extends ConsumerState<BorderAreaEditorSheet> {
           dense: true,
           value: reshaping,
           onChanged: (v) =>
-              ref.read(borderReshapeProvider.notifier).arm(v),
+              ref.read(borderReshapeProvider.notifier).arm(on: v),
           title: const Text('Reshape outline'),
           subtitle: Text(
             reshaping

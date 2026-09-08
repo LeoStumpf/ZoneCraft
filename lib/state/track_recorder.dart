@@ -155,8 +155,13 @@ class TrackRecorder extends Notifier<TrackRecording> {
   }
 
   void stop() {
-    _sub?.cancel();
+    // Detached first, so the field is null before the cancel is even asked
+    // for: a second stop() must not find a subscription that is already on
+    // its way out. Cancelling is fire-and-forget — nothing here waits on the
+    // stream draining, and the recorder is already reporting "stopped".
+    final sub = _sub;
     _sub = null;
+    if (sub != null) unawaited(sub.cancel());
     state = const TrackRecording();
   }
 

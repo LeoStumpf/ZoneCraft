@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:async';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -208,7 +210,9 @@ class _PlaneEditorSheetState extends ConsumerState<PlaneEditorSheet> {
           ),
           onChanged: (s) {
             final t = s.trim();
-            _repo.updatePlane(id, label: Value(t.isEmpty ? null : t));
+            unawaited(
+              _repo.updatePlane(id, label: Value(t.isEmpty ? null : t))
+            );
           },
         ),
       ],

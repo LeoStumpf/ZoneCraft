@@ -229,7 +229,7 @@ class BorderRelationData {
 
 // --- Parsing ----------------------------------------------------------------
 
-String? _tag(Map tags, String key) {
+String? _tag(Map<String, dynamic> tags, String key) {
   final v = tags[key];
   if (v is! String) return null;
   final t = v.trim();
@@ -275,6 +275,10 @@ List<BorderRelationData>? parseBorderRelations(String body) {
   final dynamic decoded;
   try {
     decoded = jsonDecode(body);
+  // Overpass can answer with an HTML error page or a truncated body. That is
+  // malformed *data*, not a bug here, and the null is how the caller tells it
+  // apart from a genuinely empty area.
+  // ignore: avoid_catches_without_on_clauses
   } catch (_) {
     return null;
   }
@@ -310,7 +314,7 @@ List<BorderRelationData>? parseBorderRelations(String body) {
     if (ways.isEmpty) continue;
     out.add(BorderRelationData(
       osmId: id,
-      name: tags is Map ? _tag(tags, 'name') : null,
+      name: tags is Map<String, dynamic> ? _tag(tags, 'name') : null,
       ways: ways,
     ));
   }

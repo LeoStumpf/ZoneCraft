@@ -59,7 +59,7 @@ class FreeLineRegion {
   /// Whether the disk centre is on the right (filled) side when [missesDisk].
   final bool centreOnRight;
 
-  const FreeLineRegion.miss(this.centreOnRight)
+  const FreeLineRegion.miss({required this.centreOnRight})
       : fillRings = const [],
         boundaries = const [],
         missesDisk = true;
@@ -137,7 +137,7 @@ FreeLineRegion freeLineDiskRegion({
   final runs = _cutRuns(p, r, jumpLen);
   if (runs.isEmpty) {
     // The line misses the disk: the whole disk is one side.
-    return FreeLineRegion.miss(_pointRight(const _V(0, 0), p));
+    return FreeLineRegion.miss(centreOnRight: _pointRight(const _V(0, 0), p));
   }
 
   final fillRings = <List<LatLng>>[];
@@ -183,7 +183,7 @@ List<List<_V>> _cutRuns(List<_V> line, double r, double jumpLen) {
 
     var cur = <_V>[];
     var startCross = false; // current run opened at a boundary crossing
-    void flush(bool endCross) {
+    void flush({required bool endCross}) {
       out.addAll(_finishRun(cur, startCross, endCross, trueStart, trueEnd, ext));
       cur = <_V>[];
     }
@@ -204,7 +204,7 @@ List<List<_V>> _cutRuns(List<_V> line, double r, double jumpLen) {
         }
         final x = _circleCross(a, b, r);
         if (x != null) cur.add(x);
-        flush(true);
+        flush(endCross: true);
       } else if (!aIn && bIn) {
         final x = _circleCross(a, b, r);
         cur = <_V>[if (x != null) x else a];
@@ -220,7 +220,7 @@ List<List<_V>> _cutRuns(List<_V> line, double r, double jumpLen) {
         }
       }
     }
-    flush(false); // piece ended; any open run dangles at the piece end
+    flush(endCross: false); // piece ended; any open run dangles at the end
   }
   return out;
 }
@@ -254,7 +254,7 @@ List<_V> _cutRing(List<_V> run, double r) {
   final angEnd = atan2(ep.last.y, ep.last.x);
   final angStart = atan2(ep.first.y, ep.first.x);
 
-  List<_V> closed(bool ccw) => <_V>[
+  List<_V> closed({required bool ccw}) => <_V>[
         ...ep,
         _V(big * cos(angEnd), big * sin(angEnd)),
         ..._arc(angEnd, angStart, big, ccw),
@@ -263,7 +263,7 @@ List<_V> _cutRing(List<_V> run, double r) {
 
   // Pick the closure side so the run's right-hand side is the even-odd interior.
   final probe = _rightProbe(ep, r);
-  return closed(_contains(closed(true), probe));
+  return closed(ccw: _contains(closed(ccw: true), probe));
 }
 
 /// A probe just to the right of the run's segment nearest the origin, stepped in

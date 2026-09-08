@@ -70,37 +70,37 @@ void main() {
     ids['circles'] =
         await repo.createLayer(name: 'Circles', colorArgb: 0xFF2196F3);
     final c1 = await repo.createCircle(
-        layerId: ids['circles']!,
+        layerId: _id(ids, 'circles'),
         centerLat: 48.137,
         centerLng: 11.575,
         radiusMeters: 1500,
         label: 'home');
     await repo.setElementColor(ColoredElement.circle, c1, 0xFFEF5350);
     await repo.createCircle(
-        layerId: ids['circles']!,
+        layerId: _id(ids, 'circles'),
         centerLat: 48.2,
         centerLng: 11.6,
         radiusMeters: 800);
-    await repo.updateLayer(ids['circles']!, opacity: 0.31);
+    await repo.updateLayer(_id(ids, 'circles'), opacity: 0.31);
 
     // planes — inverted layer.
     ids['planes'] = await repo.createLayer(
         name: 'Planes', colorArgb: 0xFFEF5350, type: 'planes');
     await repo.createPlane(
-        layerId: ids['planes']!,
+        layerId: _id(ids, 'planes'),
         aLat: 48.0,
         aLng: 11.0,
         bLat: 48.5,
         bLng: 11.9,
         nearA: false,
         label: 'A|B');
-    await repo.updateLayer(ids['planes']!, isInverted: true);
+    await repo.updateLayer(_id(ids, 'planes'), isInverted: true);
 
     // subspace — a main point that is not the first, and named seeds.
     ids['subspace'] = await repo.createLayer(
         name: 'Subspace', colorArgb: 0xFF66BB6A, type: 'subspace');
     final sub =
-        await repo.createSubspace(layerId: ids['subspace']!, label: 'cells');
+        await repo.createSubspace(layerId: _id(ids, 'subspace'), label: 'cells');
     await repo.addSubspacePoint(
         subspaceId: sub, lat: 48.0, lng: 11.0, label: 'north');
     await repo.addSubspacePoint(subspaceId: sub, lat: 48.1, lng: 11.2);
@@ -112,7 +112,7 @@ void main() {
     ids['freeline'] = await repo.createLayer(
         name: 'Lines', colorArgb: 0xFFAB47BC, type: 'freeline');
     final line = await repo.createFreeLine(
-      layerId: ids['freeline']!,
+      layerId: _id(ids, 'freeline'),
       label: 'the wall',
       inclusionLat: 48.05,
       inclusionLng: 11.1,
@@ -127,7 +127,7 @@ void main() {
     ids['freearea'] = await repo.createLayer(
         name: 'Areas', colorArgb: 0xFFFFA726, type: 'freearea');
     final area =
-        await repo.createFreeArea(layerId: ids['freearea']!, label: 'the park');
+        await repo.createFreeArea(layerId: _id(ids, 'freearea'), label: 'the park');
     await repo.updateFreeArea(area, offsetMeters: 300);
     await repo.addFreeAreaPoints(area, [
       LatLng(48.00000, 11.00000),
@@ -141,7 +141,7 @@ void main() {
     ids['height'] = await repo.createLayer(
         name: 'Height', colorArgb: 0xFF8D6E63, type: 'height');
     final region = await repo.createHeightRegion(
-      layerId: ids['height']!,
+      layerId: _id(ids, 'height'),
       centerLat: 47.42,
       centerLng: 10.98,
       radiusMeters: 12000,
@@ -164,9 +164,9 @@ void main() {
     // track — two segments (a recording with a pause) and non-default options.
     ids['track'] =
         await repo.createLayer(name: 'Track', colorArgb: 0xFF26A69A, type: 'track');
-    await repo.updateTrackLayerOptions(ids['track']!,
+    await repo.updateTrackLayerOptions(_id(ids, 'track'),
         strokeWidth: 7.5, minDistanceMeters: 25);
-    final track = await repo.ensureTrackForLayer(ids['track']!);
+    final track = await repo.ensureTrackForLayer(_id(ids, 'track'));
     await repo.updateTrack(track, label: const Value('morning run'));
     await repo.addTrackPoints(
       track,
@@ -191,7 +191,7 @@ void main() {
     ids['poi'] =
         await repo.createLayer(name: 'POIs', colorArgb: 0xFF00ACC1, type: 'poi');
     final poiSet = await repo.createPoiSet(
-      layerId: ids['poi']!,
+      layerId: _id(ids, 'poi'),
       categoryKey: 'cafe',
       centerLat: 48.137,
       centerLng: 11.575,
@@ -221,7 +221,7 @@ void main() {
     // an editable category silently returns as a read-only import claiming a
     // search that never ran.
     final manualSet = await repo.createPoiSet(
-      layerId: ids['poi']!,
+      layerId: _id(ids, 'poi'),
       categoryKey: 'peak',
       centerLat: 48.10,
       centerLng: 11.50,
@@ -239,7 +239,7 @@ void main() {
     ids['transit'] = await repo.createLayer(
         name: 'Transit', colorArgb: 0xFF7E57C2, type: 'transit');
     final filled = await repo.createPendingTransitSet(
-      layerId: ids['transit']!,
+      layerId: _id(ids, 'transit'),
       south: 48.00,
       west: 11.30,
       north: 48.30,
@@ -270,7 +270,7 @@ void main() {
       ),
     ]);
     final failed = await repo.createPendingTransitSet(
-      layerId: ids['transit']!,
+      layerId: _id(ids, 'transit'),
       south: 49.0,
       west: 12.0,
       north: 49.5,
@@ -288,10 +288,10 @@ void main() {
         colorArgb: 0xFF123456,
         type: 'borders',
         borderLevel: '8');
-    await repo.updateBorderLayerOptions(ids['borders']!,
+    await repo.updateBorderLayerOptions(_id(ids, 'borders'),
         fillAreas: true, showNames: true);
     await repo.addBorderSet(
-      layerId: ids['borders']!,
+      layerId: _id(ids, 'borders'),
       south: 48.0,
       west: 11.0,
       north: 48.2,
@@ -315,7 +315,7 @@ void main() {
       ],
     ]);
     await repo.updateBorderArea(munich.id, labelLat: 48.02, labelLng: 11.07);
-    await repo.updateLayer(ids['borders']!, isVisible: false);
+    await repo.updateLayer(_id(ids, 'borders'), isVisible: false);
 
     // mixed — one layer holding several types at once. Its objects say what
     // they are, so the format needs nothing new; what has to survive is that
@@ -323,27 +323,27 @@ void main() {
     ids['mixed'] = await repo.createLayer(
         name: 'Everything', colorArgb: 0xFF7E57C2, type: kMixedType);
     await repo.createCircle(
-      layerId: ids['mixed']!,
+      layerId: _id(ids, 'mixed'),
       centerLat: 48.15,
       centerLng: 11.60,
       radiusMeters: 750,
       label: 'in the mix',
     );
     await repo.createPlane(
-      layerId: ids['mixed']!,
+      layerId: _id(ids, 'mixed'),
       aLat: 48.10,
       aLng: 11.50,
       bLat: 48.20,
       bLng: 11.70,
     );
-    final mixedTrack = await repo.ensureTrackForLayer(ids['mixed']!);
+    final mixedTrack = await repo.ensureTrackForLayer(_id(ids, 'mixed'));
     await repo.addTrackPoints(
       mixedTrack,
       [const LatLng(48.16, 11.61), const LatLng(48.17, 11.62)],
       segmentIndex: 0,
     );
     final mixedPoi = await repo.createPoiSet(
-      layerId: ids['mixed']!,
+      layerId: _id(ids, 'mixed'),
       categoryKey: 'star',
       centerLat: 48.15,
       centerLng: 11.60,
@@ -476,7 +476,7 @@ void main() {
 
   test('a hidden layer comes back hidden', () async {
     final ids = await seedEverything();
-    final data = await repo.exportData(onlyLayerId: ids['borders']!);
+    final data = await repo.exportData(onlyLayerId: _id(ids, 'borders'));
     expect(data.layers.single.isVisible, isFalse);
     final after = await reimport(data);
     expect(after.single['isVisible'], isFalse);
@@ -484,7 +484,7 @@ void main() {
 
   test('a generated height layer comes back drawn, not blank', () async {
     final ids = await seedEverything();
-    final data = await repo.exportData(onlyLayerId: ids['height']!);
+    final data = await repo.exportData(onlyLayerId: _id(ids, 'height'));
     final o = data.layers.single.objects.single;
     expect(o.generated, isTrue);
     expect(o.heightRings, hasLength(2));
@@ -493,7 +493,7 @@ void main() {
     expect(o.sampleZoom, 14);
 
     final after = await reimport(data);
-    final region = (after.single['objects'] as List).single as Map;
+    final region = _objRows(after.single).single;
     expect(region['generated'], isTrue,
         reason: 'an imported height layer that has to be regenerated by hand '
             'draws nothing at all, which is what "the layer is empty" was');
@@ -502,7 +502,7 @@ void main() {
 
   test("a track's pauses survive as breaks, not as a straight jump", () async {
     final ids = await seedEverything();
-    final data = await repo.exportData(onlyLayerId: ids['track']!);
+    final data = await repo.exportData(onlyLayerId: _id(ids, 'track'));
     final o = data.layers.single.objects.single;
     expect(o.segments, hasLength(3));
     expect(o.segments!.first, hasLength(8));
@@ -510,15 +510,16 @@ void main() {
 
     // A MultiLineString, so every other tool draws the break too.
     final gj = jsonDecode(exportToGeoJson(data)) as Map<String, dynamic>;
+    final feature = (gj['features']! as List).single as Map<String, Object?>;
     expect(
-      ((gj['features'] as List).single as Map)['geometry']['type'],
+      (feature['geometry']! as Map<String, Object?>)['type'],
       'MultiLineString',
     );
 
     final after = await reimport(data);
-    final track = (after.single['objects'] as List).single as Map;
-    final segs = (track['points'] as List)
-        .map((p) => (p as Map)['segmentIndex'])
+    final track = _objRows(after.single).single;
+    final segs = (track['points']! as List)
+        .map((p) => (p as Map<String, Object?>)['segmentIndex'])
         .toSet();
     expect(segs, hasLength(3));
   });
@@ -527,13 +528,11 @@ void main() {
     final ids = await seedEverything();
     final before = await snapshot();
     final line = before.firstWhere((l) => l['type'] == 'freeline');
-    final vertices =
-        ((line['objects'] as List).single as Map)['points'] as List;
+    final vertices = _objRows(line).single['points']! as List;
     expect(vertices, hasLength(12));
 
-    final after = await reimport(await repo.exportData(onlyLayerId: ids['freeline']!));
-    expect(((after.single['objects'] as List).single as Map)['points'],
-        hasLength(12),
+    final after = await reimport(await repo.exportData(onlyLayerId: _id(ids, 'freeline')));
+    expect(_objRows(after.single).single['points'], hasLength(12),
         reason: 'the 10 m RDP pass belongs to generic files, not to ours');
   });
 
@@ -564,7 +563,7 @@ void main() {
   test('imported POIs keep their OSM identity, so a re-import dedups',
       () async {
     final ids = await seedEverything();
-    final data = await repo.exportData(onlyLayerId: ids['poi']!);
+    final data = await repo.exportData(onlyLayerId: _id(ids, 'poi'));
     // The layer holds two sets: the Overpass import and a hand-made category.
     final o = data.layers.single.objects
         .firstWhere((o) => o.manual != true);
@@ -574,12 +573,12 @@ void main() {
     // Merging the file back into the layer it came from re-creates the sets but
     // adds no *identified* POI: these are the same ones, and node 240109189 is
     // not way 240109189.
-    expect(await repo.mergeIntoLayer(ids['poi']!, data.layers.single,
+    expect(await repo.mergeIntoLayer(_id(ids, 'poi'), data.layers.single,
         simplify: false), 2);
     // Scoped to this layer's own sets: the seed also puts a hand-placed POI on
     // the combined layer, which has nothing to do with dedup.
     final setIds = (await repo.watchAllPoiSets().first)
-        .where((s) => s.layerId == ids['poi']!)
+        .where((s) => s.layerId == _id(ids, 'poi'))
         .map((s) => s.id)
         .toSet();
     final points = (await repo.watchAllPoiPoints().first)
@@ -597,7 +596,7 @@ void main() {
     // 'circles' would strand the plane, the track and the POIs on a layer that
     // no longer paints them.
     final ids = await seedEverything();
-    final data = await repo.exportData(onlyLayerId: ids['mixed']!);
+    final data = await repo.exportData(onlyLayerId: _id(ids, 'mixed'));
     final layer = data.layers.single;
     expect(layer.type, kMixedType);
     expect(
@@ -608,31 +607,31 @@ void main() {
 
     final after = await reimport(data);
     expect(after.single['type'], kMixedType);
-    final objects = after.single['objects'] as List;
+    final objects = _objRows(after.single);
     expect(objects, hasLength(4));
-    final circle = objects.firstWhere((o) => (o as Map)['label'] == 'in the mix');
-    expect((circle as Map)['radiusMeters'], 750);
+    final circle = objects.firstWhere((o) => o['label'] == 'in the mix');
+    expect(circle['radiusMeters'], 750);
   });
 
   test('a file merges into a combined layer, and refuses a narrower one',
       () async {
     final ids = await seedEverything();
     final circlesFile =
-        (await repo.exportData(onlyLayerId: ids['circles']!)).layers.single;
+        (await repo.exportData(onlyLayerId: _id(ids, 'circles'))).layers.single;
 
     // A circles file into a combined layer: allowed, because the target can
     // hold circles.
     final before = (await repo.watchAllCircles().first).length;
-    await repo.mergeIntoLayer(ids['mixed']!, circlesFile, simplify: false);
+    await repo.mergeIntoLayer(_id(ids, 'mixed'), circlesFile, simplify: false);
     expect((await repo.watchAllCircles().first).length,
         greaterThan(before));
 
     // A combined file into a circles layer: refused, because it carries planes
     // and a track that a circles layer cannot hold.
     final mixedFile =
-        (await repo.exportData(onlyLayerId: ids['mixed']!)).layers.single;
+        (await repo.exportData(onlyLayerId: _id(ids, 'mixed'))).layers.single;
     await expectLater(
-      repo.mergeIntoLayer(ids['circles']!, mixedFile, simplify: false),
+      repo.mergeIntoLayer(_id(ids, 'circles'), mixedFile, simplify: false),
       throwsArgumentError,
     );
   });
@@ -644,7 +643,7 @@ void main() {
     // read-only snapshot. A manual set returning as an import would be a silent
     // demotion — and its radius 0 would start being shown as a search area.
     final ids = await seedEverything();
-    final data = await repo.exportData(onlyLayerId: ids['poi']!);
+    final data = await repo.exportData(onlyLayerId: _id(ids, 'poi'));
     final o = data.layers.single.objects.firstWhere((o) => o.manual == true);
     expect(o.iconKey, 'peak');
     expect(o.label, 'Swimming spots');
@@ -654,23 +653,22 @@ void main() {
         reason: 'hand-placed points have no upstream to be identified against');
 
     final after = await reimport(data);
-    final sets = after.single['objects'] as List;
-    final manual = sets.firstWhere((s) => (s as Map)['isManual'] == true) as Map;
+    final sets = _objRows(after.single);
+    final manual = sets.firstWhere((s) => s['isManual'] == true);
     expect(manual['iconKey'], 'peak');
     expect(manual['label'], 'Swimming spots');
     expect(manual['radiusMeters'], 0);
 
     // And the import on the same layer is *not* flagged, which is what stops
     // "manual" from being a field that quietly defaults to true.
-    final imported =
-        sets.firstWhere((s) => (s as Map)['isManual'] == false) as Map;
+    final imported = sets.firstWhere((s) => s['isManual'] == false);
     expect(imported['categoryKey'], 'cafe');
     expect(imported['iconKey'], isNull);
   });
 
   test('a failed transit import comes back as a retry row', () async {
     final ids = await seedEverything();
-    final data = await repo.exportData(onlyLayerId: ids['transit']!);
+    final data = await repo.exportData(onlyLayerId: _id(ids, 'transit'));
     expect(data.layers.single.objects, hasLength(2));
     final failed =
         data.layers.single.objects.firstWhere((o) => o.pending == true);
@@ -679,16 +677,16 @@ void main() {
     expect(failed.bbox, [49.0, 12.0, 49.5, 12.5]);
 
     final after = await reimport(data);
-    final sets = after.single['objects'] as List;
+    final sets = _objRows(after.single);
     expect(sets, hasLength(2));
-    final retry = sets.firstWhere((s) => (s as Map)['pending'] == true) as Map;
+    final retry = sets.firstWhere((s) => s['pending'] == true);
     expect(retry['lastError'], 'Overpass was busy');
     expect(retry['label'], 'Regensburg');
   });
 
   test('a border import keeps its own name and its edited areas', () async {
     final ids = await seedEverything();
-    final data = await repo.exportData(onlyLayerId: ids['borders']!);
+    final data = await repo.exportData(onlyLayerId: _id(ids, 'borders'));
     final munich =
         data.layers.single.objects.firstWhere((o) => o.label == 'München');
     expect(munich.setLabel, 'Around Munich');
@@ -696,10 +694,10 @@ void main() {
     expect(munich.labelLat, 48.02);
 
     final after = await reimport(data);
-    final sets = after.single['objects'] as List;
-    expect(sets.single, isA<Map>());
-    expect((sets.single as Map)['label'], 'Around Munich');
-    final areas = (sets.single as Map)['areas'] as List;
+    final sets = _objRows(after.single);
+    expect(sets.single, isA<Map<String, Object?>>());
+    expect(sets.single['label'], 'Around Munich');
+    final areas = sets.single['areas']! as List;
     final m = areas.firstWhere((a) => (a as Map)['name'] == 'München') as Map;
     expect(m['edited'], isTrue);
     expect(m['labelLat'], 48.02);
@@ -730,11 +728,8 @@ void main() {
       expect(o.osmId, isNull, reason: '0 is not an OSM id');
     }
     final after = await reimport(data);
-    expect((after.single['objects'] as List).single, isA<Map>());
-    expect(
-      ((after.single['objects'] as List).single as Map)['areas'],
-      hasLength(3),
-    );
+    expect(_objRows(after.single).single, isA<Map<String, Object?>>());
+    expect(_objRows(after.single).single['areas'], hasLength(3));
   });
 
   test('a v1 file still imports, with the v1 defaults', () async {
@@ -814,6 +809,17 @@ void main() {
 
 /// Every element of [layer] as plain data, sorted so two databases holding the
 /// same rows compare equal regardless of row order.
+/// The seeded layer id for [key]. Throws rather than yielding null, so a
+/// renamed seed fails loudly instead of quietly exporting *every* layer.
+String _id(Map<String, String> ids, String key) =>
+    ids[key] ?? (throw StateError('seedEverything() seeded no "$key" layer'));
+
+/// The object rows of one snapshot layer, typed — `snapshot()` and `reimport()`
+/// both yield `Map<String, Object?>` rows under `objects`.
+/// (Distinct from [_rows], which reads a Drift table.)
+List<Map<String, Object?>> _objRows(Map<String, Object?> layer) =>
+    (layer['objects']! as List).cast<Map<String, Object?>>();
+
 Future<List<Map<String, Object?>>> _objectsOf(
     AppDatabase db, Layer layer) async {
   final out = <Map<String, Object?>>[];

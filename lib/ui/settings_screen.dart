@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -59,7 +61,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   void _setUncertainty(double meters) {
     final clamped = meters.isFinite && meters >= 0 ? meters : 0.0;
-    _repo.updateUncertainty(clamped);
+    unawaited(_repo.updateUncertainty(clamped));
   }
 
   Future<void> _clearAllData() async {

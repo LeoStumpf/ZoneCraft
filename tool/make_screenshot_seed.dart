@@ -162,6 +162,8 @@ void main() {
     // Fail loudly rather than push an empty file onto the emulator.
     expect(file.existsSync(), isTrue);
     expect(file.lengthSync(), greaterThan(4096));
+    // This is a developer tool run from the command line, not app code — its
+    // whole output is this line.
     // ignore: avoid_print
     print('wrote ${file.path} (${file.lengthSync()} bytes)');
   });

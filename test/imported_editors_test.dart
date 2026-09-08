@@ -444,7 +444,7 @@ void main() {
     testWidgets('closing disarms reshaping as well as deselecting',
         (tester) async {
       container.read(selectedBorderAreaProvider.notifier).select('ba1');
-      container.read(borderReshapeProvider.notifier).arm(true);
+      container.read(borderReshapeProvider.notifier).arm(on: true);
       await pump(
         tester,
         BorderAreaEditorSheet(

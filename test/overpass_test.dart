@@ -26,12 +26,12 @@ void main() {
   group('category bitmask', () {
     test('mask round-trips through poiMaskWith / poiCategoriesFromMask', () {
       var mask = 0;
-      mask = poiMaskWith(mask, cat('bench'), true);
-      mask = poiMaskWith(mask, cat('cafe'), true);
+      mask = poiMaskWith(mask, cat('bench'), on: true);
+      mask = poiMaskWith(mask, cat('cafe'), on: true);
       final enabled = poiCategoriesFromMask(mask).map((c) => c.key).toSet();
       expect(enabled, {'bench', 'cafe'});
 
-      mask = poiMaskWith(mask, cat('bench'), false);
+      mask = poiMaskWith(mask, cat('bench'), on: false);
       expect(poiCategoriesFromMask(mask).map((c) => c.key), {'cafe'});
     });
 

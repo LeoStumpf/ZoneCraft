@@ -109,6 +109,9 @@ class IncomingFile {
   Future<void> dispose() async {
     try {
       await File(path).delete();
+    // Already gone, never ours, or an unwritable cache — all harmless, and the
+    // platform side clears the folder before the next copy anyway.
+    // ignore: avoid_catches_without_on_clauses
     } catch (_) {
       // Already gone, or never ours to delete.
     }

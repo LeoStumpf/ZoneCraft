@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:async';
+
 import 'dart:math' as math;
 
 import 'package:drift/drift.dart' show Value;
@@ -99,7 +101,7 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
   }
 
   void _armPlacement() {
-    ref.read(circlePlacementProvider.notifier).arm(true);
+    ref.read(circlePlacementProvider.notifier).arm(on: true);
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
       ..showSnackBar(
@@ -108,7 +110,7 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
   }
 
   void _close() {
-    ref.read(circlePlacementProvider.notifier).arm(false);
+    ref.read(circlePlacementProvider.notifier).arm(on: false);
     ref.read(selectedCircleProvider.notifier).select(null);
   }
 
@@ -124,7 +126,7 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
 
   void _setRadius(double meters) {
     setState(() => _radius = meters);
-    _repo.updateCircle(widget.circle.id, radiusMeters: meters);
+    unawaited(_repo.updateCircle(widget.circle.id, radiusMeters: meters));
   }
 
   /// Mirrors the current radius into the field, unless the user is typing in
@@ -266,11 +268,11 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
                 onChanged: (s) {
                   final p = parseLatLng(s);
                   if (p != null) {
-                    _repo.updateCircle(
-                      widget.circle.id,
-                      centerLat: p.latitude,
-                      centerLng: p.longitude,
-                    );
+                    unawaited(_repo.updateCircle(
+                        widget.circle.id,
+                        centerLat: p.latitude,
+                        centerLng: p.longitude,
+                      ));
                   }
                 },
               ),
@@ -292,10 +294,10 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
           ),
           onChanged: (s) {
             final t = s.trim();
-            _repo.updateCircle(
-              widget.circle.id,
-              label: Value(t.isEmpty ? null : t),
-            );
+            unawaited(_repo.updateCircle(
+                widget.circle.id,
+                label: Value(t.isEmpty ? null : t),
+              ));
           },
         ),
       ],

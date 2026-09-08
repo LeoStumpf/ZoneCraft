@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -251,9 +253,9 @@ class LayersDrawer extends ConsumerWidget {
                       final moved = reordered.removeAt(oldIndex);
                       reordered.insert(newIndex, moved);
                       // Persist as bottom-to-top draw order.
-                      repo.reorderLayers(
-                        reordered.reversed.map((l) => l.id).toList(),
-                      );
+                      unawaited(repo.reorderLayers(
+                          reordered.reversed.map((l) => l.id).toList(),
+                        ));
                     },
                     itemBuilder: (context, index) {
                       final layer = display[index];
@@ -359,11 +361,11 @@ class LayersDrawer extends ConsumerWidget {
                   title: const Text('Settings'),
                   onTap: () {
                     Navigator.pop(context); // close the drawer
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const SettingsScreen(),
-                      ),
-                    );
+                    unawaited(Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const SettingsScreen(),
+                        ),
+                      ));
                   },
                 ),
               ],
@@ -926,7 +928,9 @@ class _BasemapTile extends ConsumerWidget {
         icon: Icon(
             visible ? Icons.visibility : Icons.visibility_off_outlined),
         onPressed:
-            settings == null ? null : () => repo.updateBasemapVisible(!visible),
+            settings == null
+                ? null
+                : () => repo.updateBasemapVisible(visible: !visible),
       ),
       title: Row(
         children: const [
@@ -1072,7 +1076,9 @@ Future<void> showTrackSettingsDialog(
             onChanged: (v) {
               final n = parseDecimal(v);
               if (n != null && n.isFinite && n > 0 && n <= 40) {
-                repo.updateTrackLayerOptions(layer.id, strokeWidth: n);
+                unawaited(
+                  repo.updateTrackLayerOptions(layer.id, strokeWidth: n)
+                );
               }
             },
           ),
@@ -1089,7 +1095,9 @@ Future<void> showTrackSettingsDialog(
             onChanged: (v) {
               final n = parseDecimal(v);
               if (n != null && n.isFinite && n >= 0 && n <= 10000) {
-                repo.updateTrackLayerOptions(layer.id, minDistanceMeters: n);
+                unawaited(
+                  repo.updateTrackLayerOptions(layer.id, minDistanceMeters: n)
+                );
               }
             },
           ),

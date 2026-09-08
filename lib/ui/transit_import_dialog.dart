@@ -397,7 +397,7 @@ class _TransitImportDialogState extends State<_TransitImportDialog> {
       dense: true,
       contentPadding: EdgeInsets.zero,
       controlAffinity: ListTileControlAffinity.leading,
-      onChanged: (v) => _setModes(transitMaskWith(_modes, m, v ?? false)),
+      onChanged: (v) => _setModes(transitMaskWith(_modes, m, on: v ?? false)),
       title: Row(
         children: [
           Container(

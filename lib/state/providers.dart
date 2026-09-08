@@ -327,7 +327,7 @@ class CirclePlacementNotifier extends Notifier<bool> {
   @override
   bool build() => false;
 
-  void arm(bool on) => state = on;
+  void arm({required bool on}) => state = on;
 }
 
 final circlePlacementProvider =
@@ -418,7 +418,7 @@ class FreeLineCenterPlacementNotifier extends Notifier<bool> {
   @override
   bool build() => false;
 
-  void arm(bool on) => state = on;
+  void arm({required bool on}) => state = on;
 }
 
 final freeLineCenterPlacementProvider =
@@ -470,7 +470,7 @@ class HeightPlacementNotifier extends Notifier<bool> {
   @override
   bool build() => false;
 
-  void arm(bool armed) => state = armed;
+  void arm({required bool on}) => state = on;
 }
 
 final heightPlacementProvider =
@@ -503,7 +503,7 @@ class BorderReshapeNotifier extends Notifier<bool> {
   @override
   bool build() => false;
 
-  void arm(bool on) => state = on;
+  void arm({required bool on}) => state = on;
 }
 
 final borderReshapeProvider =
@@ -566,24 +566,24 @@ final selectedTransitStopProvider =
 /// drawer's Elements list) rely on it too — keep it here, not in a widget.
 void clearSelection(WidgetRef ref) {
   ref.read(selectedCircleProvider.notifier).select(null);
-  ref.read(circlePlacementProvider.notifier).arm(false);
+  ref.read(circlePlacementProvider.notifier).arm(on: false);
   ref.read(selectedPlaneProvider.notifier).select(null);
   ref.read(planePlacementProvider.notifier).arm(null);
   ref.read(selectedSubspaceProvider.notifier).select(null);
   ref.read(subspacePlacementProvider.notifier).arm(null);
   ref.read(selectedFreeLineProvider.notifier).select(null);
   ref.read(freeLinePlacementProvider.notifier).arm(null);
-  ref.read(freeLineCenterPlacementProvider.notifier).arm(false);
+  ref.read(freeLineCenterPlacementProvider.notifier).arm(on: false);
   ref.read(selectedFreeAreaProvider.notifier).select(null);
   ref.read(freeAreaPlacementProvider.notifier).arm(null);
   ref.read(selectedHeightRegionProvider.notifier).select(null);
-  ref.read(heightPlacementProvider.notifier).arm(false);
+  ref.read(heightPlacementProvider.notifier).arm(on: false);
   ref.read(selectedPoiSetProvider.notifier).select(null);
   ref.read(selectedPoiPointProvider.notifier).select(null);
   ref.read(selectedTransitSetProvider.notifier).select(null);
   ref.read(selectedTransitStopProvider.notifier).select(null);
   ref.read(selectedBorderAreaProvider.notifier).select(null);
-  ref.read(borderReshapeProvider.notifier).arm(false);
+  ref.read(borderReshapeProvider.notifier).arm(on: false);
 }
 
 /// Whether any object is currently selected.
@@ -705,7 +705,7 @@ class PoiPointPlacementNotifier extends Notifier<bool> {
   @override
   bool build() => false;
 
-  void arm(bool on) => state = on;
+  void arm({required bool on}) => state = on;
 }
 
 final poiPointPlacementProvider =

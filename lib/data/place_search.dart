@@ -97,6 +97,8 @@ List<PlaceResult> parsePlaceSearchResponse(String body) {
   final dynamic decoded;
   try {
     decoded = jsonDecode(body);
+  // Nominatim answers with an error page under load; that is data, not a bug.
+  // ignore: avoid_catches_without_on_clauses
   } catch (_) {
     return out;
   }
@@ -173,6 +175,8 @@ Future<List<PlaceResult>?> searchPlaces(
     final parsed = parsePlaceSearchResponse(resp.body);
     placeSearchCache.put(q, parsed);
     return parsed;
+  // Any network failure means the search simply has no answer to give.
+  // ignore: avoid_catches_without_on_clauses
   } catch (_) {
     return null;
   } finally {

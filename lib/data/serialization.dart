@@ -465,6 +465,9 @@ ExportData? importFromGeoJson(String text) {
   Object? root;
   try {
     root = jsonDecode(text);
+  // An arbitrary file is arbitrary bytes; every failure means the same null,
+  // which is what the doc comment above promises.
+  // ignore: avoid_catches_without_on_clauses
   } catch (_) {
     return null;
   }
@@ -497,10 +500,10 @@ ExportData? importFromGeoJson(String text) {
   final features = root['features'];
   if (features is! List) return null;
   for (final f in features) {
-    if (f is! Map) continue;
+    if (f is! Map<String, dynamic>) continue;
     final obj = _featureToObject(f);
     if (obj == null) continue;
-    final idx = ((f['properties'] as Map?)?['zonecraftLayer'] as num?)?.toInt();
+    final idx = ((f['properties'] as Map<String, dynamic>?)?['zonecraftLayer'] as num?)?.toInt();
     if (idx == null || idx < 0 || idx >= buckets.length) continue;
     buckets[idx].add(obj);
   }
@@ -524,10 +527,12 @@ ExportData? importFromGeoJson(String text) {
   ]);
 }
 
-ExportObject? _featureToObject(Map f) {
+ExportObject? _featureToObject(Map<String, dynamic> f) {
   final props = f['properties'];
   final geom = f['geometry'];
-  if (props is! Map || geom is! Map) return null;
+  if (props is! Map<String, dynamic> || geom is! Map<String, dynamic>) {
+    return null;
+  }
   final kind = props['kind'] as String?;
   if (kind == null) return null;
   final rings = kind == 'borderarea' ? _readRings(geom) : null;
@@ -593,14 +598,14 @@ ExportObject? _featureToObject(Map f) {
 /// The full ring list of a `borderarea`'s geometry, flattened back to the
 /// role-less form the database stores. Accepts a `Polygon` too, so a file
 /// hand-edited down to one area still reads.
-List<List<LatLng>>? _readRings(Map geom) {
+List<List<LatLng>>? _readRings(Map<String, dynamic> geom) {
   final type = geom['type'];
   final c = geom['coordinates'];
   if (c is! List) return null;
   final polys = switch (type) {
     'MultiPolygon' => [for (final p in c) if (p is List) p],
     'Polygon' => [c],
-    _ => const <List>[],
+    _ => const <List<dynamic>>[],
   };
   final out = <List<LatLng>>[];
   for (final poly in polys) {
@@ -641,7 +646,7 @@ List<List<LatLng>>? _readRingArray(Object? raw) {
 
 /// A `track`'s parts. A `MultiLineString` carries the recording's segment
 /// breaks; a plain `LineString` (every v1 file) is one unbroken segment.
-List<List<LatLng>>? _readSegments(Map geom) {
+List<List<LatLng>>? _readSegments(Map<String, dynamic> geom) {
   final c = geom['coordinates'];
   if (c is! List) return null;
   switch (geom['type']) {
@@ -684,7 +689,7 @@ List<double>? _readDoubles(Object? raw, {required int exactly}) {
   return out;
 }
 
-List<LatLng> _readCoords(String kind, Map geom) {
+List<LatLng> _readCoords(String kind, Map<String, dynamic> geom) {
   final type = geom['type'];
   final c = geom['coordinates'];
   if (type == 'Point' && c is List) {
@@ -695,7 +700,7 @@ List<LatLng> _readCoords(String kind, Map geom) {
     return _latLngList(c);
   }
   if (type == 'Polygon' && c is List && c.isNotEmpty && c.first is List) {
-    final ring = _latLngList(c.first as List);
+    final ring = _latLngList(c.first as List<dynamic>);
     // GeoJSON polygons repeat the first vertex to close; drop it.
     if (ring.length >= 2 &&
         ring.first.latitude == ring.last.latitude &&
@@ -707,7 +712,7 @@ List<LatLng> _readCoords(String kind, Map geom) {
   return const [];
 }
 
-List<LatLng> _latLngList(List raw) {
+List<LatLng> _latLngList(List<dynamic> raw) {
   final out = <LatLng>[];
   for (final e in raw) {
     if (e is List) {
@@ -718,7 +723,7 @@ List<LatLng> _latLngList(List raw) {
   return out;
 }
 
-LatLng? _latLng(List pair) {
+LatLng? _latLng(List<dynamic> pair) {
   if (pair.length < 2) return null;
   final lng = (pair[0] as num?)?.toDouble();
   final lat = (pair[1] as num?)?.toDouble();

@@ -163,7 +163,7 @@ class TransitModeFilter extends ConsumerWidget {
           CheckboxListTile(
             value: tally.visible & m.bit != 0,
             onChanged: (v) =>
-                write(transitMaskWith(tally.visible, m, v ?? false)),
+                write(transitMaskWith(tally.visible, m, on: v ?? false)),
             secondary: Icon(transitIconFor(m.bit)),
             title: Row(
               children: [
