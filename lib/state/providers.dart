@@ -14,12 +14,16 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:async';
+
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart' hide Circle;
 
 import '../data/database.dart';
 import '../data/repository.dart';
 import '../data/shared_point.dart';
+import '../data/undo_journal.dart';
 import 'map_mode.dart';
 
 /// Single long-lived database instance.
@@ -32,6 +36,53 @@ final databaseProvider = Provider<AppDatabase>((ref) {
 final repositoryProvider = Provider<Repository>((ref) {
   return Repository(ref.watch(databaseProvider));
 });
+
+/// The undo journal, which lives on the database because its triggers do.
+final undoJournalProvider = Provider<UndoJournal>((ref) {
+  final journal = ref.watch(repositoryProvider).undo;
+  // Here rather than in `install()`: see [UndoJournal.startWatching].
+  journal.startWatching();
+  return journal;
+});
+
+/// What the back/forward buttons render from.
+final undoStateProvider = StreamProvider<UndoState>((ref) async* {
+  final journal = ref.watch(undoJournalProvider);
+  yield journal.state;
+  yield* journal.changes;
+});
+
+/// Bumped by every undo and redo.
+///
+/// Editors mirror their row into `TextEditingController`s and deliberately skip
+/// re-syncing a field that has focus — so after an undo the map would revert
+/// while the text box still showed the old value, and the next keystroke would
+/// write that stale value straight back. Folding this into the editor sheet's
+/// key discards the sheet subtree on undo, which re-seeds every controller in
+/// every editor from the restored row. It changes only on undo, so ordinary
+/// live editing never fights the keyboard.
+class UndoRevisionNotifier extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void bump() => state = state + 1;
+}
+
+final undoRevisionProvider =
+    NotifierProvider<UndoRevisionNotifier, int>(UndoRevisionNotifier.new);
+
+/// Steps back (or, with [forward], returns) one action.
+///
+/// The order matters: drop the keyboard first so no focused field can write its
+/// stale value back, disarm anything that would commit remembered geometry over
+/// what is about to be restored, then replay.
+Future<void> applyUndo(WidgetRef ref, {bool forward = false}) async {
+  FocusManager.instance.primaryFocus?.unfocus();
+  clearTransientModes(ref);
+  final journal = ref.read(undoJournalProvider);
+  await (forward ? journal.redo() : journal.undo());
+  ref.read(undoRevisionProvider.notifier).bump();
+}
 
 /// Reactive list of layers, ordered bottom-to-top (draw order).
 final layersProvider = StreamProvider<List<Layer>>((ref) {
@@ -566,23 +617,35 @@ final selectedTransitStopProvider =
 /// drawer's Elements list) rely on it too — keep it here, not in a widget.
 void clearSelection(WidgetRef ref) {
   ref.read(selectedCircleProvider.notifier).select(null);
-  ref.read(circlePlacementProvider.notifier).arm(on: false);
   ref.read(selectedPlaneProvider.notifier).select(null);
-  ref.read(planePlacementProvider.notifier).arm(null);
   ref.read(selectedSubspaceProvider.notifier).select(null);
-  ref.read(subspacePlacementProvider.notifier).arm(null);
   ref.read(selectedFreeLineProvider.notifier).select(null);
-  ref.read(freeLinePlacementProvider.notifier).arm(null);
-  ref.read(freeLineCenterPlacementProvider.notifier).arm(on: false);
   ref.read(selectedFreeAreaProvider.notifier).select(null);
-  ref.read(freeAreaPlacementProvider.notifier).arm(null);
   ref.read(selectedHeightRegionProvider.notifier).select(null);
-  ref.read(heightPlacementProvider.notifier).arm(on: false);
   ref.read(selectedPoiSetProvider.notifier).select(null);
   ref.read(selectedPoiPointProvider.notifier).select(null);
   ref.read(selectedTransitSetProvider.notifier).select(null);
   ref.read(selectedTransitStopProvider.notifier).select(null);
   ref.read(selectedBorderAreaProvider.notifier).select(null);
+  clearTransientModes(ref);
+}
+
+/// Disarms every "the next map tap places this" flag and the border reshape
+/// mode, without touching the selections.
+///
+/// Undo needs exactly this half and not the other: a selection whose row has
+/// gone resolves to null and closes its own sheet (and a redo re-opens it), but
+/// an armed placement or a live reshape draft would survive and write stale
+/// geometry back over what was just restored.
+void clearTransientModes(WidgetRef ref) {
+  ref.read(circlePlacementProvider.notifier).arm(on: false);
+  ref.read(planePlacementProvider.notifier).arm(null);
+  ref.read(subspacePlacementProvider.notifier).arm(null);
+  ref.read(freeLinePlacementProvider.notifier).arm(null);
+  ref.read(freeLineCenterPlacementProvider.notifier).arm(on: false);
+  ref.read(freeAreaPlacementProvider.notifier).arm(null);
+  ref.read(heightPlacementProvider.notifier).arm(on: false);
+  ref.read(poiPointPlacementProvider.notifier).arm(on: false);
   ref.read(borderReshapeProvider.notifier).arm(on: false);
 }
 

@@ -86,6 +86,7 @@ import 'subspace_editor.dart';
 import 'transit_import_dialog.dart';
 import 'track_layer.dart';
 import 'transit_layer.dart';
+import 'undo_buttons.dart';
 
 /// How far in "Locate me" and "Zoom to" will zoom when the map is far out.
 ///
@@ -123,7 +124,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
   // keeps the persisted-per-frame writes off the UI thread's back.
   DateTime _lastDragWriteAt = DateTime.fromMillisecondsSinceEpoch(0);
   // The position a handle held when its drag began, so a move can be undone.
-  LatLng? _dragOrigin;
   // Shows the "handles are draggable" hint once per app session, the first time
   // an object is selected.
   bool _editHintShown = false;
@@ -172,7 +172,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
   /// Everything placed in the current Add session, newest last: the object each
   /// tap belongs to (for "Edit last") and how to undo that one tap.
-  final List<({ObjectRef object, Future<void> Function() undo})> _addSteps = [];
+  final List<ObjectRef> _addSteps = [];
 
   // --- Draw mode ------------------------------------------------------------
   // While [MapMode.draw] is armed one finger draws instead of panning, and each
@@ -780,21 +780,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
-  /// SnackBar shown after a handle drag, offering to put the point back where it
-  /// started ([revert] rewrites the original lat/lng).
-  void _showMoveUndo(String what, VoidCallback revert) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..clearSnackBars()
-      ..showSnackBar(
-        SnackBar(
-          content: Text('$what moved'),
-          duration: const Duration(seconds: 4),
-          action: SnackBarAction(label: 'Undo', onPressed: revert),
-        ),
-      );
-  }
-
   /// Toggles tap-to-measure-elevation mode. Modes are mutually exclusive by
   /// construction now, so this only has to clear the *scratch* of whichever
   /// measurement is being left behind.
@@ -817,6 +802,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
   void _enterMode(MapMode mode) {
     final previous = _mode;
     if (previous == mode) return;
+    // Leaving a mode ends whatever was being done in it, so it ends the undo
+    // step too — otherwise a quick switch would run two unrelated actions
+    // together under the 600 ms idle rule.
+    unawaited(ref.read(repositoryProvider).undo.sealStep());
     setState(() {
       if (previous == MapMode.elevation) {
         _probePoint = null;
@@ -937,8 +926,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// position). The dot sits inside a generous 40 px box so it is easy to grab;
   /// [main] draws it larger/white (the subspace main point), [core] overrides the
   /// dot (e.g. a centre crosshair), and [label] shows a tiny name plate below it.
-  /// [undoLabel] names the thing moved in the undo SnackBar (null suppresses it —
-  /// e.g. for bounding-circle centres where there's no natural single-step undo).
   /// [onTapToggle] (vertex handles) marks the point for bulk delete, drawn with
   /// an accent ring when [marked].
   DragMarker _dragHandle(
@@ -949,7 +936,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
     String? label,
     Widget? core,
     void Function(Offset globalPos)? onMenu,
-    String? undoLabel,
     bool live = true,
     bool marked = false,
     VoidCallback? onTapToggle,
@@ -970,7 +956,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
       point: point,
       size: Size(width, height),
       onTap: onTapToggle == null ? null : (_) => onTapToggle(),
-      onDragStart: (_, latlng) => _dragOrigin = latlng,
       onDragUpdate: !live
           ? null
           : (_, latlng) {
@@ -989,15 +974,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
         // Handles whose [onMoved] only touches memory persist here instead —
         // one write per completed gesture (border outline reshaping).
         onDragEnded?.call();
-        final origin = _dragOrigin;
-        _dragOrigin = null;
-        // Only worth an undo if the point actually moved.
-        if (undoLabel != null &&
-            origin != null &&
-            (origin.latitude != latlng.latitude ||
-                origin.longitude != latlng.longitude)) {
-          _showMoveUndo(undoLabel, () => onMoved(origin));
-        }
+        // The gesture is over, so the step is: seal it now rather than waiting
+        // out the idle timer, so Back takes back the whole drag and nothing
+        // that follows it.
+        unawaited(ref.read(repositoryProvider).undo.sealStep());
       },
       onLongPress: onMenu == null
           ? null
@@ -1067,7 +1047,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
       _hitTest.offset(center, radiusMeters, 90), // due east of the centre
       key: key,
       live: false,
-      undoLabel: null,
       core: Container(
         width: 24,
         height: 24,
@@ -1378,9 +1357,19 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// see `clearSelection`), then drops this screen's own vertex marks.
   void _clearSelection() {
     clearSelection(ref);
+    _sealUndoStep();
     // Marks belong to the object being edited; drop them when it deselects.
     if (_markedPoints.isNotEmpty) _markedPoints.clear();
   }
+
+  /// Ends the open undo step now rather than waiting out the idle timer.
+  ///
+  /// Closing an editor, or opening a different one, ends whatever was being
+  /// adjusted — so it ends the step too. It lives here rather than inside
+  /// `clearSelection` because that helper is a pure Riverpod routine that the
+  /// widget tests call with no database behind it.
+  void _sealUndoStep() =>
+      unawaited(ref.read(repositoryProvider).undo.sealStep());
 
   /// Toggles whether [pointId] is marked for bulk delete.
   void _toggleMarked(String pointId) {
@@ -1453,6 +1442,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// screen's vertex marks.
   void _select(ObjectKind kind, String id) {
     if (_markedPoints.isNotEmpty) _markedPoints.clear();
+    _sealUndoStep();
     selectObject(ref, kind, id);
   }
 
@@ -1557,7 +1547,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// points (subspace; the nearest-to-centre promotes to main when the
   /// subspace has none yet), or a stored offline POI set with markers (poi).
   /// The search centre defaults to the map centre; Add mode passes the tap.
-  Future<void> _importPois(Layer layer, {LatLng? at}) async {
+  /// One import, one undo step. The writes straddle a network call — a set row
+  /// is created before it and filled after — so the idle rule alone would split
+  /// them into two steps and Back would leave an empty category behind.
+  Future<void> _importPois(Layer layer, {LatLng? at}) =>
+      ref.read(repositoryProvider).undo.group(
+            'Import POIs',
+            () => _runPoiImport(layer, at: at),
+          );
+
+  Future<void> _runPoiImport(Layer layer, {LatLng? at}) async {
     final isCircleLayer = layer.type == 'circles';
     final isPoiLayer = layer.type == 'poi';
     setState(() => _importCircleCentre = at);
@@ -1799,6 +1798,30 @@ class _MapScreenState extends ConsumerState<MapScreen>
     required double diagonalMeters,
     required int modeMask,
     String? existingSetId,
+  }) =>
+      ref.read(repositoryProvider).undo.group(
+            'Import stations',
+            () => _transitImport(
+              layerId: layerId,
+              south: south,
+              west: west,
+              north: north,
+              east: east,
+              diagonalMeters: diagonalMeters,
+              modeMask: modeMask,
+              existingSetId: existingSetId,
+            ),
+          );
+
+  Future<void> _transitImport({
+    required String layerId,
+    required double south,
+    required double west,
+    required double north,
+    required double east,
+    required double diagonalMeters,
+    required int modeMask,
+    String? existingSetId,
   }) async {
     final repo = ref.read(repositoryProvider);
     final setId =
@@ -1951,7 +1974,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// succeeds: unlike a transit import there is no retry row, because
   /// re-running this is two taps and a half-written set would carry no less
   /// state than the query itself.
-  Future<void> _importBorders(Layer layer, {required LatLngBounds box}) async {
+  Future<void> _importBorders(Layer layer, {required LatLngBounds box}) =>
+      ref.read(repositoryProvider).undo.group(
+            'Import borders',
+            () => _runBorderImport(layer, box: box),
+          );
+
+  Future<void> _runBorderImport(
+    Layer layer, {
+    required LatLngBounds box,
+  }) async {
     final level = borderLevelByAdminLevel(layer.borderLevel);
     if (level == null) {
       _hint('This layer has no border level set — make a new borders layer.');
@@ -2336,7 +2368,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   void _exitAddMode() {
     final layerId = _placeLayerId;
     final type = _placeType;
-    final lastPlaced = _addSteps.lastOrNull?.object;
+    final lastPlaced = _addSteps.lastOrNull;
     setState(() {
       _placeLayerId = null;
       _placeType = null;
@@ -2373,10 +2405,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
     }
   }
 
-  /// Records one placement so the banner can Undo it and "Edit last" can open
-  /// the object it belongs to.
-  void _pushAddStep(ObjectRef object, Future<void> Function() undo) {
-    setState(() => _addSteps.add((object: object, undo: undo)));
+  /// Records one placement so "Edit last" can open the object it belongs to,
+  /// and so the banner knows how many taps this session has made.
+  ///
+  /// It carries no inverse of its own: the journal already recorded one, and a
+  /// second would be a *new* write rather than an undo.
+  void _pushAddStep(ObjectRef object) {
+    setState(() => _addSteps.add(object));
+    // One tap, one step. Without this seal two quick taps would fall inside the
+    // idle window and the banner's Undo would take back both.
+    unawaited(ref.read(repositoryProvider).undo.sealStep());
   }
 
   /// Arms Draw mode for [layer]: one finger now draws a freehand line/area
@@ -2395,7 +2433,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// appear — the same "Done ⇒ now edit it" contract Add mode has, and the
   /// point of drawing into ordinary freehand objects in the first place.
   void _finishDraw() {
-    final last = _addSteps.lastOrNull?.object;
+    final last = _addSteps.lastOrNull;
     setState(() {
       _drawLayerId = null;
       _drawType = null;
@@ -2472,7 +2510,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
       await repo.addFreeAreaPoints(id, pts);
       _pushAddStep(
         ObjectRef(kind: ObjectKind.freeArea, id: id, layerId: layerId),
-        () => repo.deleteFreeArea(id),
       );
     } else {
       // A freehand line splits an inclusion circle, so the circle has to be
@@ -2502,7 +2539,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
       await repo.addFreeLinePoints(id, pts);
       _pushAddStep(
         ObjectRef(kind: ObjectKind.freeLine, id: id, layerId: layerId),
-        () => repo.deleteFreeLine(id),
       );
     }
   }
@@ -2518,14 +2554,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
       return;
     }
     if (_addSteps.isEmpty) return;
-    final step = _addSteps.last;
     setState(() => _addSteps.removeLast());
-    await step.undo();
+    // Deliberately the *same* undo the chrome button performs, not a fresh
+    // delete: an inverse write would land on the stack as another step, so
+    // pressing this and then Back would put the object back again.
+    await applyUndo(ref);
   }
 
   /// Leaves Add mode and opens the editor for the object placed last.
   void _editLastAdded() {
-    final object = _addSteps.lastOrNull?.object;
+    final object = _addSteps.lastOrNull;
     setState(() {
       _placeLayerId = null;
       _placeType = null;
@@ -2587,13 +2625,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
         final id = await _addCircleAt(latlng, layer, select: false);
         _pushAddStep(
           ObjectRef(kind: ObjectKind.circle, id: id, layerId: layer.id),
-          () => repo.deleteCircle(id),
         );
       case 'height':
         final id = await _addHeightRegionAt(latlng, layer, select: false);
         _pushAddStep(
           ObjectRef(kind: ObjectKind.heightRegion, id: id, layerId: layer.id),
-          () => repo.deleteHeightRegion(id),
         );
       case 'planes':
         // Two taps per plane: the first is buffered (and shown as a pin).
@@ -2612,7 +2648,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
         );
         _pushAddStep(
           ObjectRef(kind: ObjectKind.plane, id: id, layerId: layer.id),
-          () => repo.deletePlane(id),
         );
       case 'subspace':
         final existing = (ref.read(subspacesProvider).asData?.value ?? const [])
@@ -2629,10 +2664,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
           // The first tap made the object too, so undoing it removes both.
           _pushAddStep(
             ObjectRef(kind: ObjectKind.subspace, id: id, layerId: layerId),
-            () => repo.deleteSubspace(id),
           );
         } else {
-          final pid = await repo.addSubspacePoint(
+          await repo.addSubspacePoint(
             subspaceId: existing.id,
             lat: latlng.latitude,
             lng: latlng.longitude,
@@ -2643,7 +2677,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
               id: existing.id,
               layerId: layerId,
             ),
-            () => repo.deleteSubspacePoint(pid),
           );
         }
       case 'freeline':
@@ -2664,10 +2697,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
           );
           _pushAddStep(
             ObjectRef(kind: ObjectKind.freeLine, id: id, layerId: layerId),
-            () => repo.deleteFreeLine(id),
           );
         } else {
-          final pid = await repo.addFreeLinePoint(
+          await repo.addFreeLinePoint(
             freeLineId: existing.id,
             lat: latlng.latitude,
             lng: latlng.longitude,
@@ -2678,7 +2710,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
               id: existing.id,
               layerId: layerId,
             ),
-            () => repo.deleteFreeLinePoint(pid),
           );
         }
       case 'freearea':
@@ -2694,10 +2725,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
           );
           _pushAddStep(
             ObjectRef(kind: ObjectKind.freeArea, id: id, layerId: layerId),
-            () => repo.deleteFreeArea(id),
           );
         } else {
-          final pid = await repo.addFreeAreaPoint(
+          await repo.addFreeAreaPoint(
             freeAreaId: existing.id,
             lat: latlng.latitude,
             lng: latlng.longitude,
@@ -2708,7 +2738,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
               id: existing.id,
               layerId: layerId,
             ),
-            () => repo.deleteFreeAreaPoint(pid),
           );
         }
       case 'poi':
@@ -2727,7 +2756,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
         );
         _pushAddStep(
           ObjectRef(kind: ObjectKind.poiPoint, id: pid, layerId: layer.id),
-          () => repo.deletePoiPoint(pid),
         );
       case 'transit':
       case 'borders':
@@ -3591,7 +3619,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
         _dragHandle(
           rings[k.ring][k.index],
           key: ValueKey('ba-${draft.id}-${k.ring}-${k.index}'),
-          undoLabel: null, // the whole gesture is one write; see _commitReshape
           onMoved: (ll) => _moveReshapeVertex(k.ring, k.index, ll),
           onDragEnded: _commitReshape,
           onMenu: (pos) => _showFreeVertexMenu(
@@ -3623,7 +3650,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
         // The name only when the layer isn't already drawing it there —
         // otherwise the handle stacks a second copy on top of the real plate.
         label: layer?.borderShowNames == true ? null : area.name,
-        undoLabel: 'Name plate',
         onMoved: (ll) => ref
             .read(repositoryProvider)
             .updateBorderArea(
@@ -4738,7 +4764,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               ),
                               key: ValueKey('circle-${selectedCircle.id}'),
                               label: selectedCircle.label,
-                              undoLabel: 'Circle',
                               onMoved: (ll) => ref
                                   .read(repositoryProvider)
                                   .updateCircle(
@@ -4769,7 +4794,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               LatLng(selectedPlane.aLat, selectedPlane.aLng),
                               key: ValueKey('plane-${selectedPlane.id}-A'),
                               label: selectedPlane.label,
-                              undoLabel: 'Point',
                               onMoved: (ll) => ref
                                   .read(repositoryProvider)
                                   .updatePlane(
@@ -4783,7 +4807,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             _dragHandle(
                               LatLng(selectedPlane.bLat, selectedPlane.bLng),
                               key: ValueKey('plane-${selectedPlane.id}-B'),
-                              undoLabel: 'Point',
                               onMoved: (ll) => ref
                                   .read(repositoryProvider)
                                   .updatePlane(
@@ -4801,7 +4824,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               key: ValueKey('sub-${p.id}'),
                               main: p.isMain,
                               label: p.label,
-                              undoLabel: 'Point',
                               marked: _markedPoints.contains(p.id),
                               onTapToggle: () => _toggleMarked(p.id),
                               onMoved: (ll) => ref
@@ -4821,7 +4843,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             _dragHandle(
                               LatLng(p.lat, p.lng),
                               key: ValueKey('fl-${p.id}'),
-                              undoLabel: 'Point',
                               marked: _markedPoints.contains(p.id),
                               onTapToggle: () => _toggleMarked(p.id),
                               onMoved: (ll) => ref
@@ -4847,7 +4868,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                 'fl-center-${selectedFreeLine!.id}',
                               ),
                               core: _crosshairCore(),
-                              undoLabel: 'Centre',
                               onMoved: (ll) => ref
                                   .read(repositoryProvider)
                                   .updateFreeLine(
@@ -4877,7 +4897,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             _dragHandle(
                               LatLng(p.lat, p.lng),
                               key: ValueKey('fa-${p.id}'),
-                              undoLabel: 'Point',
                               marked: _markedPoints.contains(p.id),
                               onTapToggle: () => _toggleMarked(p.id),
                               onMoved: (ll) => ref
@@ -4906,7 +4925,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                 'height-${selectedHeightRegion.id}',
                               ),
                               core: _crosshairCore(),
-                              undoLabel: 'Centre',
                               onMoved: (ll) => ref
                                   .read(repositoryProvider)
                                   .updateHeightRegion(
@@ -4969,21 +4987,32 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       ),
                     ),
                   ),
-                // The only chrome over the map: a menu button at the top-left.
+                // The chrome over the map at the top-left: a menu button, and
+                // beside it the undo/redo pair. They are chrome rather than
+                // FABs for the same reason the compass below is — the FAB
+                // column is hidden while an editor sheet is open, which is
+                // precisely when an edit wants taking back.
                 SafeArea(
                   child: Padding(
                     padding: const EdgeInsets.all(8),
-                    child: Material(
-                      color: Theme.of(context).colorScheme.surface,
-                      elevation: 2,
-                      shape: const CircleBorder(),
-                      clipBehavior: Clip.antiAlias,
-                      child: IconButton(
-                        icon: const Icon(Icons.menu),
-                        tooltip: 'Layers',
-                        onPressed: () =>
-                            _scaffoldKey.currentState?.openDrawer(),
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Material(
+                          color: Theme.of(context).colorScheme.surface,
+                          elevation: 2,
+                          shape: const CircleBorder(),
+                          clipBehavior: Clip.antiAlias,
+                          child: IconButton(
+                            icon: const Icon(Icons.menu),
+                            tooltip: 'Layers',
+                            onPressed: () =>
+                                _scaffoldKey.currentState?.openDrawer(),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const UndoButtons(),
+                      ],
                     ),
                   ),
                 ),
@@ -5615,9 +5644,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             ref.read(receivedPointProvider.notifier).clear(),
                       ))
               : CollapsibleSheet(
-                  // Reset to expanded whenever the selected object changes.
+                  // Reset to expanded whenever the selected object changes —
+                  // and rebuild from scratch on an undo. Editors mirror their
+                  // row into controllers and skip re-syncing a focused field,
+                  // so without the revision an undone value would still be sat
+                  // in the text box, ready for the next keystroke to write it
+                  // back. Discarding the subtree re-seeds every editor at once.
                   key: ValueKey(
-                    'sheet-'
+                    'sheet-${ref.watch(undoRevisionProvider)}-'
                     '${selectedCircle?.id ?? selectedPlane?.id ?? selectedSubspace?.id ?? selectedFreeLine?.id ?? selectedFreeArea?.id ?? selectedHeightRegion?.id ?? selectedPoiSet?.id ?? selectedPoiPoint?.id ?? selectedTransitSet?.id ?? selectedTransitStop?.id ?? selectedBorderArea?.id}',
                   ),
                   child: selectedCircle != null

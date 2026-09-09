@@ -184,7 +184,12 @@ Future<HeightGenResult> generateHeightRegion({
         for (var i = 0; i + 1 < flat.length; i += 2) LatLng(flat[i], flat[i + 1]),
       ],
   ];
-  await repo.replaceHeightPolygons(region.id, polygons);
-  await repo.markHeightGenerated(region.id);
+  // Named, rather than left to the label deriver: `replaceHeightPolygons`
+  // clears the old rings first, so the step's first log row is a *delete* and
+  // the button would offer to "undo delete height shape".
+  await repo.undo.group('Generate height', () async {
+    await repo.replaceHeightPolygons(region.id, polygons);
+    await repo.markHeightGenerated(region.id);
+  });
   return HeightGenResult(polygons.length, tileBytes.length, missing);
 }

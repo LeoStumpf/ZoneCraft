@@ -415,7 +415,7 @@ class _LayerObjectsList extends ConsumerWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Delete ${s.title}?'),
-        content: const Text('This cannot be undone.'),
+        content: const Text('Undo will bring it back.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),

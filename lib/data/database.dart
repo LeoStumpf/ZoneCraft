@@ -17,6 +17,8 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
+import 'undo_journal.dart';
+
 part 'database.g.dart';
 
 /// Default opacity of a freshly created region layer's **solid fill**. The
@@ -972,10 +974,32 @@ class AppSettings extends Table {
   ],
 )
 class AppDatabase extends _$AppDatabase {
+  /// `driftDatabase(name:)` resolves to `NativeDatabase.createBackgroundConnection`
+  /// in `singleClientMode`, with drift's read-pool size left at its default of
+  /// **0** — so the whole app talks to exactly one sqlite3 connection on one
+  /// background isolate.
+  ///
+  /// [undo] depends on that: its journal lives in TEMP tables, which belong to a
+  /// connection rather than to the file. Passing `DriftNativeOptions` with a
+  /// read pool or `shareAcrossIsolates` would split reads onto a connection
+  /// where those tables do not exist — and it would fail as "no such table",
+  /// far from here. `test/undo_journal_test.dart` pins it.
   AppDatabase() : super(driftDatabase(name: 'zonecraft'));
 
   /// Constructor for tests, taking an in-memory executor.
   AppDatabase.forTesting(super.e);
+
+  /// Row-level undo/redo. Installed in `beforeOpen` so its triggers are in
+  /// place before any user statement can run.
+  late final UndoJournal undo = UndoJournal(this);
+
+  @override
+  Future<void> close() async {
+    // Before `super`, not after: the journal holds an idle timer and a write
+    // subscription, and either firing against a closed database throws.
+    await undo.dispose();
+    return super.close();
+  }
 
   @override
   int get schemaVersion => 26;
@@ -1221,6 +1245,10 @@ class AppDatabase extends _$AppDatabase {
         beforeOpen: (details) async {
           // Required for the Circles/Planes -> Layers ON DELETE CASCADE to fire.
           await customStatement('PRAGMA foreign_keys = ON');
+          // ...and, because they fire *inside* SQLite where no Dart code sees
+          // what a cascade removed, the undo journal has to be installed here
+          // too: it is the only thing that records it.
+          await undo.install();
         },
       );
 }

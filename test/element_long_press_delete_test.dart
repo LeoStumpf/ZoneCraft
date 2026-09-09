@@ -119,7 +119,7 @@ void main() {
 
     // The same confirm the menu entry shows, named after the element.
     expect(find.text('Delete Marienplatz?'), findsOneWidget);
-    expect(find.text('This cannot be undone.'), findsOneWidget);
+    expect(find.text('Undo will bring it back.'), findsOneWidget);
     expect(repo.calls, isEmpty, reason: 'nothing is deleted until confirmed');
   });
 

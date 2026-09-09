@@ -27,6 +27,7 @@ import 'database.dart';
 import 'layer_types.dart';
 import 'overpass.dart' show PoiResult;
 import 'serialization.dart';
+import 'undo_journal.dart';
 
 /// What an import actually wrote, against what the layer already held.
 ///
@@ -78,6 +79,14 @@ class Repository {
 
   final AppDatabase _db;
   static const _uuid = Uuid();
+
+  /// Row-level undo/redo. It belongs to the database — its triggers live on
+  /// that connection — but every caller reaches it through the repository,
+  /// which is the one thing the whole app already resolves writes through. Going
+  /// via the database instead would make anything that only wants to seal a step
+  /// construct a real, file-backed database, which is wrong in tests and wrong
+  /// anywhere the repository has been substituted.
+  UndoJournal get undo => _db.undo;
 
   // --- Layers ---------------------------------------------------------------
 
@@ -2491,10 +2500,19 @@ class Repository {
   /// "Clear all data" button. Returns the id of the freshly seeded layer. The
   /// tile cache is left intact (it's not user data — it has its own button).
   Future<String> clearAll() async {
-    await _db.delete(_db.layers).go(); // cascades to circles/planes
-    await _db.delete(_db.appSettings).go(); // reverts to column defaults on read
-    await _db.delete(_db.overpassCache).go(); // persisted POI/border overlays
-    return ensureDefaultLayer();
+    // Deliberately not undoable, and deliberately journalled off while it runs:
+    // a wipe is a wipe, and recording one would copy the entire database into
+    // the in-memory log purely to throw it away a moment later.
+    final id = await _db.undo.suspended(() async {
+      await _db.delete(_db.layers).go(); // cascades to circles/planes
+      await _db
+          .delete(_db.appSettings)
+          .go(); // reverts to column defaults on read
+      await _db.delete(_db.overpassCache).go(); // persisted POI/border overlays
+      return ensureDefaultLayer();
+    });
+    await _db.undo.clear();
+    return id;
   }
 
   // --- Import / export ------------------------------------------------------
@@ -2868,7 +2886,13 @@ class Repository {
   /// GeoJSON: thinning what this app itself wrote changes the shape on every
   /// round-trip, so an export/import is not the identity it looks like. It
   /// defaults to on so every generic call site keeps its behaviour.
-  Future<int> importData(ExportData data, {bool simplify = true}) async {
+  Future<int> importData(ExportData data, {bool simplify = true}) {
+    // One file, one undo step — however many hundreds of rows it lands, and
+    // however long the layer-by-layer loop takes.
+    return _db.undo.group('Import', () => _importData(data, simplify));
+  }
+
+  Future<int> _importData(ExportData data, bool simplify) async {
     var imported = 0;
     for (final layer in data.layers) {
       final layerId = await createLayer(
@@ -2921,7 +2945,16 @@ class Repository {
     String layerId,
     ExportLayer layer, {
     bool simplify = true,
-  }) async {
+  }) {
+    return _db.undo
+        .group('Import', () => _mergeIntoLayer(layerId, layer, simplify));
+  }
+
+  Future<int> _mergeIntoLayer(
+    String layerId,
+    ExportLayer layer,
+    bool simplify,
+  ) async {
     final target = await (_db.select(_db.layers)
           ..where((l) => l.id.equals(layerId)))
         .getSingleOrNull();
@@ -3389,14 +3422,27 @@ class Repository {
   /// Also removes any circles with non-finite coordinates/radius left over from
   /// older builds (which would crash map projection). Returns the id of an
   /// existing or freshly created layer.
-  Future<String> ensureDefaultLayer() async {
-    await deleteInvalidCircles();
-    final existing = await (_db.select(_db.layers)
-          ..orderBy([(l) => OrderingTerm(expression: l.sortOrder)])
-          ..limit(1))
-        .getSingleOrNull();
-    if (existing != null) return existing.id;
-    return createLayer(name: 'Layer 1', colorArgb: 0xFF2196F3);
+  Future<String> ensureDefaultLayer() {
+    // None of this is a user action, so none of it belongs on the undo stack —
+    // otherwise the app opens with "Add layer" already there, one press away
+    // from deleting the layer it just seeded.
+    return _db.undo.suspended(() async {
+      await deleteInvalidCircles();
+      // Seed the settings row while we are here. `clearAll` deletes it, and
+      // `watchSettings` synthesises defaults when it is missing — so without
+      // this the first uncertainty change after a wipe is an INSERT, which the
+      // journal's `AFTER UPDATE OF` trigger never sees, and that one change
+      // would silently not be undoable.
+      await _db.into(_db.appSettings).insertOnConflictUpdate(
+            const AppSettingsCompanion(id: Value(1)),
+          );
+      final existing = await (_db.select(_db.layers)
+            ..orderBy([(l) => OrderingTerm(expression: l.sortOrder)])
+            ..limit(1))
+          .getSingleOrNull();
+      if (existing != null) return existing.id;
+      return createLayer(name: 'Layer 1', colorArgb: 0xFF2196F3);
+    });
   }
 
   /// Deletes circles whose centre or radius is NULL or non-finite (NaN/∞).

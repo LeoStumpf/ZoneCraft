@@ -126,7 +126,12 @@ class TrackRecorder extends Notifier<TrackRecording> {
     final problem = await ref.read(locationGateProvider)();
     if (problem != null) return problem;
 
+    // A recording is one action however long it runs, so every fix it appends
+    // belongs to a single undo step — otherwise a walk would leave one step per
+    // GPS fix, and Back would rub the line out a point at a time.
     final repo = ref.read(repositoryProvider);
+    await repo.undo.beginGroup('Record track');
+
     final trackId = await repo.ensureTrackForLayer(layer.id);
     // One past whatever is stored: continuing a track must not join this walk
     // to the end of the last one.
@@ -163,6 +168,9 @@ class TrackRecorder extends Notifier<TrackRecording> {
     _sub = null;
     if (sub != null) unawaited(sub.cancel());
     state = const TrackRecording();
+    // Closes the step opened in [start]. Fire-and-forget for the same reason
+    // the cancel above is.
+    unawaited(ref.read(repositoryProvider).undo.endGroup());
   }
 
   /// Stops if the layer being recorded into has gone away (deleted from the
