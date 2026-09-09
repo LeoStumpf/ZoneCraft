@@ -17,6 +17,9 @@
 import 'dart:ui' show Color;
 
 import 'package:flutter_test/flutter_test.dart';
+
+import 'package:zonecraft/data/database.dart';
+import 'package:zonecraft/data/layer_types.dart';
 import 'package:zonecraft/ui/paint_order.dart';
 
 /// How the region engine splits a layer into paint passes.
@@ -32,11 +35,9 @@ void main() {
 
   List<({Color color, List<String> items})> runsOf(
     List<(String, Color)> input,
-  ) =>
-      colorRuns(
-        [for (final (name, _) in input) name],
-        (name) => input.firstWhere((e) => e.$1 == name).$2,
-      );
+  ) => colorRuns([
+    for (final (name, _) in input) name,
+  ], (name) => input.firstWhere((e) => e.$1 == name).$2);
 
   test('adjacent same-colour elements share one pass', () {
     final runs = runsOf([('a', green), ('b', green), ('c', green)]);
@@ -47,21 +48,18 @@ void main() {
 
   // The case the old global grouping could not express, and the reason this
   // function exists at all.
-  test('a different colour between two same-coloured ones makes three passes',
-      () {
-    final runs = runsOf([('a', green), ('b', blue), ('c', green)]);
-    expect(runs, hasLength(3));
-    expect([for (final r in runs) r.items.single], ['a', 'b', 'c']);
-    expect([for (final r in runs) r.color], [green, blue, green]);
-  });
+  test(
+    'a different colour between two same-coloured ones makes three passes',
+    () {
+      final runs = runsOf([('a', green), ('b', blue), ('c', green)]);
+      expect(runs, hasLength(3));
+      expect([for (final r in runs) r.items.single], ['a', 'b', 'c']);
+      expect([for (final r in runs) r.color], [green, blue, green]);
+    },
+  );
 
   test('the input order is the pass order, front last', () {
-    final runs = runsOf([
-      ('a', green),
-      ('b', green),
-      ('c', blue),
-      ('d', blue),
-    ]);
+    final runs = runsOf([('a', green), ('b', green), ('c', blue), ('d', blue)]);
     expect(runs, hasLength(2));
     expect(runs.first.items, ['a', 'b']);
     expect(runs.last.items, ['c', 'd']);
@@ -89,5 +87,68 @@ void main() {
     ];
     final flat = [for (final r in runsOf(input)) ...r.items];
     expect(flat, ['a', 'b', 'c', 'd', 'e']);
+  });
+
+  group('bandPassLayers', () {
+    Layer layer(String id, String type, {bool visible = true}) => Layer(
+      id: id,
+      name: id,
+      type: type,
+      colorArgb: 0xFF2196F3,
+      opacity: 0.45,
+      isVisible: visible,
+      isInverted: false,
+      sortOrder: 0,
+      borderFillAreas: false,
+      borderShowNames: false,
+      trackStrokeWidth: 4,
+      trackMinDistanceMeters: 10,
+      createdAt: DateTime(2026, 9, 1),
+    );
+
+    test('keeps the layers in their own order, bottom to top', () {
+      // The bands are stacked under the fills; among themselves they have to
+      // hold the same relative order the fills hold, or sending an element
+      // back would shuffle the bands the other way.
+      final layers = [
+        layer('a', kCircles),
+        layer('b', kFreeArea),
+        layer('c', kMixedType),
+      ];
+      expect(bandPassLayers(layers, 500).map((l) => l.id), ['a', 'b', 'c']);
+    });
+
+    test('no uncertainty, no band pass at all', () {
+      // At 0 m there is no band to draw, and the extra widget per layer would
+      // be pure cost — the map has to be exactly what it was before the split.
+      final layers = [layer('a', kCircles)];
+      expect(bandPassLayers(layers, 0), isEmpty);
+      expect(bandPassLayers(layers, -1), isEmpty);
+    });
+
+    test('hidden layers are skipped, as they are for the fill pass', () {
+      final layers = [
+        layer('a', kCircles, visible: false),
+        layer('b', kPlanes),
+      ];
+      expect(bandPassLayers(layers, 500).map((l) => l.id), ['b']);
+    });
+
+    test('borders and marker-only layers contribute no band', () {
+      // `borders` has its own painter and no band at all; a track/POI/transit
+      // layer paints no region, so a band widget for it would draw nothing.
+      final layers = [
+        layer('borders', kBorders),
+        layer('track', kTrack),
+        layer('poi', kPoi),
+        layer('transit', kTransit),
+        layer('height', kHeight),
+      ];
+      expect(bandPassLayers(layers, 500).map((l) => l.id), ['height']);
+    });
+
+    test('a mixed layer bands, because it can hold region types', () {
+      expect(bandPassLayers([layer('m', kMixedType)], 500), hasLength(1));
+    });
   });
 }

@@ -29,6 +29,20 @@ import 'paint_order.dart';
 import 'region_geometry.dart';
 import 'screen_clip.dart';
 
+/// Which of the two passes a region layer is painting.
+///
+/// Every layer's [band] pass is stacked **below every layer's [fill] pass** (see
+/// the map screen's `children`), so an uncertainty band is never drawn over a
+/// solid fill — not the element next to it in the same layer, and not one in a
+/// layer below. Bands keep the same relative order among themselves that the
+/// fills have among themselves.
+///
+/// The two passes are separate widgets, so they composite separately, and two
+/// translucent fills stacked would read as a third colour — the very thing the
+/// flat-union model exists to avoid. So within a layer the passes are kept
+/// **disjoint**: the band pass clears whatever the fill pass will cover.
+enum RegionPhase { band, fill }
+
 /// Renders one layer's objects as a single composited region.
 ///
 /// All of a layer's objects are unioned into one shape before painting, so
@@ -38,6 +52,11 @@ import 'screen_clip.dart';
 /// fill starts only past it. When [Layer.isInverted] is set, the coloured side
 /// is the complement (everything outside the objects), so the band sits just
 /// outside the boundary instead — always on the same side as the fill.
+///
+/// One layer builds **two** of these, a [RegionPhase.band] widget and a
+/// [RegionPhase.fill] one, and the map screen stacks every band widget below
+/// every fill widget. See [RegionPhase] for why, and for the disjointness the
+/// two passes have to keep.
 ///
 /// Every object type builds its boundary in **lat/lng** (geodesically) and the
 /// painter projects those rings to screen with [MapCamera.latLngToScreenOffset];
@@ -58,6 +77,7 @@ class RegionLayer extends StatelessWidget {
     this.heightPolygons = const <String, List<HeightPolygon>>{},
     this.heightPolygonPoints = const <String, List<HeightPolygonPoint>>{},
     required this.uncertaintyMeters,
+    required this.phase,
     this.opacity = 1.0,
   });
 
@@ -93,6 +113,9 @@ class RegionLayer extends StatelessWidget {
   final Map<String, List<HeightPolygonPoint>> heightPolygonPoints;
   final double uncertaintyMeters;
 
+  /// Which half of the composite this widget draws (see [RegionPhase]).
+  final RegionPhase phase;
+
   /// The layer's fill opacity in [0, 1] (see [Layers.opacity]).
   final double opacity;
 
@@ -115,28 +138,41 @@ class RegionLayer extends StatelessWidget {
       child: CustomPaint(
         // The widget's own box, never `camera.size` — see [cameraViewport].
         size: camera.nonRotatedSize,
-        painter: _RegionPainter(
-          camera: camera,
-          color: Color(layer.colorArgb),
-          inverted: layer.isInverted,
-          circles: circles,
-          planes: planes,
-          subspaces: subspaces,
-          subspacePoints: subspacePoints,
-          freeLines: freeLines,
-          freeLinePoints: freeLinePoints,
-          freeAreas: freeAreas,
-          freeAreaPoints: freeAreaPoints,
-          resolvedAreas: resolvedAreas,
-          heightRegions: heightRegions,
-          heightPolygons: heightPolygons,
-          heightPolygonPoints: heightPolygonPoints,
-          uncertaintyMeters: uncertaintyMeters,
-          opacity: layer.opacity,
-        ),
+        painter: painterFor(camera, resolvedAreas),
       ),
     );
   }
+
+  /// The painter this widget hands to its [CustomPaint].
+  ///
+  /// Exposed because the pass split is a pure *draw-order* property — which
+  /// paints land in which order, with which blend mode — and there is nothing
+  /// in the widget tree that states it. A test drives this against a recording
+  /// canvas instead of standing up a live map.
+  @visibleForTesting
+  CustomPainter painterFor(
+    MapCamera camera,
+    List<ResolvedArea> resolvedAreas,
+  ) => _RegionPainter(
+    camera: camera,
+    color: Color(layer.colorArgb),
+    inverted: layer.isInverted,
+    circles: circles,
+    planes: planes,
+    subspaces: subspaces,
+    subspacePoints: subspacePoints,
+    freeLines: freeLines,
+    freeLinePoints: freeLinePoints,
+    freeAreas: freeAreas,
+    freeAreaPoints: freeAreaPoints,
+    resolvedAreas: resolvedAreas,
+    heightRegions: heightRegions,
+    heightPolygons: heightPolygons,
+    heightPolygonPoints: heightPolygonPoints,
+    uncertaintyMeters: uncertaintyMeters,
+    phase: phase,
+    opacity: layer.opacity,
+  );
 }
 
 class _RegionPainter extends CustomPainter {
@@ -157,6 +193,7 @@ class _RegionPainter extends CustomPainter {
     required this.heightPolygons,
     required this.heightPolygonPoints,
     required this.uncertaintyMeters,
+    required this.phase,
     required this.opacity,
   });
 
@@ -179,6 +216,10 @@ class _RegionPainter extends CustomPainter {
   final Map<String, List<HeightPolygon>> heightPolygons;
   final Map<String, List<HeightPolygonPoint>> heightPolygonPoints;
   final double uncertaintyMeters;
+  final RegionPhase phase;
+
+  /// True while painting the bottom-most [RegionPhase.band] pass.
+  bool get _isBandPhase => phase == RegionPhase.band;
 
   /// The layer's fill opacity in [0, 1]. It scales all three paint elements by
   /// the same factor `k = opacity / kDefaultRegionLayerOpacity` (so at the
@@ -239,12 +280,9 @@ class _RegionPainter extends CustomPainter {
       _passes(
         canvas,
         _byColor(freeAreas, (a) => a.colorArgb, (a) => a.colorShade),
-        (c, items, {required replace}) => _paintFreeAreas(
-          canvas,
-          c,
-          [for (final a in items) resolved[a.id]!],
-          replace: replace,
-        ),
+        (c, items, {required replace}) => _paintFreeAreas(canvas, c, [
+          for (final a in items) resolved[a.id]!,
+        ], replace: replace),
       );
       return;
     }
@@ -318,29 +356,53 @@ class _RegionPainter extends CustomPainter {
     );
   }
 
+  /// Draw calls the [RegionPhase.band] pass defers to the very end of the layer.
+  ///
+  /// A band is only allowed to survive where **no** colour run's fill lands —
+  /// not just its own run's. Clearing per run as we go would let a later run's
+  /// band paint over an earlier run's already-cleared fill area, and that band
+  /// would then sit under that fill once the two passes composite. So the type
+  /// painters queue their "the fill pass covers this" clears here and [_passes]
+  /// drains them after every band has been drawn. Empty in the fill pass.
+  final List<void Function(Canvas)> _deferredClears = [];
+
+  /// Erases what it covers, so the band pass can punch the fill pass's area out
+  /// of itself. Only ever used inside an offscreen layer — on the bare canvas it
+  /// would take the map tiles with it.
+  static final Paint _clearPaint = Paint()..blendMode = BlendMode.clear;
+
   /// Runs one paint pass per colour group. With more than one they all go into
   /// a single offscreen layer and each pass **replaces** what the previous one
   /// put down (`BlendMode.src`, threaded through as `replace`) rather than
   /// blending with it — two translucent fills stacking would read as a third
   /// colour, which is exactly what the flat-union model exists to avoid.
+  ///
+  /// The band pass always takes an offscreen layer, however few groups it has:
+  /// it finishes by *clearing* the fill pass's area out of itself
+  /// ([_deferredClears]), and a clear on the bare canvas would erase the map.
   void _passes<T>(
     Canvas canvas,
     List<({Color color, List<T> items})> groups,
     void Function(Color color, List<T> items, {required bool replace})
-        paintPass,
+    paintPass,
   ) {
     if (groups.isEmpty) return;
-    final multi = groups.length > 1;
-    if (multi) canvas.saveLayer(_clip, Paint());
+    final own = groups.length > 1 || _isBandPhase;
+    if (own) canvas.saveLayer(_clip, Paint());
     for (final g in groups) {
-      paintPass(g.color, g.items, replace: multi);
+      paintPass(g.color, g.items, replace: own);
     }
-    if (multi) canvas.restore();
+    for (final clear in _deferredClears) {
+      clear(canvas);
+    }
+    _deferredClears.clear();
+    if (own) canvas.restore();
   }
 
   /// The shared path for the unbounded region types (circle / plane / subspace):
-  /// union the group's objects, then solid + band + outline. A layer holds one
-  /// object type, so exactly one of the three lists is ever non-empty.
+  /// union the group's objects, then draw the band, or the solid + outline,
+  /// depending on [phase]. A layer holds one object type, so exactly one of the
+  /// three lists is ever non-empty.
   void _paintUnbounded(
     Canvas canvas,
     Color color, {
@@ -349,7 +411,6 @@ class _RegionPainter extends CustomPainter {
     List<Subspace> subspaces = const [],
     bool replace = false,
   }) {
-
     Path? outerUnion;
     Path? coreUnion;
 
@@ -456,20 +517,6 @@ class _RegionPainter extends CustomPainter {
     if (outer == null) return; // nothing valid to draw
     final core = coreUnion ?? Path();
 
-    // Band is always the ring between core and outline. Its two operands are
-    // near-parallel outlines — Skia path-ops' worst case — so degrade to "no
-    // band this frame" rather than let a throw abort the whole paint.
-    final bandPath = _tryCombine(PathOperation.difference, outer, core);
-
-    // Solid fill: the core normally, or the complement when inverted.
-    final Path solid;
-    if (inverted) {
-      final viewport = Path()..addRect(_clip);
-      solid = Path.combine(PathOperation.difference, viewport, outer);
-    } else {
-      solid = core;
-    }
-
     final blend = replace ? BlendMode.src : BlendMode.srcOver;
     final solidPaint = Paint()
       ..style = PaintingStyle.fill
@@ -484,33 +531,41 @@ class _RegionPainter extends CustomPainter {
       ..strokeWidth = 1.5
       ..color = color.withValues(alpha: _strokeAlpha);
 
+    // All geometry was pre-clipped to `_clip` at projection time (see
+    // [_ringToPath]), so it can be drawn directly — no per-frame path-op
+    // against a clip rect, and no far-off-screen coordinates for Skia.
+    if (_isBandPhase) {
+      if (band <= 0) return; // no uncertainty, no band pass
+      // The band is the ring between `core` and the nominal boundary — drawn
+      // here as the whole footprint, with `core` (the fill pass's area, whether
+      // that fill is the core or, inverted, everything outside `outer`) taken
+      // back out at the end of the layer. That beats `outer − core` on two
+      // counts: the difference is Skia path-ops' worst case (two near-parallel
+      // outlines, which used to need a try/catch), and the clear also removes
+      // *other* runs' cores, so a front element's band cannot survive over a
+      // back element's solid.
+      canvas.drawPath(outer, bandPaint);
+      _deferredClears.add((c) => c.drawPath(core, _clearPaint));
+      return;
+    }
+
+    // Solid fill: the core normally, or the complement when inverted.
+    final Path solid;
+    if (inverted) {
+      final viewport = Path()..addRect(_clip);
+      solid = Path.combine(PathOperation.difference, viewport, outer);
+    } else {
+      solid = core;
+    }
+
     // The outline traces the *nominal* boundary, which every type keeps fixed
     // regardless of invert: normally that's `outer` (the band eats inward from
     // it into the fill); when inverted the band grows outward so the nominal
     // edge is `core`.
     final outline = inverted ? core : outer;
 
-    // All geometry was pre-clipped to `_clip` at projection time (see
-    // [_ringToPath]), so it can be drawn directly — no per-frame path-op
-    // against a clip rect, and no far-off-screen coordinates for Skia.
-    // Regions are disjoint, so paint order is irrelevant.
     canvas.drawPath(solid, solidPaint);
-    if (bandPath != null) canvas.drawPath(bandPath, bandPaint);
     canvas.drawPath(outline, strokePaint);
-  }
-
-  /// [Path.combine] that returns null instead of throwing — Skia path-ops can
-  /// still fail on pathological (near-coincident) inputs, and one bad frame
-  /// must not take the rest of the layer's paint down with it.
-  static Path? _tryCombine(PathOperation op, Path a, Path b) {
-    try {
-      return Path.combine(op, a, b);
-    // Skia path-ops fails unpredictably on near-coincident input. The exception
-    // type is not the point; the null is.
-    // ignore: avoid_catches_without_on_clauses
-    } catch (_) {
-      return null;
-    }
   }
 
   /// Paints a freehand-area layer from its **pre-resolved** geometry
@@ -561,30 +616,43 @@ class _RegionPainter extends CustomPainter {
       ..style = PaintingStyle.fill
       ..blendMode = BlendMode.src
       ..color = color.withValues(alpha: _bandAlpha);
-    final clearPaint = Paint()..blendMode = BlendMode.clear;
     final strokePaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5
       ..color = color.withValues(alpha: _strokeAlpha);
 
-    // Layer the fill widest-first, each pass replacing the last. Normally that
-    // is: whole interior at band alpha, then the band edge (the interior shrunk
-    // by the uncertainty) solid. Inverted, the coloured side is the outside, so
-    // it is: whole viewport solid, then the grown band edge at band alpha, then
-    // the interior cleared away.
+    // Layer the fill widest-first, each pass replacing the last — the band pass
+    // paints the wider of the two shapes, the fill pass the narrower, and the
+    // band pass then clears the narrower one back out of itself so the two
+    // never overlap when they composite. Normally the wider shape is the whole
+    // interior and the narrower is the band edge (the interior shrunk by the
+    // uncertainty). Inverted, the coloured side is the outside, so the fill is
+    // the whole viewport with the grown band edge cleared out, and the band is
+    // that edge minus the interior.
+    if (_isBandPhase) {
+      if (uncertaintyMeters <= 0) return; // no uncertainty, no band pass
+      final band = inverted ? edges : cores;
+      final fill = inverted ? cores : edges;
+      for (final b in band) {
+        canvas.drawPath(b, bandPaint);
+      }
+      _deferredClears.add((c) {
+        for (final f in fill) {
+          c.drawPath(f, _clearPaint);
+        }
+      });
+      return;
+    }
+
     if (!replace) canvas.saveLayer(_clip, Paint());
     if (inverted) {
       canvas.drawRect(_clip, solidPaint);
+      // The band lives in the pass below; punch its strip out so it shows
+      // through instead of being tinted by this solid.
       for (final e in edges) {
-        canvas.drawPath(e, bandPaint);
-      }
-      for (final c in cores) {
-        canvas.drawPath(c, clearPaint);
+        canvas.drawPath(e, _clearPaint);
       }
     } else {
-      for (final c in cores) {
-        canvas.drawPath(c, bandPaint);
-      }
       for (final e in edges) {
         canvas.drawPath(e, solidPaint);
       }
@@ -746,14 +814,33 @@ class _RegionPainter extends CustomPainter {
     // the dividing line at 2× the radius and clip it to the coloured side, so
     // only the near strip (never the arc, never the far side) lights up.
     //
-    // The strip lies *on* the solid, so painting it normally would compound the
-    // two alphas into something darker than either. Draw both into an offscreen
-    // layer and give the band `BlendMode.src`: it replaces the solid's pixels
-    // there instead of stacking on them, and the layer then composites once.
+    // Unlike every other type the strip lies *inside* its own fill, so the two
+    // passes carve it up between them: the band pass draws the strip, the fill
+    // pass punches the same strip out of its solid so the pass below shows
+    // through. Both need an offscreen layer — the fill pass because a clear on
+    // the bare canvas would take the map with it.
     final bandPx = bandMeters > 0 && bandRef != null
         ? _metersToPixels(bandRef, bandMeters)
         : 0.0;
     final coloredArea = bounded(coloured);
+
+    if (_isBandPhase) {
+      if (bandPx <= 0) return; // no uncertainty, no band pass
+      // Clear first: this run's fill covers the whole coloured side, so any
+      // band an earlier run left under it has to go before this strip lands.
+      canvas.drawPath(coloredArea, _clearPaint);
+      canvas.save();
+      canvas.clipPath(coloredArea);
+      canvas.drawPath(
+        boundary,
+        bandPaint
+          ..strokeWidth = 2 * bandPx
+          ..blendMode = BlendMode.src,
+      );
+      canvas.restore();
+      return;
+    }
+
     final ownLayer = bandPx > 0 && !replace;
     if (ownLayer) canvas.saveLayer(_clip, Paint());
     canvas.drawPath(coloredArea, solidPaint);
@@ -764,11 +851,11 @@ class _RegionPainter extends CustomPainter {
         boundary,
         bandPaint
           ..strokeWidth = 2 * bandPx
-          ..blendMode = BlendMode.src,
+          ..blendMode = BlendMode.clear,
       );
       canvas.restore();
-      if (ownLayer) canvas.restore();
     }
+    if (ownLayer) canvas.restore();
 
     // Outline: the dividing line, clipped to the disk.
     canvas.save();
@@ -915,23 +1002,41 @@ class _RegionPainter extends CustomPainter {
       }
       if (!hasFill) continue;
 
+      // Band only *inside* the fill: stroke the contour at twice the radius and
+      // clip it to the fill, so the outer half of the corridor is dropped and
+      // the band is exactly the uncertain strip just inside the border (and
+      // just inside any sub-threshold hole's border). The solid starts where it
+      // ends.
+      //
+      // Like the freehand line's, this strip lies *inside* its own fill, so the
+      // two passes carve it up: the band pass draws the strip, the fill pass
+      // punches the same strip out of its solid so the pass below shows
+      // through. Both need the offscreen layer — a clear on the bare canvas
+      // would take the map with it. (Skipped when the colour passes already
+      // opened one: the clear must land inside *that* layer, not a nested copy.)
       final bandPx = uncertaintyMeters > 0
           ? _metersToPixels(center, uncertaintyMeters)
           : 0.0;
+      if (_isBandPhase) {
+        if (bandPx <= 0) continue; // no uncertainty, no band pass
+        // Clear first: this region's fill covers everything an earlier region
+        // (or an earlier colour run) may have banded under it.
+        canvas.drawPath(fill, _clearPaint);
+        canvas.save();
+        canvas.clipPath(fill);
+        canvas.drawPath(
+          contour,
+          bandPaint
+            ..strokeWidth = 2 * bandPx
+            ..blendMode = BlendMode.src,
+        );
+        canvas.restore();
+        continue;
+      }
+
       if (bandPx <= 0) {
         canvas.drawPath(fill, solidPaint);
       } else {
-        // Band only *inside* the fill: stroke the contour at twice the radius
-        // and clip it to the fill, so the outer half of the corridor is dropped
-        // and the band is exactly the uncertain strip just inside the border
-        // (and just inside any sub-threshold hole's border). The solid starts
-        // where it ends.
-        //
-        // The strip overlays the solid, so drawing it plainly would compound the
-        // alphas; render both into an offscreen layer and let the band
-        // `BlendMode.src`-replace the solid's pixels there instead.
-        // (Skipped when the colour passes already opened a layer: the band's
-        // `src` must replace inside *that* one, not a nested copy.)
         if (!replace) canvas.saveLayer(_clip, Paint());
         canvas.drawPath(fill, solidPaint);
         canvas.save();
@@ -940,7 +1045,7 @@ class _RegionPainter extends CustomPainter {
           contour,
           bandPaint
             ..strokeWidth = 2 * bandPx
-            ..blendMode = BlendMode.src,
+            ..blendMode = BlendMode.clear,
         );
         canvas.restore();
         if (!replace) canvas.restore();
@@ -999,6 +1104,7 @@ class _RegionPainter extends CustomPainter {
         old.inverted != inverted ||
         old.opacity != opacity ||
         old.uncertaintyMeters != uncertaintyMeters ||
+        old.phase != phase ||
         !identical(old.circles, circles) ||
         !identical(old.planes, planes) ||
         !identical(old.subspaces, subspaces) ||

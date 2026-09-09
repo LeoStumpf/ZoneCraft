@@ -39,6 +39,24 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   `outer`+`core` screen-space polygon; these union via `Path.combine`, then paint core (solid)
   + band (`outer−core`, lighter) + outline, or `viewport−outer` when the layer is **inverted**.
   Global uncertainty widens the band; freehand objects add a signed per-object `offsetMeters`.
+- **Every band is painted below every fill, map-wide** (`RegionPhase`). A band says the region
+  *might* reach here; once elements could be reordered, a front element's band started landing
+  on a back element's solid — the uncertain shape drawn over the certain one. So each layer
+  builds **two** `RegionLayer` widgets, and `map_screen` stacks every layer's `band` pass
+  (`bandPassLayers`, straight above the base tiles) below every layer's `fill` pass. Bands keep
+  the same relative order the fills have. At **0 m uncertainty the band pass is not built at
+  all**, so the render is exactly what it was before the split.
+  The load-bearing part is that the two passes composite separately (they are separate
+  widgets), so a band left *under* a fill would blend with it into a third colour — the very
+  thing the flat-union model exists to avoid. Within a layer they are therefore kept
+  **disjoint** by `BlendMode.clear`, never by a path-op: the band pass draws the whole
+  footprint and then clears the fill pass's area out of itself, and because those clears are
+  **deferred to the end of the layer** (`_deferredClears`) they remove *other* colour runs'
+  fills too — clearing per run as it goes would let a front run's band paint over a back run's
+  already-cleared fill. `freeline`/`height` are the mirror image (their band is a stroke
+  *inside* their own fill), so there the **fill** pass punches the strip out and the band pass
+  below shows through. Dropping the old `outer − core` difference also removed the one
+  `_tryCombine` in the engine — Skia path-ops' worst case, two near-parallel outlines.
 - **Layers drawer** (show/hide, reorder, recolour, adjust opacity, rename, invert, add/delete),
   plus a pinned bottom **Map** tile (the base OSM tiles as a hideable, opacity-adjustable
   layer that can never be deleted or reordered; its state lives in `AppSettings`) + **compass**,
@@ -246,7 +264,7 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
 
 Feature-complete for everything planned so far: ten object types — six region types with
 the shared compositing engine (union / band / invert; the `height` type uses even-odd fill
-and is bounded, so it skips band/invert), the recorded `track` type (its own stroked-polyline
+and is bounded, so it bands along the elevation contour only and skips invert), the recorded `track` type (its own stroked-polyline
 painter, `ui/track_layer.dart`; no compositing, no band, no invert), plus three import types
 with their own painters:
 `poi` (offline sets, screen-space clustering), `transit` (offline station imports over a

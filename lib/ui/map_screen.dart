@@ -75,6 +75,7 @@ import 'poi_import_dialog.dart';
 import 'poi_category_dialog.dart';
 import 'poi_icons.dart';
 import 'poi_layer.dart';
+import 'paint_order.dart';
 import 'area_geometry.dart';
 import 'border_import_dialog.dart';
 import 'border_layer.dart';
@@ -104,11 +105,14 @@ class MapScreen extends ConsumerStatefulWidget {
 class _MapScreenState extends ConsumerState<MapScreen>
     with WidgetsBindingObserver {
   final _mapController = MapController();
+
   /// Deep-link subscription (`zonecraft://…`); the app's only one besides
   /// the track recorder's position stream.
   StreamSubscription<Uri>? _linkSub;
+
   /// Guards against a second shared file stacking its dialogs on the first's.
   bool _importingSharedFile = false;
+
   /// Guards the share FAB while a position fix is in flight.
   bool _sharing = false;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -132,6 +136,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   // mode stays on until Done.
   String? _placeLayerId;
   String? _placeType;
+
   /// The manual POI category Add mode drops points into, on a `poi` layer.
   /// Null on every other type.
   String? _placePoiSetId;
@@ -323,16 +328,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
       try {
         final initial = await links.getInitialLink();
         if (initial != null) _consumeSharedUri(initial);
-      // No initial link, or no platform channel to ask. Both are ordinary.
-      // ignore: avoid_catches_without_on_clauses
+        // No initial link, or no platform channel to ask. Both are ordinary.
+        // ignore: avoid_catches_without_on_clauses
       } catch (_) {
         // No initial link, or the platform channel is unavailable.
       }
     }());
-    _linkSub = links.uriLinkStream.listen(
-      _consumeSharedUri,
-      onError: (_) {},
-    );
+    _linkSub = links.uriLinkStream.listen(_consumeSharedUri, onError: (_) {});
   }
 
   void _consumeSharedUri(Uri uri) {
@@ -361,9 +363,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final IncomingFile? file;
     try {
       file = await takeSharedFile();
-    // A share hand-off can fail in the platform channel or in the copy; either
-    // way the file did not arrive and the user is told.
-    // ignore: avoid_catches_without_on_clauses
+      // A share hand-off can fail in the platform channel or in the copy; either
+      // way the file did not arrive and the user is told.
+      // ignore: avoid_catches_without_on_clauses
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -385,8 +387,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
         bytes: bytes,
         ref: ref,
       );
-    // As above, for the parse-and-write half.
-    // ignore: avoid_catches_without_on_clauses
+      // As above, for the parse-and-write half.
+      // ignore: avoid_catches_without_on_clauses
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -639,7 +641,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
       return;
     }
     unawaited(
-      ref.read(repositoryProvider).saveCamera(c.latitude, c.longitude, cam.zoom)
+      ref
+          .read(repositoryProvider)
+          .saveCamera(c.latitude, c.longitude, cam.zoom),
     );
   }
 
@@ -663,8 +667,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       });
       _mapController.move(
         here,
-        math.max(_mapController.camera.zoom, kMinFocusZoom)
-            .clamp(2.0, 19.0),
+        math.max(_mapController.camera.zoom, kMinFocusZoom).clamp(2.0, 19.0),
       );
       unawaited(_updateMyElevation(here));
     } finally {
@@ -705,8 +708,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
       _hint(problem);
       return;
     }
-    _hint('Recording. Keep ZoneCraft open — it does not record in the '
-        'background.');
+    _hint(
+      'Recording. Keep ZoneCraft open — it does not record in the '
+      'background.',
+    );
   }
 
   /// "Recording · 12 points · 8 s ago". The age of the last fix is the part
@@ -725,9 +730,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
     return b.toString();
   }
 
-  static String _ago(int seconds) => seconds < 120
-      ? '${seconds}s ago'
-      : '${(seconds / 60).round()} min ago';
+  static String _ago(int seconds) =>
+      seconds < 120 ? '${seconds}s ago' : '${(seconds / 60).round()} min ago';
 
   /// Requests the device's current position, handling permission/service state
   /// with dismissible hints. Returns the fix, or null on denial / disabled
@@ -759,10 +763,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
         return null;
       }
       return LatLng(pos.latitude, pos.longitude);
-    // geolocator throws a family of typed errors (service off, permission gone,
-    // timeout) that all end in the same hint; the non-finite guard above is the
-    // only case worth its own message.
-    // ignore: avoid_catches_without_on_clauses
+      // geolocator throws a family of typed errors (service off, permission gone,
+      // timeout) that all end in the same hint; the non-finite guard above is the
+      // only case worth its own message.
+      // ignore: avoid_catches_without_on_clauses
     } catch (e) {
       _hint('Could not get your location.');
       return null;
@@ -1535,7 +1539,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   Future<T?> _showBoxImportSheet<T>(
     LatLngBounds initial,
     Widget Function(void Function(T?) done, ValueChanged<LatLngBounds?> preview)
-        build,
+    build,
   ) async {
     setState(() => _importBoxPreview = initial);
     final result = await _showImportSheet<T>(
@@ -1750,11 +1754,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
   Future<void> _importTransit(Layer layer, {required LatLngBounds box}) async {
     final config = await _showBoxImportSheet<TransitImportConfig>(
       box,
-      (done, preview) => TransitImportSheet(
-        initial: box,
-        onPreview: preview,
-        onDone: done,
-      ),
+      (done, preview) =>
+          TransitImportSheet(initial: box, onPreview: preview, onDone: done),
     );
     if (config == null || !mounted) return;
     await _runTransitImport(
@@ -1911,9 +1912,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   '${transitModeLabels(hidden).toLowerCase()} hidden for now '
                   '(Stations… to show).',
       );
-    // A write failure used to become an unhandled async error with no message at
-    // all, whatever its type.
-    // ignore: avoid_catches_without_on_clauses
+      // A write failure used to become an unhandled async error with no message at
+      // all, whatever its type.
+      // ignore: avoid_catches_without_on_clauses
     } catch (e) {
       // A write failure used to become an unhandled async error with no
       // message at all. Say so, and leave the retry row behind.
@@ -2073,9 +2074,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
             : '${describeImportTally(tally, 'areas')} Colour areas in the '
                   'layer menu to fill them.',
       );
-    // As above: the import is on screen, so a failure has to close the progress
-    // dialog and say something.
-    // ignore: avoid_catches_without_on_clauses
+      // As above: the import is on screen, so a failure has to close the progress
+      // dialog and say something.
+      // ignore: avoid_catches_without_on_clauses
     } catch (e) {
       progress.close();
       if (mounted) _hint('Could not save the import.');
@@ -2127,11 +2128,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
       case 'transit':
         // The no-aim analogue of two corner taps: import what you can see.
         unawaited(
-          _importTransit(layer, box: _mapController.camera.visibleBounds)
+          _importTransit(layer, box: _mapController.camera.visibleBounds),
         );
       case 'borders':
         unawaited(
-          _importBorders(layer, box: _mapController.camera.visibleBounds)
+          _importBorders(layer, box: _mapController.camera.visibleBounds),
         );
       case 'subspace':
         unawaited(_addSubspaceAt(c, layer, subspaces));
@@ -2218,17 +2219,17 @@ class _MapScreenState extends ConsumerState<MapScreen>
   }
 
   static String _placeTypeLabel(String type) => switch (type) {
-        'circles' => 'Circle',
-        'planes' => 'Plane',
-        'subspace' => 'Subspace',
-        'freeline' => 'Freehand line',
-        'freearea' => 'Freehand area',
-        'height' => 'Height area',
-        'track' => 'Record a track',
-        'poi' => 'POI',
-        'transit' => 'Transit import',
-        _ => type,
-      };
+    'circles' => 'Circle',
+    'planes' => 'Plane',
+    'subspace' => 'Subspace',
+    'freeline' => 'Freehand line',
+    'freearea' => 'Freehand area',
+    'height' => 'Height area',
+    'track' => 'Record a track',
+    'poi' => 'POI',
+    'transit' => 'Transit import',
+    _ => type,
+  };
 
   /// Which manual category to drop POIs into: the only one if there is exactly
   /// one, otherwise a choice, and an offer to create one when there are none.
@@ -2276,7 +2277,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final choice = await showPoiCategoryDialog(context);
     if (choice == null || !mounted) return null;
     final centre = _mapController.camera.center;
-    return ref.read(repositoryProvider).createPoiSet(
+    return ref
+        .read(repositoryProvider)
+        .createPoiSet(
           layerId: layer.id,
           // A manual set's category key is its icon key: there is no OSM tag
           // behind it, and the two must not drift apart.
@@ -2541,9 +2544,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// and the prose ellipsises — the count is the part that changes.
   String _addBannerText(String? layerType, int placed) {
     if (layerType == 'poi') {
-      return placed > 0
-          ? '$placed added · tap for more'
-          : 'Tap to place a POI';
+      return placed > 0 ? '$placed added · tap for more' : 'Tap to place a POI';
     }
     if (_isBoxImport(layerType)) {
       // Once a corner is down the rubber band tracks the map centre, so Done is
@@ -3025,7 +3026,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (ref.read(poiPointPlacementProvider)) {
       final selId = ref.read(selectedPoiPointProvider);
       if (selId != null) {
-        await ref.read(repositoryProvider).moveManualPoiPoint(
+        await ref
+            .read(repositoryProvider)
+            .moveManualPoiPoint(
               id: selId,
               lat: latlng.latitude,
               lng: latlng.longitude,
@@ -3172,9 +3175,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     // A null active layer no longer bails out: the menu still offers what is
     // true of the *coordinate* — share it, copy it — which is the whole point
     // of long-pressing empty ground.
-    final hits = activeLayer == null
-        ? const <HitCandidate>[]
-        : _hitsAt(latlng);
+    final hits = activeLayer == null ? const <HitCandidate>[] : _hitsAt(latlng);
     final summaries = activeLayer == null
         ? const <ObjectRef, ObjectSummary>{}
         : _summariesFor(activeLayer);
@@ -3270,16 +3271,22 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (items.isEmpty &&
         activeLayer != null &&
         layerHolds(activeLayer, kTransit)) {
-      _hint('Hidden station types don\'t respond — check Stations… in the '
-          'layer menu.');
+      _hint(
+        'Hidden station types don\'t respond — check Stations… in the '
+        'layer menu.',
+      );
     }
 
     // Always last, always present: what is true of the coordinate itself,
     // whatever layer is active and whether or not anything was hit. This is
     // the route to sharing a position that is not your own.
     if (items.isNotEmpty) items.add(const PopupMenuDivider());
-    items.add(_pointMenuItem('shareCoords', Icons.ios_share, 'Share this place'));
-    items.add(_pointMenuItem('copyCoords', Icons.copy_all_outlined, 'Copy coordinates'));
+    items.add(
+      _pointMenuItem('shareCoords', Icons.ios_share, 'Share this place'),
+    );
+    items.add(
+      _pointMenuItem('copyCoords', Icons.copy_all_outlined, 'Copy coordinates'),
+    );
 
     final selected = await _showPointMenu(
       activeLayer?.name ?? 'This place',
@@ -3470,8 +3477,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
       final existing = (ref.read(subspacesProvider).asData?.value ?? const [])
           .where((sp) => sp.layerId == layerId)
           .firstOrNull;
-      final subspaceId = existing?.id ??
-          await repo.createSubspace(layerId: layerId);
+      final subspaceId =
+          existing?.id ?? await repo.createSubspace(layerId: layerId);
       await repo.addSubspacePoint(
         subspaceId: subspaceId,
         lat: point.lat,
@@ -3558,8 +3565,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (draft == null || rings == null) return null;
     final cam = _mapController.camera;
     final projected = [
-      for (final r in rings)
-        [for (final p in r) cam.latLngToScreenOffset(p)],
+      for (final r in rings) [for (final p in r) cam.latLngToScreenOffset(p)],
     ];
     final picked = reshapeHandles(
       projected,
@@ -3618,7 +3624,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
         // otherwise the handle stacks a second copy on top of the real plate.
         label: layer?.borderShowNames == true ? null : area.name,
         undoLabel: 'Name plate',
-        onMoved: (ll) => ref.read(repositoryProvider).updateBorderArea(
+        onMoved: (ll) => ref
+            .read(repositoryProvider)
+            .updateBorderArea(
               area.id,
               labelLat: ll.latitude,
               labelLng: ll.longitude,
@@ -3667,13 +3675,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final rings = _reshapeRings;
     if (rings == null) return;
     final cam = _mapController.camera;
-    final where = nearestInsertion(
-      [
-        for (final r in rings)
-          [for (final p in r) cam.latLngToScreenOffset(p)],
-      ],
-      cam.latLngToScreenOffset(at),
-    );
+    final where = nearestInsertion([
+      for (final r in rings) [for (final p in r) cam.latLngToScreenOffset(p)],
+    ], cam.latLngToScreenOffset(at));
     if (where == null) return;
     setState(() => rings[where.ring].insert(where.index, at));
     await _commitReshape();
@@ -3939,6 +3943,50 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final settings = ref.watch(settingsProvider).asData?.value;
     final uncertainty = settings?.uncertaintyMeters ?? 0;
     final toolsExpanded = settings?.toolsExpanded ?? true;
+    // One region layer builds two passes: every layer's uncertainty band is
+    // stacked below every layer's solid fill (see [RegionPhase]), so the two
+    // differ only in this argument.
+    RegionLayer regionPass(Layer layer, RegionPhase phase) => RegionLayer(
+      key: ValueKey('region-${phase.name}-${layer.id}'),
+      layer: layer,
+      opacity: layer.opacity,
+      circles: layerHolds(layer, kCircles)
+          ? circles.where((c) => c.layerId == layer.id).toList()
+          : const <Circle>[],
+      planes: layerHolds(layer, kPlanes)
+          ? planes.where((p) => p.layerId == layer.id).toList()
+          : const <Plane>[],
+      subspaces: layerHolds(layer, kSubspace)
+          ? subspaces.where((s) => s.layerId == layer.id).toList()
+          : const <Subspace>[],
+      subspacePoints: layerHolds(layer, kSubspace)
+          ? subspacePoints
+          : const <String, List<SubspacePoint>>{},
+      freeLines: layerHolds(layer, kFreeLine)
+          ? freeLines.where((l) => l.layerId == layer.id).toList()
+          : const <FreeLine>[],
+      freeLinePoints: layerHolds(layer, kFreeLine)
+          ? freeLinePoints
+          : const <String, List<FreeLinePoint>>{},
+      freeAreas: layerHolds(layer, kFreeArea)
+          ? freeAreas.where((a) => a.layerId == layer.id).toList()
+          : const <FreeArea>[],
+      freeAreaPoints: layerHolds(layer, kFreeArea)
+          ? freeAreaPoints
+          : const <String, List<FreeAreaPoint>>{},
+      heightRegions: layerHolds(layer, kHeight)
+          ? heightRegions.where((r) => r.layerId == layer.id).toList()
+          : const <HeightRegion>[],
+      heightPolygons: layerHolds(layer, kHeight)
+          ? heightPolygons
+          : const <String, List<HeightPolygon>>{},
+      heightPolygonPoints: layerHolds(layer, kHeight)
+          ? heightPolygonPoints
+          : const <String, List<HeightPolygonPoint>>{},
+      uncertaintyMeters: uncertainty,
+      phase: phase,
+    );
+
     final basemapVisible = settings?.basemapVisible ?? true;
     final basemapOpacity = settings?.basemapOpacity ?? 1.0;
     final selectedCircle = circles
@@ -4033,9 +4081,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final selectedBorderShape = selectedBorderLayer == null
         ? null
         : ref
-            .watch(borderShapesProvider(selectedBorderLayer.id))
-            .where((sh) => sh.id == selectedBorderArea!.id)
-            .firstOrNull;
+              .watch(borderShapesProvider(selectedBorderLayer.id))
+              .where((sh) => sh.id == selectedBorderArea!.id)
+              .firstOrNull;
     _syncReshapeDraft(selectedBorderShape, armed: reshapeArmed);
     final reshapeDraft = _reshapeDraftShape(selectedBorderShape);
     final hasSelection =
@@ -4076,14 +4124,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
         activeLayer != null && layerHolds(activeLayer, kCircles);
     // Since Add on a POI layer places *hand-made* points, the Overpass import
     // needs its own button there — it used to be what Add did.
-    final isPoiLayer =
-        activeLayer != null && layerHolds(activeLayer, kPoi);
+    final isPoiLayer = activeLayer != null && layerHolds(activeLayer, kPoi);
     // Freehand layers import *by name* (a district, a river) rather than by
     // radius. That flow was drawer-only, so a circle layer had an import
     // button on screen and a freehand one had nothing — the same action, two
     // very different distances away. `layerHolds` rather than a type test, so
     // a combined layer holding freehand content gets it too.
-    final canImportFeature = activeLayer != null &&
+    final canImportFeature =
+        activeLayer != null &&
         (layerHolds(activeLayer, kFreeLine) ||
             layerHolds(activeLayer, kFreeArea));
 
@@ -4118,7 +4166,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
       };
     }
 
-    final activeHasElements = activeLayer != null &&
+    final activeHasElements =
+        activeLayer != null &&
         layerContentTypes(activeLayer).any(holdsSelectable);
     final canEditByTap = activeHasEditor && activeHasElements;
     // Only the two freehand types can be drawn into — everything else is built
@@ -4263,6 +4312,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           maxZoom: 19,
                         ),
                       ),
+                    // Uncertainty bands, all of them, before any solid fill.
+                    // A band marks where a region *might* reach; painting one
+                    // over a fill that is certain — the element in front of it
+                    // in the same layer, or any element in a layer below —
+                    // reads as the uncertainty being the more definite of the
+                    // two. So every band goes down here first, in the same
+                    // bottom-to-top order the fills are drawn in above.
+                    for (final layer in bandPassLayers(layers, uncertainty))
+                      regionPass(layer, RegionPhase.band),
                     // One composited region per visible layer, bottom-to-top.
                     // Region layers apply their opacity inside the painter (so
                     // it can push the fill all the way to fully opaque). POI
@@ -4294,57 +4352,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           // opaque. Built unconditionally for any non-borders
                           // layer: it is fed only the types the layer holds,
                           // and an all-empty one paints nothing.
-                          RegionLayer(
-                            key: ValueKey('region-${layer.id}'),
-                            layer: layer,
-                            opacity: layer.opacity,
-                            circles: layerHolds(layer, kCircles)
-                                ? circles
-                                      .where((c) => c.layerId == layer.id)
-                                      .toList()
-                                : const <Circle>[],
-                            planes: layerHolds(layer, kPlanes)
-                                ? planes
-                                      .where((p) => p.layerId == layer.id)
-                                      .toList()
-                                : const <Plane>[],
-                            subspaces: layerHolds(layer, kSubspace)
-                                ? subspaces
-                                      .where((s) => s.layerId == layer.id)
-                                      .toList()
-                                : const <Subspace>[],
-                            subspacePoints: layerHolds(layer, kSubspace)
-                                ? subspacePoints
-                                : const <String, List<SubspacePoint>>{},
-                            freeLines: layerHolds(layer, kFreeLine)
-                                ? freeLines
-                                      .where((l) => l.layerId == layer.id)
-                                      .toList()
-                                : const <FreeLine>[],
-                            freeLinePoints: layerHolds(layer, kFreeLine)
-                                ? freeLinePoints
-                                : const <String, List<FreeLinePoint>>{},
-                            freeAreas: layerHolds(layer, kFreeArea)
-                                ? freeAreas
-                                      .where((a) => a.layerId == layer.id)
-                                      .toList()
-                                : const <FreeArea>[],
-                            freeAreaPoints: layerHolds(layer, kFreeArea)
-                                ? freeAreaPoints
-                                : const <String, List<FreeAreaPoint>>{},
-                            heightRegions: layerHolds(layer, kHeight)
-                                ? heightRegions
-                                      .where((r) => r.layerId == layer.id)
-                                      .toList()
-                                : const <HeightRegion>[],
-                            heightPolygons: layerHolds(layer, kHeight)
-                                ? heightPolygons
-                                : const <String, List<HeightPolygon>>{},
-                            heightPolygonPoints: layerHolds(layer, kHeight)
-                                ? heightPolygonPoints
-                                : const <String, List<HeightPolygonPoint>>{},
-                            uncertaintyMeters: uncertainty,
-                          ),
+                          regionPass(layer, RegionPhase.fill),
                         // Tracks: the painter applies the layer opacity to the
                         // stroke, which is the only thing a track has.
                         if (layerHolds(layer, kTrack))
@@ -4498,12 +4506,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           for (final c in pendingImport.circles)
                             Polygon(
                               points: geodesicCircle(c.center, c.radiusMeters),
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .tertiary
-                                  .withValues(alpha: 0.15),
-                              borderColor:
-                                  Theme.of(context).colorScheme.tertiary,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.tertiary.withValues(alpha: 0.15),
+                              borderColor: Theme.of(
+                                context,
+                              ).colorScheme.tertiary,
                               borderStrokeWidth: 3,
                             ),
                         ],
@@ -4861,7 +4869,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             ),
                           ],
                           ...?_reshapeHandles(reshapeDraft),
-                          ..._labelHandles(selectedBorderArea, selectedBorderLayer),
+                          ..._labelHandles(
+                            selectedBorderArea,
+                            selectedBorderLayer,
+                          ),
                           for (final p in selectedFreeAreaPoints)
                             _dragHandle(
                               LatLng(p.lat, p.lng),
@@ -5122,8 +5133,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(Icons.fiber_manual_record,
-                                    size: 16, color: Colors.white),
+                                const Icon(
+                                  Icons.fiber_manual_record,
+                                  size: 16,
+                                  color: Colors.white,
+                                ),
                                 const SizedBox(width: 6),
                                 Flexible(
                                   child: Text(
@@ -5137,7 +5151,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                       .read(trackRecordingProvider.notifier)
                                       .stop(),
                                   style: TextButton.styleFrom(
-                                      foregroundColor: Colors.white),
+                                    foregroundColor: Colors.white,
+                                  ),
                                   child: const Text('Stop'),
                                 ),
                               ],
@@ -5341,18 +5356,18 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         : null,
                     onPressed: _locating
                         ? null
-                        : (_myPosition != null
-                            ? _hideMyLocation
-                            : _locateMe),
+                        : (_myPosition != null ? _hideMyLocation : _locateMe),
                     child: _locating
                         ? const SizedBox(
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : Icon(_myPosition != null
-                            ? Icons.location_disabled
-                            : Icons.my_location),
+                        : Icon(
+                            _myPosition != null
+                                ? Icons.location_disabled
+                                : Icons.my_location,
+                          ),
                   ),
                   const SizedBox(height: 12),
                   // Next to Locate on purpose: both answer "where am I", one
@@ -5518,62 +5533,67 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             ? 'Stop recording'
                             : 'Record your position into this layer',
                         onPressed: () => _toggleRecording(activeLayer!),
-                        backgroundColor:
-                            recording.isRecording ? Colors.red.shade600 : null,
-                        foregroundColor:
-                            recording.isRecording ? Colors.white : null,
-                        icon: Icon(recording.isRecording
-                            ? Icons.stop
-                            : Icons.fiber_manual_record),
+                        backgroundColor: recording.isRecording
+                            ? Colors.red.shade600
+                            : null,
+                        foregroundColor: recording.isRecording
+                            ? Colors.white
+                            : null,
+                        icon: Icon(
+                          recording.isRecording
+                              ? Icons.stop
+                              : Icons.fiber_manual_record,
+                        ),
                         label: Text(recording.isRecording ? 'Stop' : 'Record'),
                       )
                     else
-                    GestureDetector(
-                      onLongPress: activeLayer == null
-                          ? null
-                          : () => _addAtMapCentre(
-                              activeLayer,
-                              subspaces: subspaces,
-                              freeLines: freeLines,
-                              freeAreas: freeAreas,
-                            ),
-                      child: FloatingActionButton.extended(
-                        heroTag: 'add',
-                        tooltip:
-                            'Tap the map to add · long-press for the '
-                            'map centre',
-                        onPressed: activeLayer == null
+                      GestureDetector(
+                        onLongPress: activeLayer == null
                             ? null
-                            : () => mode == MapMode.add
-                                  ? _finishAdd()
-                                  : _enterAddMode(activeLayer),
-                        backgroundColor: activeLayer == null
-                            ? Theme.of(context).disabledColor
-                            : mode == MapMode.add
-                            ? Theme.of(context).colorScheme.primary
-                            : null,
-                        foregroundColor: mode == MapMode.add
-                            ? Theme.of(context).colorScheme.onPrimary
-                            : null,
-                        icon: Icon(
-                          mode == MapMode.add
-                              ? Icons.check
-                              : typeIcon(activeLayer?.type ?? 'circles'),
-                        ),
-                        label: Text(
-                          mode == MapMode.add
-                              ? 'Done'
-                              : _addFabLabel(activeLayer?.type),
+                            : () => _addAtMapCentre(
+                                activeLayer,
+                                subspaces: subspaces,
+                                freeLines: freeLines,
+                                freeAreas: freeAreas,
+                              ),
+                        child: FloatingActionButton.extended(
+                          heroTag: 'add',
+                          tooltip:
+                              'Tap the map to add · long-press for the '
+                              'map centre',
+                          onPressed: activeLayer == null
+                              ? null
+                              : () => mode == MapMode.add
+                                    ? _finishAdd()
+                                    : _enterAddMode(activeLayer),
+                          backgroundColor: activeLayer == null
+                              ? Theme.of(context).disabledColor
+                              : mode == MapMode.add
+                              ? Theme.of(context).colorScheme.primary
+                              : null,
+                          foregroundColor: mode == MapMode.add
+                              ? Theme.of(context).colorScheme.onPrimary
+                              : null,
+                          icon: Icon(
+                            mode == MapMode.add
+                                ? Icons.check
+                                : typeIcon(activeLayer?.type ?? 'circles'),
+                          ),
+                          label: Text(
+                            mode == MapMode.add
+                                ? 'Done'
+                                : _addFabLabel(activeLayer?.type),
+                          ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ],
             ),
       // An import sheet outranks everything: it is a question already being
       // asked, and it comes down as soon as it is answered.
-      bottomSheet: (pendingImport == null
+      bottomSheet:
+          (pendingImport == null
               ? null
               : PendingImportSheet(
                   pending: pendingImport,
@@ -5582,155 +5602,165 @@ class _MapScreenState extends ConsumerState<MapScreen>
                 )) ??
           _importSheet ??
           (!hasSelection
-          // A shared position. An arriving one clears the selection (see the
-          // listener above), so in practice these two never compete; the order
-          // here only decides what happens if something is selected *after*.
-          ? (receivedPoint == null
-                ? null
-                : ReceivedPlaceSheet(
-                    point: receivedPoint,
-                    onKeep: () => unawaited(_keepSharedPlace(receivedPoint)),
-                    onDismiss: () =>
-                        ref.read(receivedPointProvider.notifier).clear(),
-                  ))
-          : CollapsibleSheet(
-              // Reset to expanded whenever the selected object changes.
-              key: ValueKey(
-                'sheet-'
-                '${selectedCircle?.id ?? selectedPlane?.id ?? selectedSubspace?.id ?? selectedFreeLine?.id ?? selectedFreeArea?.id ?? selectedHeightRegion?.id ?? selectedPoiSet?.id ?? selectedPoiPoint?.id ?? selectedTransitSet?.id ?? selectedTransitStop?.id ?? selectedBorderArea?.id}',
-              ),
-              child: selectedCircle != null
-                  ? CircleEditorSheet(
-                      key: ValueKey(selectedCircle.id),
-                      circle: selectedCircle,
-                      layers: layers,
-                    )
-                  : selectedPlane != null
-                  ? PlaneEditorSheet(
-                      key: ValueKey(selectedPlane.id),
-                      plane: selectedPlane,
-                      layers: layers,
-                    )
-                  : selectedSubspace != null
-                  ? SubspaceEditorSheet(
-                      key: ValueKey(selectedSubspace.id),
-                      subspace: selectedSubspace,
-                      points: selectedSubspacePoints,
-                      layers: layers,
-                      onAddPoint: () => _addSubspaceAt(
-                        _mapController.camera.center,
-                        layers.firstWhere(
-                          (l) => l.id == selectedSubspace.layerId,
-                        ),
-                        subspaces,
-                      ),
-                    )
-                  : selectedFreeLine != null
-                  ? FreeLineEditorSheet(
-                      key: ValueKey(selectedFreeLine.id),
-                      freeLine: selectedFreeLine,
-                      points: selectedFreeLinePoints,
-                      layers: layers,
-                      onAddPoint: () => _addFreeLineAt(
-                        _mapController.camera.center,
-                        layers.firstWhere(
-                          (l) => l.id == selectedFreeLine.layerId,
-                        ),
-                        freeLines,
-                      ),
-                    )
-                  : selectedFreeArea != null
-                  ? FreeAreaEditorSheet(
-                      key: ValueKey(selectedFreeArea.id),
-                      freeArea: selectedFreeArea,
-                      points: selectedFreeAreaPoints,
-                      layers: layers,
-                      onAddPoint: () => _addFreeAreaAt(
-                        _mapController.camera.center,
-                        layers.firstWhere(
-                          (l) => l.id == selectedFreeArea.layerId,
-                        ),
-                        freeAreas,
-                      ),
-                    )
-                  : selectedHeightRegion != null
-                  ? HeightEditorSheet(
-                      key: ValueKey(selectedHeightRegion.id),
-                      region: selectedHeightRegion,
-                      polygonCount:
-                          heightPolygons[selectedHeightRegion.id]?.length ?? 0,
-                      layers: layers,
-                    )
-                  : selectedPoiPoint != null
-                  ? ImportedPointEditorSheet(
-                      key: ValueKey(selectedPoiPoint.id),
-                      id: selectedPoiPoint.id,
-                      kind: ObjectKind.poiPoint,
-                      name: selectedPoiPoint.name,
-                      lat: selectedPoiPoint.lat,
-                      lng: selectedPoiPoint.lng,
-                      icon: () {
-                        final set = _setOf(poiSets, selectedPoiPoint.poiSetId);
-                        return set == null
-                            ? Icons.place_outlined
-                            : poiSetIcon(set);
-                      }(),
-                      title: 'Edit POI',
-                      subtitle: _poiCategoryLabel(
-                        poiSets,
-                        selectedPoiPoint.poiSetId,
-                      ),
-                      // Only a hand-placed POI can be moved; an imported one's
-                      // position is the fetched fact.
-                      movable:
-                          _setOf(poiSets, selectedPoiPoint.poiSetId)?.isManual ??
+              // A shared position. An arriving one clears the selection (see the
+              // listener above), so in practice these two never compete; the order
+              // here only decides what happens if something is selected *after*.
+              ? (receivedPoint == null
+                    ? null
+                    : ReceivedPlaceSheet(
+                        point: receivedPoint,
+                        onKeep: () =>
+                            unawaited(_keepSharedPlace(receivedPoint)),
+                        onDismiss: () =>
+                            ref.read(receivedPointProvider.notifier).clear(),
+                      ))
+              : CollapsibleSheet(
+                  // Reset to expanded whenever the selected object changes.
+                  key: ValueKey(
+                    'sheet-'
+                    '${selectedCircle?.id ?? selectedPlane?.id ?? selectedSubspace?.id ?? selectedFreeLine?.id ?? selectedFreeArea?.id ?? selectedHeightRegion?.id ?? selectedPoiSet?.id ?? selectedPoiPoint?.id ?? selectedTransitSet?.id ?? selectedTransitStop?.id ?? selectedBorderArea?.id}',
+                  ),
+                  child: selectedCircle != null
+                      ? CircleEditorSheet(
+                          key: ValueKey(selectedCircle.id),
+                          circle: selectedCircle,
+                          layers: layers,
+                        )
+                      : selectedPlane != null
+                      ? PlaneEditorSheet(
+                          key: ValueKey(selectedPlane.id),
+                          plane: selectedPlane,
+                          layers: layers,
+                        )
+                      : selectedSubspace != null
+                      ? SubspaceEditorSheet(
+                          key: ValueKey(selectedSubspace.id),
+                          subspace: selectedSubspace,
+                          points: selectedSubspacePoints,
+                          layers: layers,
+                          onAddPoint: () => _addSubspaceAt(
+                            _mapController.camera.center,
+                            layers.firstWhere(
+                              (l) => l.id == selectedSubspace.layerId,
+                            ),
+                            subspaces,
+                          ),
+                        )
+                      : selectedFreeLine != null
+                      ? FreeLineEditorSheet(
+                          key: ValueKey(selectedFreeLine.id),
+                          freeLine: selectedFreeLine,
+                          points: selectedFreeLinePoints,
+                          layers: layers,
+                          onAddPoint: () => _addFreeLineAt(
+                            _mapController.camera.center,
+                            layers.firstWhere(
+                              (l) => l.id == selectedFreeLine.layerId,
+                            ),
+                            freeLines,
+                          ),
+                        )
+                      : selectedFreeArea != null
+                      ? FreeAreaEditorSheet(
+                          key: ValueKey(selectedFreeArea.id),
+                          freeArea: selectedFreeArea,
+                          points: selectedFreeAreaPoints,
+                          layers: layers,
+                          onAddPoint: () => _addFreeAreaAt(
+                            _mapController.camera.center,
+                            layers.firstWhere(
+                              (l) => l.id == selectedFreeArea.layerId,
+                            ),
+                            freeAreas,
+                          ),
+                        )
+                      : selectedHeightRegion != null
+                      ? HeightEditorSheet(
+                          key: ValueKey(selectedHeightRegion.id),
+                          region: selectedHeightRegion,
+                          polygonCount:
+                              heightPolygons[selectedHeightRegion.id]?.length ??
+                              0,
+                          layers: layers,
+                        )
+                      : selectedPoiPoint != null
+                      ? ImportedPointEditorSheet(
+                          key: ValueKey(selectedPoiPoint.id),
+                          id: selectedPoiPoint.id,
+                          kind: ObjectKind.poiPoint,
+                          name: selectedPoiPoint.name,
+                          lat: selectedPoiPoint.lat,
+                          lng: selectedPoiPoint.lng,
+                          icon: () {
+                            final set = _setOf(
+                              poiSets,
+                              selectedPoiPoint.poiSetId,
+                            );
+                            return set == null
+                                ? Icons.place_outlined
+                                : poiSetIcon(set);
+                          }(),
+                          title: 'Edit POI',
+                          subtitle: _poiCategoryLabel(
+                            poiSets,
+                            selectedPoiPoint.poiSetId,
+                          ),
+                          // Only a hand-placed POI can be moved; an imported one's
+                          // position is the fetched fact.
+                          movable:
+                              _setOf(
+                                poiSets,
+                                selectedPoiPoint.poiSetId,
+                              )?.isManual ??
                               false,
-                    )
-                  : selectedTransitStop != null
-                  ? ImportedPointEditorSheet(
-                      key: ValueKey(selectedTransitStop.id),
-                      id: selectedTransitStop.id,
-                      kind: ObjectKind.transitStop,
-                      name: selectedTransitStop.name,
-                      lat: selectedTransitStop.lat,
-                      lng: selectedTransitStop.lng,
-                      icon: Icons.directions_transit,
-                      title: 'Edit station',
-                      subtitle:
-                          transitModeLabels(selectedTransitStop.modeMask),
-                    )
-                  : selectedPoiSet != null
-                  ? PoiSetEditorSheet(
-                      key: ValueKey(selectedPoiSet.id),
-                      set: selectedPoiSet,
-                      pointCount: poiPoints
-                          .where((p) => p.poiSetId == selectedPoiSet.id)
-                          .length,
-                      layers: [
-                        for (final l in layers)
-                          if (layerHolds(l, kPoi)) l,
-                      ],
-                    )
-                  : selectedTransitSet != null
-                  ? TransitSetEditorSheet(
-                      key: ValueKey(selectedTransitSet.id),
-                      set: selectedTransitSet,
-                      stopCount: transitStations
-                          .where((x) => x.setId == selectedTransitSet.id)
-                          .length,
-                      layers: [
-                        for (final l in layers)
-                          if (layerHolds(l, kTransit)) l,
-                      ],
-                    )
-                  : selectedBorderArea != null && selectedBorderLayer != null
-                  ? BorderAreaEditorSheet(
-                      key: ValueKey(selectedBorderArea.id),
-                      area: selectedBorderArea,
-                      layer: selectedBorderLayer,
-                    )
-                  : const SizedBox.shrink(),
-            )),
+                        )
+                      : selectedTransitStop != null
+                      ? ImportedPointEditorSheet(
+                          key: ValueKey(selectedTransitStop.id),
+                          id: selectedTransitStop.id,
+                          kind: ObjectKind.transitStop,
+                          name: selectedTransitStop.name,
+                          lat: selectedTransitStop.lat,
+                          lng: selectedTransitStop.lng,
+                          icon: Icons.directions_transit,
+                          title: 'Edit station',
+                          subtitle: transitModeLabels(
+                            selectedTransitStop.modeMask,
+                          ),
+                        )
+                      : selectedPoiSet != null
+                      ? PoiSetEditorSheet(
+                          key: ValueKey(selectedPoiSet.id),
+                          set: selectedPoiSet,
+                          pointCount: poiPoints
+                              .where((p) => p.poiSetId == selectedPoiSet.id)
+                              .length,
+                          layers: [
+                            for (final l in layers)
+                              if (layerHolds(l, kPoi)) l,
+                          ],
+                        )
+                      : selectedTransitSet != null
+                      ? TransitSetEditorSheet(
+                          key: ValueKey(selectedTransitSet.id),
+                          set: selectedTransitSet,
+                          stopCount: transitStations
+                              .where((x) => x.setId == selectedTransitSet.id)
+                              .length,
+                          layers: [
+                            for (final l in layers)
+                              if (layerHolds(l, kTransit)) l,
+                          ],
+                        )
+                      : selectedBorderArea != null &&
+                            selectedBorderLayer != null
+                      ? BorderAreaEditorSheet(
+                          key: ValueKey(selectedBorderArea.id),
+                          area: selectedBorderArea,
+                          layer: selectedBorderLayer,
+                        )
+                      : const SizedBox.shrink(),
+                )),
     );
   }
 }

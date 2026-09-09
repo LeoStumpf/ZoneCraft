@@ -16,6 +16,9 @@
 
 import 'dart:ui' show Color;
 
+import '../data/database.dart';
+import '../data/layer_types.dart';
+
 /// Splits [items] — already in draw order, front last — into the paint passes
 /// the region engine runs: **maximal runs of consecutive same-colour elements**.
 ///
@@ -48,3 +51,42 @@ List<({Color color, List<T> items})> colorRuns<T>(
   }
   return runs;
 }
+
+/// The layers that get a bottom-most **uncertainty band** pass, bottom to top.
+///
+/// Bands are painted by their own widget per layer, stacked below *every*
+/// layer's fill widget, so no band is ever drawn over a solid fill — see
+/// `RegionPhase`. This picks which layers contribute one:
+///
+/// * nothing at all when there is no uncertainty to draw, so at 0 m the extra
+///   pass disappears and the map is exactly what it was before bands moved;
+/// * hidden layers are skipped, as they are for the fill pass;
+/// * `borders` is skipped — it is drawn by its own painter and has no band;
+/// * so is a layer holding none of the six region types (a pure track/POI/
+///   transit layer paints no region at all).
+///
+/// The order is [layers]' own order, which is the layers' draw order, so the
+/// bands keep the same relative stacking as the fills above them.
+List<Layer> bandPassLayers(List<Layer> layers, double uncertaintyMeters) {
+  if (uncertaintyMeters <= 0) return const <Layer>[];
+  return [
+    for (final l in layers)
+      if (l.isVisible && !layerHolds(l, kBorders) && layerHoldsRegion(l)) l,
+  ];
+}
+
+/// True when [layer] holds any of the six types the region painter draws.
+bool layerHoldsRegion(Layer layer) =>
+    kRegionContentTypes.any((t) => layerHolds(layer, t));
+
+/// The content types [RegionLayer] paints — the ones with an outer/core
+/// composite and therefore an uncertainty band. `borders` is not one of them:
+/// it is a read-only snapshot with its own painter and no band.
+const kRegionContentTypes = <String>[
+  kCircles,
+  kPlanes,
+  kSubspace,
+  kFreeLine,
+  kFreeArea,
+  kHeight,
+];
