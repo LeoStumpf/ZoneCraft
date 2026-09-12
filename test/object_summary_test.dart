@@ -164,7 +164,11 @@ void main() {
       freeLinePoints: await db.select(db.freeLinePoints).get(),
     );
 
-    expect(rows.single.subtitle, '2 points');
+    // Point count, then the ground length: 7° of longitude at 48° N is
+    // roughly 520 km.
+    expect(rows.single.subtitle, startsWith('2 points · '));
+    expect(rows.single.subtitle, endsWith(' km'));
+    expect(rows.single.sizeMeasure, closeTo(520000, 10000));
     expect(rows.single.center.longitude, closeTo(11.0, 1e-9));
     // Every framing point stays within ~1 km of the inclusion centre — the
     // 7°-wide raw extent must not leak into the camera fit.
@@ -188,7 +192,59 @@ void main() {
       freeLinePoints: await db.select(db.freeLinePoints).get(),
     );
 
-    expect(rows.single.subtitle, '2 points · offset 250 m');
+    // Points · length · offset, in that order.
+    expect(
+      rows.single.subtitle,
+      matches(RegExp(r'^2 points · 1[23] km · offset 250 m$')),
+    );
+  });
+
+  test('freearea rows quote the enclosed area', () async {
+    final layerId = await repo.createLayer(
+        name: 'A', colorArgb: 0xFFFF0000, type: 'freearea');
+    final id = await repo.createFreeArea(layerId: layerId, label: 'Yard');
+    // 0.01° × 0.01° at 48° N ≈ 1113 m × 745 m ≈ 0.83 km².
+    await repo.addFreeAreaPoint(freeAreaId: id, lat: 48.00, lng: 11.00);
+    await repo.addFreeAreaPoint(freeAreaId: id, lat: 48.00, lng: 11.01);
+    await repo.addFreeAreaPoint(freeAreaId: id, lat: 48.01, lng: 11.01);
+    await repo.addFreeAreaPoint(freeAreaId: id, lat: 48.01, lng: 11.00);
+
+    final rows = summariseLayer(
+      await layerById(layerId),
+      freeAreas: await db.select(db.freeAreas).get(),
+      freeAreaPoints: await db.select(db.freeAreaPoints).get(),
+    );
+
+    expect(rows.single.title, 'Yard');
+    expect(rows.single.sortName, 'Yard');
+    expect(
+      rows.single.subtitle,
+      matches(RegExp(r'^4 points · 8[23]\d,\d\d\d m²$')),
+    );
+    expect(rows.single.sizeMeasure, closeTo(829000, 829000 * 0.01));
+  });
+
+  test('sort keys: sortName is the label only, sizeMeasure per kind', () async {
+    final layerId = await repo.createLayer(name: 'C', colorArgb: 0xFF0000FF);
+    await repo.createCircle(
+        layerId: layerId, centerLat: 48.1, centerLng: 11.5, radiusMeters: 500);
+    await repo.createCircle(
+        layerId: layerId,
+        centerLat: 48.2,
+        centerLng: 11.6,
+        radiusMeters: 2000,
+        label: '  Home ');
+
+    final rows = summariseLayer(
+      await layerById(layerId),
+      circles: await db.select(db.circles).get(),
+    );
+
+    // A positional title is not a name: it must not sort among the named.
+    final unnamed = rows.firstWhere((r) => r.title.startsWith('Circle '));
+    expect(unnamed.sortName, '');
+    expect(rows.firstWhere((r) => r.title == 'Home').sortName, 'Home');
+    expect(rows.map((r) => r.sizeMeasure), containsAll([500.0, 2000.0]));
   });
 
   test('height rows show the band, radius and generation state', () async {
@@ -509,6 +565,33 @@ void main() {
       expect(rows.single.fitPoints, hasLength(2));
       expect(rows.single.fitPoints.first.latitude, 48.1);
       expect(rows.single.fitPoints.last.longitude, 11.6);
+    });
+  });
+
+  group('formatSquareMeters', () {
+    test('square metres below one square kilometre, with separators', () {
+      expect(formatSquareMeters(0), '0 m²');
+      expect(formatSquareMeters(829123.4), '829,123 m²');
+    });
+
+    test('square kilometres above, two decimals below ten', () {
+      expect(formatSquareMeters(2130000), '2.13 km²');
+      expect(formatSquareMeters(42400000), '42 km²');
+    });
+
+    test('non-finite reads as a dash', () {
+      expect(formatSquareMeters(double.nan), '—');
+    });
+  });
+
+  group('compareNamed', () {
+    test('case-insensitive by name, unnamed last, id breaks ties', () {
+      expect(compareNamed('alpha', 'Beta', 'x', 'y'), lessThan(0));
+      expect(compareNamed('beta', 'Alpha', 'x', 'y'), greaterThan(0));
+      expect(compareNamed(null, 'Alpha', 'x', 'y'), greaterThan(0));
+      expect(compareNamed('  ', 'Alpha', 'x', 'y'), greaterThan(0));
+      expect(compareNamed(null, null, 'a', 'b'), lessThan(0));
+      expect(compareNamed('Same', 'same', 'b', 'a'), greaterThan(0));
     });
   });
 

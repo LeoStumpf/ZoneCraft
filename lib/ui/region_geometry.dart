@@ -18,6 +18,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../geo/freeline.dart';
 import '../geo/geodesic.dart';
+import '../geo/measure.dart';
 
 /// Caches the camera-independent (or slowly-changing) lat/lng geometry of the
 /// non-freehand-area region types, so a pan/zoom only re-projects rings instead
@@ -203,11 +204,7 @@ class _RingsEntry {
 LatLng _arcMidpoint(List<LatLng> pts) {
   if (pts.length < 2) return pts.first;
   const d = Distance(calculator: Haversine());
-  var total = 0.0;
-  for (var i = 0; i < pts.length - 1; i++) {
-    total += d(pts[i], pts[i + 1]);
-  }
-  final half = total / 2;
+  final half = polylineLengthMeters(pts) / 2;
   var acc = 0.0;
   for (var i = 0; i < pts.length - 1; i++) {
     final seg = d(pts[i], pts[i + 1]);

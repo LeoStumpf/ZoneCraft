@@ -21,6 +21,7 @@ import 'package:latlong2/latlong.dart' hide Circle;
 
 import '../data/database.dart';
 import '../data/layer_types.dart';
+import '../geo/measure.dart';
 import '../data/poi_sets.dart';
 import '../data/transit.dart';
 import '../state/providers.dart';
@@ -33,6 +34,11 @@ import 'region_geometry.dart';
 ///
 /// Pure (no camera, no providers, no database access) so it is unit-testable —
 /// it only reads Drift row objects that callers already have in hand.
+///
+/// This file summarises **elements** — the rows a layer counts. A POI layer's
+/// elements are its *sets*; the individual POIs inside them are rows of the
+/// Elements list too, but grouped by type rather than counted, and they are
+/// built in `poi_groups.dart`.
 
 /// Identifies one object: its type tag plus its row id and owning layer.
 @immutable
@@ -63,12 +69,27 @@ class ObjectSummary {
     required this.subtitle,
     required this.center,
     required this.fitPoints,
+    required this.sortName,
+    this.sizeMeasure,
     this.isPending = false,
     this.colorArgb,
     this.colorShade = 0,
   });
 
   final ObjectRef ref;
+
+  /// The name the user gave the element, trimmed, or `''` when it has none —
+  /// what "sort by name" orders on. Distinct from [title], which falls back to
+  /// a positional name ("Circle 3") that must *not* sort as a name: every
+  /// unnamed element would otherwise land between the named ones.
+  final String sortName;
+
+  /// The one number "sort by size" orders on, or null when the kind has no
+  /// size (a POI set, a POI). **Comparable only within one kind**: metres of
+  /// radius for a circle or height region, metres of length for a line,
+  /// square metres for a freehand area or a border area's box, and a point
+  /// count for a subspace.
+  final double? sizeMeasure;
 
   /// The element's colour override, null when it follows the layer, and which
   /// auto shade of the layer colour it takes while it does (see
@@ -143,12 +164,22 @@ String formatMeters(double meters) {
 String formatElevationMeters(double meters) {
   if (!meters.isFinite) return '—';
   final m = meters.round();
-  final withSep = m.abs().toString().replaceAllMapped(
-        RegExp(r'(\d)(?=(\d{3})+$)'),
-        (mm) => '${mm[1]},',
-      );
-  return '${m < 0 ? '−' : ''}$withSep m';
+  return '${m < 0 ? '−' : ''}${_thousands(m.abs())} m';
 }
+
+/// Formats a ground area: square metres with a thousands separator below
+/// 1 km² ("250,000 m²"), then square kilometres ("2.13 km²", "42 km²").
+String formatSquareMeters(double squareMeters) {
+  if (!squareMeters.isFinite) return '—';
+  if (squareMeters < 1000000) return '${_thousands(squareMeters.round())} m²';
+  final km2 = squareMeters / 1000000;
+  return km2 < 10 ? '${km2.toStringAsFixed(2)} km²' : '${km2.round()} km²';
+}
+
+String _thousands(int n) => n.toString().replaceAllMapped(
+      RegExp(r'(\d)(?=(\d{3})+$)'),
+      (m) => '${m[1]},',
+    );
 
 bool _finite(double lat, double lng) => lat.isFinite && lng.isFinite;
 
@@ -186,6 +217,20 @@ String _titleOr(String? label, String noun, int index) =>
         : '$noun ${index + 1}';
 
 String _plural(int n, String noun) => '$n $noun${n == 1 ? '' : 's'}';
+
+String _sortName(String? label) => label?.trim() ?? '';
+
+/// Orders two named things the way a person looks for one: case-insensitive
+/// by name, the unnamed after every named one, ties broken by id so the order
+/// is stable across rebuilds. Shared by border areas (which arrive in whatever
+/// order Overpass listed them), POI rows and the list's "sort by name".
+int compareNamed(String? a, String? b, String idA, String idB) {
+  final an = a?.trim() ?? '';
+  final bn = b?.trim() ?? '';
+  if (an.isEmpty != bn.isEmpty) return an.isEmpty ? 1 : -1; // unnamed last
+  final c = an.toLowerCase().compareTo(bn.toLowerCase());
+  return c != 0 ? c : idA.compareTo(idB);
+}
 
 /// Sorts a layer's objects into **creation** order, tie-broken by id.
 ///
@@ -382,6 +427,8 @@ ObjectSummary _circleSummary(Circle c, String layerId, int index) {
     subtitle: '${formatMeters(c.radiusMeters)} radius',
     center: center,
     fitPoints: _ringAround(center, c.radiusMeters),
+    sortName: _sortName(c.label),
+    sizeMeasure: c.radiusMeters,
   );
 }
 
@@ -411,6 +458,8 @@ ObjectSummary _subspaceSummary(
     subtitle: _plural(pts.length, 'point'),
     center: center,
     fitPoints: pts.isEmpty ? [center] : pts,
+    sortName: _sortName(s.label),
+    sizeMeasure: pts.length.toDouble(),
   );
 }
 
@@ -444,16 +493,23 @@ ObjectSummary _freeLineSummary(
     fit = _ringAround(inc.center, inc.radiusMeters);
   }
   final offset = l.offsetMeters;
+  // The line's ground length, beside its point count: "12 points" says how
+  // it was drawn, "3.4 km" says what it is.
+  final length = polylineLengthMeters(pts);
   return ObjectSummary(
     ref: ObjectRef(kind: ObjectKind.freeLine, id: l.id, layerId: layerId),
     colorArgb: l.colorArgb,
     colorShade: l.colorShade,
     title: _titleOr(l.label, 'Line', index),
-    subtitle: offset == 0
-        ? _plural(pts.length, 'point')
-        : '${_plural(pts.length, 'point')} · offset ${formatMeters(offset.abs())}',
+    subtitle: [
+      _plural(pts.length, 'point'),
+      if (pts.length >= 2) formatMeters(length),
+      if (offset != 0) 'offset ${formatMeters(offset.abs())}',
+    ].join(' · '),
     center: center,
     fitPoints: fit,
+    sortName: _sortName(l.label),
+    sizeMeasure: length,
   );
 }
 
@@ -470,16 +526,21 @@ ObjectSummary _freeAreaSummary(
   ];
   final center = _bboxCenter(pts) ?? const LatLng(0, 0);
   final offset = a.offsetMeters;
+  final area = polygonAreaSquareMeters(pts);
   return ObjectSummary(
     ref: ObjectRef(kind: ObjectKind.freeArea, id: a.id, layerId: layerId),
     colorArgb: a.colorArgb,
     colorShade: a.colorShade,
     title: _titleOr(a.label, 'Area', index),
-    subtitle: offset == 0
-        ? _plural(pts.length, 'point')
-        : '${_plural(pts.length, 'point')} · offset ${formatMeters(offset.abs())}',
+    subtitle: [
+      _plural(pts.length, 'point'),
+      if (pts.length >= 3) formatSquareMeters(area),
+      if (offset != 0) 'offset ${formatMeters(offset.abs())}',
+    ].join(' · '),
     center: center,
     fitPoints: pts.isEmpty ? [center] : pts,
+    sortName: _sortName(a.label),
+    sizeMeasure: area,
   );
 }
 
@@ -499,6 +560,8 @@ ObjectSummary _heightSummary(HeightRegion r, String layerId, int index) {
     subtitle: parts.join(' · '),
     center: center,
     fitPoints: _ringAround(center, r.radiusMeters),
+    sortName: _sortName(r.label),
+    sizeMeasure: r.radiusMeters,
   );
 }
 
@@ -508,17 +571,12 @@ ObjectSummary _heightSummary(HeightRegion r, String layerId, int index) {
 /// A set whose `fetchedAt` is null never finished — it shows as a retry row
 /// carrying the reason, so a failed import is something you can come back to
 /// rather than a snackbar you missed.
-/// Sorts border areas the way a person would look for one: by name, then by id
-/// so the order is stable. Deliberately not `_ordered`'s creation order — these
-/// are named, non-positional objects arriving in whatever order Overpass listed
-/// them, and "find Maxvorstadt in a list of 97" is the actual task.
-int _byName(BorderArea a, BorderArea b) {
-  final an = a.name?.trim() ?? '';
-  final bn = b.name?.trim() ?? '';
-  if (an.isEmpty != bn.isEmpty) return an.isEmpty ? 1 : -1; // unnamed last
-  final c = an.toLowerCase().compareTo(bn.toLowerCase());
-  return c != 0 ? c : a.id.compareTo(b.id);
-}
+/// Border areas are listed by name ([compareNamed]), deliberately not
+/// `_ordered`'s creation order — these are named, non-positional objects
+/// arriving in whatever order Overpass listed them, and "find Maxvorstadt in a
+/// list of 97" is the actual task.
+int _byName(BorderArea a, BorderArea b) =>
+    compareNamed(a.name, b.name, a.id, b.id);
 
 ObjectSummary _borderAreaSummary(BorderArea a, String layerId, int index) {
   final center = LatLng((a.south + a.north) / 2, (a.west + a.east) / 2);
@@ -539,6 +597,10 @@ ObjectSummary _borderAreaSummary(BorderArea a, String layerId, int index) {
     ].join(' · '),
     center: center,
     fitPoints: [LatLng(a.south, a.west), LatLng(a.north, a.east)],
+    sortName: _sortName(a.name),
+    // The box, not the outline: the rings are an encoded blob of up to a
+    // hundred thousand points, and this runs on every row-stream emission.
+    sizeMeasure: width * height,
   );
 }
 
@@ -590,6 +652,7 @@ ObjectSummary _poiSetSummary(
       // An import is a snapshot with no refresh path, so framing it means
       // framing exactly what was fetched.
       fitPoints: [sw, ne],
+      sortName: _sortName(s.label),
       isPending: s.isPending,
     );
   }
@@ -619,6 +682,7 @@ ObjectSummary _poiSetSummary(
     fitPoints: s.isManual && count == 0
         ? [center]
         : _ringAround(center, s.radiusMeters),
+    sortName: _sortName(s.label),
     isPending: s.isPending,
   );
 }

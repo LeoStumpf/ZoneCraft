@@ -18,10 +18,33 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zonecraft/data/database.dart';
 import 'package:zonecraft/data/overpass.dart';
+import 'package:zonecraft/data/transit.dart';
 import 'package:zonecraft/ui/poi_icons.dart';
 import 'package:zonecraft/ui/poi_layer.dart' show poiIconFor;
 
 void main() {
+  group('transitIconFor follows primaryTransitMode', () {
+    test('over every mode combination the icon is the primary mode\'s', () {
+      final all = transitAllModesMask;
+      for (var mask = 0; mask <= all; mask++) {
+        final primary = primaryTransitMode(mask);
+        expect(
+          transitIconFor(mask),
+          transitIconFor(primary?.bit ?? 0),
+          reason: 'mask $mask',
+        );
+      }
+    });
+
+    test('a subway+bus stop icons as a subway station', () {
+      final subway = transitModeByKey('subway')!.bit;
+      final bus = transitModeByKey('bus')!.bit;
+      expect(transitIconFor(subway | bus), Icons.subway);
+      expect(transitIconFor(bus), Icons.directions_bus);
+      expect(transitIconFor(0), Icons.directions_transit);
+    });
+  });
+
   PoiSet set({String categoryKey = 'cafe', String? iconKey, bool manual = false}) =>
       PoiSet(
         id: 's',

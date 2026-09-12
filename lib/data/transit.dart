@@ -225,6 +225,30 @@ int transitMaskWith(int mask, TransitMode m, {required bool on}) =>
 int transitMaskOf(Iterable<TransitMode> modes) =>
     modes.fold(0, (acc, m) => acc | m.bit);
 
+/// The one mode a station is *filed under* when it is served by several:
+/// most specific first, so a stop with both a subway and a bus reads as a
+/// subway station. Null for a mode-less station.
+///
+/// This is the single definition of that priority — the marker icon
+/// (`poiPointIcon`) and the Elements list's type groups both derive from it,
+/// so a station can never be drawn as one kind and listed under another.
+/// Monorail comes last so a monorail+bus stop keeps the bus icon it always had.
+TransitMode? primaryTransitMode(int modeMask) {
+  for (final key in const [
+    'subway',
+    'train',
+    'light_rail',
+    'tram',
+    'ferry',
+    'bus',
+    'monorail',
+  ]) {
+    final m = transitModeByKey(key);
+    if (m != null && modeMask & m.bit != 0) return m;
+  }
+  return null;
+}
+
 /// Every mode's bit — what a fresh import records as "these modes were fetched".
 int get transitAllModesMask => transitMaskOf(transitModes);
 

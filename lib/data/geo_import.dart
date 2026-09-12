@@ -21,6 +21,8 @@ import 'package:archive/archive.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:xml/xml.dart';
 
+import '../geo/measure.dart';
+
 /// Parsing of **external** geometry files (not ZoneCraft's own tagged GeoJSON)
 /// so tracks/areas drawn in other apps can be imported. Supports generic
 /// GeoJSON, KML, KMZ (zipped KML) and GPX. The output is a flat list of
@@ -409,15 +411,9 @@ List<List<LatLng>> stitchComponents(List<List<LatLng>> parts) {
     components.add(path);
   }
 
-  double lengthMeters(List<LatLng> line) {
-    var total = 0.0;
-    for (var i = 1; i < line.length; i++) {
-      total += gap(line[i - 1], line[i]);
-    }
-    return total;
-  }
-
-  components.sort((a, b) => lengthMeters(b).compareTo(lengthMeters(a)));
+  components.sort(
+    (a, b) => polylineLengthMeters(b).compareTo(polylineLengthMeters(a)),
+  );
   return components;
 }
 

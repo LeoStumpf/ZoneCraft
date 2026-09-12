@@ -97,12 +97,11 @@ class _TransitModesSheet extends ConsumerWidget {
 
 /// The station-type tick boxes themselves, without a sheet around them.
 ///
-/// Lives in its own widget because it is offered from two places: this sheet
-/// (reached from the layer's overflow menu) and inline at the top of the layer's
-/// **Elements** list — which is where people look first, having gone there to
-/// "see what's in this layer". Elements lists *imports*, which are deletable
-/// snapshots; the types are a filter. Showing both, each under its own heading,
-/// is what stops the two being confused.
+/// This is the "Stations…" sheet's body (the layer menu and the FAB quick
+/// toggle open it). The Elements list offers the same switch a second way —
+/// a tick box on each station type's group heading, over the same
+/// `setPoiVisibleModes` write — so it does not embed this widget; only the
+/// [TransitModeShortcuts] are shared, so "Rail only" means one mask.
 class TransitModeFilter extends ConsumerWidget {
   const TransitModeFilter({super.key, required this.layer});
 
@@ -139,28 +138,7 @@ class TransitModeFilter extends ConsumerWidget {
             style: theme.textTheme.bodySmall,
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
-          child: Wrap(
-            spacing: 8,
-            children: [
-              // The stated use case, in one tap.
-              OutlinedButton.icon(
-                icon: const Icon(Icons.train, size: 16),
-                label: const Text('Rail only'),
-                onPressed: () => write(transitRailMask),
-              ),
-              TextButton(
-                onPressed: () => write(transitAllModesMask),
-                child: const Text('Show all'),
-              ),
-              TextButton(
-                onPressed: () => write(0),
-                child: const Text('Hide all'),
-              ),
-            ],
-          ),
-        ),
+        TransitModeShortcuts(layer: layer),
         for (final m in tally.present)
           CheckboxListTile(
             value: tally.visible & m.bit != 0,
@@ -195,6 +173,45 @@ class TransitModeFilter extends ConsumerWidget {
                 Text('${tally.untyped}', style: theme.textTheme.bodySmall),
           ),
       ],
+    );
+  }
+}
+
+/// "Rail only / Show all / Hide all" — the three masks people actually reach
+/// for, over every station import of [layer]. One widget so the Elements list
+/// and the Stations sheet cannot drift on what "Rail only" ticks.
+class TransitModeShortcuts extends ConsumerWidget {
+  const TransitModeShortcuts({super.key, required this.layer});
+
+  final Layer layer;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tally = ref.watch(transitTallyProvider(layer.id));
+    Future<void> write(int mask) =>
+        ref.read(repositoryProvider).setPoiVisibleModes(tally.setIds, mask);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+      child: Wrap(
+        spacing: 8,
+        children: [
+          // The stated use case, in one tap.
+          OutlinedButton.icon(
+            icon: const Icon(Icons.train, size: 16),
+            label: const Text('Rail only'),
+            onPressed: () => write(transitRailMask),
+          ),
+          TextButton(
+            onPressed: () => write(transitAllModesMask),
+            child: const Text('Show all'),
+          ),
+          TextButton(
+            onPressed: () => write(0),
+            child: const Text('Hide all'),
+          ),
+        ],
+      ),
     );
   }
 }

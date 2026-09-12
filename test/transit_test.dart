@@ -191,6 +191,32 @@ void main() {
     });
   });
 
+  group('primaryTransitMode', () {
+    int bit(String key) => transitModeByKey(key)!.bit;
+
+    test('most specific wins: a subway+bus stop is a subway station', () {
+      expect(primaryTransitMode(bit('subway') | bit('bus'))!.key, 'subway');
+      expect(primaryTransitMode(bit('tram') | bit('bus'))!.key, 'tram');
+      expect(primaryTransitMode(bit('train') | bit('tram'))!.key, 'train');
+      expect(primaryTransitMode(bit('ferry') | bit('bus'))!.key, 'ferry');
+    });
+
+    test('monorail comes last, so monorail+bus stays a bus stop', () {
+      expect(primaryTransitMode(bit('monorail') | bit('bus'))!.key, 'bus');
+      expect(primaryTransitMode(bit('monorail'))!.key, 'monorail');
+    });
+
+    test('a mode-less station has no primary mode', () {
+      expect(primaryTransitMode(0), isNull);
+    });
+
+    test('every single mode is its own primary', () {
+      for (final m in transitModes) {
+        expect(primaryTransitMode(m.bit), same(m));
+      }
+    });
+  });
+
   group('transitModeLabels', () {
     test('names a subset, and collapses the full set', () {
       expect(transitModeLabels(bit('train')), 'Train');

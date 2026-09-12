@@ -45,7 +45,8 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   **the one drawn == tappable predicate** (painter and hit test): a box set filters by
   `transitStationVisible`, every other kind always draws. A station icons itself from its
   modes (`poiPointIcon`); station name plates appear from zoom 14, other POIs' always.
-  "Stations…" and the Elements list's type filter show only once the layer holds a box set.
+  "Stations…" shows only once the layer holds a box set; the Elements list carries the same
+  switch as a tick box on each station type's group heading.
 - **Compositing engine** (`ui/region_layer.dart`): per layer, every object yields an
   `outer`+`core` screen-space polygon; these union via `Path.combine`, then paint core (solid)
   + band (`outer−core`, lighter) + outline, or `viewport−outer` when the layer is **inverted**.
@@ -240,8 +241,22 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   error and a Try again), `imported_point_editor` (one POI or station — the same row:
   **rename and delete only** — a position is the fetched fact, and no column would say one
   had been moved), and `border_area_editor`. Individual POIs/stations are [ObjectKind]s
-  (`poiPoint`) but **not elements** (`isElement`), so the Elements list never lists them — a
-  city import is thousands.
+  (`poiPoint`) but **not elements** (`isElement`): `layerSummariesProvider` — what the
+  drawer, the layer sheet and the recolour picker *count* — still yields one row per set.
+- **The Elements list lists everything, and POIs by type** (`ui/layer_objects_sheet.dart`).
+  Three pure, tested layers feed one `ListView.builder`: `object_summary.dart` (one
+  `ObjectSummary` per element, now with `sortName` + a per-kind `sizeMeasure`, and lines /
+  areas quoting their ground length / area from `geo/measure.dart`), `ui/poi_groups.dart`
+  (a POI layer's *points* filed under `PoiTypeGroup`s — a category across every import of
+  it, a station's `primaryTransitMode` — the same pick `transitIconFor` makes, so icon and
+  group can't disagree — or a hand-made category, which is its own group and appears
+  nowhere else), and `ui/elements_list_model.dart` (`buildElementRows`: sort, search, which
+  groups are open). The **Imports** section holds the sets, collapsed; a **pending import's
+  retry row floats to the top** so no fold can hide it. A station group's heading carries the
+  visibility tick box (`setPoiVisibleModes`, the same write as the Stations sheet; the
+  Rail-only/Show-all/Hide-all `TransitModeShortcuts` are shared). **Z-order menu flags are
+  computed from stack order, never display order**, so "Bring to front" stays right under a
+  name or size sort. Sort and expansion are per-visit state, deliberately not persisted.
 - **A reshaped border outline is flagged** (`BorderAreas.editedAt`, schema v23; null =
   untouched OSM geometry). Reshaping forks the area from upstream while it keeps its
   `osmId`, so re-import dedup then keeps the edited version — which is why the fork is
