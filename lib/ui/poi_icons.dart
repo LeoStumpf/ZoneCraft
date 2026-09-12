@@ -17,6 +17,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/database.dart';
+import '../data/transit.dart' show transitModeByKey;
 import 'poi_layer.dart' show poiIconFor;
 
 /// One pickable marker icon: a stable [key] that goes in the database, a
@@ -127,3 +128,31 @@ IconData poiSetIcon(PoiSet set) {
   if (key != null) return poiIcons[key] ?? Icons.place_outlined;
   return poiIconFor(set.categoryKey);
 }
+
+/// Icon for a station, chosen from the modes that serve it.
+///
+/// Most specific first: a stop served by both a subway and a bus reads better
+/// as a subway station. Every branch is a `const IconData` literal for the
+/// tree-shaking reason [poiIconGroups] gives.
+IconData transitIconFor(int modeMask) {
+  for (final key in const ['subway', 'train', 'light_rail', 'tram', 'ferry']) {
+    final m = transitModeByKey(key);
+    if (m != null && modeMask & m.bit != 0) {
+      return switch (key) {
+        'subway' => Icons.subway,
+        'train' => Icons.train,
+        'light_rail' => Icons.tram,
+        'tram' => Icons.tram,
+        _ => Icons.directions_boat,
+      };
+    }
+  }
+  final bus = transitModeByKey('bus');
+  if (bus != null && modeMask & bus.bit != 0) return Icons.directions_bus;
+  return Icons.directions_transit;
+}
+
+/// The marker icon for one point of [set]: a station icons itself from the
+/// modes that serve it, everything else takes its set's icon.
+IconData poiPointIcon(PoiPoint p, PoiSet set) =>
+    p.modeMask != 0 ? transitIconFor(p.modeMask) : poiSetIcon(set);

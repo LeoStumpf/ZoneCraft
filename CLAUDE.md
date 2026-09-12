@@ -5,25 +5,18 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
 
 ## At a glance (current app)
 
-- **Ten object types**, one per layer (or several at once — see **combined layers** below): `circles` (geodesic), `planes` (closer-of-two-points
-  half-plane), `subspace` (closest-of-N Voronoi cell), `freeline` (drawn polyline dividing the
-  view), `freearea` (drawn closed polygon), `height` (terrain above/below an elevation, bounded
-  to a circle; generated from terrain tiles via marching squares, stored as fill polygons),
-  `track` (a line **recorded from the phone's GPS**: press Record on the layer and each fix is
-  appended, foreground-only — no service, no background permission — with a per-layer stroke
-  width and point spacing; **one track per layer**, so a second run continues the same element,
-  and a long gap bumps `TrackPoints.segmentIndex` so the painter *breaks* the line instead of
-  drawing a straight jump. The only type with **no editor** at all),
-  `poi` (a category of OSM POIs fetched **once** from Overpass within a chosen radius and
-  stored offline; rendered as icon markers that collapse into count-badge clusters when they'd
-  overlap — no region compositing; the FAB re-imports more sets),
-  `transit` (public-transport **stations** fetched **once** from Overpass over a
-  tap-two-corners bbox and stored offline; **no line geometry is ever fetched** — only which
-  transit *types* serve each station — drawn as clustered markers and filtered by a per-layer
-  **Stations** menu; a failed import stays on the layer as a retry row.
-  The import dialog also asks **which types to fetch**, pre-ticked from the box size and
-  size-limited per type — bus stops are ~25× the data of train stops, so a state-sized
-  train-only import works while a bus one is refused),
+- **Seven object types**, one per layer (or several at once — see **combined layers** below):
+  `circles` (geodesic), `subspace` (closest-of-N Voronoi cell; with two points it is the
+  closer-of-two half-plane — the former `planes` type, which v27 folded in), `freeline` (drawn
+  polyline dividing the view), `freearea` (drawn closed polygon), `height` (terrain
+  above/below an elevation, bounded to a circle; generated from terrain tiles via marching
+  squares, stored as fill polygons; any generated region can be **converted to a freehand
+  area** — outer contours only, holes dropped, the same contract as the border conversion),
+  `poi` (markers, in three kinds of **set** told apart by `PoiSets.source` — see **POI
+  sets** below: a `radius` category import, a `box` **station** import (the former `transit`
+  type, folded in at v27) and a `manual` hand-made category; rendered as icon markers that
+  collapse into count-badge clusters when they'd overlap — no region compositing; the import
+  FAB offers both imports),
   `borders` (administrative **areas** of one OSM `admin_level`, chosen when the layer is
   created, fetched **once** over a tap-two-corners bbox and stored offline; whole relations
   are downloaded — clipped member ways have no fillable interior — then assembled and
@@ -35,6 +28,24 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   **converted to a freehand area layer** — the offline twin of the by-name feature import,
   and the only way geometry leaves this read-only snapshot).
   The region types have a `geo/*.dart` region builder and a `ui/*_editor.dart` docked editor.
+  **Three types are gone**: `planes` and `transit` were folded into `subspace` and `poi` by
+  the v27 migration (rows retyped, ids kept), `track` (GPS recording) was dropped with its
+  data. The GeoJSON reader still translates a v1/v2 file's `plane`/`transitstop` kinds and
+  `planes`/`transit` layer types (`legacyLayerType`); `track` objects and layers are skipped.
+- **POI sets** (`data/poi_sets.dart`): `PoiSets.source` is the **one** discriminator
+  (`manual` / `radius` / `box`), replacing the v25 `isManual` bool; read it through the
+  `PoiSetKind` extension (`isManual`, `isStationImport`, `isImport`, `isPending`, `bbox`). A
+  box set stores its bbox, `modeMask` (types **fetched**) and `visibleModeMask` (types
+  **shown**), and its points carry `PoiPoints.modeMask`; its NOT NULL centre/radius are
+  derived from the box (`boxCoveringRadiusMeters`, used by the repository **and** the
+  migration so the two agree). **Every import is born pending** (`fetchedAt` null — the
+  Elements list shows a retry row) and `fillPoiSet` marks it done; `createPoiSet` +
+  `fillPoiSet` + `markPoiImportFailed` are the one lifecycle both imports share
+  (`map_screen._fetchWithProgress` / `_settleImportRow`). `poiPointVisible(point, set)` is
+  **the one drawn == tappable predicate** (painter and hit test): a box set filters by
+  `transitStationVisible`, every other kind always draws. A station icons itself from its
+  modes (`poiPointIcon`); station name plates appear from zoom 14, other POIs' always.
+  "Stations…" and the Elements list's type filter show only once the layer holds a box set.
 - **Compositing engine** (`ui/region_layer.dart`): per layer, every object yields an
   `outer`+`core` screen-space polygon; these union via `Path.combine`, then paint core (solid)
   + band (`outer−core`, lighter) + outline, or `viewport−outer` when the layer is **inverted**.
@@ -65,7 +76,7 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   (uncertainty, clear-all, offline cache, import/export).
 - **No map overlays.** All three global Settings toggles are gone: map POIs became the
   `poi` layer type, public-transport tiles and administrative borders were superseded by
-  `transit` and `borders`. `AppSettings.transportOverlay` / `.borderLevels` survive as
+  `poi` station imports and `borders`. `AppSettings.transportOverlay` / `.borderLevels` survive as
   documented **dead columns** (the precedent `poiCategories` set), as does the now-unused
   `OverpassCache` table.
 - **Offline caching:** a Drift-backed `TileCache` + custom `CachedTileProvider`
@@ -82,8 +93,8 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   `TileSource.allowsPrefetch` for the community server — `test/tile_source_test.dart`
   guards it.
 - **One Overpass client** (`data/overpass_client.dart`): endpoint failover, transient-vs-fatal
-  status handling and a size cap, shared by `transit.dart`, `borders.dart` **and
-  `overpass.dart`** (POI imports) — all three return `OverpassOutcome` and drive the shared
+  status handling and a size cap, shared by `transit.dart` (station fetch + merge),
+  `borders.dart` **and `overpass.dart`** (POI imports) — all three return `OverpassOutcome` and drive the shared
   `ui/import_progress.dart` dialog. The endpoint that last answered is remembered in
   `AppSettings.transitEndpoint` (old name, shared use).
 - **ZoneCraft is AGPL-3.0-or-later** (`LICENSE` is the verbatim FSF text). **Every
@@ -129,13 +140,14 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   whole-DB file differ only in how many layers they hold.
 - **The GeoJSON export is a fixed point** (format schema **v2**, `geoJsonSchemaVersion`):
   `export → import → export` must be byte-identical, and `test/export_roundtrip_test.dart`
-  asserts exactly that against real rows for all ten types, alongside a whole-DB and a
+  asserts exactly that against real rows for all seven types, alongside a whole-DB and a
   per-layer round-trip. **Anything the DB stores and the UI shows has to survive the trip** —
   so a hidden layer stays hidden, a `height` region travels **with its generated fill rings**
-  (regenerating needs the network and the layer draws *nothing* until it happens), a `track`
-  keeps its segment breaks (a `MultiLineString`, one part per segment), POIs keep their
-  `osmType`/`osmId` (dedup identity — without it a re-import draws them all twice), a border
-  area keeps its import's `setLabel`, and a failed transit import comes back as its retry row.
+  (regenerating needs the network and the layer draws *nothing* until it happens), POIs keep
+  their `osmType`/`osmId` (dedup identity — without it a re-import draws them all twice), a
+  station import keeps its box, masks and per-point modes (a box set writes **no**
+  `radiusMeters` — it is derived), a border area keeps its import's `setLabel`, and a failed
+  import comes back as its retry row. Format is **v3** (`geoJsonSchemaVersion`).
   `serialization_test.dart` covers the pure model; it is the *repository* half where losses
   hide, because that is the half nothing used to look at. Deliberately not preserved: `createdAt`,
   a border set holding **zero** areas (the format has no representation of a set), and the
@@ -148,9 +160,13 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   placeholder an id-less imported row is stored with (`BorderAreas.osmId` is NOT NULL). Read as
   a real id it made every such area look like the same relation, so a re-import kept one and
   dropped the rest.
-- **Drift schema is at v25**; migrations are append-only `if (from < N)` blocks. (v19 is the
-  one exception: it *drops* the transit route tables, because route geometry was abandoned —
-  see `data/transit.dart`'s header for the measurements behind that.) v20…v25 are
+- **Drift schema is at v27**; migrations are append-only `if (from < N)` blocks. (Two
+  exceptions drop tables: v19 *drops* the transit route tables, because route geometry was
+  abandoned — see `data/transit.dart`'s header for the measurements behind that — and v27
+  copies `planes` → `subspaces` and `transit_*` → `poi_*` then drops them, plus `tracks`.
+  Earlier blocks that once `createTable`d a dropped table no longer do; the raw `ALTER
+  TABLE`s in v22/v26 keep the columns v27 copies on a database old enough to have them.)
+  v20…v27 are
   snapshotted in `drift_schemas/` and guarded by `test/migration_test.dart`. **Any schema change must dump a
   new snapshot** (`dart run drift_dev schema dump lib/data/database.dart drift_schemas/`, then
   `... schema generate drift_schemas/ test/generated_migrations/`) — a snapshot cannot be
@@ -170,18 +186,18 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   `*By*Provider`s build `Map<ownerId, List<point>>` once per stream emission). `RegionLayer`
   takes maps, not flat lists: it rebuilds on every camera tick, so a linear scan per object
   there costs O(objects × all points) *per frame*.
-- **Nine of the ten types have an editor** (`layerHasEditor` in `ui/object_summary.dart` is
-  the one definition, and returns **false** for an unknown type so Edit mode can't arm
-  tap-to-select against something nothing opens). `track` is the deliberate exception: a
-  recording has nothing to edit in place, so it has no sheet, no hit-test case and no
-  selection provider — rename/colour/delete live in the Elements list, which needs none of
-  them. `selection_test.dart` states that exception once so a *missing* selection still fails. The imports' editors are scoped to what a
-  snapshot can honestly offer: `poi_set_editor` / `transit_set_editor` (label, layer, and a
-  transit import's *shown* types — never its box, radius or fetched types, which describe a
-  query that already ran), `imported_point_editor` (one POI or station: **rename and delete
-  only** — a position is the fetched fact, and no column would say one had been moved), and
-  `border_area_editor`. Individual POIs/stations are [ObjectKind]s but **not elements**
-  (`isElement`), so the Elements list never lists them — a city import is thousands.
+- **Every type has an editor** (`layerHasEditor` in `ui/object_summary.dart` is the one
+  definition, and returns **false** for an unknown type so Edit mode can't arm tap-to-select
+  against something nothing opens). `selection_test.dart` keeps an explicit — currently
+  empty — `unselectable` set so a future kind without a selection has to be stated. The
+  imports' editors are scoped to what a snapshot can honestly offer: `poi_set_editor`
+  (label, layer; a station import's *shown* types — never its box, radius or fetched types,
+  which describe a query that already ran; a hand-made category's icon; a pending import's
+  error and a Try again), `imported_point_editor` (one POI or station — the same row:
+  **rename and delete only** — a position is the fetched fact, and no column would say one
+  had been moved), and `border_area_editor`. Individual POIs/stations are [ObjectKind]s
+  (`poiPoint`) but **not elements** (`isElement`), so the Elements list never lists them — a
+  city import is thousands.
 - **A reshaped border outline is flagged** (`BorderAreas.editedAt`, schema v23; null =
   untouched OSM geometry). Reshaping forks the area from upstream while it keeps its
   `osmId`, so re-import dedup then keeps the edited version — which is why the fork is
@@ -200,14 +216,13 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   only meaningful within one admin level). **No schema change** — `Layers.type` is text.
   `layerHolds(layer, type)` / `layerContentTypes(layer)` are **the one predicate**, replacing
   every `layer.type == 'x'` in the painter, hit test, Elements list, exporter and drawer.
-  Draw order is fixed (regions → tracks → markers); opacity governs the region composite only;
+  Draw order is fixed (regions → markers); opacity governs the region composite only;
   invert applies to the region half; Add mode asks which kind to place; auto shades are taken
-  across every table the layer holds. `layerHasEditor` answers true for mixed and the real
-  gate moved to **`ObjectKind.hasEditor`**, with the colour path resolving `ColoredElement`
-  from the row's kind. `combineLayers` is now exhaustive — its old `default:` arm silently
+  across every table the layer holds. `layerHasEditor` answers true for mixed, and the colour
+  path resolves `ColoredElement` from the row's kind. `combineLayers` is now exhaustive — its old `default:` arm silently
   lost every row of an unknown type to the cascade.
-- **Hand-placed POIs** (v25, `PoiSets.isManual`/`.iconKey`): a `poi` layer holds Overpass
-  imports **and** categories you name and fill by tapping. `addManualPoiPoint` /
+- **Hand-placed POIs** (v25, `PoiSets.source == 'manual'` + `.iconKey`): a `poi` layer holds
+  Overpass imports **and** categories you name and fill by tapping. `addManualPoiPoint` /
   `moveManualPoiPoint` **refuse an import** at the repository level — an import records what
   OSM returned, and a hand-placed point in it would make that a lie. Icons come from
   `ui/poi_icons.dart` and **must be `const IconData` literals**: release tree-shakes the icon
@@ -253,8 +268,9 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   - **`importBytesFlow` is the one import routine** — picker and share both enter it, so
     `simplify: !fromZonecraft` (and the export fixed point) cannot drift.
     **`askExportChoice`/`deliverExport` are the one export routine** for both scopes.
-- **What is drawn and what can be tapped share one predicate.** `transitStationVisible`
-  (`data/transit.dart`) is read by both `transit_layer` and `hit_test`; when it existed twice
+- **What is drawn and what can be tapped share one predicate.** `poiPointVisible`
+  (`data/poi_sets.dart`, over `transitStationVisible`) is read by both `poi_layer` and
+  `hit_test`; when the station rule existed twice
   the copies disagreed on the empty filter, leaving mode-less stations tappable over blank
   ground after every type was unticked. Likewise the borders hit-test **culls on the stored
   bounds before projecting any ring** — a state boundary is 119 238 points, and the cull is
@@ -262,22 +278,20 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
 
 ## Current status
 
-Feature-complete for everything planned so far: ten object types — six region types with
+Feature-complete for everything planned so far: seven object types — five region types with
 the shared compositing engine (union / band / invert; the `height` type uses even-odd fill
-and is bounded, so it bands along the elevation contour only and skips invert), the recorded `track` type (its own stroked-polyline
-painter, `ui/track_layer.dart`; no compositing, no band, no invert), plus three import types
-with their own painters:
-`poi` (offline sets, screen-space clustering), `transit` (offline station imports over a
-bbox, per-type visibility, retryable failed imports) and `borders` (offline area imports
-per admin level, neighbour-distinct colouring, name plates, per-area convert-to-freehand,
-hand-reshapeable outlines that are flagged as forks) — the layers drawer + per-type
-editors for **nine of the ten** (`track` has none by design), settings (uncertainty,
-clear-all, offline cache, import/export), opt-in locate-me, foreground-only track recording
-(`state/track_recorder.dart`, the app's only position stream),
+and is bounded, so it bands along the elevation contour only and skips invert, and converts
+to freehand areas), plus two import types with their own painters:
+`poi` (offline sets — radius category imports, box station imports with per-type
+visibility and retryable failed imports, hand-made categories — with screen-space
+clustering) and `borders` (offline area imports per admin level, neighbour-distinct
+colouring, name plates, per-area convert-to-freehand, hand-reshapeable outlines that are
+flagged as forks) — the layers drawer + an editor for every type, settings (uncertainty,
+clear-all, offline cache, import/export), opt-in locate-me (the app's only use of location),
 persisted camera, offline resilience (cache-first tiles; **no** prefetch on the community OSM
 servers — see `data/tile_source.dart`), and import/export
 (whole-DB + per-layer + external GeoJSON/KML/KMZ/GPX; freeline imports prompt for their
-inclusion-circle radius; GPX into a track layer). Drift schema is **v24**.
+inclusion-circle radius). Drift schema is **v27**, GeoJSON format **v3**.
 
 `planning/PLAN.md` has no open roadmap items; future polish ideas are listed there.
 `planning/PRODUCTION_AUDIT.md` records the production-readiness pass (what was found, what
@@ -323,11 +337,11 @@ release notes, store listing copy and the exact data-safety answers live there.
 
 ```
 lib/
-  data/        Drift database (Layers, Circles, Planes, Subspaces,
+  data/        Drift database (Layers, Circles, Subspaces,
                SubspacePoints, FreeLines, FreeLinePoints, FreeAreas,
-               FreeAreaPoints, Tracks, TrackPoints,
+               FreeAreaPoints,
                HeightRegions, HeightPolygons, HeightPolygonPoints,
-               PoiSets, PoiPoints, TransitSets, TransitStops,
+               PoiSets, PoiPoints,
                BorderSets, BorderAreas,
                TileCache, OverpassCache, AppSettings)
                + repository; shared Overpass transport with endpoint failover
@@ -335,29 +349,28 @@ lib/
                offline tile cache (cached_tile_provider.dart); GeoJSON/KML
                import-export (serialization.dart); generic GeoJSON/KML/KMZ/GPX
                parser (geo_import.dart); height-layer terrain generation
-               (height_generator.dart); public-transport Overpass client
+               (height_generator.dart); public-transport station fetch + merge
                (transit.dart); administrative-area Overpass client (borders.dart);
-               the shared location gate + position stream (location.dart) — the
-               only file that talks to geolocator besides map_screen;
+               the POI-set kinds + the one marker-visibility predicate
+               (poi_sets.dart); the location permission gate (location.dart) —
+               the only file that talks to geolocator besides map_screen;
                the Android file channel (platform_files.dart) — receiving a
                shared file and saving one through the document picker, the only
                file that talks to MainActivity.kt
-  geo/         geodesicCircle(), plane half-plane + subspace Voronoi-cell
-               geometry, freehand line/area region geometry (freeline.dart,
+  geo/         geodesicCircle(), subspace Voronoi-cell geometry (two points =
+               a half-plane), freehand line/area region geometry (freeline.dart,
                freearea.dart), height contouring/marching-squares (height.dart),
                border ring assembly / box clipping / area colouring
                (border_areas.dart), slippy-tile maths (tiles.dart), lat/lng parsing
-  state/       Riverpod providers (layers, circles, planes, subspaces, tracks,
+  state/       Riverpod providers (layers, circles, subspaces,
                freehand lines/areas, height regions/polygons, poi sets/points,
-               transit sets/stops, border sets/areas, settings, selection,
-               map mode) + the track recorder (track_recorder.dart: owns the
-               app's only StreamSubscription<Position>)
-  ui/          map_screen, layers_panel, circle_editor, plane_editor,
+               border sets/areas, settings, selection, map mode)
+  ui/          map_screen, layers_panel, circle_editor,
                subspace_editor, freeline_editor, freearea_editor, height_editor,
                import_actions, settings_screen, region_layer, poi_layer
-               (clustered POI markers), track_layer (stroked recorded lines,
-               screen-space thinning + segment breaks), transit_layer (clustered
-               station markers), transit_import_dialog, transit_modes_sheet
+               (clustered POI + station markers, one painter),
+               poi_set_editor / imported_point_editor,
+               transit_import_dialog, transit_modes_sheet
                (the station-type tick boxes + the pure `transitTally`,
                embedded in the Elements list), border_layer (area fills +
                outlines + name plates, no Path.combine), border_import_dialog,

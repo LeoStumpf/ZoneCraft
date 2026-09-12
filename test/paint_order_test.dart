@@ -101,8 +101,6 @@ void main() {
       sortOrder: 0,
       borderFillAreas: false,
       borderShowNames: false,
-      trackStrokeWidth: 4,
-      trackMinDistanceMeters: 10,
       createdAt: DateTime(2026, 9, 1),
     );
 
@@ -129,19 +127,17 @@ void main() {
     test('hidden layers are skipped, as they are for the fill pass', () {
       final layers = [
         layer('a', kCircles, visible: false),
-        layer('b', kPlanes),
+        layer('b', kSubspace),
       ];
       expect(bandPassLayers(layers, 500).map((l) => l.id), ['b']);
     });
 
     test('borders and marker-only layers contribute no band', () {
-      // `borders` has its own painter and no band at all; a track/POI/transit
-      // layer paints no region, so a band widget for it would draw nothing.
+      // `borders` has its own painter and no band at all; a POI layer paints
+      // no region, so a band widget for it would draw nothing.
       final layers = [
         layer('borders', kBorders),
-        layer('track', kTrack),
         layer('poi', kPoi),
-        layer('transit', kTransit),
         layer('height', kHeight),
       ];
       expect(bandPassLayers(layers, 500).map((l) => l.id), ['height']);

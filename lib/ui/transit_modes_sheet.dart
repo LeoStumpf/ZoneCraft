@@ -18,12 +18,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/database.dart';
+import '../data/poi_sets.dart';
 import '../data/transit.dart';
 import '../state/providers.dart';
-import 'object_summary.dart' show typeIcon;
-import 'transit_layer.dart' show transitIconFor;
+import 'poi_icons.dart' show transitIconFor;
 
-/// The per-layer "which stations are shown" filter.
+/// The per-layer "which stations are shown" filter, over every **station
+/// import** (box-sourced POI set) the layer holds. Radius and hand-made sets
+/// have no types and are untouched by it.
 ///
 /// A station carries the modes that serve it, so this is one checkbox per
 /// transit type. **A station shows iff at least one of its types is enabled** —
@@ -67,7 +69,7 @@ class _TransitModesSheet extends ConsumerWidget {
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
           child: Row(
             children: [
-              Icon(typeIcon('transit'), size: 18),
+              const Icon(Icons.directions_transit, size: 18),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -115,8 +117,8 @@ class TransitModeFilter extends ConsumerWidget {
       return Padding(
         padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
         child: Text(
-          'No stations imported yet — tap Import transit, then tap two '
-          'corners of an area.',
+          'No stations imported yet — tap Import POIs, choose Transit '
+          'stations, then tap two corners of an area.',
           textAlign: TextAlign.center,
           style: theme.textTheme.bodyMedium,
         ),
@@ -124,7 +126,7 @@ class TransitModeFilter extends ConsumerWidget {
     }
 
     Future<void> write(int mask) =>
-        ref.read(repositoryProvider).setTransitVisibleModes(tally.setIds, mask);
+        ref.read(repositoryProvider).setPoiVisibleModes(tally.setIds, mask);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -197,8 +199,8 @@ class TransitModeFilter extends ConsumerWidget {
   }
 }
 
-/// Everything both views need about one transit layer's stations: which types
-/// are present, how many of each, what is ticked, and what that shows.
+/// Everything both views need about one layer's stations: which types are
+/// present, how many of each, what is ticked, and what that shows.
 class TransitTally {
   const TransitTally({
     required this.setIds,
@@ -227,12 +229,17 @@ class TransitTally {
 
 TransitTally transitTally({
   required String layerId,
-  required List<TransitSet> sets,
-  required List<TransitStop> allStations,
+  required List<PoiSet> sets,
+  required List<PoiPoint> allStations,
 }) {
-  final mine = sets.where((s) => s.layerId == layerId).toList();
+  // Station imports only: a radius set's points have no modes, and a filter
+  // that counted them would show "0 / 400 shown" over a full layer.
+  final mine = sets
+      .where((s) => s.layerId == layerId && s.isStationImport)
+      .toList();
   final setIds = {for (final s in mine) s.id};
-  final stations = allStations.where((s) => setIds.contains(s.setId)).toList();
+  final stations =
+      allStations.where((s) => setIds.contains(s.poiSetId)).toList();
 
   final counts = <String, int>{};
   var untyped = 0;
@@ -261,14 +268,14 @@ TransitTally transitTally({
 final transitTallyProvider = Provider.family<TransitTally, String>(
   (ref, layerId) => transitTally(
     layerId: layerId,
-    sets: ref.watch(transitSetsProvider).asData?.value ?? const [],
-    allStations: ref.watch(transitStopsProvider).asData?.value ?? const [],
+    sets: ref.watch(poiSetsProvider).asData?.value ?? const [],
+    allStations: ref.watch(poiPointsProvider).asData?.value ?? const [],
   ),
 );
 
 /// How many of [stations] a mask would show. Pure, so the header count and the
 /// map can't disagree.
-int visibleTransitStationCount(Iterable<TransitStop> stations, int visible) {
+int visibleTransitStationCount(Iterable<PoiPoint> stations, int visible) {
   if (visible == 0) return 0;
   var n = 0;
   for (final s in stations) {

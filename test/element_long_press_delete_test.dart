@@ -52,8 +52,6 @@ void main() {
     isInverted: false,
     borderFillAreas: false,
     borderShowNames: false,
-    trackStrokeWidth: 4,
-    trackMinDistanceMeters: 10,
     createdAt: DateTime.utc(2026),
   );
 

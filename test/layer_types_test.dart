@@ -17,7 +17,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zonecraft/data/database.dart';
 import 'package:zonecraft/data/layer_types.dart';
-import 'package:zonecraft/data/serialization.dart' show layerTypeForExportKind;
+import 'package:zonecraft/data/serialization.dart'
+    show layerTypeForExportKind, legacyLayerType;
 
 void main() {
   Layer layer(String type) => Layer(
@@ -31,29 +32,27 @@ void main() {
         opacity: 1,
         borderFillAreas: false,
         borderShowNames: false,
-        trackStrokeWidth: 4,
-        trackMinDistanceMeters: 10,
         createdAt: DateTime(2026),
       );
 
-  /// The ten object types, i.e. everything except `mixed`.
+  /// The seven object types, i.e. everything except `mixed`.
   final objectTypes =
       kAllLayerTypes.where((t) => t != kMixedType).toList();
 
   test('the catalogue is complete and has no duplicates', () {
     expect(kAllLayerTypes.toSet().length, kAllLayerTypes.length);
-    expect(objectTypes, hasLength(10));
+    expect(objectTypes, hasLength(7));
     // Every mixed content type is a real object type, and borders is not one.
     for (final t in kMixedContentTypes) {
       expect(objectTypes, contains(t));
     }
     expect(kMixedContentTypes, isNot(contains(kBorders)));
-    expect(kMixedContentTypes, hasLength(9));
+    expect(kMixedContentTypes, hasLength(6));
   });
 
   group('layerHolds', () {
     test('a single-type layer holds exactly its own type', () {
-      // Exhaustive over every (layer type × object type) pair, so an eleventh
+      // Exhaustive over every (layer type × object type) pair, so an eighth
       // type added to the schema fails here rather than somewhere subtle.
       for (final lt in objectTypes) {
         for (final ot in objectTypes) {
@@ -95,11 +94,6 @@ void main() {
       // Markers last: they are labels and have to stay legible over the fills.
       expect(kMixedContentTypes.last, kPoi);
       expect(kMixedContentTypes.first, kCircles);
-      expect(
-        kMixedContentTypes.indexOf(kTrack),
-        lessThan(kMixedContentTypes.indexOf(kTransit)),
-        reason: 'a line is drawn on the ground, a marker sits above it',
-      );
     });
 
     test('it agrees with layerHolds, for every type', () {
@@ -131,20 +125,31 @@ void main() {
       final reachable = {
         for (final k in const [
           'circle',
-          'plane',
           'subspace',
           'freeline',
           'freearea',
           'height',
-          'track',
           'poi',
-          'transitstop',
           'borderarea',
         ])
           layerTypeForExportKind(k),
       };
       expect(reachable, containsAll(objectTypes));
       expect(reachable, isNot(contains(null)));
+    });
+
+    test('the retired v1/v2 kinds and layer types translate, track is dropped',
+        () {
+      // A file written before v27 still has to open. The kinds are mapped by
+      // `_featureToObject`; this is the layer-type half of the same promise.
+      expect(layerTypeForExportKind('plane'), isNull,
+          reason: 'the reader translates it before this is consulted');
+      expect(legacyLayerType('planes'), kSubspace);
+      expect(legacyLayerType('transit'), kPoi);
+      expect(legacyLayerType('track'), isNull);
+      for (final t in kAllLayerTypes) {
+        expect(legacyLayerType(t), t, reason: 'today\'s types are themselves');
+      }
     });
 
     test('an unknown kind maps to null rather than guessing', () {

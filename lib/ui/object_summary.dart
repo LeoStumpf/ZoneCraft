@@ -21,6 +21,7 @@ import 'package:latlong2/latlong.dart' hide Circle;
 
 import '../data/database.dart';
 import '../data/layer_types.dart';
+import '../data/poi_sets.dart';
 import '../data/transit.dart';
 import '../state/providers.dart';
 import 'hit_test.dart';
@@ -89,61 +90,44 @@ class ObjectSummary {
   final List<LatLng> fitPoints;
 
   /// The object exists but its data never arrived — the row offers a retry
-  /// rather than a zoom. Only transit imports can be pending today.
+  /// rather than a zoom. Only POI imports (radius or box) can be pending.
   final bool isPending;
 }
 
 /// The canonical icon for a `Layers.type` — shared by the drawer, the Elements
 /// list and the Add button so one type never has two icons.
 IconData typeIcon(String layerType) => switch (layerType) {
-      'planes' => Icons.change_history,
       'subspace' => Icons.scatter_plot_outlined,
       'freeline' => Icons.polyline,
       'freearea' => Icons.hexagon_outlined,
       'height' => Icons.terrain,
       'poi' => Icons.travel_explore,
-      'transit' => Icons.directions_transit,
       'borders' => Icons.public,
-      'track' => Icons.timeline,
       'mixed' => Icons.layers_outlined,
       _ => Icons.circle_outlined,
     };
 
 /// Whether a `Layers.type` has an editor at all.
 ///
-/// **Nine of ten do.** The three import types were the exception until their
-/// editors landed; they are offline OSM snapshots, so theirs is scoped to what
-/// a snapshot can honestly offer — naming, colour, curation, and for a border
-/// area its outline, which is the one thing that genuinely forks from upstream
-/// and is flagged when it does.
+/// **Every known type does** (since `track`, the one deliberate exception,
+/// was dropped in v27). The import types are offline OSM snapshots, so theirs
+/// is scoped to what a snapshot can honestly offer — naming, colour, curation,
+/// and for a border area its outline, which is the one thing that genuinely
+/// forks from upstream and is flagged when it does.
 ///
-/// `track` is the standing exception, by design rather than by omission: it is
-/// a recording of where the phone was, so there is no property of it to edit in
-/// place. Renaming, recolouring and deleting it live in the Elements list,
-/// which needs no editor.
-///
-/// Kept as a function rather than inlined `true`, because the Elements list and
-/// the map's Edit mode have to agree on it: when they didn't, Edit mode armed
-/// tap-to-select against types nothing could select, which is a button that
-/// visibly does nothing.
-///
-/// **A mixed layer answers true, and the real gate moves down a level** to
-/// [ObjectKind.hasEditor]: it can hold tracks *and* circles, so "does this
-/// layer have an editor" stops being answerable per layer. Edit mode
-/// additionally requires an element whose *kind* has one, which is what keeps
-/// a mixed layer holding nothing but tracks from re-creating the exact failure
-/// this function exists to prevent.
+/// Kept as a function rather than inlined `true`, because it still answers
+/// **false for an unknown type**: the Elements list and the map's Edit mode
+/// have to agree on it, and when they didn't, Edit mode armed tap-to-select
+/// against types nothing could select — a button that visibly does nothing.
 bool layerHasEditor(String layerType) =>
     layerType == kMixedType ||
     const {
       'circles',
-      'planes',
       'subspace',
       'freeline',
       'freearea',
       'height',
       'poi',
-      'transit',
       'borders',
     }.contains(layerType);
 
@@ -276,7 +260,6 @@ final layerSummariesProvider = Provider.family<List<ObjectSummary>, String>((
   return summariseLayer(
     layer,
     circles: ref.watch(circlesProvider).asData?.value ?? const [],
-    planes: ref.watch(planesProvider).asData?.value ?? const [],
     subspaces: ref.watch(subspacesProvider).asData?.value ?? const [],
     subspacePoints: ref.watch(subspacePointsProvider).asData?.value ?? const [],
     freeLines: ref.watch(freeLinesProvider).asData?.value ?? const [],
@@ -286,12 +269,8 @@ final layerSummariesProvider = Provider.family<List<ObjectSummary>, String>((
     heightRegions: ref.watch(heightRegionsProvider).asData?.value ?? const [],
     poiSets: ref.watch(poiSetsProvider).asData?.value ?? const [],
     poiPoints: ref.watch(poiPointsProvider).asData?.value ?? const [],
-    transitSets: ref.watch(transitSetsProvider).asData?.value ?? const [],
-    transitStops: ref.watch(transitStopsProvider).asData?.value ?? const [],
     borderSets: ref.watch(borderSetsProvider).asData?.value ?? const [],
     borderAreas: ref.watch(borderAreasProvider).asData?.value ?? const [],
-    tracks: ref.watch(tracksProvider).asData?.value ?? const [],
-    trackPoints: ref.watch(trackPointsProvider).asData?.value ?? const [],
   );
 });
 
@@ -302,7 +281,6 @@ final layerSummariesProvider = Provider.family<List<ObjectSummary>, String>((
 List<ObjectSummary> summariseLayer(
   Layer layer, {
   List<Circle> circles = const [],
-  List<Plane> planes = const [],
   List<Subspace> subspaces = const [],
   List<SubspacePoint> subspacePoints = const [],
   List<FreeLine> freeLines = const [],
@@ -312,16 +290,12 @@ List<ObjectSummary> summariseLayer(
   List<HeightRegion> heightRegions = const [],
   List<PoiSet> poiSets = const [],
   List<PoiPoint> poiPoints = const [],
-  List<TransitSet> transitSets = const [],
-  List<TransitStop> transitStops = const [],
   List<BorderSet> borderSets = const [],
   List<BorderArea> borderAreas = const [],
-  List<Track> tracks = const [],
-  List<TrackPoint> trackPoints = const [],
 }) {
   // One pass per type the layer holds. A closure rather than a top-level
   // helper so it keeps capturing the row lists this function was handed —
-  // there are eighteen of them, and threading those through a parameter list
+  // there are thirteen of them, and threading those through a parameter list
   // would be all of the change and none of the point.
   List<ObjectSummary> ofType(String type) {
     switch (type) {
@@ -332,14 +306,6 @@ List<ObjectSummary> summariseLayer(
               _stacked(mine, (c) => c.zOrder, (c) => c.createdAt, (c) => c.id);
         return [
           for (final r in rows) _circleSummary(r, layer.id, rank[r.id]!),
-        ];
-      case 'planes':
-        final mine = planes.where((p) => p.layerId == layer.id);
-          final rank = _creationRank(mine, (p) => p.createdAt, (p) => p.id);
-          final rows =
-              _stacked(mine, (p) => p.zOrder, (p) => p.createdAt, (p) => p.id);
-        return [
-          for (final r in rows) _planeSummary(r, layer.id, rank[r.id]!),
         ];
       case 'subspace':
         final mine = subspaces.where((s) => s.layerId == layer.id);
@@ -356,14 +322,6 @@ List<ObjectSummary> summariseLayer(
               _stacked(mine, (l) => l.zOrder, (l) => l.createdAt, (l) => l.id);
         return [
           for (final r in rows) _freeLineSummary(r, layer.id, rank[r.id]!, freeLinePoints),
-        ];
-      case 'track':
-        final mine = tracks.where((t) => t.layerId == layer.id);
-          final rank = _creationRank(mine, (t) => t.createdAt, (t) => t.id);
-          final rows =
-              _stacked(mine, (t) => t.zOrder, (t) => t.createdAt, (t) => t.id);
-        return [
-          for (final r in rows) _trackSummary(r, layer.id, rank[r.id]!, trackPoints),
         ];
       case 'freearea':
         final mine = freeAreas.where((a) => a.layerId == layer.id);
@@ -388,14 +346,6 @@ List<ObjectSummary> summariseLayer(
               _stacked(mine, (s) => s.zOrder, (s) => s.createdAt, (s) => s.id);
         return [
           for (final r in rows) _poiSetSummary(r, layer.id, rank[r.id]!, poiPoints),
-        ];
-      case 'transit':
-        final mine = transitSets.where((s) => s.layerId == layer.id);
-          final rank = _creationRank(mine, (s) => s.createdAt, (s) => s.id);
-          final rows =
-              _stacked(mine, (s) => s.zOrder, (s) => s.createdAt, (s) => s.id);
-        return [
-          for (final r in rows) _transitSetSummary(r, layer.id, rank[r.id]!, transitStops),
         ];
       case 'borders':
         // The imports are bookkeeping; the *areas* are what you came to look at,
@@ -435,27 +385,9 @@ ObjectSummary _circleSummary(Circle c, String layerId, int index) {
   );
 }
 
-/// A plane's region is an unbounded half-plane, so there is nothing to frame:
-/// the two foci are used instead, which puts the dividing bisector in view.
-ObjectSummary _planeSummary(Plane p, String layerId, int index) {
-  final a = LatLng(p.aLat, p.aLng);
-  final b = LatLng(p.bLat, p.bLng);
-  final pts = [
-    if (_finite(p.aLat, p.aLng)) a,
-    if (_finite(p.bLat, p.bLng)) b,
-  ];
-  final center = _bboxCenter(pts) ?? a;
-  return ObjectSummary(
-    ref: ObjectRef(kind: ObjectKind.plane, id: p.id, layerId: layerId),
-    colorArgb: p.colorArgb,
-    colorShade: p.colorShade,
-    title: _titleOr(p.label, 'Plane', index),
-    subtitle: 'Nearer side: ${p.nearA ? 'A' : 'B'}',
-    center: center,
-    fitPoints: pts.isEmpty ? [center] : pts,
-  );
-}
-
+/// A subspace's region is unbounded (a two-point one is a half-plane), so
+/// there is nothing to frame: the seed points are used instead, which puts the
+/// dividing boundary in view.
 ObjectSummary _subspaceSummary(
   Subspace s,
   String layerId,
@@ -485,49 +417,6 @@ ObjectSummary _subspaceSummary(
 /// Freehand lines frame their **inclusion circle**, not their raw extent: an
 /// imported river's bounding box spans a continent, while the inclusion circle
 /// is the part that actually renders.
-/// A recorded track: how many fixes, and how far they add up to.
-///
-/// The distance is walked over every point rather than measured across the
-/// bounds, because a track's length is the thing it actually records — an
-/// out-and-back walk covers 8 km inside a 500 m box.
-///
-/// It is summed **within** segments only. A segment break is time the recording
-/// knows nothing about — a stop and restart, a lost signal — and the straight
-/// line across it is not drawn precisely because it was not walked, so counting
-/// its length would be the same lie in numbers. (Two walks a city apart
-/// otherwise read as a 9 000 km hike.)
-ObjectSummary _trackSummary(
-  Track t,
-  String layerId,
-  int index,
-  List<TrackPoint> allPoints,
-) {
-  final rows = allPoints.where((p) => p.trackId == t.id).toList()
-    ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-  final usable = [
-    for (final p in rows)
-      if (_finite(p.lat, p.lng)) p,
-  ];
-  final pts = [for (final p in usable) LatLng(p.lat, p.lng)];
-  var meters = 0.0;
-  for (var i = 1; i < usable.length; i++) {
-    if (usable[i].segmentIndex != usable[i - 1].segmentIndex) continue;
-    meters += geoDistance.as(LengthUnit.Meter, pts[i - 1], pts[i]);
-  }
-  final center = _bboxCenter(pts) ?? const LatLng(0, 0);
-  return ObjectSummary(
-    ref: ObjectRef(kind: ObjectKind.track, id: t.id, layerId: layerId),
-    colorArgb: t.colorArgb,
-    colorShade: t.colorShade,
-    title: _titleOr(t.label, 'Track', index),
-    subtitle: pts.length < 2
-        ? _plural(pts.length, 'point')
-        : '${_plural(pts.length, 'point')} · ${formatMeters(meters)}',
-    center: center,
-    fitPoints: pts,
-  );
-}
-
 ObjectSummary _freeLineSummary(
   FreeLine l,
   String layerId,
@@ -619,61 +508,6 @@ ObjectSummary _heightSummary(HeightRegion r, String layerId, int index) {
 /// A set whose `fetchedAt` is null never finished — it shows as a retry row
 /// carrying the reason, so a failed import is something you can come back to
 /// rather than a snackbar you missed.
-ObjectSummary _transitSetSummary(
-  TransitSet s,
-  String layerId,
-  int index,
-  List<TransitStop> allStops,
-) {
-  final center = LatLng((s.south + s.north) / 2, (s.west + s.east) / 2);
-  final width = geoDistance.as(
-      LengthUnit.Meter, LatLng(s.south, s.west), LatLng(s.south, s.east));
-  final height = geoDistance.as(
-      LengthUnit.Meter, LatLng(s.south, s.west), LatLng(s.north, s.west));
-  final size = '${formatMeters(width)} × ${formatMeters(height)}';
-
-  // Which types were asked for is part of what this row *is*: a set holding
-  // only trains looks identical to a failed bus import otherwise.
-  final partial = s.modeMask & transitAllModesMask != transitAllModesMask;
-  final types = partial ? transitModeLabels(s.modeMask).toLowerCase() : null;
-
-  final pending = s.fetchedAt == null;
-  final String title;
-  final String subtitle;
-  if (pending) {
-    title = 'Import didn\'t finish';
-    subtitle = [
-      if (s.lastError != null) s.lastError!,
-      ?types,
-      size,
-      'tap to try again',
-    ].join(' · ');
-  } else {
-    final stations =
-        s.stationCount > 0 ? s.stationCount : allStops.where((x) => x.setId == s.id).length;
-    title = _titleOr(s.label, 'Transit import', index);
-    subtitle = [
-      _plural(stations, 'station'),
-      ?types,
-      size,
-      'imported ${_shortDate(s.fetchedAt!)}',
-    ].join(' · ');
-  }
-
-  return ObjectSummary(
-    ref: ObjectRef(kind: ObjectKind.transitSet, id: s.id, layerId: layerId),
-    colorArgb: s.colorArgb,
-    colorShade: s.colorShade,
-    title: title,
-    subtitle: subtitle,
-    center: center,
-    // An import is a snapshot with no refresh path, so framing it means framing
-    // exactly what was fetched.
-    fitPoints: [LatLng(s.south, s.west), LatLng(s.north, s.east)],
-    isPending: pending,
-  );
-}
-
 /// Sorts border areas the way a person would look for one: by name, then by id
 /// so the order is stable. Deliberately not `_ordered`'s creation order — these
 /// are named, non-positional objects arriving in whatever order Overpass listed
@@ -686,10 +520,6 @@ int _byName(BorderArea a, BorderArea b) {
   return c != 0 ? c : a.id.compareTo(b.id);
 }
 
-/// One imported administrative area — a district, a municipality, a country.
-///
-/// The row frames the **area itself**, which is possible because nothing is
-/// clipped to the import box: what is stored is the whole boundary.
 ObjectSummary _borderAreaSummary(BorderArea a, String layerId, int index) {
   final center = LatLng((a.south + a.north) / 2, (a.west + a.east) / 2);
   final width = geoDistance.as(
@@ -727,13 +557,68 @@ ObjectSummary _poiSetSummary(
 ) {
   final center = LatLng(s.centerLat, s.centerLng);
   final count = allPoints.where((p) => p.poiSetId == s.id).length;
+  final ref = ObjectRef(kind: ObjectKind.poiSet, id: s.id, layerId: layerId);
+
+  if (s.isStationImport) {
+    final box = s.bbox!;
+    final sw = LatLng(box[0], box[1]);
+    final ne = LatLng(box[2], box[3]);
+    final width =
+        geoDistance.as(LengthUnit.Meter, sw, LatLng(box[0], box[3]));
+    final height =
+        geoDistance.as(LengthUnit.Meter, sw, LatLng(box[2], box[1]));
+    final size = '${formatMeters(width)} × ${formatMeters(height)}';
+    // Which types were asked for is part of what this row *is*: a set
+    // holding only trains looks identical to a failed bus import otherwise.
+    final partial = s.modeMask & transitAllModesMask != transitAllModesMask;
+    final types =
+        partial ? transitModeLabels(s.modeMask).toLowerCase() : null;
+    return ObjectSummary(
+      ref: ref,
+      colorArgb: s.colorArgb,
+      colorShade: s.colorShade,
+      title: s.isPending
+          ? 'Import didn\'t finish'
+          : _titleOr(s.label, 'Station import', index),
+      subtitle: [
+        if (s.isPending) ?s.lastError else _plural(count, 'station'),
+        ?types,
+        size,
+        if (s.isPending) 'tap to try again' else 'imported ${_shortDate(s.fetchedAt!)}',
+      ].join(' · '),
+      center: center,
+      // An import is a snapshot with no refresh path, so framing it means
+      // framing exactly what was fetched.
+      fitPoints: [sw, ne],
+      isPending: s.isPending,
+    );
+  }
+
+  final String subtitle;
+  if (s.isManual) {
+    subtitle = '${_plural(count, 'POI')} · placed by hand';
+  } else if (s.isPending) {
+    subtitle = [
+      ?s.lastError,
+      'within ${formatMeters(s.radiusMeters)}',
+      'tap to try again',
+    ].join(' · ');
+  } else {
+    subtitle =
+        '${_plural(count, 'POI')} · within ${formatMeters(s.radiusMeters)}';
+  }
   return ObjectSummary(
-    ref: ObjectRef(kind: ObjectKind.poiSet, id: s.id, layerId: layerId),
+    ref: ref,
     colorArgb: s.colorArgb,
     colorShade: s.colorShade,
-    title: _titleOr(s.label, 'POI set', index),
-    subtitle: '${_plural(count, 'POI')} · within ${formatMeters(s.radiusMeters)}',
+    title: s.isPending
+        ? 'Import didn\'t finish'
+        : _titleOr(s.label, 'POI set', index),
+    subtitle: subtitle,
     center: center,
-    fitPoints: _ringAround(center, s.radiusMeters),
+    fitPoints: s.isManual && count == 0
+        ? [center]
+        : _ringAround(center, s.radiusMeters),
+    isPending: s.isPending,
   );
 }

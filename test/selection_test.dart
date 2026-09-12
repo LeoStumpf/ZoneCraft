@@ -24,14 +24,13 @@ import 'package:zonecraft/data/repository.dart';
 import 'package:zonecraft/ui/object_summary.dart';
 import 'package:zonecraft/state/providers.dart';
 
-/// Selection is eleven parallel providers with no shared type tag, kept
+/// Selection is eight parallel providers with no shared type tag, kept
 /// consistent only by [selectObject] / [clearSelection] / [hasAnySelection]
-/// agreeing about all eleven (of twelve kinds — `track` has none by design). Every kind added since has had to be threaded
-/// through three separate switch/or-chains by hand — the `borderArea`,
-/// `poiSet` and `transitSet` cases spent a release `break`ing out of
-/// [selectObject] because they had no editor yet, which is exactly the failure
-/// this file exists to catch: a tap that reports a hit and then selects
-/// nothing.
+/// agreeing about all eight. Every kind added has had to be threaded through
+/// three separate switch/or-chains by hand — the `borderArea` and `poiSet`
+/// cases spent a release `break`ing out of [selectObject] because they had no
+/// editor yet, which is exactly the failure this file exists to catch: a tap
+/// that reports a hit and then selects nothing.
 ///
 /// These need a `WidgetRef`, not a `Ref`, so each runs against a one-widget
 /// tree that hands its ref out.
@@ -43,26 +42,22 @@ void main() {
   /// the provider itself.
   final providerOf = <ObjectKind, String? Function(ProviderContainer c)>{
     ObjectKind.circle: (c) => c.read(selectedCircleProvider),
-    ObjectKind.plane: (c) => c.read(selectedPlaneProvider),
     ObjectKind.subspace: (c) => c.read(selectedSubspaceProvider),
     ObjectKind.freeLine: (c) => c.read(selectedFreeLineProvider),
     ObjectKind.freeArea: (c) => c.read(selectedFreeAreaProvider),
     ObjectKind.heightRegion: (c) => c.read(selectedHeightRegionProvider),
     ObjectKind.poiSet: (c) => c.read(selectedPoiSetProvider),
     ObjectKind.poiPoint: (c) => c.read(selectedPoiPointProvider),
-    ObjectKind.transitSet: (c) => c.read(selectedTransitSetProvider),
-    ObjectKind.transitStop: (c) => c.read(selectedTransitStopProvider),
     ObjectKind.borderArea: (c) => c.read(selectedBorderAreaProvider),
   };
 
   /// The kinds that deliberately have **no** selection at all.
   ///
-  /// `track` is the only one: it has no editor (`layerHasEditor('track')` is
-  /// false), so a selection would arm an invisible mode over a recording that
-  /// nothing can open. Stated here rather than left out of [providerOf], so
-  /// dropping a kind's selection by accident still fails the coverage test
-  /// below.
-  const unselectable = {ObjectKind.track};
+  /// None, since v27 dropped `track` (a recording nothing could open). Kept
+  /// as an explicit empty set rather than removed, so a future kind without a
+  /// selection has to be *stated* here and still fails the coverage test
+  /// below when it is merely forgotten.
+  const unselectable = <ObjectKind>{};
 
   /// Pumps a throwaway tree and hands [body] its `WidgetRef` and container.
   Future<void> withRef(
@@ -104,18 +99,6 @@ void main() {
       (tester) async {
     expect(providerOf.keys.toSet().union(unselectable), ObjectKind.values.toSet());
     expect(providerOf.keys.toSet().intersection(unselectable), isEmpty);
-  });
-
-  testWidgets('an unselectable kind selects nothing and clears the rest',
-      (tester) async {
-    await withRef(tester, (ref, container) {
-      selectObject(ref, ObjectKind.circle, 'c1');
-      selectObject(ref, ObjectKind.track, 't1');
-      expect(hasAnySelection(ref), isFalse,
-          reason: 'a track has no editor to select into');
-      expect(container.read(selectedCircleProvider), isNull,
-          reason: 'and it still drops whatever was selected before');
-    });
   });
 
   testWidgets('selecting one kind clears every other', (tester) async {
@@ -169,7 +152,7 @@ void main() {
           reason: 'editing the object is now the job');
 
       ref.read(mapModeProvider.notifier).set(MapMode.add);
-      selectObject(ref, ObjectKind.transitStop, 's1');
+      selectObject(ref, ObjectKind.poiPoint, 's1');
       expect(container.read(mapModeProvider), MapMode.view);
     });
   });
@@ -178,15 +161,12 @@ void main() {
     test('every kind names a layer type that exists', () {
       const types = {
         'circles',
-        'planes',
         'subspace',
         'freeline',
         'freearea',
         'height',
         'poi',
-        'transit',
         'borders',
-        'track',
       };
       for (final k in ObjectKind.values) {
         expect(types, contains(k.layerType), reason: k.name);
@@ -194,38 +174,33 @@ void main() {
     });
 
     test('a layer type maps back to the kind its Elements list shows', () {
-      // The two point kinds are one level *below* an element, so no layer type
-      // resolves to them — a POI layer's elements are its imports.
+      // The point kind is one level *below* an element, so no layer type
+      // resolves to it — a POI layer's elements are its sets.
       for (final k in ObjectKind.values.where((k) => k.isElement)) {
         expect(ObjectKind.forLayerType(k.layerType), k, reason: k.name);
       }
       expect(ObjectKind.forLayerType('poi'), ObjectKind.poiSet);
-      expect(ObjectKind.forLayerType('transit'), ObjectKind.transitSet);
+      expect(ObjectKind.forLayerType('transit'), isNull,
+          reason: 'v27 folded transit into poi; the type no longer exists');
       expect(ObjectKind.forLayerType('nope'), isNull);
     });
 
-    test('exactly the two imported point kinds are not elements', () {
+    test('exactly the imported point kind is not an element', () {
       expect(
         ObjectKind.values.where((k) => !k.isElement).toSet(),
-        {ObjectKind.poiPoint, ObjectKind.transitStop},
+        {ObjectKind.poiPoint},
       );
     });
 
-    test('track is the only kind with no editor', () {
-      // The per-kind half of `layerHasEditor`, and the half that matters on a
-      // combined layer: that layer answers "yes, I have an editor" in general,
-      // so Edit mode has to ask the *kind* before arming — otherwise a
-      // combined layer holding nothing but tracks re-creates the exact failure
-      // `layerHasEditor` exists to prevent (a lit button that does nothing).
-      expect(
-        ObjectKind.values.where((k) => !k.hasEditor).toSet(),
-        {ObjectKind.track},
-      );
-      // Everything the Elements list can show an editor for is an element or a
-      // sub-element with its own sheet.
-      for (final k in ObjectKind.values.where((k) => k.hasEditor)) {
+    test('every kind has an editor', () {
+      // `track` was the one exception and is gone, so Edit mode no longer
+      // needs a per-kind gate — but the per-*type* one stays for unknown
+      // types (see `layerHasEditor`).
+      for (final k in ObjectKind.values) {
         expect(layerHasEditor(k.layerType), isTrue, reason: k.name);
       }
+      expect(layerHasEditor('track'), isFalse);
+      expect(layerHasEditor('planes'), isFalse);
     });
 
     test('a combined layer has an editor, and its kinds decide per element',

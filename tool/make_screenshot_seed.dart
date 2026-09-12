@@ -39,8 +39,8 @@ import 'package:zonecraft/data/overpass.dart' show PoiResult;
 import 'package:zonecraft/data/repository.dart';
 
 /// Munich. Chosen because it is dense enough that every layer type has
-/// something real to show, and because the border and transit fixtures below
-/// were traced from it.
+/// something real to show, and because the border fixtures below were traced
+/// from it.
 const _cityLat = 48.1372;
 const _cityLng = 11.5756;
 
@@ -80,13 +80,14 @@ void main() {
     await repo.updateLayer(pois, isVisible: false);
     final poiSet = await repo.createPoiSet(
       layerId: pois,
+      source: kPoiSourceRadius,
       categoryKey: 'cafe',
       centerLat: _cityLat,
       centerLng: _cityLng,
       radiusMeters: 1500,
       label: 'Cafés',
     );
-    await repo.addPoiPoints(poiSet, const [
+    await repo.fillPoiSet(poiSet, const [
       PoiResult(lat: 48.1385, lng: 11.5745, categoryKey: 'cafe', name: 'Café am Dom'),
       PoiResult(lat: 48.1401, lng: 11.5772, categoryKey: 'cafe', name: 'Rösterei'),
       PoiResult(lat: 48.1359, lng: 11.5719, categoryKey: 'cafe', name: 'Kaffeehaus'),
@@ -110,21 +111,28 @@ void main() {
       label: 'Marienplatz',
     );
 
-    // --- "Closer to the station" (plane) -----------------------------------
-    // Shows the half-plane type, and overlaps the circle so the intersection
-    // — the actual product idea — is visible.
-    final planes = await repo.createLayer(
+    // --- "Closer to the station" (two-point subspace) ----------------------
+    // Shows the half-plane a two-point subspace draws, and overlaps the circle
+    // so the intersection — the actual product idea — is visible.
+    final nearer = await repo.createLayer(
       name: 'Near Hbf',
       colorArgb: _orange,
-      type: 'planes',
+      type: 'subspace',
     );
-    await repo.createPlane(
-      layerId: planes,
-      aLat: 48.1402,
-      aLng: 11.5600, // München Hbf
-      bLat: 48.1183,
-      bLng: 11.6011, // Ostbahnhof
+    final hbfVsOst = await repo.createSubspace(
+      layerId: nearer,
       label: 'Hbf vs Ost',
+    );
+    await repo.addSubspacePoint(
+      subspaceId: hbfVsOst,
+      lat: 48.1402,
+      lng: 11.5600, // München Hbf
+      isMain: true,
+    );
+    await repo.addSubspacePoint(
+      subspaceId: hbfVsOst,
+      lat: 48.1183,
+      lng: 11.6011, // Ostbahnhof
     );
 
     // --- "The old town" (freehand area) ------------------------------------

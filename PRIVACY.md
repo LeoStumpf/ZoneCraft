@@ -25,39 +25,30 @@ skimmed past.
 
 ## Data stored on your device
 
-Everything you create — layers, circles, planes, subspaces, freehand lines and areas, height
-regions, **recorded tracks**, imported points of interest, transit stations and administrative
-areas, your settings and your last map position — is stored **only on your device** in a local
-database. It is never uploaded to us, and we have no server that could receive it.
+Everything you create — layers, circles, subspaces, freehand lines and areas, height regions,
+imported points of interest and transit stations, administrative areas, your settings and
+your last map position — is stored **only on your device** in a local database. It is never uploaded to us, and we have no server that could receive it.
 
 Cached map tiles are stored alongside it. These are not personal data — they are pictures of
 the map — but they do imply which areas you have looked at, so they are worth naming.
 
 ## Location
 
-The app reads your position in exactly two places, both of which you start yourself.
+The app reads your position in exactly one place, which you start yourself.
 
 **"Locate me"** requests **foreground (precise or approximate) location** to centre the map on
 your position and read the terrain elevation there. That position is used only to move the map
-and is not stored.
+and **is not stored**. Nothing else in the app reads your position: there is no recording, no
+tracking and no background use.
 
-**Recording a track** (the Record button on a track layer) reads your position repeatedly while
-the recording is on, and **writes each position into the local database** so the track is still
-there tomorrow. This is the one feature that stores your location, and it stores it the way it
-stores a circle you drew: on your device, as something you made.
-
-In both cases location is:
+Location is:
 
 - requested **only** when you use that feature — never at launch;
 - **never read in the background.** The app has no background-location permission and runs no
-  background service, so recording only continues while ZoneCraft is open. Leaving the app
-  leaves a gap in the track — that gap is the promise being kept;
-- used and kept **only** on your device — never transmitted to us or to any third party, because
-  there is nowhere for it to go;
-- yours to delete: delete the track or its layer, or use **Settings → Clear all data**.
-  Uninstalling removes everything as well.
+  background service;
+- never transmitted to us or to any third party, because there is nowhere for it to go.
 
-You can decline the permission and use every other feature normally — recording is the only
+You can decline the permission and use every other feature normally — "Locate me" is the only
 thing that stops working.
 
 The one indirect exposure worth stating plainly: after "Locate me", the app fetches the

@@ -29,6 +29,7 @@ import '../geo/coords.dart';
 import '../state/providers.dart';
 import 'editor_sheet.dart';
 import 'element_color_dialog.dart';
+import 'import_actions.dart' show convertRingsToFreehandFlow;
 
 /// Docked bottom-sheet editor for a height region: an elevation threshold
 /// applied inside a bounded circle. Lets the user set the centre (typed or
@@ -367,7 +368,33 @@ class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
             ),
           ],
         ),
+        if (generated && widget.polygonCount > 0) ...[
+          const SizedBox(height: 8),
+          // The way out of a generated fill and into geometry you own — the
+          // same conversion a border area offers. Outer contours only: a
+          // freehand area has no holes, so a "below" region comes across as
+          // its outer disk (the flow's doc says why).
+          OutlinedButton.icon(
+            onPressed: _busy ? null : _convertToFreehand,
+            icon: const Icon(Icons.hexagon_outlined, size: 18),
+            label: const Text('Convert to freehand area…'),
+          ),
+        ],
       ],
+    );
+  }
+
+  Future<void> _convertToFreehand() async {
+    final rings = await _repo.heightRegionRings(widget.region.id);
+    if (!mounted) return;
+    await convertRingsToFreehandFlow(
+      context,
+      _repo,
+      ref.read(layersProvider).asData?.value ?? const [],
+      name: widget.region.label?.trim().isNotEmpty == true
+          ? widget.region.label!.trim()
+          : 'Height area',
+      rings: rings,
     );
   }
 

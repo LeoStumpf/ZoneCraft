@@ -20,7 +20,9 @@ import 'dart:math' as math;
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
+import 'overpass.dart' show PoiResult;
 import 'overpass_client.dart';
+import 'poi_sets.dart' show kTransitStationCategoryKey;
 
 /// Public-transport **stations**, fetched once from Overpass over a chosen
 /// bounding box and stored offline (the `transit` layer type).
@@ -374,9 +376,24 @@ class TransitStationData {
   /// How many OSM nodes merged into this station.
   final int nodeCount;
 
-  /// The `route_ref` tag when present (~18 % of stops). Free text, shown as a
-  /// hint — never parsed, never relied on, never fetched for.
+  /// The `route_ref` tag when present (~18 % of stops). Free text, never
+  /// parsed, never relied on, never fetched for — and since v27 not stored
+  /// either: nothing ever showed it.
   final String? routeRef;
+
+  /// The row a station is stored as: a POI of the transit-station category
+  /// with its mode bits, keyed on its OSM node. [nodeCount] and [routeRef]
+  /// stop here — the merge needed them, the map never did.
+  PoiResult toPoiResult() => PoiResult(
+        lat: lat,
+        lng: lng,
+        categoryKey: kTransitStationCategoryKey,
+        name: name,
+        osmType: 'node',
+        // 0 was this model's "no identity" placeholder; a POI says null.
+        osmId: osmId == 0 ? null : osmId,
+        modeMask: modeMask,
+      );
 }
 
 /// The transport moved to `overpass_client.dart` when the borders layer needed

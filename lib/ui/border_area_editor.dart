@@ -26,7 +26,7 @@ import '../data/repository.dart';
 import '../state/providers.dart';
 import 'editor_sheet.dart';
 import 'element_color_dialog.dart';
-import 'import_actions.dart' show convertBorderAreaFlow;
+import 'import_actions.dart' show convertRingsToFreehandFlow;
 import 'hit_test.dart' show geoDistance;
 import 'object_summary.dart' show formatMeters;
 
@@ -100,7 +100,7 @@ class _BorderAreaEditorSheetState extends ConsumerState<BorderAreaEditorSheet> {
   Future<void> _convert() async {
     final rings = await _repo.borderAreaRings(widget.area.id);
     if (!mounted) return;
-    await convertBorderAreaFlow(
+    await convertRingsToFreehandFlow(
       context,
       _repo,
       ref.read(layersProvider).asData?.value ?? const [],

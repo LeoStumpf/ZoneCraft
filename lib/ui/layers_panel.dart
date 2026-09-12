@@ -23,6 +23,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/borders.dart';
 import '../data/database.dart';
 import '../data/layer_types.dart';
+import '../data/poi_sets.dart';
 import '../data/repository.dart';
 import '../geo/coords.dart';
 import '../state/providers.dart';
@@ -47,7 +48,6 @@ class LayersDrawer extends ConsumerWidget {
     final poiPoints =
         ref.watch(poiPointsProvider).asData?.value ?? const <PoiPoint>[];
     final circles = ref.watch(circlesProvider).asData?.value ?? const <Circle>[];
-    final planes = ref.watch(planesProvider).asData?.value ?? const <Plane>[];
     final subspaces =
         ref.watch(subspacesProvider).asData?.value ?? const <Subspace>[];
     final subspacePoints =
@@ -66,17 +66,10 @@ class LayersDrawer extends ConsumerWidget {
     final heightRegions =
         ref.watch(heightRegionsProvider).asData?.value ??
         const <HeightRegion>[];
-    final transitSets =
-        ref.watch(transitSetsProvider).asData?.value ?? const <TransitSet>[];
-    final transitStations =
-        ref.watch(transitStopsProvider).asData?.value ?? const <TransitStop>[];
     final borderSets =
         ref.watch(borderSetsProvider).asData?.value ?? const <BorderSet>[];
     final borderAreas =
         ref.watch(borderAreasProvider).asData?.value ?? const <BorderArea>[];
-    final tracks = ref.watch(tracksProvider).asData?.value ?? const <Track>[];
-    final trackPoints =
-        ref.watch(trackPointsProvider).asData?.value ?? const <TrackPoint>[];
     final selected = ref.watch(activeLayerProvider);
     final repo = ref.read(repositoryProvider);
 
@@ -141,15 +134,6 @@ class LayersDrawer extends ConsumerWidget {
                             ),
                           ),
                           const PopupMenuItem(
-                            value: 'planes',
-                            child: ListTile(
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              leading: Icon(Icons.change_history),
-                              title: Text('Planes layer'),
-                            ),
-                          ),
-                          const PopupMenuItem(
                             value: 'subspace',
                             child: ListTile(
                               dense: true,
@@ -177,15 +161,6 @@ class LayersDrawer extends ConsumerWidget {
                             ),
                           ),
                           const PopupMenuItem(
-                            value: 'track',
-                            child: ListTile(
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              leading: Icon(Icons.timeline),
-                              title: Text('Track layer'),
-                            ),
-                          ),
-                          const PopupMenuItem(
                             value: 'height',
                             child: ListTile(
                               dense: true,
@@ -201,15 +176,6 @@ class LayersDrawer extends ConsumerWidget {
                               contentPadding: EdgeInsets.zero,
                               leading: Icon(Icons.travel_explore),
                               title: Text('POI layer'),
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'transit',
-                            child: ListTile(
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              leading: Icon(Icons.directions_transit),
-                              title: Text('Transit layer'),
                             ),
                           ),
                           const PopupMenuItem(
@@ -267,11 +233,8 @@ class LayersDrawer extends ConsumerWidget {
                         // other branch below counts each type's own: points
                         // for a subspace, POIs for an import.)
                         count = ref.read(layerSummariesProvider(layer.id)).length;
-                      } else if (layer.type == 'planes') {
-                        count =
-                            planes.where((p) => p.layerId == layer.id).length;
                       } else if (layer.type == 'subspace') {
-                        // A subspace layer holds one object; show its point count.
+                        // A subspace layer shows its point count.
                         final ids = subspaces
                             .where((s) => s.layerId == layer.id)
                             .map((s) => s.id)
@@ -295,27 +258,9 @@ class LayersDrawer extends ConsumerWidget {
                         count = freeAreaPoints
                             .where((p) => ids.contains(p.freeAreaId))
                             .length;
-                      } else if (layer.type == 'track') {
-                        final ids = tracks
-                            .where((t) => t.layerId == layer.id)
-                            .map((t) => t.id)
-                            .toSet();
-                        count = trackPoints
-                            .where((p) => ids.contains(p.trackId))
-                            .length;
                       } else if (layer.type == 'height') {
                         count = heightRegions
                             .where((r) => r.layerId == layer.id)
-                            .length;
-                      } else if (layer.type == 'transit') {
-                        // Stations are the unit the user sees and filters, so
-                        // count those rather than imports (which would read 1).
-                        final ids = transitSets
-                            .where((t) => t.layerId == layer.id)
-                            .map((t) => t.id)
-                            .toSet();
-                        count = transitStations
-                            .where((s) => ids.contains(s.setId))
                             .length;
                       } else if (layer.type == 'borders') {
                         // Areas are the unit you see, so count those rather
@@ -427,14 +372,11 @@ class _LayerTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final repo = ref.read(repositoryProvider);
     final noun = switch (layer.type) {
-      'planes' => 'plane',
       'subspace' => 'point',
       'freeline' => 'point',
       'freearea' => 'point',
-      'track' => 'point',
       'height' => 'area',
       'poi' => 'POI',
-      'transit' => 'station',
       'borders' => 'area',
       // A combined layer holds several kinds, so the only honest collective
       // noun is the generic one.
@@ -456,6 +398,11 @@ class _LayerTile extends ConsumerWidget {
     if ((layer.opacity - defaultOpacity).abs() > 0.005) {
       subtitle.write(' · ${(layer.opacity * 100).round()}% opacity');
     }
+    // The "Stations…" filter is over station imports, so it is offered only
+    // once the layer holds one (see the menu below).
+    final hasStations = layerHolds(layer, kPoi) &&
+        (ref.watch(poiSetsProvider).asData?.value ?? const <PoiSet>[])
+            .any((s) => s.layerId == layer.id && s.isStationImport);
 
     return ListTile(
       selected: isActive,
@@ -544,8 +491,6 @@ class _LayerTile extends ConsumerWidget {
                 case 'showNames':
                   await repo.updateBorderLayerOptions(layer.id,
                       showNames: !layer.borderShowNames);
-                case 'trackSettings':
-                  await showTrackSettingsDialog(context, repo, layer);
                 case 'importFeature':
                   // The flow needs the full list only for its fallback picker
                   // (a line feature asked for from an area layer, or vice
@@ -607,9 +552,9 @@ class _LayerTile extends ConsumerWidget {
               const PopupMenuItem(
                   value: 'opacity', child: Text('Transparency…')),
               // 'height' layers use an above/below toggle, not viewport
-              // invert; 'poi'/'transit'/'track' are markers and lines with
-              // nothing to invert; 'borders' draws many separate areas, so
-              // there is no single region to take the complement of.
+              // invert; 'poi' is markers with nothing to invert; 'borders'
+              // draws many separate areas, so there is no single region to
+              // take the complement of.
               //
               // A combined layer offers it, and it inverts the **region half**
               // only — there is no meaningful complement of a marker, and its
@@ -617,14 +562,15 @@ class _LayerTile extends ConsumerWidget {
               if (layer.type == kMixedType ||
                   (layer.type != 'height' &&
                       layer.type != 'poi' &&
-                      layer.type != 'transit' &&
-                      layer.type != 'track' &&
                       layer.type != 'borders'))
                 PopupMenuItem(
                   value: 'inverse',
                   child: Text(layer.isInverted ? 'Un-invert' : 'Invert'),
                 ),
-              if (layerHolds(layer, kTransit))
+              // Only once a station import exists: the filter is over
+              // imported stations, and offering it on a layer of cafés would
+              // open an empty sheet.
+              if (hasStations)
                 const PopupMenuItem(
                     value: 'stations', child: Text('Stations…')),
               if (layer.type == 'borders') ...[
@@ -639,24 +585,18 @@ class _LayerTile extends ConsumerWidget {
                   child: const Text('Show names'),
                 ),
               ],
-              if (layerHolds(layer, kTrack))
-                const PopupMenuItem(
-                    value: 'trackSettings', child: Text('Track settings…')),
               // "Import map feature…" fetches a *named place*, so it belongs to
-              // the freehand types — a track layer holds recordings, not
-              // places.
+              // the freehand types.
               if (layerHolds(layer, kFreeLine) || layerHolds(layer, kFreeArea))
                 const PopupMenuItem(
                   value: 'importFeature',
                   child: Text('Import map feature…'),
                 ),
               // One entry, not one per matching type: a combined layer holds
-              // track *and* both freehand types, and the same item listed three
-              // times is a menu bug. Which of them a GPX lands in is decided
-              // once, in [importTrackIntoLayer].
-              if (layerHolds(layer, kTrack) ||
-                  layerHolds(layer, kFreeLine) ||
-                  layerHolds(layer, kFreeArea))
+              // both freehand types, and the same item listed twice is a menu
+              // bug. Which of them a GPX lands in is decided once, in
+              // [importTrackIntoLayer].
+              if (layerHolds(layer, kFreeLine) || layerHolds(layer, kFreeArea))
                 const PopupMenuItem(
                   value: 'importTrack',
                   child: Text('Import track…'),
@@ -734,7 +674,7 @@ class _LayerTile extends ConsumerWidget {
       // awaited first — it pushes it synchronously. A pop issued afterwards
       // would take that dialog instead of the drawer, leaving the drawer up and
       // the spinner invisible while the import ran unseen.
-      final retry = ref.read(pendingTransitRetryProvider.notifier);
+      final retry = ref.read(pendingImportRetryProvider.notifier);
       Navigator.pop(context);
       retry.request(target.ref.id);
       return;
@@ -749,7 +689,7 @@ class _LayerTile extends ConsumerWidget {
     Navigator.pop(context); // close the drawer so the map is visible
   }
 
-  /// Opens the transit layer's station filter. Visibility is written inside the
+  /// Opens the layer's station-type filter. Visibility is written inside the
   /// sheet, so nothing comes back and the drawer stays open — unlike
   /// [_openElements], which hands off to the map.
   Future<void> _openStations(BuildContext context, WidgetRef ref) =>
@@ -1125,84 +1065,6 @@ Future<void> showOpacityDialog(
     focus.dispose();
   });
 }
-
-/// The two per-layer `track` settings: how thick the recorded line is drawn,
-/// and how far the phone must move before another fix is stored.
-///
-/// Typed, not dragged — the same rule every numeric control in the app follows:
-/// "exactly 25 m" is a thing you mean, not a thing you aim at. Both apply
-/// live; the spacing takes effect on the **next** recording, since it is the
-/// stream's `distanceFilter` and that is fixed when the stream is opened.
-Future<void> showTrackSettingsDialog(
-  BuildContext context,
-  Repository repo,
-  Layer layer,
-) async {
-  final stroke =
-      TextEditingController(text: _trim(layer.trackStrokeWidth));
-  final spacing =
-      TextEditingController(text: _trim(layer.trackMinDistanceMeters));
-  await showDialog<void>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('Track settings'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: stroke,
-            decoration: const InputDecoration(
-              labelText: 'Line width',
-              suffixText: 'px',
-              isDense: true,
-            ),
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            onChanged: (v) {
-              final n = parseDecimal(v);
-              if (n != null && n.isFinite && n > 0 && n <= 40) {
-                unawaited(
-                  repo.updateTrackLayerOptions(layer.id, strokeWidth: n)
-                );
-              }
-            },
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: spacing,
-            decoration: const InputDecoration(
-              labelText: 'Record a point every',
-              suffixText: 'm',
-              helperText: 'Applies to the next recording',
-              isDense: true,
-            ),
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            onChanged: (v) {
-              final n = parseDecimal(v);
-              if (n != null && n.isFinite && n >= 0 && n <= 10000) {
-                unawaited(
-                  repo.updateTrackLayerOptions(layer.id, minDistanceMeters: n)
-                );
-              }
-            },
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx),
-          child: const Text('Done'),
-        ),
-      ],
-    ),
-  );
-  stroke.dispose();
-  spacing.dispose();
-}
-
-/// A stored double as the shortest text that means it: "4", not "4.0".
-String _trim(double v) =>
-    v == v.roundToDouble() ? v.round().toString() : v.toString();
-
 const _palette = <Color>[
   Color(0xFF2196F3),
   Color(0xFFE53935),

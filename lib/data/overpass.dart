@@ -183,12 +183,17 @@ class PoiResult {
     this.name,
     this.osmType,
     this.osmId,
+    this.modeMask = 0,
   });
 
   final double lat;
   final double lng;
   final String categoryKey;
   final String? name;
+
+  /// For a station (a box import's point): the packed `TransitMode.bit`s
+  /// serving it, 0 = the data doesn't say. Always 0 on a category POI.
+  final int modeMask;
 
   /// Which OSM element this came from — `node` / `way` / `relation` plus the
   /// id. Kept so a later import over the same ground can tell it is the same

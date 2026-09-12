@@ -62,8 +62,6 @@ void main() {
     sortOrder: 0,
     borderFillAreas: false,
     borderShowNames: false,
-    trackStrokeWidth: 4,
-    trackMinDistanceMeters: 10,
     createdAt: DateTime(2026, 9, 1),
   );
 

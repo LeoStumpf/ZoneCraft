@@ -22,7 +22,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/database.dart';
 import '../data/overpass.dart' show poiCategories;
+import '../data/poi_sets.dart';
 import '../data/repository.dart';
+import '../data/transit.dart';
 import '../geo/coords.dart' show formatLatLng;
 import '../state/providers.dart';
 import 'editor_sheet.dart';
@@ -31,16 +33,19 @@ import 'poi_icons.dart';
 import 'element_color_dialog.dart';
 import 'object_summary.dart' show formatMeters;
 
-/// Docked editor for one **POI import** — a category fetched once inside a
-/// circle and stored offline.
+/// Docked editor for one **POI set** — a category fetched once inside a
+/// circle, a station import fetched once over a box, or a hand-made category
+/// (see `PoiSets.source`).
 ///
-/// What it can change is the label, and which `poi` layer the import lives on.
-/// What it cannot is the category, the search centre or the radius: those three
-/// describe a *query that already ran*, and editing them would leave a row
-/// claiming to hold something it never fetched. Wanting a different area or
-/// category is wanting another import, which the FAB does in two taps.
+/// What it can change is the label, and which `poi` layer the set lives on;
+/// a station import additionally chooses which of its fetched types are
+/// *shown*, and a hand-made category its icon. What an import cannot change
+/// is its category, centre, radius, box or fetched types: those describe a
+/// *query that already ran*, and editing them would leave a row claiming to
+/// hold something it never fetched. Wanting a different area or category is
+/// wanting another import, which the FAB does in two taps.
 ///
-/// The POIs themselves are edited one at a time by tapping them on the map
+/// The points themselves are edited one at a time by tapping them on the map
 /// (`ImportedPointEditorSheet`) — a city import is thousands of them, so they
 /// are never listed here.
 class PoiSetEditorSheet extends ConsumerStatefulWidget {
@@ -114,6 +119,11 @@ class _PoiSetEditorSheetState extends ConsumerState<PoiSetEditorSheet> {
     if (mounted) _label.text = choice.name;
   }
 
+  /// The modes a station import fetched, in catalogue order — the ones its
+  /// filter chips can offer. A mode it never fetched has nothing to show.
+  static List<TransitMode> _importedModes(PoiSet s) =>
+      [for (final m in transitModes) if (s.modeMask & m.bit != 0) m];
+
   @override
   Widget build(BuildContext context) {
     final s = widget.set;
@@ -126,10 +136,21 @@ class _PoiSetEditorSheetState extends ConsumerState<PoiSetEditorSheet> {
       children: [
         Row(
           children: [
-            Icon(s.isManual ? poiSetIcon(s) : Icons.travel_explore, size: 20),
+            Icon(
+              s.isManual
+                  ? poiSetIcon(s)
+                  : s.isStationImport
+                      ? Icons.directions_transit
+                      : Icons.travel_explore,
+              size: 20,
+            ),
             const SizedBox(width: 8),
             Text(
-              s.isManual ? 'Edit category' : 'Edit POI import',
+              s.isManual
+                  ? 'Edit category'
+                  : s.isStationImport
+                      ? 'Edit station import'
+                      : 'Edit POI import',
               style: theme.textTheme.titleMedium,
             ),
             const SizedBox(width: 12),
@@ -143,7 +164,11 @@ class _PoiSetEditorSheetState extends ConsumerState<PoiSetEditorSheet> {
               id: widget.set.id,
               title: widget.set.label?.trim().isNotEmpty == true
                   ? widget.set.label!.trim()
-                  : (s.isManual ? 'Category' : 'POI import'),
+                  : (s.isManual
+                      ? 'Category'
+                      : s.isStationImport
+                          ? 'Station import'
+                          : 'POI import'),
               colorArgb: widget.set.colorArgb,
               colorShade: widget.set.colorShade,
               layerColor: _layerColor,
@@ -204,6 +229,66 @@ class _PoiSetEditorSheetState extends ConsumerState<PoiSetEditorSheet> {
             'and tap one to rename, move or remove it.',
             style: theme.textTheme.bodySmall,
           ),
+        ] else if (s.isStationImport) ...[
+          Text(
+            [
+              '${widget.pointCount} '
+                  'station${widget.pointCount == 1 ? '' : 's'} stored',
+              'imported: ${transitModeLabels(s.modeMask)}',
+            ].join(' · '),
+            style: theme.textTheme.bodySmall,
+          ),
+          if (s.isPending) ...[
+            const SizedBox(height: 8),
+            Text(
+              'This import didn\'t finish'
+              '${s.lastError == null ? '' : ': ${s.lastError}'}.',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.error),
+            ),
+            const SizedBox(height: 4),
+            OutlinedButton.icon(
+              onPressed: () {
+                ref.read(pendingImportRetryProvider.notifier).request(s.id);
+                _close();
+              },
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Try again'),
+            ),
+          ],
+          if (_importedModes(s).isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text('Show', style: theme.textTheme.labelLarge),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                for (final m in _importedModes(s))
+                  FilterChip(
+                    label: Text(m.label),
+                    selected: s.visibleModeMask & m.bit != 0,
+                    onSelected: (on) => _repo.setPoiVisibleModes(
+                      [s.id],
+                      on
+                          ? s.visibleModeMask | m.bit
+                          : s.visibleModeMask & ~m.bit,
+                    ),
+                  ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 12),
+          Text(
+            'Fetched once and kept offline. The area and the imported types '
+            'describe the query that ran — what they left out was never '
+            'stored, so a wider area or more types means another import.',
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Tap a station on the map to rename or remove that one.',
+            style: theme.textTheme.bodySmall,
+          ),
         ] else ...[
           Text(
             [
@@ -215,6 +300,24 @@ class _PoiSetEditorSheetState extends ConsumerState<PoiSetEditorSheet> {
             ].join(' · '),
             style: theme.textTheme.bodySmall,
           ),
+          if (s.isPending) ...[
+            const SizedBox(height: 8),
+            Text(
+              'This import didn\'t finish'
+              '${s.lastError == null ? '' : ': ${s.lastError}'}.',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.error),
+            ),
+            const SizedBox(height: 4),
+            OutlinedButton.icon(
+              onPressed: () {
+                ref.read(pendingImportRetryProvider.notifier).request(s.id);
+                _close();
+              },
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Try again'),
+            ),
+          ],
           const SizedBox(height: 12),
           Text(
             'Fetched once and kept offline. The area and category describe the '

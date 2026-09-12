@@ -20,7 +20,6 @@ import 'package:latlong2/latlong.dart' hide Circle, Path;
 
 import '../data/database.dart';
 import '../geo/freeline.dart';
-import '../geo/plane.dart';
 import '../geo/subspace.dart';
 import 'area_geometry.dart';
 import 'camera_viewport.dart';
@@ -66,7 +65,6 @@ class RegionLayer extends StatelessWidget {
     super.key,
     required this.layer,
     this.circles = const <Circle>[],
-    this.planes = const <Plane>[],
     this.subspaces = const <Subspace>[],
     this.subspacePoints = const <String, List<SubspacePoint>>{},
     this.freeLines = const <FreeLine>[],
@@ -83,7 +81,6 @@ class RegionLayer extends StatelessWidget {
 
   final Layer layer;
   final List<Circle> circles;
-  final List<Plane> planes;
   final List<Subspace> subspaces;
 
   // The point collections arrive **pre-grouped by owner id** (see the grouping
@@ -158,7 +155,6 @@ class RegionLayer extends StatelessWidget {
     color: Color(layer.colorArgb),
     inverted: layer.isInverted,
     circles: circles,
-    planes: planes,
     subspaces: subspaces,
     subspacePoints: subspacePoints,
     freeLines: freeLines,
@@ -181,7 +177,6 @@ class _RegionPainter extends CustomPainter {
     required this.color,
     required this.inverted,
     required this.circles,
-    required this.planes,
     required this.subspaces,
     required this.subspacePoints,
     required this.freeLines,
@@ -201,7 +196,6 @@ class _RegionPainter extends CustomPainter {
   final Color color;
   final bool inverted;
   final List<Circle> circles;
-  final List<Plane> planes;
   final List<Subspace> subspaces;
   final Map<String, List<SubspacePoint>> subspacePoints;
   final List<FreeLine> freeLines;
@@ -309,15 +303,6 @@ class _RegionPainter extends CustomPainter {
       );
       return;
     }
-    if (planes.isNotEmpty) {
-      _passes(
-        canvas,
-        _byColor(planes, (p) => p.colorArgb, (p) => p.colorShade),
-        (c, items, {required replace}) =>
-            _paintUnbounded(canvas, c, planes: items, replace: replace),
-      );
-      return;
-    }
     _passes(
       canvas,
       _byColor(subspaces, (s) => s.colorArgb, (s) => s.colorShade),
@@ -399,15 +384,14 @@ class _RegionPainter extends CustomPainter {
     if (own) canvas.restore();
   }
 
-  /// The shared path for the unbounded region types (circle / plane / subspace):
+  /// The shared path for the unbounded region types (circle / subspace):
   /// union the group's objects, then draw the band, or the solid + outline,
   /// depending on [phase]. A layer holds one object type, so exactly one of the
-  /// three lists is ever non-empty.
+  /// two lists is ever non-empty.
   void _paintUnbounded(
     Canvas canvas,
     Color color, {
     List<Circle> circles = const [],
-    List<Plane> planes = const [],
     List<Subspace> subspaces = const [],
     bool replace = false,
   }) {
@@ -454,36 +438,13 @@ class _RegionPainter extends CustomPainter {
         );
       }
     }
-    // Plane/subspace clip to the viewport as a spherical quad; unproject its
+    // Subspaces clip to the viewport as a spherical quad; unproject its
     // (slightly inflated) corners once. Null at extreme zoom / near-pole.
     final corners = viewportCorners(camera);
-    // Unbounded regions (plane/subspace/freeline) are cached against a generous
+    // Unbounded regions (subspace/freeline) are cached against a generous
     // bound and reused while the live view still fits inside it, so a pan/zoom
     // re-projects cached rings instead of re-clipping every frame.
     final viewport = corners == null ? null : ViewBound.ofCorners(corners);
-
-    if (planes.isNotEmpty && viewport != null) {
-      for (final p in planes) {
-        final sig =
-            '${p.aLat}|${p.aLng}|${p.bLat}|${p.bLng}|'
-            '${p.nearA}|$band|$inverted';
-        final region = regionGeometryCache.boundRegion(p.id, sig, viewport, (
-          bound,
-        ) {
-          final r = planeRegion(
-            a: LatLng(p.aLat, p.aLng),
-            b: LatLng(p.bLat, p.bLng),
-            nearA: p.nearA,
-            bandMeters: band,
-            viewportCorners: bound.quad,
-            bandInward: !inverted,
-          );
-          return (outer: r.outer, core: r.core);
-        });
-        addOuter(region.outer);
-        addCore(region.core);
-      }
-    }
 
     if (subspaces.isNotEmpty && viewport != null) {
       for (final s in subspaces) {
@@ -1106,7 +1067,6 @@ class _RegionPainter extends CustomPainter {
         old.uncertaintyMeters != uncertaintyMeters ||
         old.phase != phase ||
         !identical(old.circles, circles) ||
-        !identical(old.planes, planes) ||
         !identical(old.subspaces, subspaces) ||
         !identical(old.subspacePoints, subspacePoints) ||
         !identical(old.freeLines, freeLines) ||

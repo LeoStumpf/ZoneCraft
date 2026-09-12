@@ -89,7 +89,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     // Drop any selection that points at a now-deleted object before the wipe.
     ref.read(selectedCircleProvider.notifier).select(null);
-    ref.read(selectedPlaneProvider.notifier).select(null);
     ref.read(activeLayerProvider.notifier).select(null);
     await _repo.clearAll();
     if (!mounted) return;

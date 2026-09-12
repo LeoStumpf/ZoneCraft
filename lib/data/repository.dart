@@ -26,6 +26,7 @@ import '../geo/simplify.dart';
 import 'database.dart';
 import 'layer_types.dart';
 import 'overpass.dart' show PoiResult;
+import 'poi_sets.dart';
 import 'serialization.dart';
 import 'undo_journal.dart';
 
@@ -98,7 +99,7 @@ class Repository {
   }
 
   /// Creates a layer placed on top of all existing ones. Returns its id.
-  /// [type] is the object kind the layer holds ('circles' or 'planes').
+  /// [type] is the object kind the layer holds (see `layer_types.dart`).
   ///
   /// [borderLevel] is the OSM `admin_level` a `borders` layer holds — the one
   /// creation-time sub-choice any type has, because one layer holds one level
@@ -260,9 +261,6 @@ class Repository {
         await (_db.update(_db.circles)
               ..where((t) => t.layerId.equals(sourceId)))
             .write(CirclesCompanion(layerId: to));
-      case kPlanes:
-        await (_db.update(_db.planes)..where((t) => t.layerId.equals(sourceId)))
-            .write(PlanesCompanion(layerId: to));
       case kSubspace:
         await (_db.update(_db.subspaces)
               ..where((t) => t.layerId.equals(sourceId)))
@@ -279,17 +277,10 @@ class Repository {
         await (_db.update(_db.heightRegions)
               ..where((t) => t.layerId.equals(sourceId)))
             .write(HeightRegionsCompanion(layerId: to));
-      case kTrack:
-        await (_db.update(_db.tracks)..where((t) => t.layerId.equals(sourceId)))
-            .write(TracksCompanion(layerId: to));
       case kPoi:
         await (_db.update(_db.poiSets)
               ..where((t) => t.layerId.equals(sourceId)))
             .write(PoiSetsCompanion(layerId: to));
-      case kTransit:
-        await (_db.update(_db.transitSets)
-              ..where((t) => t.layerId.equals(sourceId)))
-            .write(TransitSetsCompanion(layerId: to));
       case kBorders:
         await (_db.update(_db.borderSets)
               ..where((t) => t.layerId.equals(sourceId)))
@@ -341,9 +332,6 @@ class Repository {
       ColoredElement.circle =>
         (_db.update(_db.circles)..where((t) => t.id.equals(id)))
             .write(CirclesCompanion(colorArgb: v)),
-      ColoredElement.plane =>
-        (_db.update(_db.planes)..where((t) => t.id.equals(id)))
-            .write(PlanesCompanion(colorArgb: v)),
       ColoredElement.subspace =>
         (_db.update(_db.subspaces)..where((t) => t.id.equals(id)))
             .write(SubspacesCompanion(colorArgb: v)),
@@ -359,15 +347,9 @@ class Repository {
       ColoredElement.poiSet =>
         (_db.update(_db.poiSets)..where((t) => t.id.equals(id)))
             .write(PoiSetsCompanion(colorArgb: v)),
-      ColoredElement.transitSet =>
-        (_db.update(_db.transitSets)..where((t) => t.id.equals(id)))
-            .write(TransitSetsCompanion(colorArgb: v)),
       ColoredElement.borderArea =>
         (_db.update(_db.borderAreas)..where((t) => t.id.equals(id)))
             .write(BorderAreasCompanion(colorArgb: v)),
-      ColoredElement.track =>
-        (_db.update(_db.tracks)..where((t) => t.id.equals(id)))
-            .write(TracksCompanion(colorArgb: v)),
     };
   }
 
@@ -421,7 +403,7 @@ class Repository {
   ///
   /// On a **mixed** layer the maximum is taken across *every* element table the
   /// layer holds, not just [table]: counting per table would give the first
-  /// circle and the first plane both shade 0, i.e. the same colour, which is
+  /// circle and the first subspace both shade 0, i.e. the same colour, which is
   /// precisely what the auto shades exist to avoid. A single-type layer keeps
   /// the one-table query exactly as it was, so no existing row is ever
   /// re-shaded.
@@ -484,7 +466,7 @@ class Repository {
   ///
   /// Unlike [_nextColorShade] this never looks across a mixed layer's other
   /// tables. The scope of a `z_order` is one layer *and one table*, because a
-  /// mixed layer draws its kinds in fixed passes (regions -> tracks -> markers)
+  /// mixed layer draws its kinds in fixed passes (regions -> markers)
   /// and no number stored here could make a marker go behind a circle. Sharing
   /// the counter across tables would only invent an ordering nothing honours.
   ///
@@ -554,14 +536,11 @@ class Repository {
   /// it needs to be told *with*.
   TableInfo<Table, dynamic> _tableOf(ColoredElement kind) => switch (kind) {
         ColoredElement.circle => _db.circles,
-        ColoredElement.plane => _db.planes,
         ColoredElement.subspace => _db.subspaces,
         ColoredElement.freeLine => _db.freeLines,
         ColoredElement.freeArea => _db.freeAreas,
         ColoredElement.heightRegion => _db.heightRegions,
         ColoredElement.poiSet => _db.poiSets,
-        ColoredElement.transitSet => _db.transitSets,
-        ColoredElement.track => _db.tracks,
         ColoredElement.borderArea => _db.borderAreas,
       };
 
@@ -639,80 +618,6 @@ class Repository {
 
   Future<void> deleteCircle(String id) {
     return (_db.delete(_db.circles)..where((c) => c.id.equals(id))).go();
-  }
-
-  // --- Planes ---------------------------------------------------------------
-
-  Stream<List<Plane>> watchAllPlanes() {
-    return (_db.select(_db.planes)
-          ..orderBy([
-            (t) => OrderingTerm(expression: t.zOrder),
-            (t) => OrderingTerm(expression: t.createdAt),
-            (t) => OrderingTerm(expression: t.id),
-          ])).watch();
-  }
-
-  Future<String> createPlane({
-    required String layerId,
-    required double aLat,
-    required double aLng,
-    required double bLat,
-    required double bLng,
-    bool nearA = true,
-    String? label,
-  }) async {
-    final id = _uuid.v4();
-    final shade = await _nextColorShade('planes', layerId);
-    final z = await _nextZOrder('planes', layerId);
-    await _db.into(_db.planes).insert(
-          PlanesCompanion.insert(
-            id: id,
-            layerId: layerId,
-            aLat: aLat,
-            aLng: aLng,
-            bLat: bLat,
-            bLng: bLng,
-            nearA: Value(nearA),
-            label: Value(label),
-            colorShade: Value(shade),
-            zOrder: Value(z),
-          ),
-        );
-    return id;
-  }
-
-  Future<void> updatePlane(
-    String id, {
-    double? aLat,
-    double? aLng,
-    double? bLat,
-    double? bLng,
-    bool? nearA,
-    String? layerId,
-    Value<String?> label = const Value.absent(),
-  }) async {
-    // Moving an element to another layer: the z it carried means nothing
-    // there, so it takes a fresh slot on top — which is what moving something
-    // into a layer means. Carrying the old number across would bury it under
-    // whatever the target already held.
-    final z =
-        layerId == null ? null : await _nextZOrder('planes', layerId);
-    await (_db.update(_db.planes)..where((p) => p.id.equals(id))).write(
-      PlanesCompanion(
-        aLat: aLat == null ? const Value.absent() : Value(aLat),
-        aLng: aLng == null ? const Value.absent() : Value(aLng),
-        bLat: bLat == null ? const Value.absent() : Value(bLat),
-        bLng: bLng == null ? const Value.absent() : Value(bLng),
-        nearA: nearA == null ? const Value.absent() : Value(nearA),
-        layerId: layerId == null ? const Value.absent() : Value(layerId),
-        zOrder: z == null ? const Value.absent() : Value(z),
-        label: label,
-      ),
-    );
-  }
-
-  Future<void> deletePlane(String id) {
-    return (_db.delete(_db.planes)..where((p) => p.id.equals(id))).go();
   }
 
   // --- Subspaces ------------------------------------------------------------
@@ -971,7 +876,7 @@ class Repository {
     return id;
   }
 
-  /// Appends many points to [freeLineId] in one batch (used by track import,
+  /// Appends many points to [freeLineId] in one batch (used by GPX import,
   /// where a city border can carry thousands of vertices).
   Future<void> addFreeLinePoints(String freeLineId, List<LatLng> pts) async {
     if (pts.isEmpty) return;
@@ -1027,208 +932,6 @@ class Repository {
     final row = await (_db.selectOnly(_db.freeLinePoints)
           ..addColumns([max])
           ..where(_db.freeLinePoints.freeLineId.equals(freeLineId)))
-        .getSingleOrNull();
-    return row?.read(max) ?? -1;
-  }
-
-  // --- Tracks ---------------------------------------------------------------
-
-  Stream<List<Track>> watchAllTracks() {
-    return (_db.select(_db.tracks)
-          ..orderBy([
-            (t) => OrderingTerm(expression: t.zOrder),
-            (t) => OrderingTerm(expression: t.createdAt),
-            (t) => OrderingTerm(expression: t.id),
-          ])).watch();
-  }
-
-  /// Every recorded fix across all tracks, ordered by [TrackPoints.sortOrder].
-  Stream<List<TrackPoint>> watchAllTrackPoints() {
-    return (_db.select(_db.trackPoints)
-          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
-        .watch();
-  }
-
-  Future<String> createTrack({
-    required String layerId,
-    String? label,
-  }) async {
-    final id = _uuid.v4();
-    final shade = await _nextColorShade('tracks', layerId);
-    final z = await _nextZOrder('tracks', layerId);
-    await _db.into(_db.tracks).insert(
-          TracksCompanion.insert(
-            id: id,
-            layerId: layerId,
-            label: Value(label),
-            colorShade: Value(shade),
-            zOrder: Value(z),
-          ),
-        );
-    return id;
-  }
-
-  /// The track [layerId] records into, created on first use.
-  ///
-  /// Lazy on purpose: a freshly added track layer that has never recorded shows
-  /// **no** elements, rather than an empty row that cannot be drawn, named
-  /// after a walk that never happened.
-  Future<String> ensureTrackForLayer(String layerId) async {
-    final existing = await (_db.select(_db.tracks)
-          ..where((t) => t.layerId.equals(layerId))
-          ..orderBy([(t) => OrderingTerm(expression: t.createdAt)])
-          ..limit(1))
-        .getSingleOrNull();
-    if (existing != null) return existing.id;
-    return createTrack(layerId: layerId);
-  }
-
-  Future<void> updateTrack(
-    String id, {
-    String? layerId,
-    Value<String?> label = const Value.absent(),
-  }) async {
-    // Moving an element to another layer: the z it carried means nothing
-    // there, so it takes a fresh slot on top — which is what moving something
-    // into a layer means. Carrying the old number across would bury it under
-    // whatever the target already held.
-    final z =
-        layerId == null ? null : await _nextZOrder('tracks', layerId);
-    await (_db.update(_db.tracks)..where((t) => t.id.equals(id))).write(
-      TracksCompanion(
-        layerId: layerId == null ? const Value.absent() : Value(layerId),
-        zOrder: z == null ? const Value.absent() : Value(z),
-        label: label,
-      ),
-    );
-  }
-
-  Future<void> deleteTrack(String id) {
-    return (_db.delete(_db.tracks)..where((t) => t.id.equals(id))).go();
-  }
-
-  /// The segment index a new recording run should use: one past the highest
-  /// stored, so the painter breaks the line rather than joining this walk to
-  /// the end of the last one.
-  Future<int> nextTrackSegment(String trackId) async {
-    final max = _db.trackPoints.segmentIndex.max();
-    final row = await (_db.selectOnly(_db.trackPoints)
-          ..addColumns([max])
-          ..where(_db.trackPoints.trackId.equals(trackId)))
-        .getSingleOrNull();
-    final highest = row?.read(max);
-    return highest == null ? 0 : highest + 1;
-  }
-
-  /// Appends one recorded fix and widens the track's denormalised bounds.
-  ///
-  /// Both in one transaction: the bounds are what the painter culls on, so a
-  /// point stored outside them would be invisible until something else
-  /// rewrote them.
-  Future<String> appendTrackPoint({
-    required String trackId,
-    required double lat,
-    required double lng,
-    required int segmentIndex,
-    DateTime? recordedAt,
-  }) async {
-    final id = _uuid.v4();
-    await _db.transaction(() async {
-      final order = await _maxTrackPointOrder(trackId);
-      await _db.into(_db.trackPoints).insert(
-            TrackPointsCompanion.insert(
-              id: id,
-              trackId: trackId,
-              lat: lat,
-              lng: lng,
-              sortOrder: order + 1,
-              segmentIndex: Value(segmentIndex),
-              recordedAt: Value(recordedAt ?? DateTime.now()),
-            ),
-          );
-      await _growTrackBounds(trackId, [LatLng(lat, lng)]);
-    });
-    return id;
-  }
-
-  /// Appends many points in one batch (import), all in one segment.
-  Future<void> addTrackPoints(
-    String trackId,
-    List<LatLng> pts, {
-    int segmentIndex = 0,
-  }) async {
-    if (pts.isEmpty) return;
-    var order = await _maxTrackPointOrder(trackId);
-    await _db.batch((b) {
-      for (final p in pts) {
-        order++;
-        b.insert(
-          _db.trackPoints,
-          TrackPointsCompanion.insert(
-            id: _uuid.v4(),
-            trackId: trackId,
-            lat: p.latitude,
-            lng: p.longitude,
-            sortOrder: order,
-            segmentIndex: Value(segmentIndex),
-          ),
-        );
-      }
-    });
-    await _growTrackBounds(trackId, pts);
-  }
-
-  /// The per-layer track settings.
-  Future<void> updateTrackLayerOptions(
-    String layerId, {
-    double? strokeWidth,
-    double? minDistanceMeters,
-  }) {
-    return (_db.update(_db.layers)..where((l) => l.id.equals(layerId))).write(
-      LayersCompanion(
-        trackStrokeWidth:
-            strokeWidth == null ? const Value.absent() : Value(strokeWidth),
-        trackMinDistanceMeters: minDistanceMeters == null
-            ? const Value.absent()
-            : Value(minDistanceMeters),
-      ),
-    );
-  }
-
-  /// Widens the stored bounds to contain [pts]. Never shrinks them: a deleted
-  /// point leaving the box slightly large costs one wasted cull, where
-  /// recomputing from every row would cost a full table scan per fix.
-  Future<void> _growTrackBounds(String trackId, List<LatLng> pts) async {
-    if (pts.isEmpty) return;
-    final row = await (_db.select(_db.tracks)..where((t) => t.id.equals(trackId)))
-        .getSingleOrNull();
-    if (row == null) return;
-    var south = row.south ?? pts.first.latitude;
-    var north = row.north ?? pts.first.latitude;
-    var west = row.west ?? pts.first.longitude;
-    var east = row.east ?? pts.first.longitude;
-    for (final p in pts) {
-      if (!p.latitude.isFinite || !p.longitude.isFinite) continue;
-      if (p.latitude < south) south = p.latitude;
-      if (p.latitude > north) north = p.latitude;
-      if (p.longitude < west) west = p.longitude;
-      if (p.longitude > east) east = p.longitude;
-    }
-    await (_db.update(_db.tracks)..where((t) => t.id.equals(trackId))).write(
-      TracksCompanion(
-        south: Value(south),
-        north: Value(north),
-        west: Value(west),
-        east: Value(east),
-      ),
-    );
-  }
-
-  Future<int> _maxTrackPointOrder(String trackId) async {
-    final max = _db.trackPoints.sortOrder.max();
-    final row = await (_db.selectOnly(_db.trackPoints)
-          ..addColumns([max])
-          ..where(_db.trackPoints.trackId.equals(trackId)))
         .getSingleOrNull();
     return row?.read(max) ?? -1;
   }
@@ -1550,6 +1253,28 @@ class Repository {
         .write(HeightRegionsCompanion(generatedAt: Value(DateTime.now())));
   }
 
+  /// The generated fill rings of one region, in stored order — the inverse of
+  /// [replaceHeightPolygons]. Empty until the region has been generated (or
+  /// when it is gone). Used by "Convert to freehand area", which needs the
+  /// geometry rather than the summary row; the painter reads the grouped
+  /// providers instead.
+  Future<List<List<LatLng>>> heightRegionRings(String id) async {
+    final polys = await (_db.select(_db.heightPolygons)
+          ..where((p) => p.heightRegionId.equals(id))
+          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
+        .get();
+    if (polys.isEmpty) return const [];
+    final pts = await (_db.select(_db.heightPolygonPoints)
+          ..where((q) => q.polygonId.isIn([for (final p in polys) p.id]))
+          ..orderBy([(q) => OrderingTerm(expression: q.sortOrder)]))
+        .get();
+    final byPoly = <String, List<LatLng>>{for (final p in polys) p.id: []};
+    for (final q in pts) {
+      byPoly[q.polygonId]!.add(LatLng(q.lat, q.lng));
+    }
+    return [for (final p in polys) byPoly[p.id]!];
+  }
+
   // --- POI sets -------------------------------------------------------------
 
   Stream<List<PoiSet>> watchAllPoiSets() {
@@ -1568,24 +1293,46 @@ class Repository {
         .watch();
   }
 
-  /// Creates a POI set (one import: a category within a bounded circle) on a
-  /// `poi` layer. Returns its id; the POIs themselves go in via [addPoiPoints].
-  /// Creates a POI set — an Overpass import by default, or a **hand-made
-  /// category** with [isManual] (see [PoiSets.isManual]).
+  /// Creates a POI set of the given [source] on a `poi` layer and returns its
+  /// id. What the set then holds depends on the kind (see [PoiSets.source]):
   ///
-  /// A manual set passes the map centre and radius 0 for the three query
-  /// columns, which are NOT NULL and mean nothing here; nothing reads them
-  /// while [isManual] is true.
+  /// * [kPoiSourceRadius] — [categoryKey] within [radiusMeters] of the centre;
+  ///   the points go in via [fillPoiSet].
+  /// * [kPoiSourceBox] — stations within [bbox] (`[south, west, north, east]`,
+  ///   required) of the modes in [modeMask], shown per [visibleModeMask]; the
+  ///   centre and radius passed are **ignored** and derived from the box, so a
+  ///   caller cannot make the two disagree. Points via [fillPoiSet].
+  /// * [kPoiSourceManual] — a hand-made category; pass the map centre and 0
+  ///   for the three query columns (NOT NULL, meaningless here) and add points
+  ///   with [addManualPoiPoint].
+  ///
+  /// **Every import is born pending** (`fetchedAt` null) — recorded *before*
+  /// fetching, so a failure leaves something the user can come back to rather
+  /// than a snackbar they missed. [fillPoiSet] marks it done.
   Future<String> createPoiSet({
     required String layerId,
+    required String source,
     required String categoryKey,
     required double centerLat,
     required double centerLng,
     required double radiusMeters,
     String? label,
-    bool isManual = false,
     String? iconKey,
+    List<double>? bbox,
+    int modeMask = 0,
+    int visibleModeMask = -1,
   }) async {
+    if (source == kPoiSourceBox) {
+      if (bbox == null || bbox.length != 4) {
+        throw ArgumentError('A box import needs its box');
+      }
+      centerLat = (bbox[0] + bbox[2]) / 2;
+      centerLng = (bbox[1] + bbox[3]) / 2;
+      radiusMeters = boxCoveringRadiusMeters(
+          south: bbox[0], west: bbox[1], north: bbox[2], east: bbox[3]);
+    } else if (bbox != null) {
+      throw ArgumentError('Only a box import has a box');
+    }
     final id = _uuid.v4();
     final shade = await _nextColorShade('poi_sets', layerId);
     final z = await _nextZOrder('poi_sets', layerId);
@@ -1600,8 +1347,14 @@ class Repository {
             label: Value(label),
             colorShade: Value(shade),
             zOrder: Value(z),
-            isManual: Value(isManual),
+            source: Value(source),
             iconKey: Value(iconKey),
+            south: Value(bbox?[0]),
+            west: Value(bbox?[1]),
+            north: Value(bbox?[2]),
+            east: Value(bbox?[3]),
+            modeMask: Value(modeMask),
+            visibleModeMask: Value(visibleModeMask),
           ),
         );
     return id;
@@ -1657,34 +1410,41 @@ class Repository {
     required double lng,
   }) async {
     final row = await _db.customSelect(
-      'SELECT s.is_manual AS is_manual FROM poi_points p '
+      'SELECT s.source AS source FROM poi_points p '
       'JOIN poi_sets s ON p.poi_set_id = s.id WHERE p.id = ?',
       variables: [Variable<String>(id)],
     ).getSingleOrNull();
     if (row == null) return;
-    if (row.read<int>('is_manual') == 0) {
+    if (row.read<String>('source') != kPoiSourceManual) {
       throw ArgumentError('An imported POI records where OSM put it');
     }
     await (_db.update(_db.poiPoints)..where((p) => p.id.equals(id)))
         .write(PoiPointsCompanion(lat: Value(lat), lng: Value(lng)));
   }
 
-  /// Appends the fetched POIs to [poiSetId] in one batch, **skipping any this
-  /// layer already holds** (see [ImportTally]).
+  /// Writes the fetched points into [poiSetId] and marks the import done.
   ///
-  /// Scoped to the layer, not the set: overlapping imports land in *different*
-  /// sets, which is exactly the case that used to draw the same café twice.
-  /// Two layers deliberately holding the same POIs is a legitimate thing to
-  /// want, so it stays possible.
-  /// Takes [PoiResult]s rather than a bare record: it is exactly what the
-  /// importer already holds, and it keeps the OSM identity from having to be
-  /// spelled out (as two explicit nulls) at every seed and test call site.
-  Future<ImportTally> addPoiPoints(
+  /// **Replaces** whatever the set held, so a retry after a failure is
+  /// idempotent — and **skips any point this layer's *other* sets already
+  /// hold** (see [ImportTally]). Scoped to the layer, not the set: overlapping
+  /// imports land in *different* sets, which is exactly the case that used to
+  /// draw the same café (or Pasing Bahnhof) twice. Two layers deliberately
+  /// holding the same POIs is a legitimate thing to want, so it stays
+  /// possible. The set's own previous rows are excluded from the check so a
+  /// retry of the same box doesn't dedup against its own earlier attempt.
+  ///
+  /// One transaction, one batch — a city of stations is thousands of rows and
+  /// must not be a loop of awaited inserts. Takes [PoiResult]s rather than a
+  /// bare record: it is exactly what the importer already holds, and it keeps
+  /// the OSM identity from having to be spelled out at every call site.
+  Future<ImportTally> fillPoiSet(
     String poiSetId,
     List<PoiResult> pts,
   ) async {
-    if (pts.isEmpty) return ImportTally.none;
     return _db.transaction(() async {
+      await (_db.delete(_db.poiPoints)
+            ..where((p) => p.poiSetId.equals(poiSetId)))
+          .go();
       final seen = await _poiOsmKeysInLayerOf(poiSetId);
       final keep = [
         for (final p in pts)
@@ -1705,15 +1465,21 @@ class Repository {
               sortOrder: i,
               osmType: Value(keep[i].osmType),
               osmId: Value(keep[i].osmId),
+              modeMask: Value(keep[i].modeMask),
             ),
           );
         }
       });
+      await (_db.update(_db.poiSets)..where((t) => t.id.equals(poiSetId)))
+          .write(PoiSetsCompanion(
+        fetchedAt: Value(DateTime.now()),
+        lastError: const Value(null),
+      ));
       return ImportTally(added: keep.length, skipped: pts.length - keep.length);
     });
   }
 
-  /// Every `type/id` already stored on the layer that owns [poiSetId].
+  /// Every `type/id` held by the *other* sets of the layer owning [poiSetId].
   Future<Set<String>> _poiOsmKeysInLayerOf(String poiSetId) async {
     final layerId = await (_db.selectOnly(_db.poiSets)
           ..addColumns([_db.poiSets.layerId])
@@ -1730,6 +1496,7 @@ class Repository {
             ),
           ])
           ..where(_db.poiSets.layerId.equals(layerId) &
+              _db.poiSets.id.equals(poiSetId).not() &
               _db.poiPoints.osmId.isNotNull()))
         .get();
     return {
@@ -1738,8 +1505,15 @@ class Repository {
     };
   }
 
-  /// Renames a POI set (or moves it to another `poi` layer). The set's search
-  /// circle and its stored POIs are immutable — a different area means a new
+  /// Records why an import didn't finish. The set stays, so the layer can offer
+  /// a retry for exactly that query.
+  Future<void> markPoiImportFailed(String setId, String message) {
+    return (_db.update(_db.poiSets)..where((t) => t.id.equals(setId)))
+        .write(PoiSetsCompanion(lastError: Value(message)));
+  }
+
+  /// Renames a POI set (or moves it to another `poi` layer). An import's query
+  /// and its stored points are immutable — a different area means a new
   /// import.
   /// [categoryKey] and [iconKey] are only meaningful on a **manual** set — an
   /// import's category describes the query that ran — but this does not police
@@ -1771,13 +1545,32 @@ class Repository {
     );
   }
 
+  /// Which transit modes a station import shows — what the filter sheet
+  /// writes. One batch, so toggling a mode is a single write and a single
+  /// stream emission.
+  Future<void> setPoiVisibleModes(
+    Iterable<String> setIds,
+    int visibleModeMask,
+  ) async {
+    final ids = setIds.toList();
+    if (ids.isEmpty) return;
+    await _db.batch((b) {
+      b.update(
+        _db.poiSets,
+        PoiSetsCompanion(visibleModeMask: Value(visibleModeMask)),
+        where: (t) => t.id.isIn(ids),
+      );
+    });
+  }
+
   Future<void> deletePoiSet(String id) {
     return (_db.delete(_db.poiSets)..where((s) => s.id.equals(id))).go();
   }
 
   /// Renames one stored POI. The name is the only thing about a POI that is
   /// safe to change: its **position** is the fetched fact the layer exists to
-  /// record, and there is no column that would say a coordinate had been moved.
+  /// record (and for a station, so are its mode bits), and there is no column
+  /// that would say a coordinate had been moved.
   Future<void> updatePoiPoint(String id, {required Value<String?> name}) {
     return (_db.update(_db.poiPoints)..where((p) => p.id.equals(id)))
         .write(PoiPointsCompanion(name: name));
@@ -1794,224 +1587,6 @@ class Repository {
     return (_db.delete(_db.poiPoints)..where((p) => p.id.equals(id))).go();
   }
 
-  // --- Transit sets ---------------------------------------------------------
-
-  Stream<List<TransitSet>> watchAllTransitSets() {
-    return (_db.select(_db.transitSets)
-          ..orderBy([
-            (t) => OrderingTerm(expression: t.zOrder),
-            (t) => OrderingTerm(expression: t.createdAt),
-            (t) => OrderingTerm(expression: t.id),
-          ])).watch();
-  }
-
-  Stream<List<TransitStop>> watchAllTransitStops() {
-    return _db.select(_db.transitStops).watch();
-  }
-
-  /// Records an import **before** fetching, so a failure leaves something the
-  /// user can come back to rather than a snackbar they missed. `fetchedAt` stays
-  /// null until [fillTransitSet] succeeds.
-  Future<String> createPendingTransitSet({
-    required String layerId,
-    required double south,
-    required double west,
-    required double north,
-    required double east,
-    required int modeMask,
-    required int visibleModeMask,
-    String? label,
-  }) async {
-    final id = _uuid.v4();
-    final shade = await _nextColorShade('transit_sets', layerId);
-    final z = await _nextZOrder('transit_sets', layerId);
-    await _db.into(_db.transitSets).insert(
-          TransitSetsCompanion.insert(
-            id: id,
-            layerId: layerId,
-            south: south,
-            west: west,
-            north: north,
-            east: east,
-            modeMask: modeMask,
-            visibleModeMask: Value(visibleModeMask),
-            label: Value(label),
-            colorShade: Value(shade),
-            zOrder: Value(z),
-          ),
-        );
-    return id;
-  }
-
-  /// Writes the fetched stations into [setId] and marks it done.
-  ///
-  /// Replaces whatever was there, so a retry after a partial failure is
-  /// idempotent. One transaction, one batch — a city import is thousands of
-  /// rows and must not be a loop of awaited inserts.
-  Future<ImportTally> fillTransitSet(
-    String setId,
-    List<({
-      int osmId,
-      double lat,
-      double lng,
-      String? name,
-      int modeMask,
-      int nodeCount,
-      String? routeRef,
-    })> stations,
-  ) async {
-    return _db.transaction(() async {
-      await (_db.delete(_db.transitStops)
-            ..where((s) => s.setId.equals(setId)))
-          .go();
-      // Stations this layer's *other* sets already hold. Two boxes that overlap
-      // put the same station in two sets, which is what drew Pasing twice.
-      final seen = await _transitOsmIdsInLayerOf(setId);
-      final keep = [
-        for (final s in stations)
-          if (_isNew(seen, osmKey('node', s.osmId))) s,
-      ];
-      await _db.batch((b) {
-        for (final s in keep) {
-          b.insert(
-            _db.transitStops,
-            TransitStopsCompanion.insert(
-              id: _uuid.v4(),
-              setId: setId,
-              osmId: s.osmId,
-              lat: s.lat,
-              lng: s.lng,
-              name: Value(s.name),
-              modeMask: Value(s.modeMask),
-              nodeCount: Value(s.nodeCount),
-              routeRef: Value(s.routeRef),
-            ),
-          );
-        }
-      });
-      await (_db.update(_db.transitSets)..where((t) => t.id.equals(setId)))
-          .write(TransitSetsCompanion(
-        fetchedAt: Value(DateTime.now()),
-        lastError: const Value(null),
-        // The counts describe what is *stored*, so they keep matching the rows
-        // and the "N stations" the layer tile shows.
-        stationCount: Value(keep.length),
-        nodeCount: Value(keep.fold(0, (a, s) => a + s.nodeCount)),
-      ));
-      return ImportTally(
-          added: keep.length, skipped: stations.length - keep.length);
-    });
-  }
-
-  /// Station ids held by the *other* sets of the layer owning [setId].
-  ///
-  /// Excludes [setId] itself so a retry of the same box doesn't dedup against
-  /// its own previous attempt — which would make every retry import nothing.
-  Future<Set<String>> _transitOsmIdsInLayerOf(String setId) async {
-    final layerId = await (_db.selectOnly(_db.transitSets)
-          ..addColumns([_db.transitSets.layerId])
-          ..where(_db.transitSets.id.equals(setId)))
-        .map((r) => r.read(_db.transitSets.layerId))
-        .getSingleOrNull();
-    if (layerId == null) return <String>{};
-    final rows = await (_db.selectOnly(_db.transitStops)
-          ..addColumns([_db.transitStops.osmId])
-          ..join([
-            innerJoin(
-              _db.transitSets,
-              _db.transitSets.id.equalsExp(_db.transitStops.setId),
-            ),
-          ])
-          ..where(_db.transitSets.layerId.equals(layerId) &
-              _db.transitSets.id.equals(setId).not()))
-        .get();
-    return {
-      for (final r in rows)
-        ?osmKey('node', r.read(_db.transitStops.osmId)),
-    };
-  }
-
-  /// Records why an import didn't finish. The set stays, so the layer can offer
-  /// a retry for exactly that box.
-  Future<void> markTransitImportFailed(String setId, String message) {
-    return (_db.update(_db.transitSets)..where((t) => t.id.equals(setId)))
-        .write(TransitSetsCompanion(lastError: Value(message)));
-  }
-
-  /// Renames an import (or moves it to another `transit` layer). The imported
-  /// area is immutable — a different area means a new import.
-  Future<void> updateTransitSet(
-    String id, {
-    String? layerId,
-    Value<String?> label = const Value.absent(),
-  }) async {
-    // Moving an element to another layer: the z it carried means nothing
-    // there, so it takes a fresh slot on top — which is what moving something
-    // into a layer means. Carrying the old number across would bury it under
-    // whatever the target already held.
-    final z =
-        layerId == null ? null : await _nextZOrder('transit_sets', layerId);
-    await (_db.update(_db.transitSets)..where((s) => s.id.equals(id))).write(
-      TransitSetsCompanion(
-        layerId: layerId == null ? const Value.absent() : Value(layerId),
-        zOrder: z == null ? const Value.absent() : Value(z),
-        label: label,
-      ),
-    );
-  }
-
-  /// Which transit modes are shown — what the filter sheet writes. One batch,
-  /// so toggling a mode is a single write and a single stream emission.
-  Future<void> setTransitVisibleModes(
-    Iterable<String> setIds,
-    int visibleModeMask,
-  ) async {
-    final ids = setIds.toList();
-    if (ids.isEmpty) return;
-    await _db.batch((b) {
-      b.update(
-        _db.transitSets,
-        TransitSetsCompanion(visibleModeMask: Value(visibleModeMask)),
-        where: (t) => t.id.isIn(ids),
-      );
-    });
-  }
-
-  Future<void> deleteTransitSet(String id) {
-    return (_db.delete(_db.transitSets)..where((s) => s.id.equals(id))).go();
-  }
-
-  /// Renames one station. As with a POI, the name is the only safe thing to
-  /// change — the position and the mode bits are the fetched facts.
-  Future<void> updateTransitStop(String id, {required Value<String?> name}) {
-    return (_db.update(_db.transitStops)..where((s) => s.id.equals(id)))
-        .write(TransitStopsCompanion(name: name));
-  }
-
-  /// Removes one station and keeps its import's denormalised counts honest —
-  /// the layer tile and the Elements subtitle both read `stationCount`, so a
-  /// delete that skipped it would leave the layer claiming stations it no
-  /// longer draws.
-  Future<void> deleteTransitStop(String id) async {
-    final stop = await (_db.select(_db.transitStops)
-          ..where((s) => s.id.equals(id)))
-        .getSingleOrNull();
-    if (stop == null) return;
-    await _db.transaction(() async {
-      await (_db.delete(_db.transitStops)..where((s) => s.id.equals(id))).go();
-      final set = await (_db.select(_db.transitSets)
-            ..where((t) => t.id.equals(stop.setId)))
-          .getSingleOrNull();
-      if (set == null) return;
-      await (_db.update(_db.transitSets)..where((t) => t.id.equals(set.id)))
-          .write(TransitSetsCompanion(
-        stationCount: Value(set.stationCount > 0 ? set.stationCount - 1 : 0),
-        nodeCount: Value(
-            set.nodeCount >= stop.nodeCount ? set.nodeCount - stop.nodeCount : 0),
-      ));
-    });
-  }
-
   // --- Border sets ----------------------------------------------------------
 
   Stream<List<BorderSet>> watchAllBorderSets() {
@@ -2025,7 +1600,7 @@ class Repository {
   /// Writes one finished border import: the set row plus its areas, then
   /// recolours the whole layer.
   ///
-  /// Unlike a transit import there is no pending row — a border import that
+  /// Unlike a POI import there is no pending row — a border import that
   /// fails leaves nothing behind, because re-running it is two taps and a
   /// half-written set would have to remember the query to be worth keeping.
   ///
@@ -2355,7 +1930,7 @@ class Repository {
         );
   }
 
-  /// Remembers which Overpass instance last served an import (transit or
+  /// Remembers which Overpass instance last served an import (POI or
   /// borders), so the next one starts with the one that was actually up rather
   /// than at whichever is currently swamped.
   Future<void> updateTransitEndpoint(String endpoint) {
@@ -2494,7 +2069,7 @@ class Repository {
 
   // --- Clear ----------------------------------------------------------------
 
-  /// Wipes all user data: deletes every layer (cascading to circles/planes),
+  /// Wipes all user data: deletes every layer (cascading to its elements),
   /// resets settings to defaults (uncertainty 500, camera null) by dropping the
   /// settings row, then re-seeds an empty default layer. Used by the Settings
   /// "Clear all data" button. Returns the id of the freshly seeded layer. The
@@ -2504,7 +2079,7 @@ class Repository {
     // a wipe is a wipe, and recording one would copy the entire database into
     // the in-memory log purely to throw it away a moment later.
     final id = await _db.undo.suspended(() async {
-      await _db.delete(_db.layers).go(); // cascades to circles/planes
+      await _db.delete(_db.layers).go(); // cascades to every element table
       await _db
           .delete(_db.appSettings)
           .go(); // reverts to column defaults on read
@@ -2534,12 +2109,6 @@ class Repository {
             (t) => OrderingTerm(expression: t.createdAt),
             (t) => OrderingTerm(expression: t.id),
           ])).get();
-    final planes = await (_db.select(_db.planes)
-          ..orderBy([
-            (t) => OrderingTerm(expression: t.zOrder),
-            (t) => OrderingTerm(expression: t.createdAt),
-            (t) => OrderingTerm(expression: t.id),
-          ])).get();
     final subspaces = await (_db.select(_db.subspaces)
           ..orderBy([
             (t) => OrderingTerm(expression: t.zOrder),
@@ -2556,15 +2125,6 @@ class Repository {
             (t) => OrderingTerm(expression: t.id),
           ])).get();
     final flPoints = await (_db.select(_db.freeLinePoints)
-          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
-        .get();
-    final tracks = await (_db.select(_db.tracks)
-          ..orderBy([
-            (t) => OrderingTerm(expression: t.zOrder),
-            (t) => OrderingTerm(expression: t.createdAt),
-            (t) => OrderingTerm(expression: t.id),
-          ])).get();
-    final trackPoints = await (_db.select(_db.trackPoints)
           ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
         .get();
     final freeAreas = await (_db.select(_db.freeAreas)
@@ -2588,13 +2148,6 @@ class Repository {
     final heightPolygonPoints = await (_db.select(_db.heightPolygonPoints)
           ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
         .get();
-    final transitSets = await (_db.select(_db.transitSets)
-          ..orderBy([
-            (t) => OrderingTerm(expression: t.zOrder),
-            (t) => OrderingTerm(expression: t.createdAt),
-            (t) => OrderingTerm(expression: t.id),
-          ])).get();
-    final transitStops = await _db.select(_db.transitStops).get();
     final poiSets = await (_db.select(_db.poiSets)
           ..orderBy([
             (t) => OrderingTerm(expression: t.zOrder),
@@ -2650,16 +2203,6 @@ class Repository {
                 colorArgb: c.colorArgb,
               ));
             }
-          case 'planes':
-            for (final p in planes.where((p) => p.layerId == layer.id)) {
-              objects.add(ExportObject(
-                kind: 'plane',
-                coords: [LatLng(p.aLat, p.aLng), LatLng(p.bLat, p.bLng)],
-                nearA: p.nearA,
-                label: p.label,
-                colorArgb: p.colorArgb,
-              ));
-            }
           case 'subspace':
             for (final s in subspaces.where((s) => s.layerId == layer.id)) {
               final pts = subPoints.where((p) => p.subspaceId == s.id).toList();
@@ -2682,7 +2225,7 @@ class Repository {
             for (final l in freeLines.where((l) => l.layerId == layer.id)) {
               final pts = flPoints.where((p) => p.freeLineId == l.id).toList();
               // A point-less row has no geometry to write, and the encoders read
-              // `coords.first` — the same guard subspace and track already make.
+              // `coords.first` — the same guard subspace already makes.
               if (pts.isEmpty) continue;
               objects.add(ExportObject(
                 kind: 'freeline',
@@ -2693,34 +2236,6 @@ class Repository {
                 inclusionRadiusMeters: l.inclusionRadiusMeters,
                 label: l.label,
                 colorArgb: l.colorArgb,
-              ));
-            }
-          case 'track':
-            for (final t in tracks.where((t) => t.layerId == layer.id)) {
-              final pts = trackPoints.where((p) => p.trackId == t.id).toList();
-              if (pts.isEmpty) continue;
-              // Split on segmentIndex: a segment change is a *break* in the
-              // drawn line, so it becomes one part of a MultiLineString rather
-              // than being flattened into a straight jump across the pause. One
-              // feature still, so the track stays one element on the way back.
-              final segments = <List<LatLng>>[];
-              var current = <LatLng>[];
-              int? seg;
-              for (final p in pts) {
-                if (seg != null && p.segmentIndex != seg) {
-                  segments.add(current);
-                  current = <LatLng>[];
-                }
-                seg = p.segmentIndex;
-                current.add(LatLng(p.lat, p.lng));
-              }
-              if (current.isNotEmpty) segments.add(current);
-              objects.add(ExportObject(
-                kind: 'track',
-                coords: [for (final s in segments) ...s],
-                segments: segments,
-                label: t.label,
-                colorArgb: t.colorArgb,
               ));
             }
           case 'freearea':
@@ -2757,8 +2272,12 @@ class Repository {
               ));
             }
           case 'poi':
-            // coords[0] is the set's search centre; coords[1..] are the POIs
-            // themselves, with their names in [ExportObject.pointLabels].
+            // coords[0] is the set's centre (the box centre for a station
+            // import); coords[1..] are the points themselves, with their names
+            // in [ExportObject.pointLabels]. One object per *set*: an import
+            // that never succeeded has no points but is still a row on the
+            // layer — a retry the user can press — so it travels as an empty
+            // one rather than vanishing.
             for (final s in poiSets.where((s) => s.layerId == layer.id)) {
               final pts = poiPoints.where((p) => p.poiSetId == s.id).toList();
               // The OSM identity of each POI travels too: it is what dedup
@@ -2766,56 +2285,38 @@ class Repository {
               // draws every one of them a second time. Written only when at
               // least one POI has it (rows from before v21 never did).
               final identified = pts.any((p) => p.osmId != null);
+              final box = s.isStationImport;
               objects.add(ExportObject(
                 kind: 'poi',
                 coords: [
                   LatLng(s.centerLat, s.centerLng),
                   for (final p in pts) LatLng(p.lat, p.lng),
                 ],
-                radiusMeters: s.radiusMeters,
+                // A box set's radius is derived from its box on the way back
+                // in; writing it would be a second formula to keep equal.
+                radiusMeters: box ? null : s.radiusMeters,
                 categoryKey: s.categoryKey,
                 pointLabels: [for (final p in pts) p.name],
                 pointOsmIds:
                     identified ? [for (final p in pts) p.osmId ?? 0] : null,
                 pointOsmTypes:
                     identified ? [for (final p in pts) p.osmType] : null,
+                // Only a station import carries mode bits; every other kind
+                // would write a list of zeros.
+                pointModeMasks: box && pts.isNotEmpty
+                    ? [for (final p in pts) p.modeMask]
+                    : null,
                 // Written only for a hand-made category, so an ordinary import's
                 // GeoJSON is byte-for-byte what it was before v25.
                 manual: s.isManual ? true : null,
                 iconKey: s.iconKey,
+                bbox: s.bbox,
+                modeMask: box ? s.modeMask : null,
+                visibleModeMask: box ? s.visibleModeMask : null,
+                pending: s.isPending ? true : null,
+                errorMessage: s.lastError,
                 label: s.label,
                 colorArgb: s.colorArgb,
-              ));
-            }
-          case 'transit':
-            // One object per *import*: its stations as named points (which is
-            // what another tool can read) plus the box and the per-station OSM
-            // attributes, which is what lets this app put the import back
-            // together. An import that never succeeded has no stations but is
-            // still a row on the layer — a retry the user can press — so it
-            // travels as an empty one rather than vanishing.
-            for (final t in transitSets.where((t) => t.layerId == layer.id)) {
-              final stops =
-                  transitStops.where((x) => x.setId == t.id).toList();
-              final done = stops.isNotEmpty;
-              objects.add(ExportObject(
-                kind: 'transitstop',
-                coords: [for (final x in stops) LatLng(x.lat, x.lng)],
-                pointLabels: done ? [for (final x in stops) x.name] : null,
-                pointOsmIds: done ? [for (final x in stops) x.osmId] : null,
-                pointModeMasks:
-                    done ? [for (final x in stops) x.modeMask] : null,
-                pointNodeCounts:
-                    done ? [for (final x in stops) x.nodeCount] : null,
-                pointRouteRefs:
-                    done ? [for (final x in stops) x.routeRef] : null,
-                bbox: [t.south, t.west, t.north, t.east],
-                modeMask: t.modeMask,
-                visibleModeMask: t.visibleModeMask,
-                pending: t.fetchedAt == null ? true : null,
-                errorMessage: t.lastError,
-                label: t.label,
-                colorArgb: t.colorArgb,
               ));
             }
           case 'borders':
@@ -2863,10 +2364,6 @@ class Repository {
             layer.type == 'borders' ? layer.borderFillAreas : null,
         borderShowNames:
             layer.type == 'borders' ? layer.borderShowNames : null,
-        trackStrokeWidth:
-            layer.type == 'track' ? layer.trackStrokeWidth : null,
-        trackMinDistanceMeters:
-            layer.type == 'track' ? layer.trackMinDistanceMeters : null,
         // Only a hidden layer writes the key; shown is the default everywhere.
         isVisible: layer.isVisible ? null : false,
         objects: objects,
@@ -2921,15 +2418,6 @@ class Repository {
           layerId,
           fillAreas: layer.borderFillAreas,
           showNames: layer.borderShowNames,
-        );
-      }
-      if (layer.type == 'track' &&
-          (layer.trackStrokeWidth != null ||
-              layer.trackMinDistanceMeters != null)) {
-        await updateTrackLayerOptions(
-          layerId,
-          strokeWidth: layer.trackStrokeWidth,
-          minDistanceMeters: layer.trackMinDistanceMeters,
         );
       }
       imported += await _insertObjects(layerId, layer.objects, simplify);
@@ -3042,18 +2530,6 @@ class Repository {
           label: o.label,
         );
         await _applyImportedColor(ColoredElement.circle, cid, o.colorArgb);
-      case 'plane':
-        if (o.coords.length < 2) return false;
-        final pid = await createPlane(
-          layerId: layerId,
-          aLat: o.coords[0].latitude,
-          aLng: o.coords[0].longitude,
-          bLat: o.coords[1].latitude,
-          bLng: o.coords[1].longitude,
-          nearA: o.nearA ?? true,
-          label: o.label,
-        );
-        await _applyImportedColor(ColoredElement.plane, pid, o.colorArgb);
       case 'subspace':
         if (o.coords.isEmpty) return false;
         final sid = await createSubspace(layerId: layerId, label: o.label);
@@ -3083,27 +2559,6 @@ class Repository {
         }
         await addFreeLinePoints(lid, _importLine(o.coords, simplify));
         await _applyImportedColor(ColoredElement.freeLine, lid, o.colorArgb);
-      case 'track':
-        // One point is a track: the recorder got a fix and then nothing. It
-        // draws no line, but it is a stored position and it moves the track's
-        // bounds — dropping it would lose real recorded data.
-        if (o.coords.isEmpty) return false;
-        // An imported track lands in the layer's one track — the same place
-        // recording appends to — and in one segment: a file says nothing about
-        // where the recording paused.
-        final tid = await ensureTrackForLayer(layerId);
-        if (o.label != null) {
-          await updateTrack(tid, label: Value(o.label));
-        }
-        // One call per exported segment, each with its own index, so the
-        // recording's pauses stay breaks instead of becoming straight jumps.
-        // A file with no segments (v1, or a generic GPX) is one segment.
-        for (final part in o.segments ?? [o.coords]) {
-          if (part.isEmpty) continue;
-          await addTrackPoints(tid, _importLine(part, simplify),
-              segmentIndex: await nextTrackSegment(tid));
-        }
-        await _applyImportedColor(ColoredElement.track, tid, o.colorArgb);
       case 'freearea':
         if (o.coords.length < 3) return false;
         final aid = await createFreeArea(layerId: layerId, label: o.label);
@@ -3143,14 +2598,25 @@ class Repository {
       case 'poi':
         if (o.coords.isEmpty) return false;
         final r = o.radiusMeters;
+        // Which kind of set this is follows from what the file carries: a
+        // box means a station import, `manual` a hand-made category, and
+        // anything else a radius import — so a v3 file needs no `source` key
+        // and a v2 one (which never had it) reads the same way.
+        final manual = o.manual ?? false;
+        final box = o.bbox;
+        final source = manual
+            ? kPoiSourceManual
+            : box != null
+                ? kPoiSourceBox
+                : kPoiSourceRadius;
         // A search radius is what the set was fetched with, not what its POIs
         // are — so when a file doesn't carry a usable one, derive it from how
         // far the POIs actually reach. Dropping the set (and every POI in it)
         // over a missing number loses far more than it protects.
         // A hand-made category never had a search radius — 0 *is* its value,
         // and deriving one from how far its points reach would both invent a
-        // search that never ran and break the export fixed point.
-        final manual = o.manual ?? false;
+        // search that never ran and break the export fixed point. A box set
+        // derives its own from the box inside [createPoiSet].
         final radius = manual
             ? (r ?? 0)
             : (r != null && r.isFinite && r > 0)
@@ -3158,22 +2624,50 @@ class Repository {
                 : _coveringRadius(o.coords);
         final sid = await createPoiSet(
           layerId: layerId,
+          source: source,
           categoryKey: o.categoryKey ?? 'place',
           centerLat: o.coords.first.latitude,
           centerLng: o.coords.first.longitude,
           radiusMeters: radius,
           label: o.label,
-          isManual: manual,
           iconKey: o.iconKey,
+          bbox: box,
+          modeMask: o.modeMask ?? 0,
+          visibleModeMask: o.visibleModeMask ?? -1,
         );
+        await _applyImportedColor(ColoredElement.poiSet, sid, o.colorArgb);
         final labels = o.pointLabels ?? const <String?>[];
+        if (manual) {
+          // Hand-placed points go in the way they were placed: one by one,
+          // through the guard that keeps imports and hand-made sets apart. A
+          // manual set never gets a `fetchedAt` — nothing was fetched.
+          for (var i = 1; i < o.coords.length; i++) {
+            await addManualPoiPoint(
+              poiSetId: sid,
+              lat: o.coords[i].latitude,
+              lng: o.coords[i].longitude,
+              label: i - 1 < labels.length ? labels[i - 1] : null,
+            );
+          }
+          return true;
+        }
+        if (o.pending ?? false) {
+          // An import that never succeeded is still a row on the layer — the
+          // retry the user can press. Restoring it as an empty *pending* set
+          // keeps the layer looking exactly as it did, error text and all.
+          if (o.errorMessage != null) {
+            await markPoiImportFailed(sid, o.errorMessage!);
+          }
+          return true;
+        }
         // The OSM identity travels with the file (v2), so a re-import over the
         // same ground recognises these POIs instead of drawing them twice. A
         // file without it — or a POI whose id is missing — simply stays outside
         // the dedup check, rather than being given a made-up one.
         final poiIds = o.pointOsmIds ?? const <int>[];
         final poiTypes = o.pointOsmTypes ?? const <String?>[];
-        await addPoiPoints(sid, [
+        final masks = o.pointModeMasks ?? const <int>[];
+        await fillPoiSet(sid, [
           for (var i = 1; i < o.coords.length; i++)
             PoiResult(
               lat: o.coords[i].latitude,
@@ -3184,62 +2678,9 @@ class Repository {
               osmId: i - 1 < poiIds.length && poiIds[i - 1] != 0
                   ? poiIds[i - 1]
                   : null,
+              modeMask: i - 1 < masks.length ? masks[i - 1] : 0,
             ),
         ]);
-        await _applyImportedColor(ColoredElement.poiSet, sid, o.colorArgb);
-      case 'transitstop':
-        // Stations are keyed on their OSM node id — it is the row's identity
-        // *and* what re-import dedup matches on — so a file that doesn't carry
-        // one can't be restored: inventing ids would let two genuinely
-        // different stations collide. That is every transit export written
-        // before this feature, which is exactly the set that used to refuse.
-        final ids = o.pointOsmIds;
-        final unfetched = o.coords.isEmpty && o.bbox != null;
-        if (!unfetched && (o.coords.isEmpty || ids == null || ids.isEmpty)) {
-          return false;
-        }
-        final n = unfetched
-            ? 0
-            : (ids!.length < o.coords.length ? ids.length : o.coords.length);
-        final masks = o.pointModeMasks ?? const <int>[];
-        final nodes = o.pointNodeCounts ?? const <int>[];
-        final refs = o.pointRouteRefs ?? const <String?>[];
-        final names = o.pointLabels ?? const <String?>[];
-        final box = o.bbox ?? _extent(o.coords.take(n));
-        final tid = await createPendingTransitSet(
-          layerId: layerId,
-          south: box[0],
-          west: box[1],
-          north: box[2],
-          east: box[3],
-          modeMask: o.modeMask ?? 0,
-          visibleModeMask: o.visibleModeMask ?? -1,
-          label: o.label,
-        );
-        if (unfetched) {
-          // An import that never succeeded is still a row on the layer — the
-          // retry the user can press. Restoring it as an empty *pending* set
-          // keeps the layer looking exactly as it did, error text and all.
-          if (o.errorMessage != null) {
-            await markTransitImportFailed(tid, o.errorMessage!);
-          }
-          await _applyImportedColor(
-              ColoredElement.transitSet, tid, o.colorArgb);
-          return true;
-        }
-        await fillTransitSet(tid, [
-          for (var i = 0; i < n; i++)
-            (
-              osmId: ids![i],
-              lat: o.coords[i].latitude,
-              lng: o.coords[i].longitude,
-              name: i < names.length ? names[i] : null,
-              modeMask: i < masks.length ? masks[i] : 0,
-              nodeCount: i < nodes.length ? nodes[i] : 1,
-              routeRef: i < refs.length ? refs[i] : null,
-            ),
-        ]);
-        await _applyImportedColor(ColoredElement.transitSet, tid, o.colorArgb);
       case 'borderarea':
         // Never reached: [_insertObjects] batches these — see the comment
         // there. Refused rather than half-handled, so a new call site that
@@ -3268,7 +2709,7 @@ class Repository {
     return max > 0 ? max : 1;
   }
 
-  /// `[south, west, north, east]` of [points] — the fallback box for a transit
+  /// `[south, west, north, east]` of [points] — the fallback box for a border
   /// import whose file didn't record the one it was fetched over.
   List<double> _extent(Iterable<LatLng> points) {
     var s = 90.0, w = 180.0, n = -90.0, e = -180.0;
@@ -3483,15 +2924,12 @@ enum ZMove { toFront, forward, backward, toBack }
 
 enum ColoredElement {
   circle('circles', 'circles'),
-  plane('planes', 'planes'),
   subspace('subspaces', 'subspace'),
   freeLine('free_lines', 'freeline'),
   freeArea('free_areas', 'freearea'),
   heightRegion('height_regions', 'height'),
   poiSet('poi_sets', 'poi'),
-  transitSet('transit_sets', 'transit'),
-  borderArea('border_areas', 'borders'),
-  track('tracks', 'track');
+  borderArea('border_areas', 'borders');
 
   const ColoredElement(this.table, this.layerType);
 
@@ -3511,22 +2949,19 @@ enum ColoredElement {
   /// The kind for an [ObjectKind] name, which is what a *row* knows about
   /// itself.
   ///
-  /// The layer-type lookup cannot answer for a mixed layer — it holds nine
+  /// The layer-type lookup cannot answer for a mixed layer — it holds six
   /// kinds — so anything acting on one element (the Elements-list colour menu,
   /// the editors' colour swatch) must come in this way instead. Takes the
   /// enum's `name` rather than the enum itself so `data/` need not import
   /// `state/`.
   static ColoredElement? forObjectKindName(String kindName) => switch (kindName) {
         'circle' => ColoredElement.circle,
-        'plane' => ColoredElement.plane,
         'subspace' => ColoredElement.subspace,
         'freeLine' => ColoredElement.freeLine,
         'freeArea' => ColoredElement.freeArea,
         'heightRegion' => ColoredElement.heightRegion,
         'poiSet' => ColoredElement.poiSet,
-        'transitSet' => ColoredElement.transitSet,
         'borderArea' => ColoredElement.borderArea,
-        'track' => ColoredElement.track,
         _ => null,
       };
 }

@@ -141,30 +141,6 @@ class $LayersTable extends Layers with TableInfo<$LayersTable, Layer> {
     ),
     defaultValue: const Constant(false),
   );
-  static const VerificationMeta _trackStrokeWidthMeta = const VerificationMeta(
-    'trackStrokeWidth',
-  );
-  @override
-  late final GeneratedColumn<double> trackStrokeWidth = GeneratedColumn<double>(
-    'track_stroke_width',
-    aliasedName,
-    false,
-    type: DriftSqlType.double,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(4.0),
-  );
-  static const VerificationMeta _trackMinDistanceMetersMeta =
-      const VerificationMeta('trackMinDistanceMeters');
-  @override
-  late final GeneratedColumn<double> trackMinDistanceMeters =
-      GeneratedColumn<double>(
-        'track_min_distance_meters',
-        aliasedName,
-        false,
-        type: DriftSqlType.double,
-        requiredDuringInsert: false,
-        defaultValue: const Constant(10.0),
-      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -190,8 +166,6 @@ class $LayersTable extends Layers with TableInfo<$LayersTable, Layer> {
     borderLevel,
     borderFillAreas,
     borderShowNames,
-    trackStrokeWidth,
-    trackMinDistanceMeters,
     createdAt,
   ];
   @override
@@ -286,24 +260,6 @@ class $LayersTable extends Layers with TableInfo<$LayersTable, Layer> {
         ),
       );
     }
-    if (data.containsKey('track_stroke_width')) {
-      context.handle(
-        _trackStrokeWidthMeta,
-        trackStrokeWidth.isAcceptableOrUnknown(
-          data['track_stroke_width']!,
-          _trackStrokeWidthMeta,
-        ),
-      );
-    }
-    if (data.containsKey('track_min_distance_meters')) {
-      context.handle(
-        _trackMinDistanceMetersMeta,
-        trackMinDistanceMeters.isAcceptableOrUnknown(
-          data['track_min_distance_meters']!,
-          _trackMinDistanceMetersMeta,
-        ),
-      );
-    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -363,14 +319,6 @@ class $LayersTable extends Layers with TableInfo<$LayersTable, Layer> {
         DriftSqlType.bool,
         data['${effectivePrefix}border_show_names'],
       )!,
-      trackStrokeWidth: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}track_stroke_width'],
-      )!,
-      trackMinDistanceMeters: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}track_min_distance_meters'],
-      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -393,7 +341,7 @@ class Layer extends DataClass implements Insertable<Layer> {
   final bool isVisible;
   final int sortOrder;
 
-  /// Object kind this layer holds: 'circles' or 'planes'.
+  /// Object kind this layer holds: one of the `k*` types in `layer_types.dart`.
   final String type;
 
   /// When true, render the complement (outside the objects) instead.
@@ -419,14 +367,6 @@ class Layer extends DataClass implements Insertable<Layer> {
 
   /// **`borders` only.** Draw each area's name on a plate at its label anchor.
   final bool borderShowNames;
-
-  /// **`track` only.** Stroke width, in logical pixels, of the recorded line.
-  final double trackStrokeWidth;
-
-  /// **`track` only.** How far the phone must move before another fix is
-  /// stored, in metres — the recorder's `distanceFilter`. Lower is a smoother
-  /// line and more rows; standing still stores nothing either way.
-  final double trackMinDistanceMeters;
   final DateTime createdAt;
   const Layer({
     required this.id,
@@ -440,8 +380,6 @@ class Layer extends DataClass implements Insertable<Layer> {
     this.borderLevel,
     required this.borderFillAreas,
     required this.borderShowNames,
-    required this.trackStrokeWidth,
-    required this.trackMinDistanceMeters,
     required this.createdAt,
   });
   @override
@@ -460,8 +398,6 @@ class Layer extends DataClass implements Insertable<Layer> {
     }
     map['border_fill_areas'] = Variable<bool>(borderFillAreas);
     map['border_show_names'] = Variable<bool>(borderShowNames);
-    map['track_stroke_width'] = Variable<double>(trackStrokeWidth);
-    map['track_min_distance_meters'] = Variable<double>(trackMinDistanceMeters);
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -481,8 +417,6 @@ class Layer extends DataClass implements Insertable<Layer> {
           : Value(borderLevel),
       borderFillAreas: Value(borderFillAreas),
       borderShowNames: Value(borderShowNames),
-      trackStrokeWidth: Value(trackStrokeWidth),
-      trackMinDistanceMeters: Value(trackMinDistanceMeters),
       createdAt: Value(createdAt),
     );
   }
@@ -504,10 +438,6 @@ class Layer extends DataClass implements Insertable<Layer> {
       borderLevel: serializer.fromJson<String?>(json['borderLevel']),
       borderFillAreas: serializer.fromJson<bool>(json['borderFillAreas']),
       borderShowNames: serializer.fromJson<bool>(json['borderShowNames']),
-      trackStrokeWidth: serializer.fromJson<double>(json['trackStrokeWidth']),
-      trackMinDistanceMeters: serializer.fromJson<double>(
-        json['trackMinDistanceMeters'],
-      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -526,10 +456,6 @@ class Layer extends DataClass implements Insertable<Layer> {
       'borderLevel': serializer.toJson<String?>(borderLevel),
       'borderFillAreas': serializer.toJson<bool>(borderFillAreas),
       'borderShowNames': serializer.toJson<bool>(borderShowNames),
-      'trackStrokeWidth': serializer.toJson<double>(trackStrokeWidth),
-      'trackMinDistanceMeters': serializer.toJson<double>(
-        trackMinDistanceMeters,
-      ),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -546,8 +472,6 @@ class Layer extends DataClass implements Insertable<Layer> {
     Value<String?> borderLevel = const Value.absent(),
     bool? borderFillAreas,
     bool? borderShowNames,
-    double? trackStrokeWidth,
-    double? trackMinDistanceMeters,
     DateTime? createdAt,
   }) => Layer(
     id: id ?? this.id,
@@ -561,9 +485,6 @@ class Layer extends DataClass implements Insertable<Layer> {
     borderLevel: borderLevel.present ? borderLevel.value : this.borderLevel,
     borderFillAreas: borderFillAreas ?? this.borderFillAreas,
     borderShowNames: borderShowNames ?? this.borderShowNames,
-    trackStrokeWidth: trackStrokeWidth ?? this.trackStrokeWidth,
-    trackMinDistanceMeters:
-        trackMinDistanceMeters ?? this.trackMinDistanceMeters,
     createdAt: createdAt ?? this.createdAt,
   );
   Layer copyWithCompanion(LayersCompanion data) {
@@ -587,12 +508,6 @@ class Layer extends DataClass implements Insertable<Layer> {
       borderShowNames: data.borderShowNames.present
           ? data.borderShowNames.value
           : this.borderShowNames,
-      trackStrokeWidth: data.trackStrokeWidth.present
-          ? data.trackStrokeWidth.value
-          : this.trackStrokeWidth,
-      trackMinDistanceMeters: data.trackMinDistanceMeters.present
-          ? data.trackMinDistanceMeters.value
-          : this.trackMinDistanceMeters,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -611,8 +526,6 @@ class Layer extends DataClass implements Insertable<Layer> {
           ..write('borderLevel: $borderLevel, ')
           ..write('borderFillAreas: $borderFillAreas, ')
           ..write('borderShowNames: $borderShowNames, ')
-          ..write('trackStrokeWidth: $trackStrokeWidth, ')
-          ..write('trackMinDistanceMeters: $trackMinDistanceMeters, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -631,8 +544,6 @@ class Layer extends DataClass implements Insertable<Layer> {
     borderLevel,
     borderFillAreas,
     borderShowNames,
-    trackStrokeWidth,
-    trackMinDistanceMeters,
     createdAt,
   );
   @override
@@ -650,8 +561,6 @@ class Layer extends DataClass implements Insertable<Layer> {
           other.borderLevel == this.borderLevel &&
           other.borderFillAreas == this.borderFillAreas &&
           other.borderShowNames == this.borderShowNames &&
-          other.trackStrokeWidth == this.trackStrokeWidth &&
-          other.trackMinDistanceMeters == this.trackMinDistanceMeters &&
           other.createdAt == this.createdAt);
 }
 
@@ -667,8 +576,6 @@ class LayersCompanion extends UpdateCompanion<Layer> {
   final Value<String?> borderLevel;
   final Value<bool> borderFillAreas;
   final Value<bool> borderShowNames;
-  final Value<double> trackStrokeWidth;
-  final Value<double> trackMinDistanceMeters;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const LayersCompanion({
@@ -683,8 +590,6 @@ class LayersCompanion extends UpdateCompanion<Layer> {
     this.borderLevel = const Value.absent(),
     this.borderFillAreas = const Value.absent(),
     this.borderShowNames = const Value.absent(),
-    this.trackStrokeWidth = const Value.absent(),
-    this.trackMinDistanceMeters = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -700,8 +605,6 @@ class LayersCompanion extends UpdateCompanion<Layer> {
     this.borderLevel = const Value.absent(),
     this.borderFillAreas = const Value.absent(),
     this.borderShowNames = const Value.absent(),
-    this.trackStrokeWidth = const Value.absent(),
-    this.trackMinDistanceMeters = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -720,8 +623,6 @@ class LayersCompanion extends UpdateCompanion<Layer> {
     Expression<String>? borderLevel,
     Expression<bool>? borderFillAreas,
     Expression<bool>? borderShowNames,
-    Expression<double>? trackStrokeWidth,
-    Expression<double>? trackMinDistanceMeters,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -737,9 +638,6 @@ class LayersCompanion extends UpdateCompanion<Layer> {
       if (borderLevel != null) 'border_level': borderLevel,
       if (borderFillAreas != null) 'border_fill_areas': borderFillAreas,
       if (borderShowNames != null) 'border_show_names': borderShowNames,
-      if (trackStrokeWidth != null) 'track_stroke_width': trackStrokeWidth,
-      if (trackMinDistanceMeters != null)
-        'track_min_distance_meters': trackMinDistanceMeters,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -757,8 +655,6 @@ class LayersCompanion extends UpdateCompanion<Layer> {
     Value<String?>? borderLevel,
     Value<bool>? borderFillAreas,
     Value<bool>? borderShowNames,
-    Value<double>? trackStrokeWidth,
-    Value<double>? trackMinDistanceMeters,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
@@ -774,9 +670,6 @@ class LayersCompanion extends UpdateCompanion<Layer> {
       borderLevel: borderLevel ?? this.borderLevel,
       borderFillAreas: borderFillAreas ?? this.borderFillAreas,
       borderShowNames: borderShowNames ?? this.borderShowNames,
-      trackStrokeWidth: trackStrokeWidth ?? this.trackStrokeWidth,
-      trackMinDistanceMeters:
-          trackMinDistanceMeters ?? this.trackMinDistanceMeters,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -818,14 +711,6 @@ class LayersCompanion extends UpdateCompanion<Layer> {
     if (borderShowNames.present) {
       map['border_show_names'] = Variable<bool>(borderShowNames.value);
     }
-    if (trackStrokeWidth.present) {
-      map['track_stroke_width'] = Variable<double>(trackStrokeWidth.value);
-    }
-    if (trackMinDistanceMeters.present) {
-      map['track_min_distance_meters'] = Variable<double>(
-        trackMinDistanceMeters.value,
-      );
-    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -849,8 +734,6 @@ class LayersCompanion extends UpdateCompanion<Layer> {
           ..write('borderLevel: $borderLevel, ')
           ..write('borderFillAreas: $borderFillAreas, ')
           ..write('borderShowNames: $borderShowNames, ')
-          ..write('trackStrokeWidth: $trackStrokeWidth, ')
-          ..write('trackMinDistanceMeters: $trackMinDistanceMeters, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -1149,7 +1032,7 @@ class Circle extends DataClass implements Insertable<Circle> {
 
   /// Where this element sits in its layer's stack (v26). **Higher is drawn
   /// later, i.e. in front**, and the scope is one layer *and one table*: a
-  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// mixed layer's cross-kind order stays fixed (regions -> markers),
   /// because that is the only order its separate painters can honour.
   ///
   /// Deliberately not [colorShade], which used to imply this: that column also
@@ -1477,718 +1360,6 @@ class CirclesCompanion extends UpdateCompanion<Circle> {
           ..write('centerLat: $centerLat, ')
           ..write('centerLng: $centerLng, ')
           ..write('radiusMeters: $radiusMeters, ')
-          ..write('label: $label, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('colorArgb: $colorArgb, ')
-          ..write('colorShade: $colorShade, ')
-          ..write('zOrder: $zOrder, ')
-          ..write('rowid: $rowid')
-          ..write(')'))
-        .toString();
-  }
-}
-
-class $PlanesTable extends Planes with TableInfo<$PlanesTable, Plane> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  $PlanesTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _idMeta = const VerificationMeta('id');
-  @override
-  late final GeneratedColumn<String> id = GeneratedColumn<String>(
-    'id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _layerIdMeta = const VerificationMeta(
-    'layerId',
-  );
-  @override
-  late final GeneratedColumn<String> layerId = GeneratedColumn<String>(
-    'layer_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES layers (id) ON DELETE CASCADE',
-    ),
-  );
-  static const VerificationMeta _aLatMeta = const VerificationMeta('aLat');
-  @override
-  late final GeneratedColumn<double> aLat = GeneratedColumn<double>(
-    'a_lat',
-    aliasedName,
-    false,
-    type: DriftSqlType.double,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _aLngMeta = const VerificationMeta('aLng');
-  @override
-  late final GeneratedColumn<double> aLng = GeneratedColumn<double>(
-    'a_lng',
-    aliasedName,
-    false,
-    type: DriftSqlType.double,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _bLatMeta = const VerificationMeta('bLat');
-  @override
-  late final GeneratedColumn<double> bLat = GeneratedColumn<double>(
-    'b_lat',
-    aliasedName,
-    false,
-    type: DriftSqlType.double,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _bLngMeta = const VerificationMeta('bLng');
-  @override
-  late final GeneratedColumn<double> bLng = GeneratedColumn<double>(
-    'b_lng',
-    aliasedName,
-    false,
-    type: DriftSqlType.double,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _nearAMeta = const VerificationMeta('nearA');
-  @override
-  late final GeneratedColumn<bool> nearA = GeneratedColumn<bool>(
-    'near_a',
-    aliasedName,
-    false,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("near_a" IN (0, 1))',
-    ),
-    defaultValue: const Constant(true),
-  );
-  static const VerificationMeta _labelMeta = const VerificationMeta('label');
-  @override
-  late final GeneratedColumn<String> label = GeneratedColumn<String>(
-    'label',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _createdAtMeta = const VerificationMeta(
-    'createdAt',
-  );
-  @override
-  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
-    'created_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: false,
-    defaultValue: currentDateAndTime,
-  );
-  static const VerificationMeta _colorArgbMeta = const VerificationMeta(
-    'colorArgb',
-  );
-  @override
-  late final GeneratedColumn<int> colorArgb = GeneratedColumn<int>(
-    'color_argb',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _colorShadeMeta = const VerificationMeta(
-    'colorShade',
-  );
-  @override
-  late final GeneratedColumn<int> colorShade = GeneratedColumn<int>(
-    'color_shade',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0),
-  );
-  static const VerificationMeta _zOrderMeta = const VerificationMeta('zOrder');
-  @override
-  late final GeneratedColumn<int> zOrder = GeneratedColumn<int>(
-    'z_order',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0),
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    id,
-    layerId,
-    aLat,
-    aLng,
-    bLat,
-    bLng,
-    nearA,
-    label,
-    createdAt,
-    colorArgb,
-    colorShade,
-    zOrder,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'planes';
-  @override
-  VerificationContext validateIntegrity(
-    Insertable<Plane> instance, {
-    bool isInserting = false,
-  }) {
-    final context = VerificationContext();
-    final data = instance.toColumns(true);
-    if (data.containsKey('id')) {
-      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
-    } else if (isInserting) {
-      context.missing(_idMeta);
-    }
-    if (data.containsKey('layer_id')) {
-      context.handle(
-        _layerIdMeta,
-        layerId.isAcceptableOrUnknown(data['layer_id']!, _layerIdMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_layerIdMeta);
-    }
-    if (data.containsKey('a_lat')) {
-      context.handle(
-        _aLatMeta,
-        aLat.isAcceptableOrUnknown(data['a_lat']!, _aLatMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_aLatMeta);
-    }
-    if (data.containsKey('a_lng')) {
-      context.handle(
-        _aLngMeta,
-        aLng.isAcceptableOrUnknown(data['a_lng']!, _aLngMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_aLngMeta);
-    }
-    if (data.containsKey('b_lat')) {
-      context.handle(
-        _bLatMeta,
-        bLat.isAcceptableOrUnknown(data['b_lat']!, _bLatMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_bLatMeta);
-    }
-    if (data.containsKey('b_lng')) {
-      context.handle(
-        _bLngMeta,
-        bLng.isAcceptableOrUnknown(data['b_lng']!, _bLngMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_bLngMeta);
-    }
-    if (data.containsKey('near_a')) {
-      context.handle(
-        _nearAMeta,
-        nearA.isAcceptableOrUnknown(data['near_a']!, _nearAMeta),
-      );
-    }
-    if (data.containsKey('label')) {
-      context.handle(
-        _labelMeta,
-        label.isAcceptableOrUnknown(data['label']!, _labelMeta),
-      );
-    }
-    if (data.containsKey('created_at')) {
-      context.handle(
-        _createdAtMeta,
-        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
-      );
-    }
-    if (data.containsKey('color_argb')) {
-      context.handle(
-        _colorArgbMeta,
-        colorArgb.isAcceptableOrUnknown(data['color_argb']!, _colorArgbMeta),
-      );
-    }
-    if (data.containsKey('color_shade')) {
-      context.handle(
-        _colorShadeMeta,
-        colorShade.isAcceptableOrUnknown(data['color_shade']!, _colorShadeMeta),
-      );
-    }
-    if (data.containsKey('z_order')) {
-      context.handle(
-        _zOrderMeta,
-        zOrder.isAcceptableOrUnknown(data['z_order']!, _zOrderMeta),
-      );
-    }
-    return context;
-  }
-
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  Plane map(Map<String, dynamic> data, {String? tablePrefix}) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return Plane(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}id'],
-      )!,
-      layerId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}layer_id'],
-      )!,
-      aLat: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}a_lat'],
-      )!,
-      aLng: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}a_lng'],
-      )!,
-      bLat: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}b_lat'],
-      )!,
-      bLng: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}b_lng'],
-      )!,
-      nearA: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}near_a'],
-      )!,
-      label: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}label'],
-      ),
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}created_at'],
-      )!,
-      colorArgb: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}color_argb'],
-      ),
-      colorShade: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}color_shade'],
-      )!,
-      zOrder: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}z_order'],
-      )!,
-    );
-  }
-
-  @override
-  $PlanesTable createAlias(String alias) {
-    return $PlanesTable(attachedDatabase, alias);
-  }
-}
-
-class Plane extends DataClass implements Insertable<Plane> {
-  final String id;
-  final String layerId;
-  final double aLat;
-  final double aLng;
-  final double bLat;
-  final double bLng;
-  final bool nearA;
-  final String? label;
-  final DateTime createdAt;
-
-  /// Per-element colour (v22). Null = follow the layer: the element paints in
-  /// its auto **shade** of the layer colour, picked by [colorShade] so the
-  /// elements of one layer tell each other apart and all follow a layer
-  /// recolour. A set value overrides that and survives a layer recolour, which
-  /// is what makes the recolour dialog ask what to do with them.
-  final int? colorArgb;
-
-  /// Which auto shade this element takes, assigned in creation order within the
-  /// layer. **0 is the layer colour exactly**, which is what every row
-  /// migrating in from v21 gets — an untouched map must look untouched.
-  final int colorShade;
-
-  /// Where this element sits in its layer's stack (v26). **Higher is drawn
-  /// later, i.e. in front**, and the scope is one layer *and one table*: a
-  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
-  /// because that is the only order its separate painters can honour.
-  ///
-  /// Deliberately not [colorShade], which used to imply this: that column also
-  /// picks the auto shade, so moving an element forward would have recoloured
-  /// it. Assigned one past the layer's current maximum on create, so a new
-  /// element lands on top — which is what "the newest element wins an overlap"
-  /// already meant, now said out loud instead of inferred.
-  final int zOrder;
-  const Plane({
-    required this.id,
-    required this.layerId,
-    required this.aLat,
-    required this.aLng,
-    required this.bLat,
-    required this.bLng,
-    required this.nearA,
-    this.label,
-    required this.createdAt,
-    this.colorArgb,
-    required this.colorShade,
-    required this.zOrder,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['id'] = Variable<String>(id);
-    map['layer_id'] = Variable<String>(layerId);
-    map['a_lat'] = Variable<double>(aLat);
-    map['a_lng'] = Variable<double>(aLng);
-    map['b_lat'] = Variable<double>(bLat);
-    map['b_lng'] = Variable<double>(bLng);
-    map['near_a'] = Variable<bool>(nearA);
-    if (!nullToAbsent || label != null) {
-      map['label'] = Variable<String>(label);
-    }
-    map['created_at'] = Variable<DateTime>(createdAt);
-    if (!nullToAbsent || colorArgb != null) {
-      map['color_argb'] = Variable<int>(colorArgb);
-    }
-    map['color_shade'] = Variable<int>(colorShade);
-    map['z_order'] = Variable<int>(zOrder);
-    return map;
-  }
-
-  PlanesCompanion toCompanion(bool nullToAbsent) {
-    return PlanesCompanion(
-      id: Value(id),
-      layerId: Value(layerId),
-      aLat: Value(aLat),
-      aLng: Value(aLng),
-      bLat: Value(bLat),
-      bLng: Value(bLng),
-      nearA: Value(nearA),
-      label: label == null && nullToAbsent
-          ? const Value.absent()
-          : Value(label),
-      createdAt: Value(createdAt),
-      colorArgb: colorArgb == null && nullToAbsent
-          ? const Value.absent()
-          : Value(colorArgb),
-      colorShade: Value(colorShade),
-      zOrder: Value(zOrder),
-    );
-  }
-
-  factory Plane.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return Plane(
-      id: serializer.fromJson<String>(json['id']),
-      layerId: serializer.fromJson<String>(json['layerId']),
-      aLat: serializer.fromJson<double>(json['aLat']),
-      aLng: serializer.fromJson<double>(json['aLng']),
-      bLat: serializer.fromJson<double>(json['bLat']),
-      bLng: serializer.fromJson<double>(json['bLng']),
-      nearA: serializer.fromJson<bool>(json['nearA']),
-      label: serializer.fromJson<String?>(json['label']),
-      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
-      colorArgb: serializer.fromJson<int?>(json['colorArgb']),
-      colorShade: serializer.fromJson<int>(json['colorShade']),
-      zOrder: serializer.fromJson<int>(json['zOrder']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'id': serializer.toJson<String>(id),
-      'layerId': serializer.toJson<String>(layerId),
-      'aLat': serializer.toJson<double>(aLat),
-      'aLng': serializer.toJson<double>(aLng),
-      'bLat': serializer.toJson<double>(bLat),
-      'bLng': serializer.toJson<double>(bLng),
-      'nearA': serializer.toJson<bool>(nearA),
-      'label': serializer.toJson<String?>(label),
-      'createdAt': serializer.toJson<DateTime>(createdAt),
-      'colorArgb': serializer.toJson<int?>(colorArgb),
-      'colorShade': serializer.toJson<int>(colorShade),
-      'zOrder': serializer.toJson<int>(zOrder),
-    };
-  }
-
-  Plane copyWith({
-    String? id,
-    String? layerId,
-    double? aLat,
-    double? aLng,
-    double? bLat,
-    double? bLng,
-    bool? nearA,
-    Value<String?> label = const Value.absent(),
-    DateTime? createdAt,
-    Value<int?> colorArgb = const Value.absent(),
-    int? colorShade,
-    int? zOrder,
-  }) => Plane(
-    id: id ?? this.id,
-    layerId: layerId ?? this.layerId,
-    aLat: aLat ?? this.aLat,
-    aLng: aLng ?? this.aLng,
-    bLat: bLat ?? this.bLat,
-    bLng: bLng ?? this.bLng,
-    nearA: nearA ?? this.nearA,
-    label: label.present ? label.value : this.label,
-    createdAt: createdAt ?? this.createdAt,
-    colorArgb: colorArgb.present ? colorArgb.value : this.colorArgb,
-    colorShade: colorShade ?? this.colorShade,
-    zOrder: zOrder ?? this.zOrder,
-  );
-  Plane copyWithCompanion(PlanesCompanion data) {
-    return Plane(
-      id: data.id.present ? data.id.value : this.id,
-      layerId: data.layerId.present ? data.layerId.value : this.layerId,
-      aLat: data.aLat.present ? data.aLat.value : this.aLat,
-      aLng: data.aLng.present ? data.aLng.value : this.aLng,
-      bLat: data.bLat.present ? data.bLat.value : this.bLat,
-      bLng: data.bLng.present ? data.bLng.value : this.bLng,
-      nearA: data.nearA.present ? data.nearA.value : this.nearA,
-      label: data.label.present ? data.label.value : this.label,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-      colorArgb: data.colorArgb.present ? data.colorArgb.value : this.colorArgb,
-      colorShade: data.colorShade.present
-          ? data.colorShade.value
-          : this.colorShade,
-      zOrder: data.zOrder.present ? data.zOrder.value : this.zOrder,
-    );
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('Plane(')
-          ..write('id: $id, ')
-          ..write('layerId: $layerId, ')
-          ..write('aLat: $aLat, ')
-          ..write('aLng: $aLng, ')
-          ..write('bLat: $bLat, ')
-          ..write('bLng: $bLng, ')
-          ..write('nearA: $nearA, ')
-          ..write('label: $label, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('colorArgb: $colorArgb, ')
-          ..write('colorShade: $colorShade, ')
-          ..write('zOrder: $zOrder')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hash(
-    id,
-    layerId,
-    aLat,
-    aLng,
-    bLat,
-    bLng,
-    nearA,
-    label,
-    createdAt,
-    colorArgb,
-    colorShade,
-    zOrder,
-  );
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is Plane &&
-          other.id == this.id &&
-          other.layerId == this.layerId &&
-          other.aLat == this.aLat &&
-          other.aLng == this.aLng &&
-          other.bLat == this.bLat &&
-          other.bLng == this.bLng &&
-          other.nearA == this.nearA &&
-          other.label == this.label &&
-          other.createdAt == this.createdAt &&
-          other.colorArgb == this.colorArgb &&
-          other.colorShade == this.colorShade &&
-          other.zOrder == this.zOrder);
-}
-
-class PlanesCompanion extends UpdateCompanion<Plane> {
-  final Value<String> id;
-  final Value<String> layerId;
-  final Value<double> aLat;
-  final Value<double> aLng;
-  final Value<double> bLat;
-  final Value<double> bLng;
-  final Value<bool> nearA;
-  final Value<String?> label;
-  final Value<DateTime> createdAt;
-  final Value<int?> colorArgb;
-  final Value<int> colorShade;
-  final Value<int> zOrder;
-  final Value<int> rowid;
-  const PlanesCompanion({
-    this.id = const Value.absent(),
-    this.layerId = const Value.absent(),
-    this.aLat = const Value.absent(),
-    this.aLng = const Value.absent(),
-    this.bLat = const Value.absent(),
-    this.bLng = const Value.absent(),
-    this.nearA = const Value.absent(),
-    this.label = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.colorArgb = const Value.absent(),
-    this.colorShade = const Value.absent(),
-    this.zOrder = const Value.absent(),
-    this.rowid = const Value.absent(),
-  });
-  PlanesCompanion.insert({
-    required String id,
-    required String layerId,
-    required double aLat,
-    required double aLng,
-    required double bLat,
-    required double bLng,
-    this.nearA = const Value.absent(),
-    this.label = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.colorArgb = const Value.absent(),
-    this.colorShade = const Value.absent(),
-    this.zOrder = const Value.absent(),
-    this.rowid = const Value.absent(),
-  }) : id = Value(id),
-       layerId = Value(layerId),
-       aLat = Value(aLat),
-       aLng = Value(aLng),
-       bLat = Value(bLat),
-       bLng = Value(bLng);
-  static Insertable<Plane> custom({
-    Expression<String>? id,
-    Expression<String>? layerId,
-    Expression<double>? aLat,
-    Expression<double>? aLng,
-    Expression<double>? bLat,
-    Expression<double>? bLng,
-    Expression<bool>? nearA,
-    Expression<String>? label,
-    Expression<DateTime>? createdAt,
-    Expression<int>? colorArgb,
-    Expression<int>? colorShade,
-    Expression<int>? zOrder,
-    Expression<int>? rowid,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (layerId != null) 'layer_id': layerId,
-      if (aLat != null) 'a_lat': aLat,
-      if (aLng != null) 'a_lng': aLng,
-      if (bLat != null) 'b_lat': bLat,
-      if (bLng != null) 'b_lng': bLng,
-      if (nearA != null) 'near_a': nearA,
-      if (label != null) 'label': label,
-      if (createdAt != null) 'created_at': createdAt,
-      if (colorArgb != null) 'color_argb': colorArgb,
-      if (colorShade != null) 'color_shade': colorShade,
-      if (zOrder != null) 'z_order': zOrder,
-      if (rowid != null) 'rowid': rowid,
-    });
-  }
-
-  PlanesCompanion copyWith({
-    Value<String>? id,
-    Value<String>? layerId,
-    Value<double>? aLat,
-    Value<double>? aLng,
-    Value<double>? bLat,
-    Value<double>? bLng,
-    Value<bool>? nearA,
-    Value<String?>? label,
-    Value<DateTime>? createdAt,
-    Value<int?>? colorArgb,
-    Value<int>? colorShade,
-    Value<int>? zOrder,
-    Value<int>? rowid,
-  }) {
-    return PlanesCompanion(
-      id: id ?? this.id,
-      layerId: layerId ?? this.layerId,
-      aLat: aLat ?? this.aLat,
-      aLng: aLng ?? this.aLng,
-      bLat: bLat ?? this.bLat,
-      bLng: bLng ?? this.bLng,
-      nearA: nearA ?? this.nearA,
-      label: label ?? this.label,
-      createdAt: createdAt ?? this.createdAt,
-      colorArgb: colorArgb ?? this.colorArgb,
-      colorShade: colorShade ?? this.colorShade,
-      zOrder: zOrder ?? this.zOrder,
-      rowid: rowid ?? this.rowid,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<String>(id.value);
-    }
-    if (layerId.present) {
-      map['layer_id'] = Variable<String>(layerId.value);
-    }
-    if (aLat.present) {
-      map['a_lat'] = Variable<double>(aLat.value);
-    }
-    if (aLng.present) {
-      map['a_lng'] = Variable<double>(aLng.value);
-    }
-    if (bLat.present) {
-      map['b_lat'] = Variable<double>(bLat.value);
-    }
-    if (bLng.present) {
-      map['b_lng'] = Variable<double>(bLng.value);
-    }
-    if (nearA.present) {
-      map['near_a'] = Variable<bool>(nearA.value);
-    }
-    if (label.present) {
-      map['label'] = Variable<String>(label.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<DateTime>(createdAt.value);
-    }
-    if (colorArgb.present) {
-      map['color_argb'] = Variable<int>(colorArgb.value);
-    }
-    if (colorShade.present) {
-      map['color_shade'] = Variable<int>(colorShade.value);
-    }
-    if (zOrder.present) {
-      map['z_order'] = Variable<int>(zOrder.value);
-    }
-    if (rowid.present) {
-      map['rowid'] = Variable<int>(rowid.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('PlanesCompanion(')
-          ..write('id: $id, ')
-          ..write('layerId: $layerId, ')
-          ..write('aLat: $aLat, ')
-          ..write('aLng: $aLng, ')
-          ..write('bLat: $bLat, ')
-          ..write('bLng: $bLng, ')
-          ..write('nearA: $nearA, ')
           ..write('label: $label, ')
           ..write('createdAt: $createdAt, ')
           ..write('colorArgb: $colorArgb, ')
@@ -3174,7 +2345,7 @@ class Subspace extends DataClass implements Insertable<Subspace> {
 
   /// Where this element sits in its layer's stack (v26). **Higher is drawn
   /// later, i.e. in front**, and the scope is one layer *and one table*: a
-  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// mixed layer's cross-kind order stays fixed (regions -> markers),
   /// because that is the only order its separate painters can honour.
   ///
   /// Deliberately not [colorShade], which used to imply this: that column also
@@ -4272,7 +3443,7 @@ class FreeLine extends DataClass implements Insertable<FreeLine> {
 
   /// Where this element sits in its layer's stack (v26). **Higher is drawn
   /// later, i.e. in front**, and the scope is one layer *and one table*: a
-  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// mixed layer's cross-kind order stays fixed (regions -> markers),
   /// because that is the only order its separate painters can honour.
   ///
   /// Deliberately not [colorShade], which used to imply this: that column also
@@ -5070,1137 +4241,6 @@ class FreeLinePointsCompanion extends UpdateCompanion<FreeLinePoint> {
   }
 }
 
-class $TracksTable extends Tracks with TableInfo<$TracksTable, Track> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  $TracksTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _idMeta = const VerificationMeta('id');
-  @override
-  late final GeneratedColumn<String> id = GeneratedColumn<String>(
-    'id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _layerIdMeta = const VerificationMeta(
-    'layerId',
-  );
-  @override
-  late final GeneratedColumn<String> layerId = GeneratedColumn<String>(
-    'layer_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES layers (id) ON DELETE CASCADE',
-    ),
-  );
-  static const VerificationMeta _labelMeta = const VerificationMeta('label');
-  @override
-  late final GeneratedColumn<String> label = GeneratedColumn<String>(
-    'label',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _createdAtMeta = const VerificationMeta(
-    'createdAt',
-  );
-  @override
-  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
-    'created_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: false,
-    defaultValue: currentDateAndTime,
-  );
-  static const VerificationMeta _colorArgbMeta = const VerificationMeta(
-    'colorArgb',
-  );
-  @override
-  late final GeneratedColumn<int> colorArgb = GeneratedColumn<int>(
-    'color_argb',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _colorShadeMeta = const VerificationMeta(
-    'colorShade',
-  );
-  @override
-  late final GeneratedColumn<int> colorShade = GeneratedColumn<int>(
-    'color_shade',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0),
-  );
-  static const VerificationMeta _zOrderMeta = const VerificationMeta('zOrder');
-  @override
-  late final GeneratedColumn<int> zOrder = GeneratedColumn<int>(
-    'z_order',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0),
-  );
-  static const VerificationMeta _southMeta = const VerificationMeta('south');
-  @override
-  late final GeneratedColumn<double> south = GeneratedColumn<double>(
-    'south',
-    aliasedName,
-    true,
-    type: DriftSqlType.double,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _westMeta = const VerificationMeta('west');
-  @override
-  late final GeneratedColumn<double> west = GeneratedColumn<double>(
-    'west',
-    aliasedName,
-    true,
-    type: DriftSqlType.double,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _northMeta = const VerificationMeta('north');
-  @override
-  late final GeneratedColumn<double> north = GeneratedColumn<double>(
-    'north',
-    aliasedName,
-    true,
-    type: DriftSqlType.double,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _eastMeta = const VerificationMeta('east');
-  @override
-  late final GeneratedColumn<double> east = GeneratedColumn<double>(
-    'east',
-    aliasedName,
-    true,
-    type: DriftSqlType.double,
-    requiredDuringInsert: false,
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    id,
-    layerId,
-    label,
-    createdAt,
-    colorArgb,
-    colorShade,
-    zOrder,
-    south,
-    west,
-    north,
-    east,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'tracks';
-  @override
-  VerificationContext validateIntegrity(
-    Insertable<Track> instance, {
-    bool isInserting = false,
-  }) {
-    final context = VerificationContext();
-    final data = instance.toColumns(true);
-    if (data.containsKey('id')) {
-      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
-    } else if (isInserting) {
-      context.missing(_idMeta);
-    }
-    if (data.containsKey('layer_id')) {
-      context.handle(
-        _layerIdMeta,
-        layerId.isAcceptableOrUnknown(data['layer_id']!, _layerIdMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_layerIdMeta);
-    }
-    if (data.containsKey('label')) {
-      context.handle(
-        _labelMeta,
-        label.isAcceptableOrUnknown(data['label']!, _labelMeta),
-      );
-    }
-    if (data.containsKey('created_at')) {
-      context.handle(
-        _createdAtMeta,
-        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
-      );
-    }
-    if (data.containsKey('color_argb')) {
-      context.handle(
-        _colorArgbMeta,
-        colorArgb.isAcceptableOrUnknown(data['color_argb']!, _colorArgbMeta),
-      );
-    }
-    if (data.containsKey('color_shade')) {
-      context.handle(
-        _colorShadeMeta,
-        colorShade.isAcceptableOrUnknown(data['color_shade']!, _colorShadeMeta),
-      );
-    }
-    if (data.containsKey('z_order')) {
-      context.handle(
-        _zOrderMeta,
-        zOrder.isAcceptableOrUnknown(data['z_order']!, _zOrderMeta),
-      );
-    }
-    if (data.containsKey('south')) {
-      context.handle(
-        _southMeta,
-        south.isAcceptableOrUnknown(data['south']!, _southMeta),
-      );
-    }
-    if (data.containsKey('west')) {
-      context.handle(
-        _westMeta,
-        west.isAcceptableOrUnknown(data['west']!, _westMeta),
-      );
-    }
-    if (data.containsKey('north')) {
-      context.handle(
-        _northMeta,
-        north.isAcceptableOrUnknown(data['north']!, _northMeta),
-      );
-    }
-    if (data.containsKey('east')) {
-      context.handle(
-        _eastMeta,
-        east.isAcceptableOrUnknown(data['east']!, _eastMeta),
-      );
-    }
-    return context;
-  }
-
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  Track map(Map<String, dynamic> data, {String? tablePrefix}) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return Track(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}id'],
-      )!,
-      layerId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}layer_id'],
-      )!,
-      label: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}label'],
-      ),
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}created_at'],
-      )!,
-      colorArgb: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}color_argb'],
-      ),
-      colorShade: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}color_shade'],
-      )!,
-      zOrder: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}z_order'],
-      )!,
-      south: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}south'],
-      ),
-      west: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}west'],
-      ),
-      north: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}north'],
-      ),
-      east: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}east'],
-      ),
-    );
-  }
-
-  @override
-  $TracksTable createAlias(String alias) {
-    return $TracksTable(attachedDatabase, alias);
-  }
-}
-
-class Track extends DataClass implements Insertable<Track> {
-  final String id;
-  final String layerId;
-  final String? label;
-  final DateTime createdAt;
-
-  /// Per-element colour (v22). Null = follow the layer — see [FreeLines].
-  final int? colorArgb;
-
-  /// Which auto shade this element takes; **0 is the layer colour exactly**.
-  final int colorShade;
-
-  /// Where this element sits in its layer's stack (v26). **Higher is drawn
-  /// later, i.e. in front**, and the scope is one layer *and one table*: a
-  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
-  /// because that is the only order its separate painters can honour.
-  ///
-  /// Deliberately not [colorShade], which used to imply this: that column also
-  /// picks the auto shade, so moving an element forward would have recoloured
-  /// it. Assigned one past the layer's current maximum on create, so a new
-  /// element lands on top — which is what "the newest element wins an overlap"
-  /// already meant, now said out loud instead of inferred.
-  final int zOrder;
-
-  /// Denormalised bounds of every point, for viewport culling — the
-  /// [BorderAreas] precedent. Null while the track is still empty, which is
-  /// also how the painter knows there is nothing to draw.
-  final double? south;
-  final double? west;
-  final double? north;
-  final double? east;
-  const Track({
-    required this.id,
-    required this.layerId,
-    this.label,
-    required this.createdAt,
-    this.colorArgb,
-    required this.colorShade,
-    required this.zOrder,
-    this.south,
-    this.west,
-    this.north,
-    this.east,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['id'] = Variable<String>(id);
-    map['layer_id'] = Variable<String>(layerId);
-    if (!nullToAbsent || label != null) {
-      map['label'] = Variable<String>(label);
-    }
-    map['created_at'] = Variable<DateTime>(createdAt);
-    if (!nullToAbsent || colorArgb != null) {
-      map['color_argb'] = Variable<int>(colorArgb);
-    }
-    map['color_shade'] = Variable<int>(colorShade);
-    map['z_order'] = Variable<int>(zOrder);
-    if (!nullToAbsent || south != null) {
-      map['south'] = Variable<double>(south);
-    }
-    if (!nullToAbsent || west != null) {
-      map['west'] = Variable<double>(west);
-    }
-    if (!nullToAbsent || north != null) {
-      map['north'] = Variable<double>(north);
-    }
-    if (!nullToAbsent || east != null) {
-      map['east'] = Variable<double>(east);
-    }
-    return map;
-  }
-
-  TracksCompanion toCompanion(bool nullToAbsent) {
-    return TracksCompanion(
-      id: Value(id),
-      layerId: Value(layerId),
-      label: label == null && nullToAbsent
-          ? const Value.absent()
-          : Value(label),
-      createdAt: Value(createdAt),
-      colorArgb: colorArgb == null && nullToAbsent
-          ? const Value.absent()
-          : Value(colorArgb),
-      colorShade: Value(colorShade),
-      zOrder: Value(zOrder),
-      south: south == null && nullToAbsent
-          ? const Value.absent()
-          : Value(south),
-      west: west == null && nullToAbsent ? const Value.absent() : Value(west),
-      north: north == null && nullToAbsent
-          ? const Value.absent()
-          : Value(north),
-      east: east == null && nullToAbsent ? const Value.absent() : Value(east),
-    );
-  }
-
-  factory Track.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return Track(
-      id: serializer.fromJson<String>(json['id']),
-      layerId: serializer.fromJson<String>(json['layerId']),
-      label: serializer.fromJson<String?>(json['label']),
-      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
-      colorArgb: serializer.fromJson<int?>(json['colorArgb']),
-      colorShade: serializer.fromJson<int>(json['colorShade']),
-      zOrder: serializer.fromJson<int>(json['zOrder']),
-      south: serializer.fromJson<double?>(json['south']),
-      west: serializer.fromJson<double?>(json['west']),
-      north: serializer.fromJson<double?>(json['north']),
-      east: serializer.fromJson<double?>(json['east']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'id': serializer.toJson<String>(id),
-      'layerId': serializer.toJson<String>(layerId),
-      'label': serializer.toJson<String?>(label),
-      'createdAt': serializer.toJson<DateTime>(createdAt),
-      'colorArgb': serializer.toJson<int?>(colorArgb),
-      'colorShade': serializer.toJson<int>(colorShade),
-      'zOrder': serializer.toJson<int>(zOrder),
-      'south': serializer.toJson<double?>(south),
-      'west': serializer.toJson<double?>(west),
-      'north': serializer.toJson<double?>(north),
-      'east': serializer.toJson<double?>(east),
-    };
-  }
-
-  Track copyWith({
-    String? id,
-    String? layerId,
-    Value<String?> label = const Value.absent(),
-    DateTime? createdAt,
-    Value<int?> colorArgb = const Value.absent(),
-    int? colorShade,
-    int? zOrder,
-    Value<double?> south = const Value.absent(),
-    Value<double?> west = const Value.absent(),
-    Value<double?> north = const Value.absent(),
-    Value<double?> east = const Value.absent(),
-  }) => Track(
-    id: id ?? this.id,
-    layerId: layerId ?? this.layerId,
-    label: label.present ? label.value : this.label,
-    createdAt: createdAt ?? this.createdAt,
-    colorArgb: colorArgb.present ? colorArgb.value : this.colorArgb,
-    colorShade: colorShade ?? this.colorShade,
-    zOrder: zOrder ?? this.zOrder,
-    south: south.present ? south.value : this.south,
-    west: west.present ? west.value : this.west,
-    north: north.present ? north.value : this.north,
-    east: east.present ? east.value : this.east,
-  );
-  Track copyWithCompanion(TracksCompanion data) {
-    return Track(
-      id: data.id.present ? data.id.value : this.id,
-      layerId: data.layerId.present ? data.layerId.value : this.layerId,
-      label: data.label.present ? data.label.value : this.label,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-      colorArgb: data.colorArgb.present ? data.colorArgb.value : this.colorArgb,
-      colorShade: data.colorShade.present
-          ? data.colorShade.value
-          : this.colorShade,
-      zOrder: data.zOrder.present ? data.zOrder.value : this.zOrder,
-      south: data.south.present ? data.south.value : this.south,
-      west: data.west.present ? data.west.value : this.west,
-      north: data.north.present ? data.north.value : this.north,
-      east: data.east.present ? data.east.value : this.east,
-    );
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('Track(')
-          ..write('id: $id, ')
-          ..write('layerId: $layerId, ')
-          ..write('label: $label, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('colorArgb: $colorArgb, ')
-          ..write('colorShade: $colorShade, ')
-          ..write('zOrder: $zOrder, ')
-          ..write('south: $south, ')
-          ..write('west: $west, ')
-          ..write('north: $north, ')
-          ..write('east: $east')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hash(
-    id,
-    layerId,
-    label,
-    createdAt,
-    colorArgb,
-    colorShade,
-    zOrder,
-    south,
-    west,
-    north,
-    east,
-  );
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is Track &&
-          other.id == this.id &&
-          other.layerId == this.layerId &&
-          other.label == this.label &&
-          other.createdAt == this.createdAt &&
-          other.colorArgb == this.colorArgb &&
-          other.colorShade == this.colorShade &&
-          other.zOrder == this.zOrder &&
-          other.south == this.south &&
-          other.west == this.west &&
-          other.north == this.north &&
-          other.east == this.east);
-}
-
-class TracksCompanion extends UpdateCompanion<Track> {
-  final Value<String> id;
-  final Value<String> layerId;
-  final Value<String?> label;
-  final Value<DateTime> createdAt;
-  final Value<int?> colorArgb;
-  final Value<int> colorShade;
-  final Value<int> zOrder;
-  final Value<double?> south;
-  final Value<double?> west;
-  final Value<double?> north;
-  final Value<double?> east;
-  final Value<int> rowid;
-  const TracksCompanion({
-    this.id = const Value.absent(),
-    this.layerId = const Value.absent(),
-    this.label = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.colorArgb = const Value.absent(),
-    this.colorShade = const Value.absent(),
-    this.zOrder = const Value.absent(),
-    this.south = const Value.absent(),
-    this.west = const Value.absent(),
-    this.north = const Value.absent(),
-    this.east = const Value.absent(),
-    this.rowid = const Value.absent(),
-  });
-  TracksCompanion.insert({
-    required String id,
-    required String layerId,
-    this.label = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.colorArgb = const Value.absent(),
-    this.colorShade = const Value.absent(),
-    this.zOrder = const Value.absent(),
-    this.south = const Value.absent(),
-    this.west = const Value.absent(),
-    this.north = const Value.absent(),
-    this.east = const Value.absent(),
-    this.rowid = const Value.absent(),
-  }) : id = Value(id),
-       layerId = Value(layerId);
-  static Insertable<Track> custom({
-    Expression<String>? id,
-    Expression<String>? layerId,
-    Expression<String>? label,
-    Expression<DateTime>? createdAt,
-    Expression<int>? colorArgb,
-    Expression<int>? colorShade,
-    Expression<int>? zOrder,
-    Expression<double>? south,
-    Expression<double>? west,
-    Expression<double>? north,
-    Expression<double>? east,
-    Expression<int>? rowid,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (layerId != null) 'layer_id': layerId,
-      if (label != null) 'label': label,
-      if (createdAt != null) 'created_at': createdAt,
-      if (colorArgb != null) 'color_argb': colorArgb,
-      if (colorShade != null) 'color_shade': colorShade,
-      if (zOrder != null) 'z_order': zOrder,
-      if (south != null) 'south': south,
-      if (west != null) 'west': west,
-      if (north != null) 'north': north,
-      if (east != null) 'east': east,
-      if (rowid != null) 'rowid': rowid,
-    });
-  }
-
-  TracksCompanion copyWith({
-    Value<String>? id,
-    Value<String>? layerId,
-    Value<String?>? label,
-    Value<DateTime>? createdAt,
-    Value<int?>? colorArgb,
-    Value<int>? colorShade,
-    Value<int>? zOrder,
-    Value<double?>? south,
-    Value<double?>? west,
-    Value<double?>? north,
-    Value<double?>? east,
-    Value<int>? rowid,
-  }) {
-    return TracksCompanion(
-      id: id ?? this.id,
-      layerId: layerId ?? this.layerId,
-      label: label ?? this.label,
-      createdAt: createdAt ?? this.createdAt,
-      colorArgb: colorArgb ?? this.colorArgb,
-      colorShade: colorShade ?? this.colorShade,
-      zOrder: zOrder ?? this.zOrder,
-      south: south ?? this.south,
-      west: west ?? this.west,
-      north: north ?? this.north,
-      east: east ?? this.east,
-      rowid: rowid ?? this.rowid,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<String>(id.value);
-    }
-    if (layerId.present) {
-      map['layer_id'] = Variable<String>(layerId.value);
-    }
-    if (label.present) {
-      map['label'] = Variable<String>(label.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<DateTime>(createdAt.value);
-    }
-    if (colorArgb.present) {
-      map['color_argb'] = Variable<int>(colorArgb.value);
-    }
-    if (colorShade.present) {
-      map['color_shade'] = Variable<int>(colorShade.value);
-    }
-    if (zOrder.present) {
-      map['z_order'] = Variable<int>(zOrder.value);
-    }
-    if (south.present) {
-      map['south'] = Variable<double>(south.value);
-    }
-    if (west.present) {
-      map['west'] = Variable<double>(west.value);
-    }
-    if (north.present) {
-      map['north'] = Variable<double>(north.value);
-    }
-    if (east.present) {
-      map['east'] = Variable<double>(east.value);
-    }
-    if (rowid.present) {
-      map['rowid'] = Variable<int>(rowid.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('TracksCompanion(')
-          ..write('id: $id, ')
-          ..write('layerId: $layerId, ')
-          ..write('label: $label, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('colorArgb: $colorArgb, ')
-          ..write('colorShade: $colorShade, ')
-          ..write('zOrder: $zOrder, ')
-          ..write('south: $south, ')
-          ..write('west: $west, ')
-          ..write('north: $north, ')
-          ..write('east: $east, ')
-          ..write('rowid: $rowid')
-          ..write(')'))
-        .toString();
-  }
-}
-
-class $TrackPointsTable extends TrackPoints
-    with TableInfo<$TrackPointsTable, TrackPoint> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  $TrackPointsTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _idMeta = const VerificationMeta('id');
-  @override
-  late final GeneratedColumn<String> id = GeneratedColumn<String>(
-    'id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _trackIdMeta = const VerificationMeta(
-    'trackId',
-  );
-  @override
-  late final GeneratedColumn<String> trackId = GeneratedColumn<String>(
-    'track_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES tracks (id) ON DELETE CASCADE',
-    ),
-  );
-  static const VerificationMeta _latMeta = const VerificationMeta('lat');
-  @override
-  late final GeneratedColumn<double> lat = GeneratedColumn<double>(
-    'lat',
-    aliasedName,
-    false,
-    type: DriftSqlType.double,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _lngMeta = const VerificationMeta('lng');
-  @override
-  late final GeneratedColumn<double> lng = GeneratedColumn<double>(
-    'lng',
-    aliasedName,
-    false,
-    type: DriftSqlType.double,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
-    'sortOrder',
-  );
-  @override
-  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
-    'sort_order',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _segmentIndexMeta = const VerificationMeta(
-    'segmentIndex',
-  );
-  @override
-  late final GeneratedColumn<int> segmentIndex = GeneratedColumn<int>(
-    'segment_index',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0),
-  );
-  static const VerificationMeta _recordedAtMeta = const VerificationMeta(
-    'recordedAt',
-  );
-  @override
-  late final GeneratedColumn<DateTime> recordedAt = GeneratedColumn<DateTime>(
-    'recorded_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: false,
-    defaultValue: currentDateAndTime,
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    id,
-    trackId,
-    lat,
-    lng,
-    sortOrder,
-    segmentIndex,
-    recordedAt,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'track_points';
-  @override
-  VerificationContext validateIntegrity(
-    Insertable<TrackPoint> instance, {
-    bool isInserting = false,
-  }) {
-    final context = VerificationContext();
-    final data = instance.toColumns(true);
-    if (data.containsKey('id')) {
-      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
-    } else if (isInserting) {
-      context.missing(_idMeta);
-    }
-    if (data.containsKey('track_id')) {
-      context.handle(
-        _trackIdMeta,
-        trackId.isAcceptableOrUnknown(data['track_id']!, _trackIdMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_trackIdMeta);
-    }
-    if (data.containsKey('lat')) {
-      context.handle(
-        _latMeta,
-        lat.isAcceptableOrUnknown(data['lat']!, _latMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_latMeta);
-    }
-    if (data.containsKey('lng')) {
-      context.handle(
-        _lngMeta,
-        lng.isAcceptableOrUnknown(data['lng']!, _lngMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_lngMeta);
-    }
-    if (data.containsKey('sort_order')) {
-      context.handle(
-        _sortOrderMeta,
-        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_sortOrderMeta);
-    }
-    if (data.containsKey('segment_index')) {
-      context.handle(
-        _segmentIndexMeta,
-        segmentIndex.isAcceptableOrUnknown(
-          data['segment_index']!,
-          _segmentIndexMeta,
-        ),
-      );
-    }
-    if (data.containsKey('recorded_at')) {
-      context.handle(
-        _recordedAtMeta,
-        recordedAt.isAcceptableOrUnknown(data['recorded_at']!, _recordedAtMeta),
-      );
-    }
-    return context;
-  }
-
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  TrackPoint map(Map<String, dynamic> data, {String? tablePrefix}) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return TrackPoint(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}id'],
-      )!,
-      trackId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}track_id'],
-      )!,
-      lat: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}lat'],
-      )!,
-      lng: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}lng'],
-      )!,
-      sortOrder: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}sort_order'],
-      )!,
-      segmentIndex: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}segment_index'],
-      )!,
-      recordedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}recorded_at'],
-      )!,
-    );
-  }
-
-  @override
-  $TrackPointsTable createAlias(String alias) {
-    return $TrackPointsTable(attachedDatabase, alias);
-  }
-}
-
-class TrackPoint extends DataClass implements Insertable<TrackPoint> {
-  final String id;
-  final String trackId;
-  final double lat;
-  final double lng;
-  final int sortOrder;
-
-  /// Which recording run this fix belongs to. A change of segment is a **break**
-  /// in the drawn line, never a new element: recording two walks into one track
-  /// must not join them with a straight line across the map. Bumped when
-  /// recording starts and when a fix arrives after a long gap (a lost signal, a
-  /// tunnel, or the app having been in the background).
-  final int segmentIndex;
-
-  /// When the fix was taken — the input to the gap rule above, and the only
-  /// thing that says a track is a recording rather than a drawing.
-  final DateTime recordedAt;
-  const TrackPoint({
-    required this.id,
-    required this.trackId,
-    required this.lat,
-    required this.lng,
-    required this.sortOrder,
-    required this.segmentIndex,
-    required this.recordedAt,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['id'] = Variable<String>(id);
-    map['track_id'] = Variable<String>(trackId);
-    map['lat'] = Variable<double>(lat);
-    map['lng'] = Variable<double>(lng);
-    map['sort_order'] = Variable<int>(sortOrder);
-    map['segment_index'] = Variable<int>(segmentIndex);
-    map['recorded_at'] = Variable<DateTime>(recordedAt);
-    return map;
-  }
-
-  TrackPointsCompanion toCompanion(bool nullToAbsent) {
-    return TrackPointsCompanion(
-      id: Value(id),
-      trackId: Value(trackId),
-      lat: Value(lat),
-      lng: Value(lng),
-      sortOrder: Value(sortOrder),
-      segmentIndex: Value(segmentIndex),
-      recordedAt: Value(recordedAt),
-    );
-  }
-
-  factory TrackPoint.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return TrackPoint(
-      id: serializer.fromJson<String>(json['id']),
-      trackId: serializer.fromJson<String>(json['trackId']),
-      lat: serializer.fromJson<double>(json['lat']),
-      lng: serializer.fromJson<double>(json['lng']),
-      sortOrder: serializer.fromJson<int>(json['sortOrder']),
-      segmentIndex: serializer.fromJson<int>(json['segmentIndex']),
-      recordedAt: serializer.fromJson<DateTime>(json['recordedAt']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'id': serializer.toJson<String>(id),
-      'trackId': serializer.toJson<String>(trackId),
-      'lat': serializer.toJson<double>(lat),
-      'lng': serializer.toJson<double>(lng),
-      'sortOrder': serializer.toJson<int>(sortOrder),
-      'segmentIndex': serializer.toJson<int>(segmentIndex),
-      'recordedAt': serializer.toJson<DateTime>(recordedAt),
-    };
-  }
-
-  TrackPoint copyWith({
-    String? id,
-    String? trackId,
-    double? lat,
-    double? lng,
-    int? sortOrder,
-    int? segmentIndex,
-    DateTime? recordedAt,
-  }) => TrackPoint(
-    id: id ?? this.id,
-    trackId: trackId ?? this.trackId,
-    lat: lat ?? this.lat,
-    lng: lng ?? this.lng,
-    sortOrder: sortOrder ?? this.sortOrder,
-    segmentIndex: segmentIndex ?? this.segmentIndex,
-    recordedAt: recordedAt ?? this.recordedAt,
-  );
-  TrackPoint copyWithCompanion(TrackPointsCompanion data) {
-    return TrackPoint(
-      id: data.id.present ? data.id.value : this.id,
-      trackId: data.trackId.present ? data.trackId.value : this.trackId,
-      lat: data.lat.present ? data.lat.value : this.lat,
-      lng: data.lng.present ? data.lng.value : this.lng,
-      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
-      segmentIndex: data.segmentIndex.present
-          ? data.segmentIndex.value
-          : this.segmentIndex,
-      recordedAt: data.recordedAt.present
-          ? data.recordedAt.value
-          : this.recordedAt,
-    );
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('TrackPoint(')
-          ..write('id: $id, ')
-          ..write('trackId: $trackId, ')
-          ..write('lat: $lat, ')
-          ..write('lng: $lng, ')
-          ..write('sortOrder: $sortOrder, ')
-          ..write('segmentIndex: $segmentIndex, ')
-          ..write('recordedAt: $recordedAt')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode =>
-      Object.hash(id, trackId, lat, lng, sortOrder, segmentIndex, recordedAt);
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is TrackPoint &&
-          other.id == this.id &&
-          other.trackId == this.trackId &&
-          other.lat == this.lat &&
-          other.lng == this.lng &&
-          other.sortOrder == this.sortOrder &&
-          other.segmentIndex == this.segmentIndex &&
-          other.recordedAt == this.recordedAt);
-}
-
-class TrackPointsCompanion extends UpdateCompanion<TrackPoint> {
-  final Value<String> id;
-  final Value<String> trackId;
-  final Value<double> lat;
-  final Value<double> lng;
-  final Value<int> sortOrder;
-  final Value<int> segmentIndex;
-  final Value<DateTime> recordedAt;
-  final Value<int> rowid;
-  const TrackPointsCompanion({
-    this.id = const Value.absent(),
-    this.trackId = const Value.absent(),
-    this.lat = const Value.absent(),
-    this.lng = const Value.absent(),
-    this.sortOrder = const Value.absent(),
-    this.segmentIndex = const Value.absent(),
-    this.recordedAt = const Value.absent(),
-    this.rowid = const Value.absent(),
-  });
-  TrackPointsCompanion.insert({
-    required String id,
-    required String trackId,
-    required double lat,
-    required double lng,
-    required int sortOrder,
-    this.segmentIndex = const Value.absent(),
-    this.recordedAt = const Value.absent(),
-    this.rowid = const Value.absent(),
-  }) : id = Value(id),
-       trackId = Value(trackId),
-       lat = Value(lat),
-       lng = Value(lng),
-       sortOrder = Value(sortOrder);
-  static Insertable<TrackPoint> custom({
-    Expression<String>? id,
-    Expression<String>? trackId,
-    Expression<double>? lat,
-    Expression<double>? lng,
-    Expression<int>? sortOrder,
-    Expression<int>? segmentIndex,
-    Expression<DateTime>? recordedAt,
-    Expression<int>? rowid,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (trackId != null) 'track_id': trackId,
-      if (lat != null) 'lat': lat,
-      if (lng != null) 'lng': lng,
-      if (sortOrder != null) 'sort_order': sortOrder,
-      if (segmentIndex != null) 'segment_index': segmentIndex,
-      if (recordedAt != null) 'recorded_at': recordedAt,
-      if (rowid != null) 'rowid': rowid,
-    });
-  }
-
-  TrackPointsCompanion copyWith({
-    Value<String>? id,
-    Value<String>? trackId,
-    Value<double>? lat,
-    Value<double>? lng,
-    Value<int>? sortOrder,
-    Value<int>? segmentIndex,
-    Value<DateTime>? recordedAt,
-    Value<int>? rowid,
-  }) {
-    return TrackPointsCompanion(
-      id: id ?? this.id,
-      trackId: trackId ?? this.trackId,
-      lat: lat ?? this.lat,
-      lng: lng ?? this.lng,
-      sortOrder: sortOrder ?? this.sortOrder,
-      segmentIndex: segmentIndex ?? this.segmentIndex,
-      recordedAt: recordedAt ?? this.recordedAt,
-      rowid: rowid ?? this.rowid,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<String>(id.value);
-    }
-    if (trackId.present) {
-      map['track_id'] = Variable<String>(trackId.value);
-    }
-    if (lat.present) {
-      map['lat'] = Variable<double>(lat.value);
-    }
-    if (lng.present) {
-      map['lng'] = Variable<double>(lng.value);
-    }
-    if (sortOrder.present) {
-      map['sort_order'] = Variable<int>(sortOrder.value);
-    }
-    if (segmentIndex.present) {
-      map['segment_index'] = Variable<int>(segmentIndex.value);
-    }
-    if (recordedAt.present) {
-      map['recorded_at'] = Variable<DateTime>(recordedAt.value);
-    }
-    if (rowid.present) {
-      map['rowid'] = Variable<int>(rowid.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('TrackPointsCompanion(')
-          ..write('id: $id, ')
-          ..write('trackId: $trackId, ')
-          ..write('lat: $lat, ')
-          ..write('lng: $lng, ')
-          ..write('sortOrder: $sortOrder, ')
-          ..write('segmentIndex: $segmentIndex, ')
-          ..write('recordedAt: $recordedAt, ')
-          ..write('rowid: $rowid')
-          ..write(')'))
-        .toString();
-  }
-}
-
 class $FreeAreasTable extends FreeAreas
     with TableInfo<$FreeAreasTable, FreeArea> {
   @override
@@ -6444,7 +4484,7 @@ class FreeArea extends DataClass implements Insertable<FreeArea> {
 
   /// Where this element sits in its layer's stack (v26). **Higher is drawn
   /// later, i.e. in front**, and the scope is one layer *and one table*: a
-  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// mixed layer's cross-kind order stays fixed (regions -> markers),
   /// because that is the only order its separate painters can honour.
   ///
   /// Deliberately not [colorShade], which used to imply this: that column also
@@ -7555,7 +5595,7 @@ class HeightRegion extends DataClass implements Insertable<HeightRegion> {
 
   /// Where this element sits in its layer's stack (v26). **Higher is drawn
   /// later, i.e. in front**, and the scope is one layer *and one table*: a
-  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// mixed layer's cross-kind order stays fixed (regions -> markers),
   /// because that is the only order its separate painters can honour.
   ///
   /// Deliberately not [colorShade], which used to imply this: that column also
@@ -8849,20 +6889,97 @@ class $PoiSetsTable extends PoiSets with TableInfo<$PoiSetsTable, PoiSet> {
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
-  static const VerificationMeta _isManualMeta = const VerificationMeta(
-    'isManual',
-  );
+  static const VerificationMeta _sourceMeta = const VerificationMeta('source');
   @override
-  late final GeneratedColumn<bool> isManual = GeneratedColumn<bool>(
-    'is_manual',
+  late final GeneratedColumn<String> source = GeneratedColumn<String>(
+    'source',
     aliasedName,
     false,
-    type: DriftSqlType.bool,
+    type: DriftSqlType.string,
     requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("is_manual" IN (0, 1))',
-    ),
-    defaultValue: const Constant(false),
+    defaultValue: const Constant('radius'),
+  );
+  static const VerificationMeta _southMeta = const VerificationMeta('south');
+  @override
+  late final GeneratedColumn<double> south = GeneratedColumn<double>(
+    'south',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _westMeta = const VerificationMeta('west');
+  @override
+  late final GeneratedColumn<double> west = GeneratedColumn<double>(
+    'west',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _northMeta = const VerificationMeta('north');
+  @override
+  late final GeneratedColumn<double> north = GeneratedColumn<double>(
+    'north',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _eastMeta = const VerificationMeta('east');
+  @override
+  late final GeneratedColumn<double> east = GeneratedColumn<double>(
+    'east',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _modeMaskMeta = const VerificationMeta(
+    'modeMask',
+  );
+  @override
+  late final GeneratedColumn<int> modeMask = GeneratedColumn<int>(
+    'mode_mask',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _visibleModeMaskMeta = const VerificationMeta(
+    'visibleModeMask',
+  );
+  @override
+  late final GeneratedColumn<int> visibleModeMask = GeneratedColumn<int>(
+    'visible_mode_mask',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(-1),
+  );
+  static const VerificationMeta _fetchedAtMeta = const VerificationMeta(
+    'fetchedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> fetchedAt = GeneratedColumn<DateTime>(
+    'fetched_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastErrorMeta = const VerificationMeta(
+    'lastError',
+  );
+  @override
+  late final GeneratedColumn<String> lastError = GeneratedColumn<String>(
+    'last_error',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
   );
   static const VerificationMeta _iconKeyMeta = const VerificationMeta(
     'iconKey',
@@ -8888,7 +7005,15 @@ class $PoiSetsTable extends PoiSets with TableInfo<$PoiSetsTable, PoiSet> {
     colorArgb,
     colorShade,
     zOrder,
-    isManual,
+    source,
+    south,
+    west,
+    north,
+    east,
+    modeMask,
+    visibleModeMask,
+    fetchedAt,
+    lastError,
     iconKey,
   ];
   @override
@@ -8984,10 +7109,61 @@ class $PoiSetsTable extends PoiSets with TableInfo<$PoiSetsTable, PoiSet> {
         zOrder.isAcceptableOrUnknown(data['z_order']!, _zOrderMeta),
       );
     }
-    if (data.containsKey('is_manual')) {
+    if (data.containsKey('source')) {
       context.handle(
-        _isManualMeta,
-        isManual.isAcceptableOrUnknown(data['is_manual']!, _isManualMeta),
+        _sourceMeta,
+        source.isAcceptableOrUnknown(data['source']!, _sourceMeta),
+      );
+    }
+    if (data.containsKey('south')) {
+      context.handle(
+        _southMeta,
+        south.isAcceptableOrUnknown(data['south']!, _southMeta),
+      );
+    }
+    if (data.containsKey('west')) {
+      context.handle(
+        _westMeta,
+        west.isAcceptableOrUnknown(data['west']!, _westMeta),
+      );
+    }
+    if (data.containsKey('north')) {
+      context.handle(
+        _northMeta,
+        north.isAcceptableOrUnknown(data['north']!, _northMeta),
+      );
+    }
+    if (data.containsKey('east')) {
+      context.handle(
+        _eastMeta,
+        east.isAcceptableOrUnknown(data['east']!, _eastMeta),
+      );
+    }
+    if (data.containsKey('mode_mask')) {
+      context.handle(
+        _modeMaskMeta,
+        modeMask.isAcceptableOrUnknown(data['mode_mask']!, _modeMaskMeta),
+      );
+    }
+    if (data.containsKey('visible_mode_mask')) {
+      context.handle(
+        _visibleModeMaskMeta,
+        visibleModeMask.isAcceptableOrUnknown(
+          data['visible_mode_mask']!,
+          _visibleModeMaskMeta,
+        ),
+      );
+    }
+    if (data.containsKey('fetched_at')) {
+      context.handle(
+        _fetchedAtMeta,
+        fetchedAt.isAcceptableOrUnknown(data['fetched_at']!, _fetchedAtMeta),
+      );
+    }
+    if (data.containsKey('last_error')) {
+      context.handle(
+        _lastErrorMeta,
+        lastError.isAcceptableOrUnknown(data['last_error']!, _lastErrorMeta),
       );
     }
     if (data.containsKey('icon_key')) {
@@ -9049,10 +7225,42 @@ class $PoiSetsTable extends PoiSets with TableInfo<$PoiSetsTable, PoiSet> {
         DriftSqlType.int,
         data['${effectivePrefix}z_order'],
       )!,
-      isManual: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}is_manual'],
+      source: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source'],
       )!,
+      south: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}south'],
+      ),
+      west: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}west'],
+      ),
+      north: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}north'],
+      ),
+      east: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}east'],
+      ),
+      modeMask: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}mode_mask'],
+      )!,
+      visibleModeMask: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}visible_mode_mask'],
+      )!,
+      fetchedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}fetched_at'],
+      ),
+      lastError: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_error'],
+      ),
       iconKey: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}icon_key'],
@@ -9092,7 +7300,7 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
 
   /// Where this element sits in its layer's stack (v26). **Higher is drawn
   /// later, i.e. in front**, and the scope is one layer *and one table*: a
-  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// mixed layer's cross-kind order stays fixed (regions -> markers),
   /// because that is the only order its separate painters can honour.
   ///
   /// Deliberately not [colorShade], which used to imply this: that column also
@@ -9102,15 +7310,47 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
   /// already meant, now said out loud instead of inferred.
   final int zOrder;
 
-  /// A category the user made rather than an Overpass import (v25).
+  /// Which kind of set this is: [kPoiSourceManual], [kPoiSourceRadius] or
+  /// [kPoiSourceBox] (v27; replaced the v25 `is_manual` flag when station
+  /// imports joined the table — a bool and a nullable box read together in
+  /// eight places is exactly the two-copies rule this app keeps avoiding).
   ///
   /// The distinction is what keeps an import honest: a fetched set is a
-  /// snapshot of what OSM returned, so its category, centre and radius describe
-  /// a query that already ran and nothing may be added to it by hand. A manual
-  /// set describes no query at all — [centerLat]/[centerLng]/[radiusMeters]
-  /// hold the map centre and 0 purely because the columns are NOT NULL, and the
-  /// editor does not show them.
-  final bool isManual;
+  /// snapshot of what OSM returned, so its query describes something that
+  /// already ran and nothing may be added to it by hand. A manual set describes
+  /// no query at all — [centerLat]/[centerLng]/[radiusMeters] hold the map
+  /// centre and 0 purely because the columns are NOT NULL, and the editor does
+  /// not show them. A box set likewise holds its box's centre and half-diagonal
+  /// there; nothing reads them for a box either.
+  final String source;
+
+  /// **Box sets only.** The imported bounding box; null on the other kinds.
+  final double? south;
+  final double? west;
+  final double? north;
+  final double? east;
+
+  /// **Box sets only.** Which modes were fetched (packed `TransitMode.bit`s),
+  /// chosen in the import dialog. This is the **contents** of the set, not a
+  /// filter: what it omits was never stored, so widening it means importing
+  /// again — which is exactly what a retry of a failed import must not do
+  /// differently. 0 on the other kinds.
+  final int modeMask;
+
+  /// **Box sets only.** Which of those modes are **shown**. This is what the
+  /// filter sheet writes; it starts from `modeMask & defaultVisibleModes(...)`,
+  /// which hides buses on a city-sized import because they outnumber
+  /// everything else ~7:1.
+  final int visibleModeMask;
+
+  /// When the data was pulled from OSM. **Null on an import = it hasn't
+  /// succeeded yet** — the layer shows it as a retry row until it does, so a
+  /// failure is something you can come back to rather than a lost snackbar.
+  /// Always null on a manual set, which was never fetched.
+  final DateTime? fetchedAt;
+
+  /// Why the last attempt failed, shown on that retry row.
+  final String? lastError;
 
   /// Marker icon for a manual set — a key into `poiIcons` (`ui/poi_icons.dart`).
   ///
@@ -9130,7 +7370,15 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
     this.colorArgb,
     required this.colorShade,
     required this.zOrder,
-    required this.isManual,
+    required this.source,
+    this.south,
+    this.west,
+    this.north,
+    this.east,
+    required this.modeMask,
+    required this.visibleModeMask,
+    this.fetchedAt,
+    this.lastError,
     this.iconKey,
   });
   @override
@@ -9151,7 +7399,27 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
     }
     map['color_shade'] = Variable<int>(colorShade);
     map['z_order'] = Variable<int>(zOrder);
-    map['is_manual'] = Variable<bool>(isManual);
+    map['source'] = Variable<String>(source);
+    if (!nullToAbsent || south != null) {
+      map['south'] = Variable<double>(south);
+    }
+    if (!nullToAbsent || west != null) {
+      map['west'] = Variable<double>(west);
+    }
+    if (!nullToAbsent || north != null) {
+      map['north'] = Variable<double>(north);
+    }
+    if (!nullToAbsent || east != null) {
+      map['east'] = Variable<double>(east);
+    }
+    map['mode_mask'] = Variable<int>(modeMask);
+    map['visible_mode_mask'] = Variable<int>(visibleModeMask);
+    if (!nullToAbsent || fetchedAt != null) {
+      map['fetched_at'] = Variable<DateTime>(fetchedAt);
+    }
+    if (!nullToAbsent || lastError != null) {
+      map['last_error'] = Variable<String>(lastError);
+    }
     if (!nullToAbsent || iconKey != null) {
       map['icon_key'] = Variable<String>(iconKey);
     }
@@ -9175,7 +7443,23 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
           : Value(colorArgb),
       colorShade: Value(colorShade),
       zOrder: Value(zOrder),
-      isManual: Value(isManual),
+      source: Value(source),
+      south: south == null && nullToAbsent
+          ? const Value.absent()
+          : Value(south),
+      west: west == null && nullToAbsent ? const Value.absent() : Value(west),
+      north: north == null && nullToAbsent
+          ? const Value.absent()
+          : Value(north),
+      east: east == null && nullToAbsent ? const Value.absent() : Value(east),
+      modeMask: Value(modeMask),
+      visibleModeMask: Value(visibleModeMask),
+      fetchedAt: fetchedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fetchedAt),
+      lastError: lastError == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastError),
       iconKey: iconKey == null && nullToAbsent
           ? const Value.absent()
           : Value(iconKey),
@@ -9199,7 +7483,15 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
       colorArgb: serializer.fromJson<int?>(json['colorArgb']),
       colorShade: serializer.fromJson<int>(json['colorShade']),
       zOrder: serializer.fromJson<int>(json['zOrder']),
-      isManual: serializer.fromJson<bool>(json['isManual']),
+      source: serializer.fromJson<String>(json['source']),
+      south: serializer.fromJson<double?>(json['south']),
+      west: serializer.fromJson<double?>(json['west']),
+      north: serializer.fromJson<double?>(json['north']),
+      east: serializer.fromJson<double?>(json['east']),
+      modeMask: serializer.fromJson<int>(json['modeMask']),
+      visibleModeMask: serializer.fromJson<int>(json['visibleModeMask']),
+      fetchedAt: serializer.fromJson<DateTime?>(json['fetchedAt']),
+      lastError: serializer.fromJson<String?>(json['lastError']),
       iconKey: serializer.fromJson<String?>(json['iconKey']),
     );
   }
@@ -9218,7 +7510,15 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
       'colorArgb': serializer.toJson<int?>(colorArgb),
       'colorShade': serializer.toJson<int>(colorShade),
       'zOrder': serializer.toJson<int>(zOrder),
-      'isManual': serializer.toJson<bool>(isManual),
+      'source': serializer.toJson<String>(source),
+      'south': serializer.toJson<double?>(south),
+      'west': serializer.toJson<double?>(west),
+      'north': serializer.toJson<double?>(north),
+      'east': serializer.toJson<double?>(east),
+      'modeMask': serializer.toJson<int>(modeMask),
+      'visibleModeMask': serializer.toJson<int>(visibleModeMask),
+      'fetchedAt': serializer.toJson<DateTime?>(fetchedAt),
+      'lastError': serializer.toJson<String?>(lastError),
       'iconKey': serializer.toJson<String?>(iconKey),
     };
   }
@@ -9235,7 +7535,15 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
     Value<int?> colorArgb = const Value.absent(),
     int? colorShade,
     int? zOrder,
-    bool? isManual,
+    String? source,
+    Value<double?> south = const Value.absent(),
+    Value<double?> west = const Value.absent(),
+    Value<double?> north = const Value.absent(),
+    Value<double?> east = const Value.absent(),
+    int? modeMask,
+    int? visibleModeMask,
+    Value<DateTime?> fetchedAt = const Value.absent(),
+    Value<String?> lastError = const Value.absent(),
     Value<String?> iconKey = const Value.absent(),
   }) => PoiSet(
     id: id ?? this.id,
@@ -9249,7 +7557,15 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
     colorArgb: colorArgb.present ? colorArgb.value : this.colorArgb,
     colorShade: colorShade ?? this.colorShade,
     zOrder: zOrder ?? this.zOrder,
-    isManual: isManual ?? this.isManual,
+    source: source ?? this.source,
+    south: south.present ? south.value : this.south,
+    west: west.present ? west.value : this.west,
+    north: north.present ? north.value : this.north,
+    east: east.present ? east.value : this.east,
+    modeMask: modeMask ?? this.modeMask,
+    visibleModeMask: visibleModeMask ?? this.visibleModeMask,
+    fetchedAt: fetchedAt.present ? fetchedAt.value : this.fetchedAt,
+    lastError: lastError.present ? lastError.value : this.lastError,
     iconKey: iconKey.present ? iconKey.value : this.iconKey,
   );
   PoiSet copyWithCompanion(PoiSetsCompanion data) {
@@ -9271,7 +7587,17 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
           ? data.colorShade.value
           : this.colorShade,
       zOrder: data.zOrder.present ? data.zOrder.value : this.zOrder,
-      isManual: data.isManual.present ? data.isManual.value : this.isManual,
+      source: data.source.present ? data.source.value : this.source,
+      south: data.south.present ? data.south.value : this.south,
+      west: data.west.present ? data.west.value : this.west,
+      north: data.north.present ? data.north.value : this.north,
+      east: data.east.present ? data.east.value : this.east,
+      modeMask: data.modeMask.present ? data.modeMask.value : this.modeMask,
+      visibleModeMask: data.visibleModeMask.present
+          ? data.visibleModeMask.value
+          : this.visibleModeMask,
+      fetchedAt: data.fetchedAt.present ? data.fetchedAt.value : this.fetchedAt,
+      lastError: data.lastError.present ? data.lastError.value : this.lastError,
       iconKey: data.iconKey.present ? data.iconKey.value : this.iconKey,
     );
   }
@@ -9290,14 +7616,22 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
           ..write('colorArgb: $colorArgb, ')
           ..write('colorShade: $colorShade, ')
           ..write('zOrder: $zOrder, ')
-          ..write('isManual: $isManual, ')
+          ..write('source: $source, ')
+          ..write('south: $south, ')
+          ..write('west: $west, ')
+          ..write('north: $north, ')
+          ..write('east: $east, ')
+          ..write('modeMask: $modeMask, ')
+          ..write('visibleModeMask: $visibleModeMask, ')
+          ..write('fetchedAt: $fetchedAt, ')
+          ..write('lastError: $lastError, ')
           ..write('iconKey: $iconKey')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     layerId,
     categoryKey,
@@ -9309,9 +7643,17 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
     colorArgb,
     colorShade,
     zOrder,
-    isManual,
+    source,
+    south,
+    west,
+    north,
+    east,
+    modeMask,
+    visibleModeMask,
+    fetchedAt,
+    lastError,
     iconKey,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -9327,7 +7669,15 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
           other.colorArgb == this.colorArgb &&
           other.colorShade == this.colorShade &&
           other.zOrder == this.zOrder &&
-          other.isManual == this.isManual &&
+          other.source == this.source &&
+          other.south == this.south &&
+          other.west == this.west &&
+          other.north == this.north &&
+          other.east == this.east &&
+          other.modeMask == this.modeMask &&
+          other.visibleModeMask == this.visibleModeMask &&
+          other.fetchedAt == this.fetchedAt &&
+          other.lastError == this.lastError &&
           other.iconKey == this.iconKey);
 }
 
@@ -9343,7 +7693,15 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
   final Value<int?> colorArgb;
   final Value<int> colorShade;
   final Value<int> zOrder;
-  final Value<bool> isManual;
+  final Value<String> source;
+  final Value<double?> south;
+  final Value<double?> west;
+  final Value<double?> north;
+  final Value<double?> east;
+  final Value<int> modeMask;
+  final Value<int> visibleModeMask;
+  final Value<DateTime?> fetchedAt;
+  final Value<String?> lastError;
   final Value<String?> iconKey;
   final Value<int> rowid;
   const PoiSetsCompanion({
@@ -9358,7 +7716,15 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
     this.colorArgb = const Value.absent(),
     this.colorShade = const Value.absent(),
     this.zOrder = const Value.absent(),
-    this.isManual = const Value.absent(),
+    this.source = const Value.absent(),
+    this.south = const Value.absent(),
+    this.west = const Value.absent(),
+    this.north = const Value.absent(),
+    this.east = const Value.absent(),
+    this.modeMask = const Value.absent(),
+    this.visibleModeMask = const Value.absent(),
+    this.fetchedAt = const Value.absent(),
+    this.lastError = const Value.absent(),
     this.iconKey = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -9374,7 +7740,15 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
     this.colorArgb = const Value.absent(),
     this.colorShade = const Value.absent(),
     this.zOrder = const Value.absent(),
-    this.isManual = const Value.absent(),
+    this.source = const Value.absent(),
+    this.south = const Value.absent(),
+    this.west = const Value.absent(),
+    this.north = const Value.absent(),
+    this.east = const Value.absent(),
+    this.modeMask = const Value.absent(),
+    this.visibleModeMask = const Value.absent(),
+    this.fetchedAt = const Value.absent(),
+    this.lastError = const Value.absent(),
     this.iconKey = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -9395,7 +7769,15 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
     Expression<int>? colorArgb,
     Expression<int>? colorShade,
     Expression<int>? zOrder,
-    Expression<bool>? isManual,
+    Expression<String>? source,
+    Expression<double>? south,
+    Expression<double>? west,
+    Expression<double>? north,
+    Expression<double>? east,
+    Expression<int>? modeMask,
+    Expression<int>? visibleModeMask,
+    Expression<DateTime>? fetchedAt,
+    Expression<String>? lastError,
     Expression<String>? iconKey,
     Expression<int>? rowid,
   }) {
@@ -9411,7 +7793,15 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
       if (colorArgb != null) 'color_argb': colorArgb,
       if (colorShade != null) 'color_shade': colorShade,
       if (zOrder != null) 'z_order': zOrder,
-      if (isManual != null) 'is_manual': isManual,
+      if (source != null) 'source': source,
+      if (south != null) 'south': south,
+      if (west != null) 'west': west,
+      if (north != null) 'north': north,
+      if (east != null) 'east': east,
+      if (modeMask != null) 'mode_mask': modeMask,
+      if (visibleModeMask != null) 'visible_mode_mask': visibleModeMask,
+      if (fetchedAt != null) 'fetched_at': fetchedAt,
+      if (lastError != null) 'last_error': lastError,
       if (iconKey != null) 'icon_key': iconKey,
       if (rowid != null) 'rowid': rowid,
     });
@@ -9429,7 +7819,15 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
     Value<int?>? colorArgb,
     Value<int>? colorShade,
     Value<int>? zOrder,
-    Value<bool>? isManual,
+    Value<String>? source,
+    Value<double?>? south,
+    Value<double?>? west,
+    Value<double?>? north,
+    Value<double?>? east,
+    Value<int>? modeMask,
+    Value<int>? visibleModeMask,
+    Value<DateTime?>? fetchedAt,
+    Value<String?>? lastError,
     Value<String?>? iconKey,
     Value<int>? rowid,
   }) {
@@ -9445,7 +7843,15 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
       colorArgb: colorArgb ?? this.colorArgb,
       colorShade: colorShade ?? this.colorShade,
       zOrder: zOrder ?? this.zOrder,
-      isManual: isManual ?? this.isManual,
+      source: source ?? this.source,
+      south: south ?? this.south,
+      west: west ?? this.west,
+      north: north ?? this.north,
+      east: east ?? this.east,
+      modeMask: modeMask ?? this.modeMask,
+      visibleModeMask: visibleModeMask ?? this.visibleModeMask,
+      fetchedAt: fetchedAt ?? this.fetchedAt,
+      lastError: lastError ?? this.lastError,
       iconKey: iconKey ?? this.iconKey,
       rowid: rowid ?? this.rowid,
     );
@@ -9487,8 +7893,32 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
     if (zOrder.present) {
       map['z_order'] = Variable<int>(zOrder.value);
     }
-    if (isManual.present) {
-      map['is_manual'] = Variable<bool>(isManual.value);
+    if (source.present) {
+      map['source'] = Variable<String>(source.value);
+    }
+    if (south.present) {
+      map['south'] = Variable<double>(south.value);
+    }
+    if (west.present) {
+      map['west'] = Variable<double>(west.value);
+    }
+    if (north.present) {
+      map['north'] = Variable<double>(north.value);
+    }
+    if (east.present) {
+      map['east'] = Variable<double>(east.value);
+    }
+    if (modeMask.present) {
+      map['mode_mask'] = Variable<int>(modeMask.value);
+    }
+    if (visibleModeMask.present) {
+      map['visible_mode_mask'] = Variable<int>(visibleModeMask.value);
+    }
+    if (fetchedAt.present) {
+      map['fetched_at'] = Variable<DateTime>(fetchedAt.value);
+    }
+    if (lastError.present) {
+      map['last_error'] = Variable<String>(lastError.value);
     }
     if (iconKey.present) {
       map['icon_key'] = Variable<String>(iconKey.value);
@@ -9513,7 +7943,15 @@ class PoiSetsCompanion extends UpdateCompanion<PoiSet> {
           ..write('colorArgb: $colorArgb, ')
           ..write('colorShade: $colorShade, ')
           ..write('zOrder: $zOrder, ')
-          ..write('isManual: $isManual, ')
+          ..write('source: $source, ')
+          ..write('south: $south, ')
+          ..write('west: $west, ')
+          ..write('north: $north, ')
+          ..write('east: $east, ')
+          ..write('modeMask: $modeMask, ')
+          ..write('visibleModeMask: $visibleModeMask, ')
+          ..write('fetchedAt: $fetchedAt, ')
+          ..write('lastError: $lastError, ')
           ..write('iconKey: $iconKey, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -9620,6 +8058,18 @@ class $PoiPointsTable extends PoiPoints
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _modeMaskMeta = const VerificationMeta(
+    'modeMask',
+  );
+  @override
+  late final GeneratedColumn<int> modeMask = GeneratedColumn<int>(
+    'mode_mask',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -9631,6 +8081,7 @@ class $PoiPointsTable extends PoiPoints
     createdAt,
     osmType,
     osmId,
+    modeMask,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -9705,6 +8156,12 @@ class $PoiPointsTable extends PoiPoints
         osmId.isAcceptableOrUnknown(data['osm_id']!, _osmIdMeta),
       );
     }
+    if (data.containsKey('mode_mask')) {
+      context.handle(
+        _modeMaskMeta,
+        modeMask.isAcceptableOrUnknown(data['mode_mask']!, _modeMaskMeta),
+      );
+    }
     return context;
   }
 
@@ -9750,6 +8207,10 @@ class $PoiPointsTable extends PoiPoints
         DriftSqlType.int,
         data['${effectivePrefix}osm_id'],
       ),
+      modeMask: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}mode_mask'],
+      )!,
     );
   }
 
@@ -9776,9 +8237,15 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
   /// Nullable because rows imported before v21 never recorded it, and a
   /// backfill is impossible — the id was not merely unstored, it was never
   /// fetched. An unidentified row simply doesn't participate in dedup; see
-  /// [Repository.addPoiPoints].
+  /// [Repository.fillPoiSet].
   final String? osmType;
   final int? osmId;
+
+  /// **Stations only** (a box set's points): the modes serving this station
+  /// (packed bits); 0 = the data doesn't say, and 0 on every other kind of
+  /// point. A station is drawn iff `poiPointVisible` says so — one predicate
+  /// for the painter and the hit test.
+  final int modeMask;
   const PoiPoint({
     required this.id,
     required this.poiSetId,
@@ -9789,6 +8256,7 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
     required this.createdAt,
     this.osmType,
     this.osmId,
+    required this.modeMask,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -9808,6 +8276,7 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
     if (!nullToAbsent || osmId != null) {
       map['osm_id'] = Variable<int>(osmId);
     }
+    map['mode_mask'] = Variable<int>(modeMask);
     return map;
   }
 
@@ -9826,6 +8295,7 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
       osmId: osmId == null && nullToAbsent
           ? const Value.absent()
           : Value(osmId),
+      modeMask: Value(modeMask),
     );
   }
 
@@ -9844,6 +8314,7 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       osmType: serializer.fromJson<String?>(json['osmType']),
       osmId: serializer.fromJson<int?>(json['osmId']),
+      modeMask: serializer.fromJson<int>(json['modeMask']),
     );
   }
   @override
@@ -9859,6 +8330,7 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'osmType': serializer.toJson<String?>(osmType),
       'osmId': serializer.toJson<int?>(osmId),
+      'modeMask': serializer.toJson<int>(modeMask),
     };
   }
 
@@ -9872,6 +8344,7 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
     DateTime? createdAt,
     Value<String?> osmType = const Value.absent(),
     Value<int?> osmId = const Value.absent(),
+    int? modeMask,
   }) => PoiPoint(
     id: id ?? this.id,
     poiSetId: poiSetId ?? this.poiSetId,
@@ -9882,6 +8355,7 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
     createdAt: createdAt ?? this.createdAt,
     osmType: osmType.present ? osmType.value : this.osmType,
     osmId: osmId.present ? osmId.value : this.osmId,
+    modeMask: modeMask ?? this.modeMask,
   );
   PoiPoint copyWithCompanion(PoiPointsCompanion data) {
     return PoiPoint(
@@ -9894,6 +8368,7 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       osmType: data.osmType.present ? data.osmType.value : this.osmType,
       osmId: data.osmId.present ? data.osmId.value : this.osmId,
+      modeMask: data.modeMask.present ? data.modeMask.value : this.modeMask,
     );
   }
 
@@ -9908,7 +8383,8 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
           ..write('sortOrder: $sortOrder, ')
           ..write('createdAt: $createdAt, ')
           ..write('osmType: $osmType, ')
-          ..write('osmId: $osmId')
+          ..write('osmId: $osmId, ')
+          ..write('modeMask: $modeMask')
           ..write(')'))
         .toString();
   }
@@ -9924,6 +8400,7 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
     createdAt,
     osmType,
     osmId,
+    modeMask,
   );
   @override
   bool operator ==(Object other) =>
@@ -9937,7 +8414,8 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
           other.sortOrder == this.sortOrder &&
           other.createdAt == this.createdAt &&
           other.osmType == this.osmType &&
-          other.osmId == this.osmId);
+          other.osmId == this.osmId &&
+          other.modeMask == this.modeMask);
 }
 
 class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
@@ -9950,6 +8428,7 @@ class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
   final Value<DateTime> createdAt;
   final Value<String?> osmType;
   final Value<int?> osmId;
+  final Value<int> modeMask;
   final Value<int> rowid;
   const PoiPointsCompanion({
     this.id = const Value.absent(),
@@ -9961,6 +8440,7 @@ class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
     this.createdAt = const Value.absent(),
     this.osmType = const Value.absent(),
     this.osmId = const Value.absent(),
+    this.modeMask = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   PoiPointsCompanion.insert({
@@ -9973,6 +8453,7 @@ class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
     this.createdAt = const Value.absent(),
     this.osmType = const Value.absent(),
     this.osmId = const Value.absent(),
+    this.modeMask = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        poiSetId = Value(poiSetId),
@@ -9989,6 +8470,7 @@ class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
     Expression<DateTime>? createdAt,
     Expression<String>? osmType,
     Expression<int>? osmId,
+    Expression<int>? modeMask,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -10001,6 +8483,7 @@ class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
       if (createdAt != null) 'created_at': createdAt,
       if (osmType != null) 'osm_type': osmType,
       if (osmId != null) 'osm_id': osmId,
+      if (modeMask != null) 'mode_mask': modeMask,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -10015,6 +8498,7 @@ class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
     Value<DateTime>? createdAt,
     Value<String?>? osmType,
     Value<int?>? osmId,
+    Value<int>? modeMask,
     Value<int>? rowid,
   }) {
     return PoiPointsCompanion(
@@ -10027,6 +8511,7 @@ class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
       createdAt: createdAt ?? this.createdAt,
       osmType: osmType ?? this.osmType,
       osmId: osmId ?? this.osmId,
+      modeMask: modeMask ?? this.modeMask,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -10061,6 +8546,9 @@ class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
     if (osmId.present) {
       map['osm_id'] = Variable<int>(osmId.value);
     }
+    if (modeMask.present) {
+      map['mode_mask'] = Variable<int>(modeMask.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -10079,1592 +8567,7 @@ class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
           ..write('createdAt: $createdAt, ')
           ..write('osmType: $osmType, ')
           ..write('osmId: $osmId, ')
-          ..write('rowid: $rowid')
-          ..write(')'))
-        .toString();
-  }
-}
-
-class $TransitSetsTable extends TransitSets
-    with TableInfo<$TransitSetsTable, TransitSet> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  $TransitSetsTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _idMeta = const VerificationMeta('id');
-  @override
-  late final GeneratedColumn<String> id = GeneratedColumn<String>(
-    'id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _layerIdMeta = const VerificationMeta(
-    'layerId',
-  );
-  @override
-  late final GeneratedColumn<String> layerId = GeneratedColumn<String>(
-    'layer_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES layers (id) ON DELETE CASCADE',
-    ),
-  );
-  static const VerificationMeta _southMeta = const VerificationMeta('south');
-  @override
-  late final GeneratedColumn<double> south = GeneratedColumn<double>(
-    'south',
-    aliasedName,
-    false,
-    type: DriftSqlType.double,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _westMeta = const VerificationMeta('west');
-  @override
-  late final GeneratedColumn<double> west = GeneratedColumn<double>(
-    'west',
-    aliasedName,
-    false,
-    type: DriftSqlType.double,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _northMeta = const VerificationMeta('north');
-  @override
-  late final GeneratedColumn<double> north = GeneratedColumn<double>(
-    'north',
-    aliasedName,
-    false,
-    type: DriftSqlType.double,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _eastMeta = const VerificationMeta('east');
-  @override
-  late final GeneratedColumn<double> east = GeneratedColumn<double>(
-    'east',
-    aliasedName,
-    false,
-    type: DriftSqlType.double,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _modeMaskMeta = const VerificationMeta(
-    'modeMask',
-  );
-  @override
-  late final GeneratedColumn<int> modeMask = GeneratedColumn<int>(
-    'mode_mask',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _visibleModeMaskMeta = const VerificationMeta(
-    'visibleModeMask',
-  );
-  @override
-  late final GeneratedColumn<int> visibleModeMask = GeneratedColumn<int>(
-    'visible_mode_mask',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(-1),
-  );
-  static const VerificationMeta _labelMeta = const VerificationMeta('label');
-  @override
-  late final GeneratedColumn<String> label = GeneratedColumn<String>(
-    'label',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _fetchedAtMeta = const VerificationMeta(
-    'fetchedAt',
-  );
-  @override
-  late final GeneratedColumn<DateTime> fetchedAt = GeneratedColumn<DateTime>(
-    'fetched_at',
-    aliasedName,
-    true,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _lastErrorMeta = const VerificationMeta(
-    'lastError',
-  );
-  @override
-  late final GeneratedColumn<String> lastError = GeneratedColumn<String>(
-    'last_error',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _stationCountMeta = const VerificationMeta(
-    'stationCount',
-  );
-  @override
-  late final GeneratedColumn<int> stationCount = GeneratedColumn<int>(
-    'station_count',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0),
-  );
-  static const VerificationMeta _nodeCountMeta = const VerificationMeta(
-    'nodeCount',
-  );
-  @override
-  late final GeneratedColumn<int> nodeCount = GeneratedColumn<int>(
-    'node_count',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0),
-  );
-  static const VerificationMeta _createdAtMeta = const VerificationMeta(
-    'createdAt',
-  );
-  @override
-  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
-    'created_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: false,
-    defaultValue: currentDateAndTime,
-  );
-  static const VerificationMeta _colorArgbMeta = const VerificationMeta(
-    'colorArgb',
-  );
-  @override
-  late final GeneratedColumn<int> colorArgb = GeneratedColumn<int>(
-    'color_argb',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _colorShadeMeta = const VerificationMeta(
-    'colorShade',
-  );
-  @override
-  late final GeneratedColumn<int> colorShade = GeneratedColumn<int>(
-    'color_shade',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0),
-  );
-  static const VerificationMeta _zOrderMeta = const VerificationMeta('zOrder');
-  @override
-  late final GeneratedColumn<int> zOrder = GeneratedColumn<int>(
-    'z_order',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0),
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    id,
-    layerId,
-    south,
-    west,
-    north,
-    east,
-    modeMask,
-    visibleModeMask,
-    label,
-    fetchedAt,
-    lastError,
-    stationCount,
-    nodeCount,
-    createdAt,
-    colorArgb,
-    colorShade,
-    zOrder,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'transit_sets';
-  @override
-  VerificationContext validateIntegrity(
-    Insertable<TransitSet> instance, {
-    bool isInserting = false,
-  }) {
-    final context = VerificationContext();
-    final data = instance.toColumns(true);
-    if (data.containsKey('id')) {
-      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
-    } else if (isInserting) {
-      context.missing(_idMeta);
-    }
-    if (data.containsKey('layer_id')) {
-      context.handle(
-        _layerIdMeta,
-        layerId.isAcceptableOrUnknown(data['layer_id']!, _layerIdMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_layerIdMeta);
-    }
-    if (data.containsKey('south')) {
-      context.handle(
-        _southMeta,
-        south.isAcceptableOrUnknown(data['south']!, _southMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_southMeta);
-    }
-    if (data.containsKey('west')) {
-      context.handle(
-        _westMeta,
-        west.isAcceptableOrUnknown(data['west']!, _westMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_westMeta);
-    }
-    if (data.containsKey('north')) {
-      context.handle(
-        _northMeta,
-        north.isAcceptableOrUnknown(data['north']!, _northMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_northMeta);
-    }
-    if (data.containsKey('east')) {
-      context.handle(
-        _eastMeta,
-        east.isAcceptableOrUnknown(data['east']!, _eastMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_eastMeta);
-    }
-    if (data.containsKey('mode_mask')) {
-      context.handle(
-        _modeMaskMeta,
-        modeMask.isAcceptableOrUnknown(data['mode_mask']!, _modeMaskMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_modeMaskMeta);
-    }
-    if (data.containsKey('visible_mode_mask')) {
-      context.handle(
-        _visibleModeMaskMeta,
-        visibleModeMask.isAcceptableOrUnknown(
-          data['visible_mode_mask']!,
-          _visibleModeMaskMeta,
-        ),
-      );
-    }
-    if (data.containsKey('label')) {
-      context.handle(
-        _labelMeta,
-        label.isAcceptableOrUnknown(data['label']!, _labelMeta),
-      );
-    }
-    if (data.containsKey('fetched_at')) {
-      context.handle(
-        _fetchedAtMeta,
-        fetchedAt.isAcceptableOrUnknown(data['fetched_at']!, _fetchedAtMeta),
-      );
-    }
-    if (data.containsKey('last_error')) {
-      context.handle(
-        _lastErrorMeta,
-        lastError.isAcceptableOrUnknown(data['last_error']!, _lastErrorMeta),
-      );
-    }
-    if (data.containsKey('station_count')) {
-      context.handle(
-        _stationCountMeta,
-        stationCount.isAcceptableOrUnknown(
-          data['station_count']!,
-          _stationCountMeta,
-        ),
-      );
-    }
-    if (data.containsKey('node_count')) {
-      context.handle(
-        _nodeCountMeta,
-        nodeCount.isAcceptableOrUnknown(data['node_count']!, _nodeCountMeta),
-      );
-    }
-    if (data.containsKey('created_at')) {
-      context.handle(
-        _createdAtMeta,
-        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
-      );
-    }
-    if (data.containsKey('color_argb')) {
-      context.handle(
-        _colorArgbMeta,
-        colorArgb.isAcceptableOrUnknown(data['color_argb']!, _colorArgbMeta),
-      );
-    }
-    if (data.containsKey('color_shade')) {
-      context.handle(
-        _colorShadeMeta,
-        colorShade.isAcceptableOrUnknown(data['color_shade']!, _colorShadeMeta),
-      );
-    }
-    if (data.containsKey('z_order')) {
-      context.handle(
-        _zOrderMeta,
-        zOrder.isAcceptableOrUnknown(data['z_order']!, _zOrderMeta),
-      );
-    }
-    return context;
-  }
-
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  TransitSet map(Map<String, dynamic> data, {String? tablePrefix}) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return TransitSet(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}id'],
-      )!,
-      layerId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}layer_id'],
-      )!,
-      south: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}south'],
-      )!,
-      west: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}west'],
-      )!,
-      north: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}north'],
-      )!,
-      east: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}east'],
-      )!,
-      modeMask: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}mode_mask'],
-      )!,
-      visibleModeMask: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}visible_mode_mask'],
-      )!,
-      label: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}label'],
-      ),
-      fetchedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}fetched_at'],
-      ),
-      lastError: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}last_error'],
-      ),
-      stationCount: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}station_count'],
-      )!,
-      nodeCount: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}node_count'],
-      )!,
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}created_at'],
-      )!,
-      colorArgb: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}color_argb'],
-      ),
-      colorShade: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}color_shade'],
-      )!,
-      zOrder: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}z_order'],
-      )!,
-    );
-  }
-
-  @override
-  $TransitSetsTable createAlias(String alias) {
-    return $TransitSetsTable(attachedDatabase, alias);
-  }
-}
-
-class TransitSet extends DataClass implements Insertable<TransitSet> {
-  final String id;
-  final String layerId;
-
-  /// The imported bounding box.
-  final double south;
-  final double west;
-  final double north;
-  final double east;
-
-  /// Which modes were fetched (packed `TransitMode.bit`s), chosen in the import
-  /// dialog. This is the **contents** of the set, not a filter: what it omits
-  /// was never stored, so widening it means importing again — which is exactly
-  /// what a retry of a failed import must not do differently.
-  final int modeMask;
-
-  /// Which of those modes are **shown**. This is what the filter sheet writes;
-  /// it starts from `modeMask & defaultVisibleModes(diagonal)`, which hides
-  /// buses on a city-sized import because they outnumber everything else ~7:1.
-  final int visibleModeMask;
-  final String? label;
-
-  /// When the data was pulled from OSM. **Null = the import hasn't succeeded
-  /// yet** — the layer shows it as a retry row until it does, so a failure is
-  /// something you can come back to rather than a lost snackbar.
-  final DateTime? fetchedAt;
-
-  /// Why the last attempt failed, shown on that retry row.
-  final String? lastError;
-
-  /// Denormalised for the Elements subtitle without a join: stations stored,
-  /// and how many raw OSM nodes merged into them.
-  final int stationCount;
-  final int nodeCount;
-  final DateTime createdAt;
-
-  /// Per-element colour (v22). Null = follow the layer: the element paints in
-  /// its auto **shade** of the layer colour, picked by [colorShade] so the
-  /// elements of one layer tell each other apart and all follow a layer
-  /// recolour. A set value overrides that and survives a layer recolour, which
-  /// is what makes the recolour dialog ask what to do with them.
-  final int? colorArgb;
-
-  /// Which auto shade this element takes, assigned in creation order within the
-  /// layer. **0 is the layer colour exactly**, which is what every row
-  /// migrating in from v21 gets — an untouched map must look untouched.
-  final int colorShade;
-
-  /// Where this element sits in its layer's stack (v26). **Higher is drawn
-  /// later, i.e. in front**, and the scope is one layer *and one table*: a
-  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
-  /// because that is the only order its separate painters can honour.
-  ///
-  /// Deliberately not [colorShade], which used to imply this: that column also
-  /// picks the auto shade, so moving an element forward would have recoloured
-  /// it. Assigned one past the layer's current maximum on create, so a new
-  /// element lands on top — which is what "the newest element wins an overlap"
-  /// already meant, now said out loud instead of inferred.
-  final int zOrder;
-  const TransitSet({
-    required this.id,
-    required this.layerId,
-    required this.south,
-    required this.west,
-    required this.north,
-    required this.east,
-    required this.modeMask,
-    required this.visibleModeMask,
-    this.label,
-    this.fetchedAt,
-    this.lastError,
-    required this.stationCount,
-    required this.nodeCount,
-    required this.createdAt,
-    this.colorArgb,
-    required this.colorShade,
-    required this.zOrder,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['id'] = Variable<String>(id);
-    map['layer_id'] = Variable<String>(layerId);
-    map['south'] = Variable<double>(south);
-    map['west'] = Variable<double>(west);
-    map['north'] = Variable<double>(north);
-    map['east'] = Variable<double>(east);
-    map['mode_mask'] = Variable<int>(modeMask);
-    map['visible_mode_mask'] = Variable<int>(visibleModeMask);
-    if (!nullToAbsent || label != null) {
-      map['label'] = Variable<String>(label);
-    }
-    if (!nullToAbsent || fetchedAt != null) {
-      map['fetched_at'] = Variable<DateTime>(fetchedAt);
-    }
-    if (!nullToAbsent || lastError != null) {
-      map['last_error'] = Variable<String>(lastError);
-    }
-    map['station_count'] = Variable<int>(stationCount);
-    map['node_count'] = Variable<int>(nodeCount);
-    map['created_at'] = Variable<DateTime>(createdAt);
-    if (!nullToAbsent || colorArgb != null) {
-      map['color_argb'] = Variable<int>(colorArgb);
-    }
-    map['color_shade'] = Variable<int>(colorShade);
-    map['z_order'] = Variable<int>(zOrder);
-    return map;
-  }
-
-  TransitSetsCompanion toCompanion(bool nullToAbsent) {
-    return TransitSetsCompanion(
-      id: Value(id),
-      layerId: Value(layerId),
-      south: Value(south),
-      west: Value(west),
-      north: Value(north),
-      east: Value(east),
-      modeMask: Value(modeMask),
-      visibleModeMask: Value(visibleModeMask),
-      label: label == null && nullToAbsent
-          ? const Value.absent()
-          : Value(label),
-      fetchedAt: fetchedAt == null && nullToAbsent
-          ? const Value.absent()
-          : Value(fetchedAt),
-      lastError: lastError == null && nullToAbsent
-          ? const Value.absent()
-          : Value(lastError),
-      stationCount: Value(stationCount),
-      nodeCount: Value(nodeCount),
-      createdAt: Value(createdAt),
-      colorArgb: colorArgb == null && nullToAbsent
-          ? const Value.absent()
-          : Value(colorArgb),
-      colorShade: Value(colorShade),
-      zOrder: Value(zOrder),
-    );
-  }
-
-  factory TransitSet.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return TransitSet(
-      id: serializer.fromJson<String>(json['id']),
-      layerId: serializer.fromJson<String>(json['layerId']),
-      south: serializer.fromJson<double>(json['south']),
-      west: serializer.fromJson<double>(json['west']),
-      north: serializer.fromJson<double>(json['north']),
-      east: serializer.fromJson<double>(json['east']),
-      modeMask: serializer.fromJson<int>(json['modeMask']),
-      visibleModeMask: serializer.fromJson<int>(json['visibleModeMask']),
-      label: serializer.fromJson<String?>(json['label']),
-      fetchedAt: serializer.fromJson<DateTime?>(json['fetchedAt']),
-      lastError: serializer.fromJson<String?>(json['lastError']),
-      stationCount: serializer.fromJson<int>(json['stationCount']),
-      nodeCount: serializer.fromJson<int>(json['nodeCount']),
-      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
-      colorArgb: serializer.fromJson<int?>(json['colorArgb']),
-      colorShade: serializer.fromJson<int>(json['colorShade']),
-      zOrder: serializer.fromJson<int>(json['zOrder']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'id': serializer.toJson<String>(id),
-      'layerId': serializer.toJson<String>(layerId),
-      'south': serializer.toJson<double>(south),
-      'west': serializer.toJson<double>(west),
-      'north': serializer.toJson<double>(north),
-      'east': serializer.toJson<double>(east),
-      'modeMask': serializer.toJson<int>(modeMask),
-      'visibleModeMask': serializer.toJson<int>(visibleModeMask),
-      'label': serializer.toJson<String?>(label),
-      'fetchedAt': serializer.toJson<DateTime?>(fetchedAt),
-      'lastError': serializer.toJson<String?>(lastError),
-      'stationCount': serializer.toJson<int>(stationCount),
-      'nodeCount': serializer.toJson<int>(nodeCount),
-      'createdAt': serializer.toJson<DateTime>(createdAt),
-      'colorArgb': serializer.toJson<int?>(colorArgb),
-      'colorShade': serializer.toJson<int>(colorShade),
-      'zOrder': serializer.toJson<int>(zOrder),
-    };
-  }
-
-  TransitSet copyWith({
-    String? id,
-    String? layerId,
-    double? south,
-    double? west,
-    double? north,
-    double? east,
-    int? modeMask,
-    int? visibleModeMask,
-    Value<String?> label = const Value.absent(),
-    Value<DateTime?> fetchedAt = const Value.absent(),
-    Value<String?> lastError = const Value.absent(),
-    int? stationCount,
-    int? nodeCount,
-    DateTime? createdAt,
-    Value<int?> colorArgb = const Value.absent(),
-    int? colorShade,
-    int? zOrder,
-  }) => TransitSet(
-    id: id ?? this.id,
-    layerId: layerId ?? this.layerId,
-    south: south ?? this.south,
-    west: west ?? this.west,
-    north: north ?? this.north,
-    east: east ?? this.east,
-    modeMask: modeMask ?? this.modeMask,
-    visibleModeMask: visibleModeMask ?? this.visibleModeMask,
-    label: label.present ? label.value : this.label,
-    fetchedAt: fetchedAt.present ? fetchedAt.value : this.fetchedAt,
-    lastError: lastError.present ? lastError.value : this.lastError,
-    stationCount: stationCount ?? this.stationCount,
-    nodeCount: nodeCount ?? this.nodeCount,
-    createdAt: createdAt ?? this.createdAt,
-    colorArgb: colorArgb.present ? colorArgb.value : this.colorArgb,
-    colorShade: colorShade ?? this.colorShade,
-    zOrder: zOrder ?? this.zOrder,
-  );
-  TransitSet copyWithCompanion(TransitSetsCompanion data) {
-    return TransitSet(
-      id: data.id.present ? data.id.value : this.id,
-      layerId: data.layerId.present ? data.layerId.value : this.layerId,
-      south: data.south.present ? data.south.value : this.south,
-      west: data.west.present ? data.west.value : this.west,
-      north: data.north.present ? data.north.value : this.north,
-      east: data.east.present ? data.east.value : this.east,
-      modeMask: data.modeMask.present ? data.modeMask.value : this.modeMask,
-      visibleModeMask: data.visibleModeMask.present
-          ? data.visibleModeMask.value
-          : this.visibleModeMask,
-      label: data.label.present ? data.label.value : this.label,
-      fetchedAt: data.fetchedAt.present ? data.fetchedAt.value : this.fetchedAt,
-      lastError: data.lastError.present ? data.lastError.value : this.lastError,
-      stationCount: data.stationCount.present
-          ? data.stationCount.value
-          : this.stationCount,
-      nodeCount: data.nodeCount.present ? data.nodeCount.value : this.nodeCount,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-      colorArgb: data.colorArgb.present ? data.colorArgb.value : this.colorArgb,
-      colorShade: data.colorShade.present
-          ? data.colorShade.value
-          : this.colorShade,
-      zOrder: data.zOrder.present ? data.zOrder.value : this.zOrder,
-    );
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('TransitSet(')
-          ..write('id: $id, ')
-          ..write('layerId: $layerId, ')
-          ..write('south: $south, ')
-          ..write('west: $west, ')
-          ..write('north: $north, ')
-          ..write('east: $east, ')
           ..write('modeMask: $modeMask, ')
-          ..write('visibleModeMask: $visibleModeMask, ')
-          ..write('label: $label, ')
-          ..write('fetchedAt: $fetchedAt, ')
-          ..write('lastError: $lastError, ')
-          ..write('stationCount: $stationCount, ')
-          ..write('nodeCount: $nodeCount, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('colorArgb: $colorArgb, ')
-          ..write('colorShade: $colorShade, ')
-          ..write('zOrder: $zOrder')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hash(
-    id,
-    layerId,
-    south,
-    west,
-    north,
-    east,
-    modeMask,
-    visibleModeMask,
-    label,
-    fetchedAt,
-    lastError,
-    stationCount,
-    nodeCount,
-    createdAt,
-    colorArgb,
-    colorShade,
-    zOrder,
-  );
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is TransitSet &&
-          other.id == this.id &&
-          other.layerId == this.layerId &&
-          other.south == this.south &&
-          other.west == this.west &&
-          other.north == this.north &&
-          other.east == this.east &&
-          other.modeMask == this.modeMask &&
-          other.visibleModeMask == this.visibleModeMask &&
-          other.label == this.label &&
-          other.fetchedAt == this.fetchedAt &&
-          other.lastError == this.lastError &&
-          other.stationCount == this.stationCount &&
-          other.nodeCount == this.nodeCount &&
-          other.createdAt == this.createdAt &&
-          other.colorArgb == this.colorArgb &&
-          other.colorShade == this.colorShade &&
-          other.zOrder == this.zOrder);
-}
-
-class TransitSetsCompanion extends UpdateCompanion<TransitSet> {
-  final Value<String> id;
-  final Value<String> layerId;
-  final Value<double> south;
-  final Value<double> west;
-  final Value<double> north;
-  final Value<double> east;
-  final Value<int> modeMask;
-  final Value<int> visibleModeMask;
-  final Value<String?> label;
-  final Value<DateTime?> fetchedAt;
-  final Value<String?> lastError;
-  final Value<int> stationCount;
-  final Value<int> nodeCount;
-  final Value<DateTime> createdAt;
-  final Value<int?> colorArgb;
-  final Value<int> colorShade;
-  final Value<int> zOrder;
-  final Value<int> rowid;
-  const TransitSetsCompanion({
-    this.id = const Value.absent(),
-    this.layerId = const Value.absent(),
-    this.south = const Value.absent(),
-    this.west = const Value.absent(),
-    this.north = const Value.absent(),
-    this.east = const Value.absent(),
-    this.modeMask = const Value.absent(),
-    this.visibleModeMask = const Value.absent(),
-    this.label = const Value.absent(),
-    this.fetchedAt = const Value.absent(),
-    this.lastError = const Value.absent(),
-    this.stationCount = const Value.absent(),
-    this.nodeCount = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.colorArgb = const Value.absent(),
-    this.colorShade = const Value.absent(),
-    this.zOrder = const Value.absent(),
-    this.rowid = const Value.absent(),
-  });
-  TransitSetsCompanion.insert({
-    required String id,
-    required String layerId,
-    required double south,
-    required double west,
-    required double north,
-    required double east,
-    required int modeMask,
-    this.visibleModeMask = const Value.absent(),
-    this.label = const Value.absent(),
-    this.fetchedAt = const Value.absent(),
-    this.lastError = const Value.absent(),
-    this.stationCount = const Value.absent(),
-    this.nodeCount = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.colorArgb = const Value.absent(),
-    this.colorShade = const Value.absent(),
-    this.zOrder = const Value.absent(),
-    this.rowid = const Value.absent(),
-  }) : id = Value(id),
-       layerId = Value(layerId),
-       south = Value(south),
-       west = Value(west),
-       north = Value(north),
-       east = Value(east),
-       modeMask = Value(modeMask);
-  static Insertable<TransitSet> custom({
-    Expression<String>? id,
-    Expression<String>? layerId,
-    Expression<double>? south,
-    Expression<double>? west,
-    Expression<double>? north,
-    Expression<double>? east,
-    Expression<int>? modeMask,
-    Expression<int>? visibleModeMask,
-    Expression<String>? label,
-    Expression<DateTime>? fetchedAt,
-    Expression<String>? lastError,
-    Expression<int>? stationCount,
-    Expression<int>? nodeCount,
-    Expression<DateTime>? createdAt,
-    Expression<int>? colorArgb,
-    Expression<int>? colorShade,
-    Expression<int>? zOrder,
-    Expression<int>? rowid,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (layerId != null) 'layer_id': layerId,
-      if (south != null) 'south': south,
-      if (west != null) 'west': west,
-      if (north != null) 'north': north,
-      if (east != null) 'east': east,
-      if (modeMask != null) 'mode_mask': modeMask,
-      if (visibleModeMask != null) 'visible_mode_mask': visibleModeMask,
-      if (label != null) 'label': label,
-      if (fetchedAt != null) 'fetched_at': fetchedAt,
-      if (lastError != null) 'last_error': lastError,
-      if (stationCount != null) 'station_count': stationCount,
-      if (nodeCount != null) 'node_count': nodeCount,
-      if (createdAt != null) 'created_at': createdAt,
-      if (colorArgb != null) 'color_argb': colorArgb,
-      if (colorShade != null) 'color_shade': colorShade,
-      if (zOrder != null) 'z_order': zOrder,
-      if (rowid != null) 'rowid': rowid,
-    });
-  }
-
-  TransitSetsCompanion copyWith({
-    Value<String>? id,
-    Value<String>? layerId,
-    Value<double>? south,
-    Value<double>? west,
-    Value<double>? north,
-    Value<double>? east,
-    Value<int>? modeMask,
-    Value<int>? visibleModeMask,
-    Value<String?>? label,
-    Value<DateTime?>? fetchedAt,
-    Value<String?>? lastError,
-    Value<int>? stationCount,
-    Value<int>? nodeCount,
-    Value<DateTime>? createdAt,
-    Value<int?>? colorArgb,
-    Value<int>? colorShade,
-    Value<int>? zOrder,
-    Value<int>? rowid,
-  }) {
-    return TransitSetsCompanion(
-      id: id ?? this.id,
-      layerId: layerId ?? this.layerId,
-      south: south ?? this.south,
-      west: west ?? this.west,
-      north: north ?? this.north,
-      east: east ?? this.east,
-      modeMask: modeMask ?? this.modeMask,
-      visibleModeMask: visibleModeMask ?? this.visibleModeMask,
-      label: label ?? this.label,
-      fetchedAt: fetchedAt ?? this.fetchedAt,
-      lastError: lastError ?? this.lastError,
-      stationCount: stationCount ?? this.stationCount,
-      nodeCount: nodeCount ?? this.nodeCount,
-      createdAt: createdAt ?? this.createdAt,
-      colorArgb: colorArgb ?? this.colorArgb,
-      colorShade: colorShade ?? this.colorShade,
-      zOrder: zOrder ?? this.zOrder,
-      rowid: rowid ?? this.rowid,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<String>(id.value);
-    }
-    if (layerId.present) {
-      map['layer_id'] = Variable<String>(layerId.value);
-    }
-    if (south.present) {
-      map['south'] = Variable<double>(south.value);
-    }
-    if (west.present) {
-      map['west'] = Variable<double>(west.value);
-    }
-    if (north.present) {
-      map['north'] = Variable<double>(north.value);
-    }
-    if (east.present) {
-      map['east'] = Variable<double>(east.value);
-    }
-    if (modeMask.present) {
-      map['mode_mask'] = Variable<int>(modeMask.value);
-    }
-    if (visibleModeMask.present) {
-      map['visible_mode_mask'] = Variable<int>(visibleModeMask.value);
-    }
-    if (label.present) {
-      map['label'] = Variable<String>(label.value);
-    }
-    if (fetchedAt.present) {
-      map['fetched_at'] = Variable<DateTime>(fetchedAt.value);
-    }
-    if (lastError.present) {
-      map['last_error'] = Variable<String>(lastError.value);
-    }
-    if (stationCount.present) {
-      map['station_count'] = Variable<int>(stationCount.value);
-    }
-    if (nodeCount.present) {
-      map['node_count'] = Variable<int>(nodeCount.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<DateTime>(createdAt.value);
-    }
-    if (colorArgb.present) {
-      map['color_argb'] = Variable<int>(colorArgb.value);
-    }
-    if (colorShade.present) {
-      map['color_shade'] = Variable<int>(colorShade.value);
-    }
-    if (zOrder.present) {
-      map['z_order'] = Variable<int>(zOrder.value);
-    }
-    if (rowid.present) {
-      map['rowid'] = Variable<int>(rowid.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('TransitSetsCompanion(')
-          ..write('id: $id, ')
-          ..write('layerId: $layerId, ')
-          ..write('south: $south, ')
-          ..write('west: $west, ')
-          ..write('north: $north, ')
-          ..write('east: $east, ')
-          ..write('modeMask: $modeMask, ')
-          ..write('visibleModeMask: $visibleModeMask, ')
-          ..write('label: $label, ')
-          ..write('fetchedAt: $fetchedAt, ')
-          ..write('lastError: $lastError, ')
-          ..write('stationCount: $stationCount, ')
-          ..write('nodeCount: $nodeCount, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('colorArgb: $colorArgb, ')
-          ..write('colorShade: $colorShade, ')
-          ..write('zOrder: $zOrder, ')
-          ..write('rowid: $rowid')
-          ..write(')'))
-        .toString();
-  }
-}
-
-class $TransitStopsTable extends TransitStops
-    with TableInfo<$TransitStopsTable, TransitStop> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  $TransitStopsTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _idMeta = const VerificationMeta('id');
-  @override
-  late final GeneratedColumn<String> id = GeneratedColumn<String>(
-    'id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _setIdMeta = const VerificationMeta('setId');
-  @override
-  late final GeneratedColumn<String> setId = GeneratedColumn<String>(
-    'set_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES transit_sets (id) ON DELETE CASCADE',
-    ),
-  );
-  static const VerificationMeta _osmIdMeta = const VerificationMeta('osmId');
-  @override
-  late final GeneratedColumn<int> osmId = GeneratedColumn<int>(
-    'osm_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _latMeta = const VerificationMeta('lat');
-  @override
-  late final GeneratedColumn<double> lat = GeneratedColumn<double>(
-    'lat',
-    aliasedName,
-    false,
-    type: DriftSqlType.double,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _lngMeta = const VerificationMeta('lng');
-  @override
-  late final GeneratedColumn<double> lng = GeneratedColumn<double>(
-    'lng',
-    aliasedName,
-    false,
-    type: DriftSqlType.double,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _nameMeta = const VerificationMeta('name');
-  @override
-  late final GeneratedColumn<String> name = GeneratedColumn<String>(
-    'name',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _modeMaskMeta = const VerificationMeta(
-    'modeMask',
-  );
-  @override
-  late final GeneratedColumn<int> modeMask = GeneratedColumn<int>(
-    'mode_mask',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0),
-  );
-  static const VerificationMeta _nodeCountMeta = const VerificationMeta(
-    'nodeCount',
-  );
-  @override
-  late final GeneratedColumn<int> nodeCount = GeneratedColumn<int>(
-    'node_count',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(1),
-  );
-  static const VerificationMeta _routeRefMeta = const VerificationMeta(
-    'routeRef',
-  );
-  @override
-  late final GeneratedColumn<String> routeRef = GeneratedColumn<String>(
-    'route_ref',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _createdAtMeta = const VerificationMeta(
-    'createdAt',
-  );
-  @override
-  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
-    'created_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: false,
-    defaultValue: currentDateAndTime,
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    id,
-    setId,
-    osmId,
-    lat,
-    lng,
-    name,
-    modeMask,
-    nodeCount,
-    routeRef,
-    createdAt,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'transit_stops';
-  @override
-  VerificationContext validateIntegrity(
-    Insertable<TransitStop> instance, {
-    bool isInserting = false,
-  }) {
-    final context = VerificationContext();
-    final data = instance.toColumns(true);
-    if (data.containsKey('id')) {
-      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
-    } else if (isInserting) {
-      context.missing(_idMeta);
-    }
-    if (data.containsKey('set_id')) {
-      context.handle(
-        _setIdMeta,
-        setId.isAcceptableOrUnknown(data['set_id']!, _setIdMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_setIdMeta);
-    }
-    if (data.containsKey('osm_id')) {
-      context.handle(
-        _osmIdMeta,
-        osmId.isAcceptableOrUnknown(data['osm_id']!, _osmIdMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_osmIdMeta);
-    }
-    if (data.containsKey('lat')) {
-      context.handle(
-        _latMeta,
-        lat.isAcceptableOrUnknown(data['lat']!, _latMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_latMeta);
-    }
-    if (data.containsKey('lng')) {
-      context.handle(
-        _lngMeta,
-        lng.isAcceptableOrUnknown(data['lng']!, _lngMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_lngMeta);
-    }
-    if (data.containsKey('name')) {
-      context.handle(
-        _nameMeta,
-        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
-      );
-    }
-    if (data.containsKey('mode_mask')) {
-      context.handle(
-        _modeMaskMeta,
-        modeMask.isAcceptableOrUnknown(data['mode_mask']!, _modeMaskMeta),
-      );
-    }
-    if (data.containsKey('node_count')) {
-      context.handle(
-        _nodeCountMeta,
-        nodeCount.isAcceptableOrUnknown(data['node_count']!, _nodeCountMeta),
-      );
-    }
-    if (data.containsKey('route_ref')) {
-      context.handle(
-        _routeRefMeta,
-        routeRef.isAcceptableOrUnknown(data['route_ref']!, _routeRefMeta),
-      );
-    }
-    if (data.containsKey('created_at')) {
-      context.handle(
-        _createdAtMeta,
-        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
-      );
-    }
-    return context;
-  }
-
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  TransitStop map(Map<String, dynamic> data, {String? tablePrefix}) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return TransitStop(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}id'],
-      )!,
-      setId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}set_id'],
-      )!,
-      osmId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}osm_id'],
-      )!,
-      lat: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}lat'],
-      )!,
-      lng: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}lng'],
-      )!,
-      name: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}name'],
-      ),
-      modeMask: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}mode_mask'],
-      )!,
-      nodeCount: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}node_count'],
-      )!,
-      routeRef: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}route_ref'],
-      ),
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}created_at'],
-      )!,
-    );
-  }
-
-  @override
-  $TransitStopsTable createAlias(String alias) {
-    return $TransitStopsTable(attachedDatabase, alias);
-  }
-}
-
-class TransitStop extends DataClass implements Insertable<TransitStop> {
-  final String id;
-  final String setId;
-
-  /// The OSM node the station was keyed on (the `station` node when there was
-  /// one), so it can be looked up on osm.org.
-  final int osmId;
-  final double lat;
-  final double lng;
-  final String? name;
-
-  /// The modes serving this station (packed bits); 0 = the data doesn't say.
-  /// A station is drawn iff `modeMask & set.visibleModeMask != 0`.
-  final int modeMask;
-
-  /// How many OSM nodes merged into this station.
-  final int nodeCount;
-
-  /// The OSM `route_ref` tag when present (~18 % of stops) — free text shown as
-  /// a hint. Never parsed, never relied on.
-  final String? routeRef;
-  final DateTime createdAt;
-  const TransitStop({
-    required this.id,
-    required this.setId,
-    required this.osmId,
-    required this.lat,
-    required this.lng,
-    this.name,
-    required this.modeMask,
-    required this.nodeCount,
-    this.routeRef,
-    required this.createdAt,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['id'] = Variable<String>(id);
-    map['set_id'] = Variable<String>(setId);
-    map['osm_id'] = Variable<int>(osmId);
-    map['lat'] = Variable<double>(lat);
-    map['lng'] = Variable<double>(lng);
-    if (!nullToAbsent || name != null) {
-      map['name'] = Variable<String>(name);
-    }
-    map['mode_mask'] = Variable<int>(modeMask);
-    map['node_count'] = Variable<int>(nodeCount);
-    if (!nullToAbsent || routeRef != null) {
-      map['route_ref'] = Variable<String>(routeRef);
-    }
-    map['created_at'] = Variable<DateTime>(createdAt);
-    return map;
-  }
-
-  TransitStopsCompanion toCompanion(bool nullToAbsent) {
-    return TransitStopsCompanion(
-      id: Value(id),
-      setId: Value(setId),
-      osmId: Value(osmId),
-      lat: Value(lat),
-      lng: Value(lng),
-      name: name == null && nullToAbsent ? const Value.absent() : Value(name),
-      modeMask: Value(modeMask),
-      nodeCount: Value(nodeCount),
-      routeRef: routeRef == null && nullToAbsent
-          ? const Value.absent()
-          : Value(routeRef),
-      createdAt: Value(createdAt),
-    );
-  }
-
-  factory TransitStop.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return TransitStop(
-      id: serializer.fromJson<String>(json['id']),
-      setId: serializer.fromJson<String>(json['setId']),
-      osmId: serializer.fromJson<int>(json['osmId']),
-      lat: serializer.fromJson<double>(json['lat']),
-      lng: serializer.fromJson<double>(json['lng']),
-      name: serializer.fromJson<String?>(json['name']),
-      modeMask: serializer.fromJson<int>(json['modeMask']),
-      nodeCount: serializer.fromJson<int>(json['nodeCount']),
-      routeRef: serializer.fromJson<String?>(json['routeRef']),
-      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'id': serializer.toJson<String>(id),
-      'setId': serializer.toJson<String>(setId),
-      'osmId': serializer.toJson<int>(osmId),
-      'lat': serializer.toJson<double>(lat),
-      'lng': serializer.toJson<double>(lng),
-      'name': serializer.toJson<String?>(name),
-      'modeMask': serializer.toJson<int>(modeMask),
-      'nodeCount': serializer.toJson<int>(nodeCount),
-      'routeRef': serializer.toJson<String?>(routeRef),
-      'createdAt': serializer.toJson<DateTime>(createdAt),
-    };
-  }
-
-  TransitStop copyWith({
-    String? id,
-    String? setId,
-    int? osmId,
-    double? lat,
-    double? lng,
-    Value<String?> name = const Value.absent(),
-    int? modeMask,
-    int? nodeCount,
-    Value<String?> routeRef = const Value.absent(),
-    DateTime? createdAt,
-  }) => TransitStop(
-    id: id ?? this.id,
-    setId: setId ?? this.setId,
-    osmId: osmId ?? this.osmId,
-    lat: lat ?? this.lat,
-    lng: lng ?? this.lng,
-    name: name.present ? name.value : this.name,
-    modeMask: modeMask ?? this.modeMask,
-    nodeCount: nodeCount ?? this.nodeCount,
-    routeRef: routeRef.present ? routeRef.value : this.routeRef,
-    createdAt: createdAt ?? this.createdAt,
-  );
-  TransitStop copyWithCompanion(TransitStopsCompanion data) {
-    return TransitStop(
-      id: data.id.present ? data.id.value : this.id,
-      setId: data.setId.present ? data.setId.value : this.setId,
-      osmId: data.osmId.present ? data.osmId.value : this.osmId,
-      lat: data.lat.present ? data.lat.value : this.lat,
-      lng: data.lng.present ? data.lng.value : this.lng,
-      name: data.name.present ? data.name.value : this.name,
-      modeMask: data.modeMask.present ? data.modeMask.value : this.modeMask,
-      nodeCount: data.nodeCount.present ? data.nodeCount.value : this.nodeCount,
-      routeRef: data.routeRef.present ? data.routeRef.value : this.routeRef,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-    );
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('TransitStop(')
-          ..write('id: $id, ')
-          ..write('setId: $setId, ')
-          ..write('osmId: $osmId, ')
-          ..write('lat: $lat, ')
-          ..write('lng: $lng, ')
-          ..write('name: $name, ')
-          ..write('modeMask: $modeMask, ')
-          ..write('nodeCount: $nodeCount, ')
-          ..write('routeRef: $routeRef, ')
-          ..write('createdAt: $createdAt')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hash(
-    id,
-    setId,
-    osmId,
-    lat,
-    lng,
-    name,
-    modeMask,
-    nodeCount,
-    routeRef,
-    createdAt,
-  );
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is TransitStop &&
-          other.id == this.id &&
-          other.setId == this.setId &&
-          other.osmId == this.osmId &&
-          other.lat == this.lat &&
-          other.lng == this.lng &&
-          other.name == this.name &&
-          other.modeMask == this.modeMask &&
-          other.nodeCount == this.nodeCount &&
-          other.routeRef == this.routeRef &&
-          other.createdAt == this.createdAt);
-}
-
-class TransitStopsCompanion extends UpdateCompanion<TransitStop> {
-  final Value<String> id;
-  final Value<String> setId;
-  final Value<int> osmId;
-  final Value<double> lat;
-  final Value<double> lng;
-  final Value<String?> name;
-  final Value<int> modeMask;
-  final Value<int> nodeCount;
-  final Value<String?> routeRef;
-  final Value<DateTime> createdAt;
-  final Value<int> rowid;
-  const TransitStopsCompanion({
-    this.id = const Value.absent(),
-    this.setId = const Value.absent(),
-    this.osmId = const Value.absent(),
-    this.lat = const Value.absent(),
-    this.lng = const Value.absent(),
-    this.name = const Value.absent(),
-    this.modeMask = const Value.absent(),
-    this.nodeCount = const Value.absent(),
-    this.routeRef = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.rowid = const Value.absent(),
-  });
-  TransitStopsCompanion.insert({
-    required String id,
-    required String setId,
-    required int osmId,
-    required double lat,
-    required double lng,
-    this.name = const Value.absent(),
-    this.modeMask = const Value.absent(),
-    this.nodeCount = const Value.absent(),
-    this.routeRef = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.rowid = const Value.absent(),
-  }) : id = Value(id),
-       setId = Value(setId),
-       osmId = Value(osmId),
-       lat = Value(lat),
-       lng = Value(lng);
-  static Insertable<TransitStop> custom({
-    Expression<String>? id,
-    Expression<String>? setId,
-    Expression<int>? osmId,
-    Expression<double>? lat,
-    Expression<double>? lng,
-    Expression<String>? name,
-    Expression<int>? modeMask,
-    Expression<int>? nodeCount,
-    Expression<String>? routeRef,
-    Expression<DateTime>? createdAt,
-    Expression<int>? rowid,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (setId != null) 'set_id': setId,
-      if (osmId != null) 'osm_id': osmId,
-      if (lat != null) 'lat': lat,
-      if (lng != null) 'lng': lng,
-      if (name != null) 'name': name,
-      if (modeMask != null) 'mode_mask': modeMask,
-      if (nodeCount != null) 'node_count': nodeCount,
-      if (routeRef != null) 'route_ref': routeRef,
-      if (createdAt != null) 'created_at': createdAt,
-      if (rowid != null) 'rowid': rowid,
-    });
-  }
-
-  TransitStopsCompanion copyWith({
-    Value<String>? id,
-    Value<String>? setId,
-    Value<int>? osmId,
-    Value<double>? lat,
-    Value<double>? lng,
-    Value<String?>? name,
-    Value<int>? modeMask,
-    Value<int>? nodeCount,
-    Value<String?>? routeRef,
-    Value<DateTime>? createdAt,
-    Value<int>? rowid,
-  }) {
-    return TransitStopsCompanion(
-      id: id ?? this.id,
-      setId: setId ?? this.setId,
-      osmId: osmId ?? this.osmId,
-      lat: lat ?? this.lat,
-      lng: lng ?? this.lng,
-      name: name ?? this.name,
-      modeMask: modeMask ?? this.modeMask,
-      nodeCount: nodeCount ?? this.nodeCount,
-      routeRef: routeRef ?? this.routeRef,
-      createdAt: createdAt ?? this.createdAt,
-      rowid: rowid ?? this.rowid,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<String>(id.value);
-    }
-    if (setId.present) {
-      map['set_id'] = Variable<String>(setId.value);
-    }
-    if (osmId.present) {
-      map['osm_id'] = Variable<int>(osmId.value);
-    }
-    if (lat.present) {
-      map['lat'] = Variable<double>(lat.value);
-    }
-    if (lng.present) {
-      map['lng'] = Variable<double>(lng.value);
-    }
-    if (name.present) {
-      map['name'] = Variable<String>(name.value);
-    }
-    if (modeMask.present) {
-      map['mode_mask'] = Variable<int>(modeMask.value);
-    }
-    if (nodeCount.present) {
-      map['node_count'] = Variable<int>(nodeCount.value);
-    }
-    if (routeRef.present) {
-      map['route_ref'] = Variable<String>(routeRef.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<DateTime>(createdAt.value);
-    }
-    if (rowid.present) {
-      map['rowid'] = Variable<int>(rowid.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('TransitStopsCompanion(')
-          ..write('id: $id, ')
-          ..write('setId: $setId, ')
-          ..write('osmId: $osmId, ')
-          ..write('lat: $lat, ')
-          ..write('lng: $lng, ')
-          ..write('name: $name, ')
-          ..write('modeMask: $modeMask, ')
-          ..write('nodeCount: $nodeCount, ')
-          ..write('routeRef: $routeRef, ')
-          ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -14289,14 +11192,11 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $LayersTable layers = $LayersTable(this);
   late final $CirclesTable circles = $CirclesTable(this);
-  late final $PlanesTable planes = $PlanesTable(this);
   late final $AppSettingsTable appSettings = $AppSettingsTable(this);
   late final $SubspacesTable subspaces = $SubspacesTable(this);
   late final $SubspacePointsTable subspacePoints = $SubspacePointsTable(this);
   late final $FreeLinesTable freeLines = $FreeLinesTable(this);
   late final $FreeLinePointsTable freeLinePoints = $FreeLinePointsTable(this);
-  late final $TracksTable tracks = $TracksTable(this);
-  late final $TrackPointsTable trackPoints = $TrackPointsTable(this);
   late final $FreeAreasTable freeAreas = $FreeAreasTable(this);
   late final $FreeAreaPointsTable freeAreaPoints = $FreeAreaPointsTable(this);
   late final $HeightRegionsTable heightRegions = $HeightRegionsTable(this);
@@ -14305,8 +11205,6 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $HeightPolygonPointsTable(this);
   late final $PoiSetsTable poiSets = $PoiSetsTable(this);
   late final $PoiPointsTable poiPoints = $PoiPointsTable(this);
-  late final $TransitSetsTable transitSets = $TransitSetsTable(this);
-  late final $TransitStopsTable transitStops = $TransitStopsTable(this);
   late final $BorderSetsTable borderSets = $BorderSetsTable(this);
   late final $BorderAreasTable borderAreas = $BorderAreasTable(this);
   late final $TileCacheTable tileCache = $TileCacheTable(this);
@@ -14318,14 +11216,11 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   List<DatabaseSchemaEntity> get allSchemaEntities => [
     layers,
     circles,
-    planes,
     appSettings,
     subspaces,
     subspacePoints,
     freeLines,
     freeLinePoints,
-    tracks,
-    trackPoints,
     freeAreas,
     freeAreaPoints,
     heightRegions,
@@ -14333,8 +11228,6 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     heightPolygonPoints,
     poiSets,
     poiPoints,
-    transitSets,
-    transitStops,
     borderSets,
     borderAreas,
     tileCache,
@@ -14348,13 +11241,6 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('circles', kind: UpdateKind.delete)],
-    ),
-    WritePropagation(
-      on: TableUpdateQuery.onTableName(
-        'layers',
-        limitUpdateKind: UpdateKind.delete,
-      ),
-      result: [TableUpdate('planes', kind: UpdateKind.delete)],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -14383,20 +11269,6 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('free_line_points', kind: UpdateKind.delete)],
-    ),
-    WritePropagation(
-      on: TableUpdateQuery.onTableName(
-        'layers',
-        limitUpdateKind: UpdateKind.delete,
-      ),
-      result: [TableUpdate('tracks', kind: UpdateKind.delete)],
-    ),
-    WritePropagation(
-      on: TableUpdateQuery.onTableName(
-        'tracks',
-        limitUpdateKind: UpdateKind.delete,
-      ),
-      result: [TableUpdate('track_points', kind: UpdateKind.delete)],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -14452,20 +11324,6 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         'layers',
         limitUpdateKind: UpdateKind.delete,
       ),
-      result: [TableUpdate('transit_sets', kind: UpdateKind.delete)],
-    ),
-    WritePropagation(
-      on: TableUpdateQuery.onTableName(
-        'transit_sets',
-        limitUpdateKind: UpdateKind.delete,
-      ),
-      result: [TableUpdate('transit_stops', kind: UpdateKind.delete)],
-    ),
-    WritePropagation(
-      on: TableUpdateQuery.onTableName(
-        'layers',
-        limitUpdateKind: UpdateKind.delete,
-      ),
       result: [TableUpdate('border_sets', kind: UpdateKind.delete)],
     ),
     WritePropagation(
@@ -14491,8 +11349,6 @@ typedef $$LayersTableCreateCompanionBuilder =
       Value<String?> borderLevel,
       Value<bool> borderFillAreas,
       Value<bool> borderShowNames,
-      Value<double> trackStrokeWidth,
-      Value<double> trackMinDistanceMeters,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -14509,8 +11365,6 @@ typedef $$LayersTableUpdateCompanionBuilder =
       Value<String?> borderLevel,
       Value<bool> borderFillAreas,
       Value<bool> borderShowNames,
-      Value<double> trackStrokeWidth,
-      Value<double> trackMinDistanceMeters,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -14533,25 +11387,6 @@ final class $$LayersTableReferences
     ).filter((f) => f.layerId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_circlesRefsTable($_db));
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
-
-  static MultiTypedResultKey<$PlanesTable, List<Plane>> _planesRefsTable(
-    _$AppDatabase db,
-  ) => MultiTypedResultKey.fromTable(
-    db.planes,
-    aliasName: $_aliasNameGenerator(db.layers.id, db.planes.layerId),
-  );
-
-  $$PlanesTableProcessedTableManager get planesRefs {
-    final manager = $$PlanesTableTableManager(
-      $_db,
-      $_db.planes,
-    ).filter((f) => f.layerId.id.sqlEquals($_itemColumn<String>('id')!));
-
-    final cache = $_typedResult.readTableOrNull(_planesRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -14588,25 +11423,6 @@ final class $$LayersTableReferences
     ).filter((f) => f.layerId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_freeLinesRefsTable($_db));
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
-
-  static MultiTypedResultKey<$TracksTable, List<Track>> _tracksRefsTable(
-    _$AppDatabase db,
-  ) => MultiTypedResultKey.fromTable(
-    db.tracks,
-    aliasName: $_aliasNameGenerator(db.layers.id, db.tracks.layerId),
-  );
-
-  $$TracksTableProcessedTableManager get tracksRefs {
-    final manager = $$TracksTableTableManager(
-      $_db,
-      $_db.tracks,
-    ).filter((f) => f.layerId.id.sqlEquals($_itemColumn<String>('id')!));
-
-    final cache = $_typedResult.readTableOrNull(_tracksRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -14662,24 +11478,6 @@ final class $$LayersTableReferences
     ).filter((f) => f.layerId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_poiSetsRefsTable($_db));
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
-
-  static MultiTypedResultKey<$TransitSetsTable, List<TransitSet>>
-  _transitSetsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
-    db.transitSets,
-    aliasName: $_aliasNameGenerator(db.layers.id, db.transitSets.layerId),
-  );
-
-  $$TransitSetsTableProcessedTableManager get transitSetsRefs {
-    final manager = $$TransitSetsTableTableManager(
-      $_db,
-      $_db.transitSets,
-    ).filter((f) => f.layerId.id.sqlEquals($_itemColumn<String>('id')!));
-
-    final cache = $_typedResult.readTableOrNull(_transitSetsRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -14768,16 +11566,6 @@ class $$LayersTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<double> get trackStrokeWidth => $composableBuilder(
-    column: $table.trackStrokeWidth,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get trackMinDistanceMeters => $composableBuilder(
-    column: $table.trackMinDistanceMeters,
-    builder: (column) => ColumnFilters(column),
-  );
-
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnFilters(column),
@@ -14799,31 +11587,6 @@ class $$LayersTableFilterComposer
           }) => $$CirclesTableFilterComposer(
             $db: $db,
             $table: $db.circles,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
-  Expression<bool> planesRefs(
-    Expression<bool> Function($$PlanesTableFilterComposer f) f,
-  ) {
-    final $$PlanesTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.planes,
-      getReferencedColumn: (t) => t.layerId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$PlanesTableFilterComposer(
-            $db: $db,
-            $table: $db.planes,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -14874,31 +11637,6 @@ class $$LayersTableFilterComposer
           }) => $$FreeLinesTableFilterComposer(
             $db: $db,
             $table: $db.freeLines,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
-  Expression<bool> tracksRefs(
-    Expression<bool> Function($$TracksTableFilterComposer f) f,
-  ) {
-    final $$TracksTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.tracks,
-      getReferencedColumn: (t) => t.layerId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$TracksTableFilterComposer(
-            $db: $db,
-            $table: $db.tracks,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -14974,31 +11712,6 @@ class $$LayersTableFilterComposer
           }) => $$PoiSetsTableFilterComposer(
             $db: $db,
             $table: $db.poiSets,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
-  Expression<bool> transitSetsRefs(
-    Expression<bool> Function($$TransitSetsTableFilterComposer f) f,
-  ) {
-    final $$TransitSetsTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.transitSets,
-      getReferencedColumn: (t) => t.layerId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$TransitSetsTableFilterComposer(
-            $db: $db,
-            $table: $db.transitSets,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -15098,16 +11811,6 @@ class $$LayersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<double> get trackStrokeWidth => $composableBuilder(
-    column: $table.trackStrokeWidth,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<double> get trackMinDistanceMeters => $composableBuilder(
-    column: $table.trackMinDistanceMeters,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -15164,16 +11867,6 @@ class $$LayersTableAnnotationComposer
     builder: (column) => column,
   );
 
-  GeneratedColumn<double> get trackStrokeWidth => $composableBuilder(
-    column: $table.trackStrokeWidth,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<double> get trackMinDistanceMeters => $composableBuilder(
-    column: $table.trackMinDistanceMeters,
-    builder: (column) => column,
-  );
-
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -15193,31 +11886,6 @@ class $$LayersTableAnnotationComposer
           }) => $$CirclesTableAnnotationComposer(
             $db: $db,
             $table: $db.circles,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
-  Expression<T> planesRefs<T extends Object>(
-    Expression<T> Function($$PlanesTableAnnotationComposer a) f,
-  ) {
-    final $$PlanesTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.planes,
-      getReferencedColumn: (t) => t.layerId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$PlanesTableAnnotationComposer(
-            $db: $db,
-            $table: $db.planes,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -15268,31 +11936,6 @@ class $$LayersTableAnnotationComposer
           }) => $$FreeLinesTableAnnotationComposer(
             $db: $db,
             $table: $db.freeLines,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
-  Expression<T> tracksRefs<T extends Object>(
-    Expression<T> Function($$TracksTableAnnotationComposer a) f,
-  ) {
-    final $$TracksTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.tracks,
-      getReferencedColumn: (t) => t.layerId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$TracksTableAnnotationComposer(
-            $db: $db,
-            $table: $db.tracks,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -15377,31 +12020,6 @@ class $$LayersTableAnnotationComposer
     return f(composer);
   }
 
-  Expression<T> transitSetsRefs<T extends Object>(
-    Expression<T> Function($$TransitSetsTableAnnotationComposer a) f,
-  ) {
-    final $$TransitSetsTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.transitSets,
-      getReferencedColumn: (t) => t.layerId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$TransitSetsTableAnnotationComposer(
-            $db: $db,
-            $table: $db.transitSets,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
   Expression<T> borderSetsRefs<T extends Object>(
     Expression<T> Function($$BorderSetsTableAnnotationComposer a) f,
   ) {
@@ -15443,14 +12061,11 @@ class $$LayersTableTableManager
           Layer,
           PrefetchHooks Function({
             bool circlesRefs,
-            bool planesRefs,
             bool subspacesRefs,
             bool freeLinesRefs,
-            bool tracksRefs,
             bool freeAreasRefs,
             bool heightRegionsRefs,
             bool poiSetsRefs,
-            bool transitSetsRefs,
             bool borderSetsRefs,
           })
         > {
@@ -15478,8 +12093,6 @@ class $$LayersTableTableManager
                 Value<String?> borderLevel = const Value.absent(),
                 Value<bool> borderFillAreas = const Value.absent(),
                 Value<bool> borderShowNames = const Value.absent(),
-                Value<double> trackStrokeWidth = const Value.absent(),
-                Value<double> trackMinDistanceMeters = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LayersCompanion(
@@ -15494,8 +12107,6 @@ class $$LayersTableTableManager
                 borderLevel: borderLevel,
                 borderFillAreas: borderFillAreas,
                 borderShowNames: borderShowNames,
-                trackStrokeWidth: trackStrokeWidth,
-                trackMinDistanceMeters: trackMinDistanceMeters,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -15512,8 +12123,6 @@ class $$LayersTableTableManager
                 Value<String?> borderLevel = const Value.absent(),
                 Value<bool> borderFillAreas = const Value.absent(),
                 Value<bool> borderShowNames = const Value.absent(),
-                Value<double> trackStrokeWidth = const Value.absent(),
-                Value<double> trackMinDistanceMeters = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LayersCompanion.insert(
@@ -15528,8 +12137,6 @@ class $$LayersTableTableManager
                 borderLevel: borderLevel,
                 borderFillAreas: borderFillAreas,
                 borderShowNames: borderShowNames,
-                trackStrokeWidth: trackStrokeWidth,
-                trackMinDistanceMeters: trackMinDistanceMeters,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -15542,28 +12149,22 @@ class $$LayersTableTableManager
           prefetchHooksCallback:
               ({
                 circlesRefs = false,
-                planesRefs = false,
                 subspacesRefs = false,
                 freeLinesRefs = false,
-                tracksRefs = false,
                 freeAreasRefs = false,
                 heightRegionsRefs = false,
                 poiSetsRefs = false,
-                transitSetsRefs = false,
                 borderSetsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
                     if (circlesRefs) db.circles,
-                    if (planesRefs) db.planes,
                     if (subspacesRefs) db.subspaces,
                     if (freeLinesRefs) db.freeLines,
-                    if (tracksRefs) db.tracks,
                     if (freeAreasRefs) db.freeAreas,
                     if (heightRegionsRefs) db.heightRegions,
                     if (poiSetsRefs) db.poiSets,
-                    if (transitSetsRefs) db.transitSets,
                     if (borderSetsRefs) db.borderSets,
                   ],
                   addJoins: null,
@@ -15580,19 +12181,6 @@ class $$LayersTableTableManager
                                 table,
                                 p0,
                               ).circlesRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.layerId == item.id,
-                              ),
-                          typedResults: items,
-                        ),
-                      if (planesRefs)
-                        await $_getPrefetchedData<Layer, $LayersTable, Plane>(
-                          currentTable: table,
-                          referencedTable: $$LayersTableReferences
-                              ._planesRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$LayersTableReferences(db, table, p0).planesRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.layerId == item.id,
@@ -15635,19 +12223,6 @@ class $$LayersTableTableManager
                                 table,
                                 p0,
                               ).freeLinesRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.layerId == item.id,
-                              ),
-                          typedResults: items,
-                        ),
-                      if (tracksRefs)
-                        await $_getPrefetchedData<Layer, $LayersTable, Track>(
-                          currentTable: table,
-                          referencedTable: $$LayersTableReferences
-                              ._tracksRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$LayersTableReferences(db, table, p0).tracksRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.layerId == item.id,
@@ -15713,27 +12288,6 @@ class $$LayersTableTableManager
                               ),
                           typedResults: items,
                         ),
-                      if (transitSetsRefs)
-                        await $_getPrefetchedData<
-                          Layer,
-                          $LayersTable,
-                          TransitSet
-                        >(
-                          currentTable: table,
-                          referencedTable: $$LayersTableReferences
-                              ._transitSetsRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$LayersTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).transitSetsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.layerId == item.id,
-                              ),
-                          typedResults: items,
-                        ),
                       if (borderSetsRefs)
                         await $_getPrefetchedData<
                           Layer,
@@ -15777,14 +12331,11 @@ typedef $$LayersTableProcessedTableManager =
       Layer,
       PrefetchHooks Function({
         bool circlesRefs,
-        bool planesRefs,
         bool subspacesRefs,
         bool freeLinesRefs,
-        bool tracksRefs,
         bool freeAreasRefs,
         bool heightRegionsRefs,
         bool poiSetsRefs,
-        bool transitSetsRefs,
         bool borderSetsRefs,
       })
     >;
@@ -16203,457 +12754,6 @@ typedef $$CirclesTableProcessedTableManager =
       $$CirclesTableUpdateCompanionBuilder,
       (Circle, $$CirclesTableReferences),
       Circle,
-      PrefetchHooks Function({bool layerId})
-    >;
-typedef $$PlanesTableCreateCompanionBuilder =
-    PlanesCompanion Function({
-      required String id,
-      required String layerId,
-      required double aLat,
-      required double aLng,
-      required double bLat,
-      required double bLng,
-      Value<bool> nearA,
-      Value<String?> label,
-      Value<DateTime> createdAt,
-      Value<int?> colorArgb,
-      Value<int> colorShade,
-      Value<int> zOrder,
-      Value<int> rowid,
-    });
-typedef $$PlanesTableUpdateCompanionBuilder =
-    PlanesCompanion Function({
-      Value<String> id,
-      Value<String> layerId,
-      Value<double> aLat,
-      Value<double> aLng,
-      Value<double> bLat,
-      Value<double> bLng,
-      Value<bool> nearA,
-      Value<String?> label,
-      Value<DateTime> createdAt,
-      Value<int?> colorArgb,
-      Value<int> colorShade,
-      Value<int> zOrder,
-      Value<int> rowid,
-    });
-
-final class $$PlanesTableReferences
-    extends BaseReferences<_$AppDatabase, $PlanesTable, Plane> {
-  $$PlanesTableReferences(super.$_db, super.$_table, super.$_typedResult);
-
-  static $LayersTable _layerIdTable(_$AppDatabase db) => db.layers.createAlias(
-    $_aliasNameGenerator(db.planes.layerId, db.layers.id),
-  );
-
-  $$LayersTableProcessedTableManager get layerId {
-    final $_column = $_itemColumn<String>('layer_id')!;
-
-    final manager = $$LayersTableTableManager(
-      $_db,
-      $_db.layers,
-    ).filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_layerIdTable($_db));
-    if (item == null) return manager;
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: [item]),
-    );
-  }
-}
-
-class $$PlanesTableFilterComposer
-    extends Composer<_$AppDatabase, $PlanesTable> {
-  $$PlanesTableFilterComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnFilters<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get aLat => $composableBuilder(
-    column: $table.aLat,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get aLng => $composableBuilder(
-    column: $table.aLng,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get bLat => $composableBuilder(
-    column: $table.bLat,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get bLng => $composableBuilder(
-    column: $table.bLng,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<bool> get nearA => $composableBuilder(
-    column: $table.nearA,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get label => $composableBuilder(
-    column: $table.label,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<DateTime> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get colorArgb => $composableBuilder(
-    column: $table.colorArgb,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get colorShade => $composableBuilder(
-    column: $table.colorShade,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get zOrder => $composableBuilder(
-    column: $table.zOrder,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  $$LayersTableFilterComposer get layerId {
-    final $$LayersTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.layerId,
-      referencedTable: $db.layers,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$LayersTableFilterComposer(
-            $db: $db,
-            $table: $db.layers,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-}
-
-class $$PlanesTableOrderingComposer
-    extends Composer<_$AppDatabase, $PlanesTable> {
-  $$PlanesTableOrderingComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnOrderings<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<double> get aLat => $composableBuilder(
-    column: $table.aLat,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<double> get aLng => $composableBuilder(
-    column: $table.aLng,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<double> get bLat => $composableBuilder(
-    column: $table.bLat,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<double> get bLng => $composableBuilder(
-    column: $table.bLng,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<bool> get nearA => $composableBuilder(
-    column: $table.nearA,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get label => $composableBuilder(
-    column: $table.label,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get colorArgb => $composableBuilder(
-    column: $table.colorArgb,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get colorShade => $composableBuilder(
-    column: $table.colorShade,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get zOrder => $composableBuilder(
-    column: $table.zOrder,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  $$LayersTableOrderingComposer get layerId {
-    final $$LayersTableOrderingComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.layerId,
-      referencedTable: $db.layers,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$LayersTableOrderingComposer(
-            $db: $db,
-            $table: $db.layers,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-}
-
-class $$PlanesTableAnnotationComposer
-    extends Composer<_$AppDatabase, $PlanesTable> {
-  $$PlanesTableAnnotationComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  GeneratedColumn<String> get id =>
-      $composableBuilder(column: $table.id, builder: (column) => column);
-
-  GeneratedColumn<double> get aLat =>
-      $composableBuilder(column: $table.aLat, builder: (column) => column);
-
-  GeneratedColumn<double> get aLng =>
-      $composableBuilder(column: $table.aLng, builder: (column) => column);
-
-  GeneratedColumn<double> get bLat =>
-      $composableBuilder(column: $table.bLat, builder: (column) => column);
-
-  GeneratedColumn<double> get bLng =>
-      $composableBuilder(column: $table.bLng, builder: (column) => column);
-
-  GeneratedColumn<bool> get nearA =>
-      $composableBuilder(column: $table.nearA, builder: (column) => column);
-
-  GeneratedColumn<String> get label =>
-      $composableBuilder(column: $table.label, builder: (column) => column);
-
-  GeneratedColumn<DateTime> get createdAt =>
-      $composableBuilder(column: $table.createdAt, builder: (column) => column);
-
-  GeneratedColumn<int> get colorArgb =>
-      $composableBuilder(column: $table.colorArgb, builder: (column) => column);
-
-  GeneratedColumn<int> get colorShade => $composableBuilder(
-    column: $table.colorShade,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<int> get zOrder =>
-      $composableBuilder(column: $table.zOrder, builder: (column) => column);
-
-  $$LayersTableAnnotationComposer get layerId {
-    final $$LayersTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.layerId,
-      referencedTable: $db.layers,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$LayersTableAnnotationComposer(
-            $db: $db,
-            $table: $db.layers,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-}
-
-class $$PlanesTableTableManager
-    extends
-        RootTableManager<
-          _$AppDatabase,
-          $PlanesTable,
-          Plane,
-          $$PlanesTableFilterComposer,
-          $$PlanesTableOrderingComposer,
-          $$PlanesTableAnnotationComposer,
-          $$PlanesTableCreateCompanionBuilder,
-          $$PlanesTableUpdateCompanionBuilder,
-          (Plane, $$PlanesTableReferences),
-          Plane,
-          PrefetchHooks Function({bool layerId})
-        > {
-  $$PlanesTableTableManager(_$AppDatabase db, $PlanesTable table)
-    : super(
-        TableManagerState(
-          db: db,
-          table: table,
-          createFilteringComposer: () =>
-              $$PlanesTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$PlanesTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$PlanesTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback:
-              ({
-                Value<String> id = const Value.absent(),
-                Value<String> layerId = const Value.absent(),
-                Value<double> aLat = const Value.absent(),
-                Value<double> aLng = const Value.absent(),
-                Value<double> bLat = const Value.absent(),
-                Value<double> bLng = const Value.absent(),
-                Value<bool> nearA = const Value.absent(),
-                Value<String?> label = const Value.absent(),
-                Value<DateTime> createdAt = const Value.absent(),
-                Value<int?> colorArgb = const Value.absent(),
-                Value<int> colorShade = const Value.absent(),
-                Value<int> zOrder = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => PlanesCompanion(
-                id: id,
-                layerId: layerId,
-                aLat: aLat,
-                aLng: aLng,
-                bLat: bLat,
-                bLng: bLng,
-                nearA: nearA,
-                label: label,
-                createdAt: createdAt,
-                colorArgb: colorArgb,
-                colorShade: colorShade,
-                zOrder: zOrder,
-                rowid: rowid,
-              ),
-          createCompanionCallback:
-              ({
-                required String id,
-                required String layerId,
-                required double aLat,
-                required double aLng,
-                required double bLat,
-                required double bLng,
-                Value<bool> nearA = const Value.absent(),
-                Value<String?> label = const Value.absent(),
-                Value<DateTime> createdAt = const Value.absent(),
-                Value<int?> colorArgb = const Value.absent(),
-                Value<int> colorShade = const Value.absent(),
-                Value<int> zOrder = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => PlanesCompanion.insert(
-                id: id,
-                layerId: layerId,
-                aLat: aLat,
-                aLng: aLng,
-                bLat: bLat,
-                bLng: bLng,
-                nearA: nearA,
-                label: label,
-                createdAt: createdAt,
-                colorArgb: colorArgb,
-                colorShade: colorShade,
-                zOrder: zOrder,
-                rowid: rowid,
-              ),
-          withReferenceMapper: (p0) => p0
-              .map(
-                (e) =>
-                    (e.readTable(table), $$PlanesTableReferences(db, table, e)),
-              )
-              .toList(),
-          prefetchHooksCallback: ({layerId = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [],
-              addJoins:
-                  <
-                    T extends TableManagerState<
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic
-                    >
-                  >(state) {
-                    if (layerId) {
-                      state =
-                          state.withJoin(
-                                currentTable: table,
-                                currentColumn: table.layerId,
-                                referencedTable: $$PlanesTableReferences
-                                    ._layerIdTable(db),
-                                referencedColumn: $$PlanesTableReferences
-                                    ._layerIdTable(db)
-                                    .id,
-                              )
-                              as T;
-                    }
-
-                    return state;
-                  },
-              getPrefetchedDataCallback: (items) async {
-                return [];
-              },
-            );
-          },
-        ),
-      );
-}
-
-typedef $$PlanesTableProcessedTableManager =
-    ProcessedTableManager<
-      _$AppDatabase,
-      $PlanesTable,
-      Plane,
-      $$PlanesTableFilterComposer,
-      $$PlanesTableOrderingComposer,
-      $$PlanesTableAnnotationComposer,
-      $$PlanesTableCreateCompanionBuilder,
-      $$PlanesTableUpdateCompanionBuilder,
-      (Plane, $$PlanesTableReferences),
-      Plane,
       PrefetchHooks Function({bool layerId})
     >;
 typedef $$AppSettingsTableCreateCompanionBuilder =
@@ -18718,881 +14818,6 @@ typedef $$FreeLinePointsTableProcessedTableManager =
       (FreeLinePoint, $$FreeLinePointsTableReferences),
       FreeLinePoint,
       PrefetchHooks Function({bool freeLineId})
-    >;
-typedef $$TracksTableCreateCompanionBuilder =
-    TracksCompanion Function({
-      required String id,
-      required String layerId,
-      Value<String?> label,
-      Value<DateTime> createdAt,
-      Value<int?> colorArgb,
-      Value<int> colorShade,
-      Value<int> zOrder,
-      Value<double?> south,
-      Value<double?> west,
-      Value<double?> north,
-      Value<double?> east,
-      Value<int> rowid,
-    });
-typedef $$TracksTableUpdateCompanionBuilder =
-    TracksCompanion Function({
-      Value<String> id,
-      Value<String> layerId,
-      Value<String?> label,
-      Value<DateTime> createdAt,
-      Value<int?> colorArgb,
-      Value<int> colorShade,
-      Value<int> zOrder,
-      Value<double?> south,
-      Value<double?> west,
-      Value<double?> north,
-      Value<double?> east,
-      Value<int> rowid,
-    });
-
-final class $$TracksTableReferences
-    extends BaseReferences<_$AppDatabase, $TracksTable, Track> {
-  $$TracksTableReferences(super.$_db, super.$_table, super.$_typedResult);
-
-  static $LayersTable _layerIdTable(_$AppDatabase db) => db.layers.createAlias(
-    $_aliasNameGenerator(db.tracks.layerId, db.layers.id),
-  );
-
-  $$LayersTableProcessedTableManager get layerId {
-    final $_column = $_itemColumn<String>('layer_id')!;
-
-    final manager = $$LayersTableTableManager(
-      $_db,
-      $_db.layers,
-    ).filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_layerIdTable($_db));
-    if (item == null) return manager;
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: [item]),
-    );
-  }
-
-  static MultiTypedResultKey<$TrackPointsTable, List<TrackPoint>>
-  _trackPointsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
-    db.trackPoints,
-    aliasName: $_aliasNameGenerator(db.tracks.id, db.trackPoints.trackId),
-  );
-
-  $$TrackPointsTableProcessedTableManager get trackPointsRefs {
-    final manager = $$TrackPointsTableTableManager(
-      $_db,
-      $_db.trackPoints,
-    ).filter((f) => f.trackId.id.sqlEquals($_itemColumn<String>('id')!));
-
-    final cache = $_typedResult.readTableOrNull(_trackPointsRefsTable($_db));
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
-}
-
-class $$TracksTableFilterComposer
-    extends Composer<_$AppDatabase, $TracksTable> {
-  $$TracksTableFilterComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnFilters<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get label => $composableBuilder(
-    column: $table.label,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<DateTime> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get colorArgb => $composableBuilder(
-    column: $table.colorArgb,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get colorShade => $composableBuilder(
-    column: $table.colorShade,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get zOrder => $composableBuilder(
-    column: $table.zOrder,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get south => $composableBuilder(
-    column: $table.south,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get west => $composableBuilder(
-    column: $table.west,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get north => $composableBuilder(
-    column: $table.north,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get east => $composableBuilder(
-    column: $table.east,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  $$LayersTableFilterComposer get layerId {
-    final $$LayersTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.layerId,
-      referencedTable: $db.layers,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$LayersTableFilterComposer(
-            $db: $db,
-            $table: $db.layers,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-
-  Expression<bool> trackPointsRefs(
-    Expression<bool> Function($$TrackPointsTableFilterComposer f) f,
-  ) {
-    final $$TrackPointsTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.trackPoints,
-      getReferencedColumn: (t) => t.trackId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$TrackPointsTableFilterComposer(
-            $db: $db,
-            $table: $db.trackPoints,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-}
-
-class $$TracksTableOrderingComposer
-    extends Composer<_$AppDatabase, $TracksTable> {
-  $$TracksTableOrderingComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnOrderings<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get label => $composableBuilder(
-    column: $table.label,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get colorArgb => $composableBuilder(
-    column: $table.colorArgb,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get colorShade => $composableBuilder(
-    column: $table.colorShade,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get zOrder => $composableBuilder(
-    column: $table.zOrder,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<double> get south => $composableBuilder(
-    column: $table.south,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<double> get west => $composableBuilder(
-    column: $table.west,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<double> get north => $composableBuilder(
-    column: $table.north,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<double> get east => $composableBuilder(
-    column: $table.east,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  $$LayersTableOrderingComposer get layerId {
-    final $$LayersTableOrderingComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.layerId,
-      referencedTable: $db.layers,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$LayersTableOrderingComposer(
-            $db: $db,
-            $table: $db.layers,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-}
-
-class $$TracksTableAnnotationComposer
-    extends Composer<_$AppDatabase, $TracksTable> {
-  $$TracksTableAnnotationComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  GeneratedColumn<String> get id =>
-      $composableBuilder(column: $table.id, builder: (column) => column);
-
-  GeneratedColumn<String> get label =>
-      $composableBuilder(column: $table.label, builder: (column) => column);
-
-  GeneratedColumn<DateTime> get createdAt =>
-      $composableBuilder(column: $table.createdAt, builder: (column) => column);
-
-  GeneratedColumn<int> get colorArgb =>
-      $composableBuilder(column: $table.colorArgb, builder: (column) => column);
-
-  GeneratedColumn<int> get colorShade => $composableBuilder(
-    column: $table.colorShade,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<int> get zOrder =>
-      $composableBuilder(column: $table.zOrder, builder: (column) => column);
-
-  GeneratedColumn<double> get south =>
-      $composableBuilder(column: $table.south, builder: (column) => column);
-
-  GeneratedColumn<double> get west =>
-      $composableBuilder(column: $table.west, builder: (column) => column);
-
-  GeneratedColumn<double> get north =>
-      $composableBuilder(column: $table.north, builder: (column) => column);
-
-  GeneratedColumn<double> get east =>
-      $composableBuilder(column: $table.east, builder: (column) => column);
-
-  $$LayersTableAnnotationComposer get layerId {
-    final $$LayersTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.layerId,
-      referencedTable: $db.layers,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$LayersTableAnnotationComposer(
-            $db: $db,
-            $table: $db.layers,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-
-  Expression<T> trackPointsRefs<T extends Object>(
-    Expression<T> Function($$TrackPointsTableAnnotationComposer a) f,
-  ) {
-    final $$TrackPointsTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.trackPoints,
-      getReferencedColumn: (t) => t.trackId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$TrackPointsTableAnnotationComposer(
-            $db: $db,
-            $table: $db.trackPoints,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-}
-
-class $$TracksTableTableManager
-    extends
-        RootTableManager<
-          _$AppDatabase,
-          $TracksTable,
-          Track,
-          $$TracksTableFilterComposer,
-          $$TracksTableOrderingComposer,
-          $$TracksTableAnnotationComposer,
-          $$TracksTableCreateCompanionBuilder,
-          $$TracksTableUpdateCompanionBuilder,
-          (Track, $$TracksTableReferences),
-          Track,
-          PrefetchHooks Function({bool layerId, bool trackPointsRefs})
-        > {
-  $$TracksTableTableManager(_$AppDatabase db, $TracksTable table)
-    : super(
-        TableManagerState(
-          db: db,
-          table: table,
-          createFilteringComposer: () =>
-              $$TracksTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$TracksTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$TracksTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback:
-              ({
-                Value<String> id = const Value.absent(),
-                Value<String> layerId = const Value.absent(),
-                Value<String?> label = const Value.absent(),
-                Value<DateTime> createdAt = const Value.absent(),
-                Value<int?> colorArgb = const Value.absent(),
-                Value<int> colorShade = const Value.absent(),
-                Value<int> zOrder = const Value.absent(),
-                Value<double?> south = const Value.absent(),
-                Value<double?> west = const Value.absent(),
-                Value<double?> north = const Value.absent(),
-                Value<double?> east = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => TracksCompanion(
-                id: id,
-                layerId: layerId,
-                label: label,
-                createdAt: createdAt,
-                colorArgb: colorArgb,
-                colorShade: colorShade,
-                zOrder: zOrder,
-                south: south,
-                west: west,
-                north: north,
-                east: east,
-                rowid: rowid,
-              ),
-          createCompanionCallback:
-              ({
-                required String id,
-                required String layerId,
-                Value<String?> label = const Value.absent(),
-                Value<DateTime> createdAt = const Value.absent(),
-                Value<int?> colorArgb = const Value.absent(),
-                Value<int> colorShade = const Value.absent(),
-                Value<int> zOrder = const Value.absent(),
-                Value<double?> south = const Value.absent(),
-                Value<double?> west = const Value.absent(),
-                Value<double?> north = const Value.absent(),
-                Value<double?> east = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => TracksCompanion.insert(
-                id: id,
-                layerId: layerId,
-                label: label,
-                createdAt: createdAt,
-                colorArgb: colorArgb,
-                colorShade: colorShade,
-                zOrder: zOrder,
-                south: south,
-                west: west,
-                north: north,
-                east: east,
-                rowid: rowid,
-              ),
-          withReferenceMapper: (p0) => p0
-              .map(
-                (e) =>
-                    (e.readTable(table), $$TracksTableReferences(db, table, e)),
-              )
-              .toList(),
-          prefetchHooksCallback: ({layerId = false, trackPointsRefs = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [if (trackPointsRefs) db.trackPoints],
-              addJoins:
-                  <
-                    T extends TableManagerState<
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic
-                    >
-                  >(state) {
-                    if (layerId) {
-                      state =
-                          state.withJoin(
-                                currentTable: table,
-                                currentColumn: table.layerId,
-                                referencedTable: $$TracksTableReferences
-                                    ._layerIdTable(db),
-                                referencedColumn: $$TracksTableReferences
-                                    ._layerIdTable(db)
-                                    .id,
-                              )
-                              as T;
-                    }
-
-                    return state;
-                  },
-              getPrefetchedDataCallback: (items) async {
-                return [
-                  if (trackPointsRefs)
-                    await $_getPrefetchedData<Track, $TracksTable, TrackPoint>(
-                      currentTable: table,
-                      referencedTable: $$TracksTableReferences
-                          ._trackPointsRefsTable(db),
-                      managerFromTypedResult: (p0) => $$TracksTableReferences(
-                        db,
-                        table,
-                        p0,
-                      ).trackPointsRefs,
-                      referencedItemsForCurrentItem: (item, referencedItems) =>
-                          referencedItems.where((e) => e.trackId == item.id),
-                      typedResults: items,
-                    ),
-                ];
-              },
-            );
-          },
-        ),
-      );
-}
-
-typedef $$TracksTableProcessedTableManager =
-    ProcessedTableManager<
-      _$AppDatabase,
-      $TracksTable,
-      Track,
-      $$TracksTableFilterComposer,
-      $$TracksTableOrderingComposer,
-      $$TracksTableAnnotationComposer,
-      $$TracksTableCreateCompanionBuilder,
-      $$TracksTableUpdateCompanionBuilder,
-      (Track, $$TracksTableReferences),
-      Track,
-      PrefetchHooks Function({bool layerId, bool trackPointsRefs})
-    >;
-typedef $$TrackPointsTableCreateCompanionBuilder =
-    TrackPointsCompanion Function({
-      required String id,
-      required String trackId,
-      required double lat,
-      required double lng,
-      required int sortOrder,
-      Value<int> segmentIndex,
-      Value<DateTime> recordedAt,
-      Value<int> rowid,
-    });
-typedef $$TrackPointsTableUpdateCompanionBuilder =
-    TrackPointsCompanion Function({
-      Value<String> id,
-      Value<String> trackId,
-      Value<double> lat,
-      Value<double> lng,
-      Value<int> sortOrder,
-      Value<int> segmentIndex,
-      Value<DateTime> recordedAt,
-      Value<int> rowid,
-    });
-
-final class $$TrackPointsTableReferences
-    extends BaseReferences<_$AppDatabase, $TrackPointsTable, TrackPoint> {
-  $$TrackPointsTableReferences(super.$_db, super.$_table, super.$_typedResult);
-
-  static $TracksTable _trackIdTable(_$AppDatabase db) => db.tracks.createAlias(
-    $_aliasNameGenerator(db.trackPoints.trackId, db.tracks.id),
-  );
-
-  $$TracksTableProcessedTableManager get trackId {
-    final $_column = $_itemColumn<String>('track_id')!;
-
-    final manager = $$TracksTableTableManager(
-      $_db,
-      $_db.tracks,
-    ).filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_trackIdTable($_db));
-    if (item == null) return manager;
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: [item]),
-    );
-  }
-}
-
-class $$TrackPointsTableFilterComposer
-    extends Composer<_$AppDatabase, $TrackPointsTable> {
-  $$TrackPointsTableFilterComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnFilters<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get lat => $composableBuilder(
-    column: $table.lat,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get lng => $composableBuilder(
-    column: $table.lng,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get sortOrder => $composableBuilder(
-    column: $table.sortOrder,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get segmentIndex => $composableBuilder(
-    column: $table.segmentIndex,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<DateTime> get recordedAt => $composableBuilder(
-    column: $table.recordedAt,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  $$TracksTableFilterComposer get trackId {
-    final $$TracksTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.trackId,
-      referencedTable: $db.tracks,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$TracksTableFilterComposer(
-            $db: $db,
-            $table: $db.tracks,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-}
-
-class $$TrackPointsTableOrderingComposer
-    extends Composer<_$AppDatabase, $TrackPointsTable> {
-  $$TrackPointsTableOrderingComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnOrderings<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<double> get lat => $composableBuilder(
-    column: $table.lat,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<double> get lng => $composableBuilder(
-    column: $table.lng,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get sortOrder => $composableBuilder(
-    column: $table.sortOrder,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get segmentIndex => $composableBuilder(
-    column: $table.segmentIndex,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<DateTime> get recordedAt => $composableBuilder(
-    column: $table.recordedAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  $$TracksTableOrderingComposer get trackId {
-    final $$TracksTableOrderingComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.trackId,
-      referencedTable: $db.tracks,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$TracksTableOrderingComposer(
-            $db: $db,
-            $table: $db.tracks,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-}
-
-class $$TrackPointsTableAnnotationComposer
-    extends Composer<_$AppDatabase, $TrackPointsTable> {
-  $$TrackPointsTableAnnotationComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  GeneratedColumn<String> get id =>
-      $composableBuilder(column: $table.id, builder: (column) => column);
-
-  GeneratedColumn<double> get lat =>
-      $composableBuilder(column: $table.lat, builder: (column) => column);
-
-  GeneratedColumn<double> get lng =>
-      $composableBuilder(column: $table.lng, builder: (column) => column);
-
-  GeneratedColumn<int> get sortOrder =>
-      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
-
-  GeneratedColumn<int> get segmentIndex => $composableBuilder(
-    column: $table.segmentIndex,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<DateTime> get recordedAt => $composableBuilder(
-    column: $table.recordedAt,
-    builder: (column) => column,
-  );
-
-  $$TracksTableAnnotationComposer get trackId {
-    final $$TracksTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.trackId,
-      referencedTable: $db.tracks,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$TracksTableAnnotationComposer(
-            $db: $db,
-            $table: $db.tracks,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-}
-
-class $$TrackPointsTableTableManager
-    extends
-        RootTableManager<
-          _$AppDatabase,
-          $TrackPointsTable,
-          TrackPoint,
-          $$TrackPointsTableFilterComposer,
-          $$TrackPointsTableOrderingComposer,
-          $$TrackPointsTableAnnotationComposer,
-          $$TrackPointsTableCreateCompanionBuilder,
-          $$TrackPointsTableUpdateCompanionBuilder,
-          (TrackPoint, $$TrackPointsTableReferences),
-          TrackPoint,
-          PrefetchHooks Function({bool trackId})
-        > {
-  $$TrackPointsTableTableManager(_$AppDatabase db, $TrackPointsTable table)
-    : super(
-        TableManagerState(
-          db: db,
-          table: table,
-          createFilteringComposer: () =>
-              $$TrackPointsTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$TrackPointsTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$TrackPointsTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback:
-              ({
-                Value<String> id = const Value.absent(),
-                Value<String> trackId = const Value.absent(),
-                Value<double> lat = const Value.absent(),
-                Value<double> lng = const Value.absent(),
-                Value<int> sortOrder = const Value.absent(),
-                Value<int> segmentIndex = const Value.absent(),
-                Value<DateTime> recordedAt = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => TrackPointsCompanion(
-                id: id,
-                trackId: trackId,
-                lat: lat,
-                lng: lng,
-                sortOrder: sortOrder,
-                segmentIndex: segmentIndex,
-                recordedAt: recordedAt,
-                rowid: rowid,
-              ),
-          createCompanionCallback:
-              ({
-                required String id,
-                required String trackId,
-                required double lat,
-                required double lng,
-                required int sortOrder,
-                Value<int> segmentIndex = const Value.absent(),
-                Value<DateTime> recordedAt = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => TrackPointsCompanion.insert(
-                id: id,
-                trackId: trackId,
-                lat: lat,
-                lng: lng,
-                sortOrder: sortOrder,
-                segmentIndex: segmentIndex,
-                recordedAt: recordedAt,
-                rowid: rowid,
-              ),
-          withReferenceMapper: (p0) => p0
-              .map(
-                (e) => (
-                  e.readTable(table),
-                  $$TrackPointsTableReferences(db, table, e),
-                ),
-              )
-              .toList(),
-          prefetchHooksCallback: ({trackId = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [],
-              addJoins:
-                  <
-                    T extends TableManagerState<
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic
-                    >
-                  >(state) {
-                    if (trackId) {
-                      state =
-                          state.withJoin(
-                                currentTable: table,
-                                currentColumn: table.trackId,
-                                referencedTable: $$TrackPointsTableReferences
-                                    ._trackIdTable(db),
-                                referencedColumn: $$TrackPointsTableReferences
-                                    ._trackIdTable(db)
-                                    .id,
-                              )
-                              as T;
-                    }
-
-                    return state;
-                  },
-              getPrefetchedDataCallback: (items) async {
-                return [];
-              },
-            );
-          },
-        ),
-      );
-}
-
-typedef $$TrackPointsTableProcessedTableManager =
-    ProcessedTableManager<
-      _$AppDatabase,
-      $TrackPointsTable,
-      TrackPoint,
-      $$TrackPointsTableFilterComposer,
-      $$TrackPointsTableOrderingComposer,
-      $$TrackPointsTableAnnotationComposer,
-      $$TrackPointsTableCreateCompanionBuilder,
-      $$TrackPointsTableUpdateCompanionBuilder,
-      (TrackPoint, $$TrackPointsTableReferences),
-      TrackPoint,
-      PrefetchHooks Function({bool trackId})
     >;
 typedef $$FreeAreasTableCreateCompanionBuilder =
     FreeAreasCompanion Function({
@@ -21810,7 +17035,15 @@ typedef $$PoiSetsTableCreateCompanionBuilder =
       Value<int?> colorArgb,
       Value<int> colorShade,
       Value<int> zOrder,
-      Value<bool> isManual,
+      Value<String> source,
+      Value<double?> south,
+      Value<double?> west,
+      Value<double?> north,
+      Value<double?> east,
+      Value<int> modeMask,
+      Value<int> visibleModeMask,
+      Value<DateTime?> fetchedAt,
+      Value<String?> lastError,
       Value<String?> iconKey,
       Value<int> rowid,
     });
@@ -21827,7 +17060,15 @@ typedef $$PoiSetsTableUpdateCompanionBuilder =
       Value<int?> colorArgb,
       Value<int> colorShade,
       Value<int> zOrder,
-      Value<bool> isManual,
+      Value<String> source,
+      Value<double?> south,
+      Value<double?> west,
+      Value<double?> north,
+      Value<double?> east,
+      Value<int> modeMask,
+      Value<int> visibleModeMask,
+      Value<DateTime?> fetchedAt,
+      Value<String?> lastError,
       Value<String?> iconKey,
       Value<int> rowid,
     });
@@ -21932,8 +17173,48 @@ class $$PoiSetsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<bool> get isManual => $composableBuilder(
-    column: $table.isManual,
+  ColumnFilters<String> get source => $composableBuilder(
+    column: $table.source,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get south => $composableBuilder(
+    column: $table.south,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get west => $composableBuilder(
+    column: $table.west,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get north => $composableBuilder(
+    column: $table.north,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get east => $composableBuilder(
+    column: $table.east,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get modeMask => $composableBuilder(
+    column: $table.modeMask,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get visibleModeMask => $composableBuilder(
+    column: $table.visibleModeMask,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get fetchedAt => $composableBuilder(
+    column: $table.fetchedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastError => $composableBuilder(
+    column: $table.lastError,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -22050,8 +17331,48 @@ class $$PoiSetsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<bool> get isManual => $composableBuilder(
-    column: $table.isManual,
+  ColumnOrderings<String> get source => $composableBuilder(
+    column: $table.source,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get south => $composableBuilder(
+    column: $table.south,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get west => $composableBuilder(
+    column: $table.west,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get north => $composableBuilder(
+    column: $table.north,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get east => $composableBuilder(
+    column: $table.east,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get modeMask => $composableBuilder(
+    column: $table.modeMask,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get visibleModeMask => $composableBuilder(
+    column: $table.visibleModeMask,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get fetchedAt => $composableBuilder(
+    column: $table.fetchedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lastError => $composableBuilder(
+    column: $table.lastError,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -22129,8 +17450,34 @@ class $$PoiSetsTableAnnotationComposer
   GeneratedColumn<int> get zOrder =>
       $composableBuilder(column: $table.zOrder, builder: (column) => column);
 
-  GeneratedColumn<bool> get isManual =>
-      $composableBuilder(column: $table.isManual, builder: (column) => column);
+  GeneratedColumn<String> get source =>
+      $composableBuilder(column: $table.source, builder: (column) => column);
+
+  GeneratedColumn<double> get south =>
+      $composableBuilder(column: $table.south, builder: (column) => column);
+
+  GeneratedColumn<double> get west =>
+      $composableBuilder(column: $table.west, builder: (column) => column);
+
+  GeneratedColumn<double> get north =>
+      $composableBuilder(column: $table.north, builder: (column) => column);
+
+  GeneratedColumn<double> get east =>
+      $composableBuilder(column: $table.east, builder: (column) => column);
+
+  GeneratedColumn<int> get modeMask =>
+      $composableBuilder(column: $table.modeMask, builder: (column) => column);
+
+  GeneratedColumn<int> get visibleModeMask => $composableBuilder(
+    column: $table.visibleModeMask,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get fetchedAt =>
+      $composableBuilder(column: $table.fetchedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get lastError =>
+      $composableBuilder(column: $table.lastError, builder: (column) => column);
 
   GeneratedColumn<String> get iconKey =>
       $composableBuilder(column: $table.iconKey, builder: (column) => column);
@@ -22223,7 +17570,15 @@ class $$PoiSetsTableTableManager
                 Value<int?> colorArgb = const Value.absent(),
                 Value<int> colorShade = const Value.absent(),
                 Value<int> zOrder = const Value.absent(),
-                Value<bool> isManual = const Value.absent(),
+                Value<String> source = const Value.absent(),
+                Value<double?> south = const Value.absent(),
+                Value<double?> west = const Value.absent(),
+                Value<double?> north = const Value.absent(),
+                Value<double?> east = const Value.absent(),
+                Value<int> modeMask = const Value.absent(),
+                Value<int> visibleModeMask = const Value.absent(),
+                Value<DateTime?> fetchedAt = const Value.absent(),
+                Value<String?> lastError = const Value.absent(),
                 Value<String?> iconKey = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PoiSetsCompanion(
@@ -22238,7 +17593,15 @@ class $$PoiSetsTableTableManager
                 colorArgb: colorArgb,
                 colorShade: colorShade,
                 zOrder: zOrder,
-                isManual: isManual,
+                source: source,
+                south: south,
+                west: west,
+                north: north,
+                east: east,
+                modeMask: modeMask,
+                visibleModeMask: visibleModeMask,
+                fetchedAt: fetchedAt,
+                lastError: lastError,
                 iconKey: iconKey,
                 rowid: rowid,
               ),
@@ -22255,7 +17618,15 @@ class $$PoiSetsTableTableManager
                 Value<int?> colorArgb = const Value.absent(),
                 Value<int> colorShade = const Value.absent(),
                 Value<int> zOrder = const Value.absent(),
-                Value<bool> isManual = const Value.absent(),
+                Value<String> source = const Value.absent(),
+                Value<double?> south = const Value.absent(),
+                Value<double?> west = const Value.absent(),
+                Value<double?> north = const Value.absent(),
+                Value<double?> east = const Value.absent(),
+                Value<int> modeMask = const Value.absent(),
+                Value<int> visibleModeMask = const Value.absent(),
+                Value<DateTime?> fetchedAt = const Value.absent(),
+                Value<String?> lastError = const Value.absent(),
                 Value<String?> iconKey = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PoiSetsCompanion.insert(
@@ -22270,7 +17641,15 @@ class $$PoiSetsTableTableManager
                 colorArgb: colorArgb,
                 colorShade: colorShade,
                 zOrder: zOrder,
-                isManual: isManual,
+                source: source,
+                south: south,
+                west: west,
+                north: north,
+                east: east,
+                modeMask: modeMask,
+                visibleModeMask: visibleModeMask,
+                fetchedAt: fetchedAt,
+                lastError: lastError,
                 iconKey: iconKey,
                 rowid: rowid,
               ),
@@ -22364,6 +17743,7 @@ typedef $$PoiPointsTableCreateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<String?> osmType,
       Value<int?> osmId,
+      Value<int> modeMask,
       Value<int> rowid,
     });
 typedef $$PoiPointsTableUpdateCompanionBuilder =
@@ -22377,6 +17757,7 @@ typedef $$PoiPointsTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<String?> osmType,
       Value<int?> osmId,
+      Value<int> modeMask,
       Value<int> rowid,
     });
 
@@ -22448,6 +17829,11 @@ class $$PoiPointsTableFilterComposer
 
   ColumnFilters<int> get osmId => $composableBuilder(
     column: $table.osmId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get modeMask => $composableBuilder(
+    column: $table.modeMask,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -22524,6 +17910,11 @@ class $$PoiPointsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get modeMask => $composableBuilder(
+    column: $table.modeMask,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$PoiSetsTableOrderingComposer get poiSetId {
     final $$PoiSetsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -22580,6 +17971,9 @@ class $$PoiPointsTableAnnotationComposer
 
   GeneratedColumn<int> get osmId =>
       $composableBuilder(column: $table.osmId, builder: (column) => column);
+
+  GeneratedColumn<int> get modeMask =>
+      $composableBuilder(column: $table.modeMask, builder: (column) => column);
 
   $$PoiSetsTableAnnotationComposer get poiSetId {
     final $$PoiSetsTableAnnotationComposer composer = $composerBuilder(
@@ -22642,6 +18036,7 @@ class $$PoiPointsTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<String?> osmType = const Value.absent(),
                 Value<int?> osmId = const Value.absent(),
+                Value<int> modeMask = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PoiPointsCompanion(
                 id: id,
@@ -22653,6 +18048,7 @@ class $$PoiPointsTableTableManager
                 createdAt: createdAt,
                 osmType: osmType,
                 osmId: osmId,
+                modeMask: modeMask,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -22666,6 +18062,7 @@ class $$PoiPointsTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<String?> osmType = const Value.absent(),
                 Value<int?> osmId = const Value.absent(),
+                Value<int> modeMask = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PoiPointsCompanion.insert(
                 id: id,
@@ -22677,6 +18074,7 @@ class $$PoiPointsTableTableManager
                 createdAt: createdAt,
                 osmType: osmType,
                 osmId: osmId,
+                modeMask: modeMask,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -22745,1060 +18143,6 @@ typedef $$PoiPointsTableProcessedTableManager =
       (PoiPoint, $$PoiPointsTableReferences),
       PoiPoint,
       PrefetchHooks Function({bool poiSetId})
-    >;
-typedef $$TransitSetsTableCreateCompanionBuilder =
-    TransitSetsCompanion Function({
-      required String id,
-      required String layerId,
-      required double south,
-      required double west,
-      required double north,
-      required double east,
-      required int modeMask,
-      Value<int> visibleModeMask,
-      Value<String?> label,
-      Value<DateTime?> fetchedAt,
-      Value<String?> lastError,
-      Value<int> stationCount,
-      Value<int> nodeCount,
-      Value<DateTime> createdAt,
-      Value<int?> colorArgb,
-      Value<int> colorShade,
-      Value<int> zOrder,
-      Value<int> rowid,
-    });
-typedef $$TransitSetsTableUpdateCompanionBuilder =
-    TransitSetsCompanion Function({
-      Value<String> id,
-      Value<String> layerId,
-      Value<double> south,
-      Value<double> west,
-      Value<double> north,
-      Value<double> east,
-      Value<int> modeMask,
-      Value<int> visibleModeMask,
-      Value<String?> label,
-      Value<DateTime?> fetchedAt,
-      Value<String?> lastError,
-      Value<int> stationCount,
-      Value<int> nodeCount,
-      Value<DateTime> createdAt,
-      Value<int?> colorArgb,
-      Value<int> colorShade,
-      Value<int> zOrder,
-      Value<int> rowid,
-    });
-
-final class $$TransitSetsTableReferences
-    extends BaseReferences<_$AppDatabase, $TransitSetsTable, TransitSet> {
-  $$TransitSetsTableReferences(super.$_db, super.$_table, super.$_typedResult);
-
-  static $LayersTable _layerIdTable(_$AppDatabase db) => db.layers.createAlias(
-    $_aliasNameGenerator(db.transitSets.layerId, db.layers.id),
-  );
-
-  $$LayersTableProcessedTableManager get layerId {
-    final $_column = $_itemColumn<String>('layer_id')!;
-
-    final manager = $$LayersTableTableManager(
-      $_db,
-      $_db.layers,
-    ).filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_layerIdTable($_db));
-    if (item == null) return manager;
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: [item]),
-    );
-  }
-
-  static MultiTypedResultKey<$TransitStopsTable, List<TransitStop>>
-  _transitStopsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
-    db.transitStops,
-    aliasName: $_aliasNameGenerator(db.transitSets.id, db.transitStops.setId),
-  );
-
-  $$TransitStopsTableProcessedTableManager get transitStopsRefs {
-    final manager = $$TransitStopsTableTableManager(
-      $_db,
-      $_db.transitStops,
-    ).filter((f) => f.setId.id.sqlEquals($_itemColumn<String>('id')!));
-
-    final cache = $_typedResult.readTableOrNull(_transitStopsRefsTable($_db));
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
-}
-
-class $$TransitSetsTableFilterComposer
-    extends Composer<_$AppDatabase, $TransitSetsTable> {
-  $$TransitSetsTableFilterComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnFilters<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get south => $composableBuilder(
-    column: $table.south,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get west => $composableBuilder(
-    column: $table.west,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get north => $composableBuilder(
-    column: $table.north,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get east => $composableBuilder(
-    column: $table.east,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get modeMask => $composableBuilder(
-    column: $table.modeMask,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get visibleModeMask => $composableBuilder(
-    column: $table.visibleModeMask,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get label => $composableBuilder(
-    column: $table.label,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<DateTime> get fetchedAt => $composableBuilder(
-    column: $table.fetchedAt,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get lastError => $composableBuilder(
-    column: $table.lastError,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get stationCount => $composableBuilder(
-    column: $table.stationCount,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get nodeCount => $composableBuilder(
-    column: $table.nodeCount,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<DateTime> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get colorArgb => $composableBuilder(
-    column: $table.colorArgb,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get colorShade => $composableBuilder(
-    column: $table.colorShade,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get zOrder => $composableBuilder(
-    column: $table.zOrder,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  $$LayersTableFilterComposer get layerId {
-    final $$LayersTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.layerId,
-      referencedTable: $db.layers,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$LayersTableFilterComposer(
-            $db: $db,
-            $table: $db.layers,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-
-  Expression<bool> transitStopsRefs(
-    Expression<bool> Function($$TransitStopsTableFilterComposer f) f,
-  ) {
-    final $$TransitStopsTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.transitStops,
-      getReferencedColumn: (t) => t.setId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$TransitStopsTableFilterComposer(
-            $db: $db,
-            $table: $db.transitStops,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-}
-
-class $$TransitSetsTableOrderingComposer
-    extends Composer<_$AppDatabase, $TransitSetsTable> {
-  $$TransitSetsTableOrderingComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnOrderings<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<double> get south => $composableBuilder(
-    column: $table.south,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<double> get west => $composableBuilder(
-    column: $table.west,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<double> get north => $composableBuilder(
-    column: $table.north,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<double> get east => $composableBuilder(
-    column: $table.east,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get modeMask => $composableBuilder(
-    column: $table.modeMask,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get visibleModeMask => $composableBuilder(
-    column: $table.visibleModeMask,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get label => $composableBuilder(
-    column: $table.label,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<DateTime> get fetchedAt => $composableBuilder(
-    column: $table.fetchedAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get lastError => $composableBuilder(
-    column: $table.lastError,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get stationCount => $composableBuilder(
-    column: $table.stationCount,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get nodeCount => $composableBuilder(
-    column: $table.nodeCount,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get colorArgb => $composableBuilder(
-    column: $table.colorArgb,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get colorShade => $composableBuilder(
-    column: $table.colorShade,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get zOrder => $composableBuilder(
-    column: $table.zOrder,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  $$LayersTableOrderingComposer get layerId {
-    final $$LayersTableOrderingComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.layerId,
-      referencedTable: $db.layers,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$LayersTableOrderingComposer(
-            $db: $db,
-            $table: $db.layers,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-}
-
-class $$TransitSetsTableAnnotationComposer
-    extends Composer<_$AppDatabase, $TransitSetsTable> {
-  $$TransitSetsTableAnnotationComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  GeneratedColumn<String> get id =>
-      $composableBuilder(column: $table.id, builder: (column) => column);
-
-  GeneratedColumn<double> get south =>
-      $composableBuilder(column: $table.south, builder: (column) => column);
-
-  GeneratedColumn<double> get west =>
-      $composableBuilder(column: $table.west, builder: (column) => column);
-
-  GeneratedColumn<double> get north =>
-      $composableBuilder(column: $table.north, builder: (column) => column);
-
-  GeneratedColumn<double> get east =>
-      $composableBuilder(column: $table.east, builder: (column) => column);
-
-  GeneratedColumn<int> get modeMask =>
-      $composableBuilder(column: $table.modeMask, builder: (column) => column);
-
-  GeneratedColumn<int> get visibleModeMask => $composableBuilder(
-    column: $table.visibleModeMask,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get label =>
-      $composableBuilder(column: $table.label, builder: (column) => column);
-
-  GeneratedColumn<DateTime> get fetchedAt =>
-      $composableBuilder(column: $table.fetchedAt, builder: (column) => column);
-
-  GeneratedColumn<String> get lastError =>
-      $composableBuilder(column: $table.lastError, builder: (column) => column);
-
-  GeneratedColumn<int> get stationCount => $composableBuilder(
-    column: $table.stationCount,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<int> get nodeCount =>
-      $composableBuilder(column: $table.nodeCount, builder: (column) => column);
-
-  GeneratedColumn<DateTime> get createdAt =>
-      $composableBuilder(column: $table.createdAt, builder: (column) => column);
-
-  GeneratedColumn<int> get colorArgb =>
-      $composableBuilder(column: $table.colorArgb, builder: (column) => column);
-
-  GeneratedColumn<int> get colorShade => $composableBuilder(
-    column: $table.colorShade,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<int> get zOrder =>
-      $composableBuilder(column: $table.zOrder, builder: (column) => column);
-
-  $$LayersTableAnnotationComposer get layerId {
-    final $$LayersTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.layerId,
-      referencedTable: $db.layers,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$LayersTableAnnotationComposer(
-            $db: $db,
-            $table: $db.layers,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-
-  Expression<T> transitStopsRefs<T extends Object>(
-    Expression<T> Function($$TransitStopsTableAnnotationComposer a) f,
-  ) {
-    final $$TransitStopsTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.transitStops,
-      getReferencedColumn: (t) => t.setId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$TransitStopsTableAnnotationComposer(
-            $db: $db,
-            $table: $db.transitStops,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-}
-
-class $$TransitSetsTableTableManager
-    extends
-        RootTableManager<
-          _$AppDatabase,
-          $TransitSetsTable,
-          TransitSet,
-          $$TransitSetsTableFilterComposer,
-          $$TransitSetsTableOrderingComposer,
-          $$TransitSetsTableAnnotationComposer,
-          $$TransitSetsTableCreateCompanionBuilder,
-          $$TransitSetsTableUpdateCompanionBuilder,
-          (TransitSet, $$TransitSetsTableReferences),
-          TransitSet,
-          PrefetchHooks Function({bool layerId, bool transitStopsRefs})
-        > {
-  $$TransitSetsTableTableManager(_$AppDatabase db, $TransitSetsTable table)
-    : super(
-        TableManagerState(
-          db: db,
-          table: table,
-          createFilteringComposer: () =>
-              $$TransitSetsTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$TransitSetsTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$TransitSetsTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback:
-              ({
-                Value<String> id = const Value.absent(),
-                Value<String> layerId = const Value.absent(),
-                Value<double> south = const Value.absent(),
-                Value<double> west = const Value.absent(),
-                Value<double> north = const Value.absent(),
-                Value<double> east = const Value.absent(),
-                Value<int> modeMask = const Value.absent(),
-                Value<int> visibleModeMask = const Value.absent(),
-                Value<String?> label = const Value.absent(),
-                Value<DateTime?> fetchedAt = const Value.absent(),
-                Value<String?> lastError = const Value.absent(),
-                Value<int> stationCount = const Value.absent(),
-                Value<int> nodeCount = const Value.absent(),
-                Value<DateTime> createdAt = const Value.absent(),
-                Value<int?> colorArgb = const Value.absent(),
-                Value<int> colorShade = const Value.absent(),
-                Value<int> zOrder = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => TransitSetsCompanion(
-                id: id,
-                layerId: layerId,
-                south: south,
-                west: west,
-                north: north,
-                east: east,
-                modeMask: modeMask,
-                visibleModeMask: visibleModeMask,
-                label: label,
-                fetchedAt: fetchedAt,
-                lastError: lastError,
-                stationCount: stationCount,
-                nodeCount: nodeCount,
-                createdAt: createdAt,
-                colorArgb: colorArgb,
-                colorShade: colorShade,
-                zOrder: zOrder,
-                rowid: rowid,
-              ),
-          createCompanionCallback:
-              ({
-                required String id,
-                required String layerId,
-                required double south,
-                required double west,
-                required double north,
-                required double east,
-                required int modeMask,
-                Value<int> visibleModeMask = const Value.absent(),
-                Value<String?> label = const Value.absent(),
-                Value<DateTime?> fetchedAt = const Value.absent(),
-                Value<String?> lastError = const Value.absent(),
-                Value<int> stationCount = const Value.absent(),
-                Value<int> nodeCount = const Value.absent(),
-                Value<DateTime> createdAt = const Value.absent(),
-                Value<int?> colorArgb = const Value.absent(),
-                Value<int> colorShade = const Value.absent(),
-                Value<int> zOrder = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => TransitSetsCompanion.insert(
-                id: id,
-                layerId: layerId,
-                south: south,
-                west: west,
-                north: north,
-                east: east,
-                modeMask: modeMask,
-                visibleModeMask: visibleModeMask,
-                label: label,
-                fetchedAt: fetchedAt,
-                lastError: lastError,
-                stationCount: stationCount,
-                nodeCount: nodeCount,
-                createdAt: createdAt,
-                colorArgb: colorArgb,
-                colorShade: colorShade,
-                zOrder: zOrder,
-                rowid: rowid,
-              ),
-          withReferenceMapper: (p0) => p0
-              .map(
-                (e) => (
-                  e.readTable(table),
-                  $$TransitSetsTableReferences(db, table, e),
-                ),
-              )
-              .toList(),
-          prefetchHooksCallback: ({layerId = false, transitStopsRefs = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [if (transitStopsRefs) db.transitStops],
-              addJoins:
-                  <
-                    T extends TableManagerState<
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic
-                    >
-                  >(state) {
-                    if (layerId) {
-                      state =
-                          state.withJoin(
-                                currentTable: table,
-                                currentColumn: table.layerId,
-                                referencedTable: $$TransitSetsTableReferences
-                                    ._layerIdTable(db),
-                                referencedColumn: $$TransitSetsTableReferences
-                                    ._layerIdTable(db)
-                                    .id,
-                              )
-                              as T;
-                    }
-
-                    return state;
-                  },
-              getPrefetchedDataCallback: (items) async {
-                return [
-                  if (transitStopsRefs)
-                    await $_getPrefetchedData<
-                      TransitSet,
-                      $TransitSetsTable,
-                      TransitStop
-                    >(
-                      currentTable: table,
-                      referencedTable: $$TransitSetsTableReferences
-                          ._transitStopsRefsTable(db),
-                      managerFromTypedResult: (p0) =>
-                          $$TransitSetsTableReferences(
-                            db,
-                            table,
-                            p0,
-                          ).transitStopsRefs,
-                      referencedItemsForCurrentItem: (item, referencedItems) =>
-                          referencedItems.where((e) => e.setId == item.id),
-                      typedResults: items,
-                    ),
-                ];
-              },
-            );
-          },
-        ),
-      );
-}
-
-typedef $$TransitSetsTableProcessedTableManager =
-    ProcessedTableManager<
-      _$AppDatabase,
-      $TransitSetsTable,
-      TransitSet,
-      $$TransitSetsTableFilterComposer,
-      $$TransitSetsTableOrderingComposer,
-      $$TransitSetsTableAnnotationComposer,
-      $$TransitSetsTableCreateCompanionBuilder,
-      $$TransitSetsTableUpdateCompanionBuilder,
-      (TransitSet, $$TransitSetsTableReferences),
-      TransitSet,
-      PrefetchHooks Function({bool layerId, bool transitStopsRefs})
-    >;
-typedef $$TransitStopsTableCreateCompanionBuilder =
-    TransitStopsCompanion Function({
-      required String id,
-      required String setId,
-      required int osmId,
-      required double lat,
-      required double lng,
-      Value<String?> name,
-      Value<int> modeMask,
-      Value<int> nodeCount,
-      Value<String?> routeRef,
-      Value<DateTime> createdAt,
-      Value<int> rowid,
-    });
-typedef $$TransitStopsTableUpdateCompanionBuilder =
-    TransitStopsCompanion Function({
-      Value<String> id,
-      Value<String> setId,
-      Value<int> osmId,
-      Value<double> lat,
-      Value<double> lng,
-      Value<String?> name,
-      Value<int> modeMask,
-      Value<int> nodeCount,
-      Value<String?> routeRef,
-      Value<DateTime> createdAt,
-      Value<int> rowid,
-    });
-
-final class $$TransitStopsTableReferences
-    extends BaseReferences<_$AppDatabase, $TransitStopsTable, TransitStop> {
-  $$TransitStopsTableReferences(super.$_db, super.$_table, super.$_typedResult);
-
-  static $TransitSetsTable _setIdTable(_$AppDatabase db) =>
-      db.transitSets.createAlias(
-        $_aliasNameGenerator(db.transitStops.setId, db.transitSets.id),
-      );
-
-  $$TransitSetsTableProcessedTableManager get setId {
-    final $_column = $_itemColumn<String>('set_id')!;
-
-    final manager = $$TransitSetsTableTableManager(
-      $_db,
-      $_db.transitSets,
-    ).filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_setIdTable($_db));
-    if (item == null) return manager;
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: [item]),
-    );
-  }
-}
-
-class $$TransitStopsTableFilterComposer
-    extends Composer<_$AppDatabase, $TransitStopsTable> {
-  $$TransitStopsTableFilterComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnFilters<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get osmId => $composableBuilder(
-    column: $table.osmId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get lat => $composableBuilder(
-    column: $table.lat,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get lng => $composableBuilder(
-    column: $table.lng,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get name => $composableBuilder(
-    column: $table.name,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get modeMask => $composableBuilder(
-    column: $table.modeMask,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get nodeCount => $composableBuilder(
-    column: $table.nodeCount,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get routeRef => $composableBuilder(
-    column: $table.routeRef,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<DateTime> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  $$TransitSetsTableFilterComposer get setId {
-    final $$TransitSetsTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.setId,
-      referencedTable: $db.transitSets,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$TransitSetsTableFilterComposer(
-            $db: $db,
-            $table: $db.transitSets,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-}
-
-class $$TransitStopsTableOrderingComposer
-    extends Composer<_$AppDatabase, $TransitStopsTable> {
-  $$TransitStopsTableOrderingComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnOrderings<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get osmId => $composableBuilder(
-    column: $table.osmId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<double> get lat => $composableBuilder(
-    column: $table.lat,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<double> get lng => $composableBuilder(
-    column: $table.lng,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get name => $composableBuilder(
-    column: $table.name,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get modeMask => $composableBuilder(
-    column: $table.modeMask,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get nodeCount => $composableBuilder(
-    column: $table.nodeCount,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get routeRef => $composableBuilder(
-    column: $table.routeRef,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  $$TransitSetsTableOrderingComposer get setId {
-    final $$TransitSetsTableOrderingComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.setId,
-      referencedTable: $db.transitSets,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$TransitSetsTableOrderingComposer(
-            $db: $db,
-            $table: $db.transitSets,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-}
-
-class $$TransitStopsTableAnnotationComposer
-    extends Composer<_$AppDatabase, $TransitStopsTable> {
-  $$TransitStopsTableAnnotationComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  GeneratedColumn<String> get id =>
-      $composableBuilder(column: $table.id, builder: (column) => column);
-
-  GeneratedColumn<int> get osmId =>
-      $composableBuilder(column: $table.osmId, builder: (column) => column);
-
-  GeneratedColumn<double> get lat =>
-      $composableBuilder(column: $table.lat, builder: (column) => column);
-
-  GeneratedColumn<double> get lng =>
-      $composableBuilder(column: $table.lng, builder: (column) => column);
-
-  GeneratedColumn<String> get name =>
-      $composableBuilder(column: $table.name, builder: (column) => column);
-
-  GeneratedColumn<int> get modeMask =>
-      $composableBuilder(column: $table.modeMask, builder: (column) => column);
-
-  GeneratedColumn<int> get nodeCount =>
-      $composableBuilder(column: $table.nodeCount, builder: (column) => column);
-
-  GeneratedColumn<String> get routeRef =>
-      $composableBuilder(column: $table.routeRef, builder: (column) => column);
-
-  GeneratedColumn<DateTime> get createdAt =>
-      $composableBuilder(column: $table.createdAt, builder: (column) => column);
-
-  $$TransitSetsTableAnnotationComposer get setId {
-    final $$TransitSetsTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.setId,
-      referencedTable: $db.transitSets,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$TransitSetsTableAnnotationComposer(
-            $db: $db,
-            $table: $db.transitSets,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-}
-
-class $$TransitStopsTableTableManager
-    extends
-        RootTableManager<
-          _$AppDatabase,
-          $TransitStopsTable,
-          TransitStop,
-          $$TransitStopsTableFilterComposer,
-          $$TransitStopsTableOrderingComposer,
-          $$TransitStopsTableAnnotationComposer,
-          $$TransitStopsTableCreateCompanionBuilder,
-          $$TransitStopsTableUpdateCompanionBuilder,
-          (TransitStop, $$TransitStopsTableReferences),
-          TransitStop,
-          PrefetchHooks Function({bool setId})
-        > {
-  $$TransitStopsTableTableManager(_$AppDatabase db, $TransitStopsTable table)
-    : super(
-        TableManagerState(
-          db: db,
-          table: table,
-          createFilteringComposer: () =>
-              $$TransitStopsTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$TransitStopsTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$TransitStopsTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback:
-              ({
-                Value<String> id = const Value.absent(),
-                Value<String> setId = const Value.absent(),
-                Value<int> osmId = const Value.absent(),
-                Value<double> lat = const Value.absent(),
-                Value<double> lng = const Value.absent(),
-                Value<String?> name = const Value.absent(),
-                Value<int> modeMask = const Value.absent(),
-                Value<int> nodeCount = const Value.absent(),
-                Value<String?> routeRef = const Value.absent(),
-                Value<DateTime> createdAt = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => TransitStopsCompanion(
-                id: id,
-                setId: setId,
-                osmId: osmId,
-                lat: lat,
-                lng: lng,
-                name: name,
-                modeMask: modeMask,
-                nodeCount: nodeCount,
-                routeRef: routeRef,
-                createdAt: createdAt,
-                rowid: rowid,
-              ),
-          createCompanionCallback:
-              ({
-                required String id,
-                required String setId,
-                required int osmId,
-                required double lat,
-                required double lng,
-                Value<String?> name = const Value.absent(),
-                Value<int> modeMask = const Value.absent(),
-                Value<int> nodeCount = const Value.absent(),
-                Value<String?> routeRef = const Value.absent(),
-                Value<DateTime> createdAt = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => TransitStopsCompanion.insert(
-                id: id,
-                setId: setId,
-                osmId: osmId,
-                lat: lat,
-                lng: lng,
-                name: name,
-                modeMask: modeMask,
-                nodeCount: nodeCount,
-                routeRef: routeRef,
-                createdAt: createdAt,
-                rowid: rowid,
-              ),
-          withReferenceMapper: (p0) => p0
-              .map(
-                (e) => (
-                  e.readTable(table),
-                  $$TransitStopsTableReferences(db, table, e),
-                ),
-              )
-              .toList(),
-          prefetchHooksCallback: ({setId = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [],
-              addJoins:
-                  <
-                    T extends TableManagerState<
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic
-                    >
-                  >(state) {
-                    if (setId) {
-                      state =
-                          state.withJoin(
-                                currentTable: table,
-                                currentColumn: table.setId,
-                                referencedTable: $$TransitStopsTableReferences
-                                    ._setIdTable(db),
-                                referencedColumn: $$TransitStopsTableReferences
-                                    ._setIdTable(db)
-                                    .id,
-                              )
-                              as T;
-                    }
-
-                    return state;
-                  },
-              getPrefetchedDataCallback: (items) async {
-                return [];
-              },
-            );
-          },
-        ),
-      );
-}
-
-typedef $$TransitStopsTableProcessedTableManager =
-    ProcessedTableManager<
-      _$AppDatabase,
-      $TransitStopsTable,
-      TransitStop,
-      $$TransitStopsTableFilterComposer,
-      $$TransitStopsTableOrderingComposer,
-      $$TransitStopsTableAnnotationComposer,
-      $$TransitStopsTableCreateCompanionBuilder,
-      $$TransitStopsTableUpdateCompanionBuilder,
-      (TransitStop, $$TransitStopsTableReferences),
-      TransitStop,
-      PrefetchHooks Function({bool setId})
     >;
 typedef $$BorderSetsTableCreateCompanionBuilder =
     BorderSetsCompanion Function({
@@ -25384,8 +19728,6 @@ class $AppDatabaseManager {
       $$LayersTableTableManager(_db, _db.layers);
   $$CirclesTableTableManager get circles =>
       $$CirclesTableTableManager(_db, _db.circles);
-  $$PlanesTableTableManager get planes =>
-      $$PlanesTableTableManager(_db, _db.planes);
   $$AppSettingsTableTableManager get appSettings =>
       $$AppSettingsTableTableManager(_db, _db.appSettings);
   $$SubspacesTableTableManager get subspaces =>
@@ -25396,10 +19738,6 @@ class $AppDatabaseManager {
       $$FreeLinesTableTableManager(_db, _db.freeLines);
   $$FreeLinePointsTableTableManager get freeLinePoints =>
       $$FreeLinePointsTableTableManager(_db, _db.freeLinePoints);
-  $$TracksTableTableManager get tracks =>
-      $$TracksTableTableManager(_db, _db.tracks);
-  $$TrackPointsTableTableManager get trackPoints =>
-      $$TrackPointsTableTableManager(_db, _db.trackPoints);
   $$FreeAreasTableTableManager get freeAreas =>
       $$FreeAreasTableTableManager(_db, _db.freeAreas);
   $$FreeAreaPointsTableTableManager get freeAreaPoints =>
@@ -25414,10 +19752,6 @@ class $AppDatabaseManager {
       $$PoiSetsTableTableManager(_db, _db.poiSets);
   $$PoiPointsTableTableManager get poiPoints =>
       $$PoiPointsTableTableManager(_db, _db.poiPoints);
-  $$TransitSetsTableTableManager get transitSets =>
-      $$TransitSetsTableTableManager(_db, _db.transitSets);
-  $$TransitStopsTableTableManager get transitStops =>
-      $$TransitStopsTableTableManager(_db, _db.transitStops);
   $$BorderSetsTableTableManager get borderSets =>
       $$BorderSetsTableTableManager(_db, _db.borderSets);
   $$BorderAreasTableTableManager get borderAreas =>

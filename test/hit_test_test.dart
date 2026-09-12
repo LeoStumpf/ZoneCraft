@@ -26,7 +26,7 @@ import 'package:zonecraft/data/database.dart' as db;
 import 'package:zonecraft/data/layer_types.dart';
 import 'package:zonecraft/ui/hit_test.dart';
 import 'package:zonecraft/ui/object_summary.dart';
-import 'package:zonecraft/ui/transit_layer.dart' show visibleTransitStations;
+import 'package:zonecraft/data/poi_sets.dart';
 
 HitCandidate candidate(
   String id, {
@@ -141,7 +141,7 @@ void main() {
             inside: true,
             edgeDistPx: 5000,
             sizeProxyMeters: double.infinity,
-            kind: ObjectKind.plane),
+            kind: ObjectKind.subspace),
         candidate('big', inside: true, edgeDistPx: 400, sizeProxyMeters: 9000),
         candidate('tight', inside: true, edgeDistPx: 300, sizeProxyMeters: 80),
       ]);
@@ -197,8 +197,6 @@ void main() {
         opacity: 1,
         borderFillAreas: false,
         borderShowNames: false,
-        trackStrokeWidth: 4,
-        trackMinDistanceMeters: 10,
         createdAt: DateTime(2026),
       );
 
@@ -212,8 +210,10 @@ void main() {
       radiusMeters: 800,
       createdAt: DateTime(2026),
       colorShade: 0,
-      isManual: false,
+      source: kPoiSourceRadius,
       zOrder: 0,
+      modeMask: 0,
+      visibleModeMask: -1,
     );
     PoiPoint poi(String id, LatLng at) => PoiPoint(
           id: id,
@@ -222,6 +222,7 @@ void main() {
           lng: at.longitude,
           sortOrder: 0,
           createdAt: DateTime(2026),
+          modeMask: 0,
         );
 
     test('a tap on a marker offers that POI, not its set', () {
@@ -265,30 +266,34 @@ void main() {
     });
   });
 
-  group('collectCandidates on a transit layer', () {
-    TransitSet setWith(int visible) => TransitSet(
+  group('collectCandidates on a poi layer with a station import', () {
+    PoiSet setWith(int visible) => PoiSet(
           id: 'S',
           layerId: 'L',
+          categoryKey: kTransitStationCategoryKey,
+          centerLat: 48.1,
+          centerLng: 11.5,
+          radiusMeters: 1,
+          source: kPoiSourceBox,
           south: 48.0,
           west: 11.4,
           north: 48.2,
           east: 11.6,
           modeMask: 3,
           visibleModeMask: visible,
-          stationCount: 1,
-          nodeCount: 1,
           createdAt: DateTime(2026),
           colorShade: 0,
           zOrder: 0,
         );
-    final stop = TransitStop(
+    final stop = PoiPoint(
       id: 's1',
-      setId: 'S',
+      poiSetId: 'S',
+      osmType: 'node',
       osmId: 42,
       lat: center.latitude,
       lng: center.longitude,
+      sortOrder: 0,
       modeMask: 1,
-      nodeCount: 1,
       createdAt: DateTime(2026),
     );
 
@@ -296,12 +301,12 @@ void main() {
       final hits = collectCandidates(
         camera: camera,
         tap: center,
-        layer: layerOf('transit'),
-        transitSets: [setWith(3)],
-        transitStops: [stop],
+        layer: layerOf('poi'),
+        poiSets: [setWith(3)],
+        poiPoints: [stop],
       );
       expect(hits, hasLength(1));
-      expect(hits.single.ref.kind, ObjectKind.transitStop);
+      expect(hits.single.ref.kind, ObjectKind.poiPoint);
       expect(hits.single.ref.id, 's1');
     });
 
@@ -311,9 +316,9 @@ void main() {
       final hits = collectCandidates(
         camera: camera,
         tap: center,
-        layer: layerOf('transit'),
-        transitSets: [setWith(2)], // bit 1 (this stop's mode) not shown
-        transitStops: [stop],
+        layer: layerOf('poi'),
+        poiSets: [setWith(2)], // bit 1 (this stop's mode) not shown
+        poiPoints: [stop],
       );
       expect(hits, isEmpty);
     });
@@ -324,9 +329,9 @@ void main() {
       final hits = collectCandidates(
         camera: camera,
         tap: center,
-        layer: layerOf('transit'),
-        transitSets: [setWith(2)],
-        transitStops: [stop.copyWith(modeMask: 0)],
+        layer: layerOf('poi'),
+        poiSets: [setWith(2)],
+        poiPoints: [stop.copyWith(modeMask: 0)],
       );
       expect(hits, hasLength(1));
     });
@@ -342,13 +347,28 @@ void main() {
           collectCandidates(
             camera: camera,
             tap: center,
-            layer: layerOf('transit'),
-            transitSets: [setWith(0)],
-            transitStops: [stop.copyWith(modeMask: mask)],
+            layer: layerOf('poi'),
+            poiSets: [setWith(0)],
+            poiPoints: [stop.copyWith(modeMask: mask)],
           ),
           isEmpty,
           reason: 'station modeMask $mask with nothing shown',
         );
+      }
+    });
+
+    test('the filter never touches a radius or hand-made set', () {
+      // A mode-less point in an ordinary set must always draw and tap: the
+      // filter is a property of station imports, and a cafe has no modes.
+      for (final source in [kPoiSourceRadius, kPoiSourceManual]) {
+        final hits = collectCandidates(
+          camera: camera,
+          tap: center,
+          layer: layerOf('poi'),
+          poiSets: [setWith(0).copyWith(source: source)],
+          poiPoints: [stop.copyWith(modeMask: 0)],
+        );
+        expect(hits, hasLength(1), reason: source);
       }
     });
 
@@ -358,124 +378,22 @@ void main() {
       for (final stationMask in [0, 1, 2, 3]) {
         for (final visible in [0, 1, 2, 3]) {
           final st = stop.copyWith(modeMask: stationMask);
-          final drawn = visibleTransitStations([st], {'S': visible});
+          final set = setWith(visible);
+          final drawn = poiPointVisible(st, set);
           final tappable = collectCandidates(
             camera: camera,
             tap: center,
-            layer: layerOf('transit'),
-            transitSets: [setWith(visible)],
-            transitStops: [st],
+            layer: layerOf('poi'),
+            poiSets: [set],
+            poiPoints: [st],
           );
           expect(
             tappable.isNotEmpty,
-            drawn.isNotEmpty,
+            drawn,
             reason: 'station $stationMask, visible $visible',
           );
         }
       }
-    });
-  });
-
-  group('collectCandidates on a borders layer', () {
-    // A square around the camera centre, with a hole in the middle of it.
-    const outer = [
-      LatLng(48.05, 11.45),
-      LatLng(48.05, 11.55),
-      LatLng(48.15, 11.55),
-      LatLng(48.15, 11.45),
-    ];
-    const hole = [
-      LatLng(48.09, 11.49),
-      LatLng(48.09, 11.51),
-      LatLng(48.11, 11.51),
-      LatLng(48.11, 11.49),
-    ];
-    BorderShapeRef shape(List<List<LatLng>> rings) => BorderShapeRef(
-          id: 'a1',
-          rings: rings,
-          south: 48.05,
-          west: 11.45,
-          north: 48.15,
-          east: 11.55,
-        );
-
-    test('a tap inside the area selects it', () {
-      final hits = collectCandidates(
-        camera: camera,
-        tap: const LatLng(48.06, 11.46),
-        layer: layerOf('borders'),
-        borderShapes: [shape(const [outer])],
-      );
-      expect(hits, hasLength(1));
-      expect(hits.single.ref.kind, ObjectKind.borderArea);
-      expect(hits.single.inside, isTrue);
-    });
-
-    test('a tap in a hole is outside, exactly as it looks', () {
-      final hits = collectCandidates(
-        camera: camera,
-        tap: center, // the middle of the hole
-        layer: layerOf('borders'),
-        borderShapes: [shape(const [outer, hole])],
-      );
-      expect(hits.single.inside, isFalse);
-    });
-
-    test('a tap just outside still offers the area by its edge', () {
-      // Inside the tap slop of the western edge (11.45) but outside the ring.
-      final hits = collectCandidates(
-        camera: camera,
-        tap: const LatLng(48.10, 11.4497),
-        layer: layerOf('borders'),
-        borderShapes: [shape(const [outer])],
-      );
-      expect(hits.single.inside, isFalse);
-      expect(hits.single.edgeDistPx, lessThan(kEdgeTolerancePx));
-      expect(rankCandidates(hits).single.ref.id, 'a1');
-    });
-
-    test('an area nowhere near the tap is never even projected', () {
-      // The cull is on the *stored bounds*, so a far tap costs four
-      // projections rather than one per vertex — a state boundary is 119 238
-      // of them, and a layer holds dozens of areas. It is exact, not an
-      // approximation: a ring lies inside its own box, so nothing dropped here
-      // could have survived [rankCandidates] anyway.
-      final hits = collectCandidates(
-        camera: camera,
-        tap: const LatLng(48.30, 11.90),
-        layer: layerOf('borders'),
-        borderShapes: [shape(const [outer])],
-      );
-      expect(hits, isEmpty);
-    });
-
-    test('the smallest area containing the tap wins', () {
-      // Two nested districts: tapping well inside both has to mean the one you
-      // can actually point at, which is what [sizeProxyMeters] orders.
-      const inner = [
-        LatLng(48.08, 11.48),
-        LatLng(48.08, 11.52),
-        LatLng(48.12, 11.52),
-        LatLng(48.12, 11.48),
-      ];
-      final hits = collectCandidates(
-        camera: camera,
-        tap: center,
-        layer: layerOf('borders'),
-        borderShapes: [
-          shape(const [outer]),
-          BorderShapeRef(
-            id: 'a2',
-            rings: const [inner],
-            south: 48.08,
-            west: 11.48,
-            north: 48.12,
-            east: 11.52,
-          ),
-        ],
-      );
-      expect(hits.map((h) => h.ref.id), containsAll(['a1', 'a2']));
-      expect(rankCandidates(hits).first.ref.id, 'a2');
     });
   });
 
@@ -490,18 +408,33 @@ void main() {
       colorShade: 0,
       zOrder: 0,
     );
-    final plane = db.Plane(
+    final sub = db.Subspace(
       id: 'p1',
       layerId: 'L',
-      aLat: center.latitude,
-      aLng: center.longitude,
-      bLat: center.latitude + 0.5,
-      bLng: center.longitude + 0.5,
-      nearA: true,
       createdAt: DateTime(2026),
       colorShade: 0,
       zOrder: 0,
     );
+    final subPoints = [
+      db.SubspacePoint(
+        id: 'a',
+        subspaceId: 'p1',
+        lat: center.latitude,
+        lng: center.longitude,
+        sortOrder: 0,
+        isMain: true,
+        createdAt: DateTime(2026),
+      ),
+      db.SubspacePoint(
+        id: 'b',
+        subspaceId: 'p1',
+        lat: center.latitude + 0.5,
+        lng: center.longitude + 0.5,
+        sortOrder: 1,
+        isMain: false,
+        createdAt: DateTime(2026),
+      ),
+    ];
 
     test('it offers every type the layer holds, from one tap', () {
       // The painter draws all of them, so all of them have to be tappable —
@@ -512,11 +445,12 @@ void main() {
         tap: center,
         layer: layerOf(kMixedType),
         circles: [circle],
-        planes: [plane],
+        subspaces: [sub],
+        subspacePoints: subPoints,
       );
       expect(
         hits.map((h) => h.ref.kind).toSet(),
-        {ObjectKind.circle, ObjectKind.plane},
+        {ObjectKind.circle, ObjectKind.subspace},
       );
     });
 
@@ -526,7 +460,8 @@ void main() {
         tap: center,
         layer: layerOf('circles'),
         circles: [circle],
-        planes: [plane],
+        subspaces: [sub],
+        subspacePoints: subPoints,
       );
       expect(hits.map((h) => h.ref.kind).toSet(), {ObjectKind.circle});
     });

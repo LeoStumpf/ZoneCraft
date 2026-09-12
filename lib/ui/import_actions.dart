@@ -404,15 +404,10 @@ Future<void> importTrackIntoLayer(
   Layer layer,
 ) async {
   final messenger = ScaffoldMessenger.of(context);
-  // A `track` layer takes the file as what it already is — a recorded line —
-  // so it skips the inclusion-circle question entirely (a track bounds
-  // nothing) and lands in the same track the recorder appends to.
-  //
-  // A **combined** layer can hold all three, so track wins: this entry is
-  // called "Import track…", and importing a GPX as anything else would be a
-  // silent reinterpretation of the file.
-  final wantTrack = layerHolds(layer, kTrack);
-  final wantArea = !wantTrack && layerHolds(layer, kFreeArea);
+  // A layer that can hold areas takes the file as areas; anything else takes
+  // it as freehand lines, which are bounded to an inclusion circle and so ask
+  // for its radius. (A **combined** layer holds both, so area wins there.)
+  final wantArea = layerHolds(layer, kFreeArea);
   try {
     final picked = await openFile(acceptedTypeGroups: const [_importGroup]);
     if (picked == null) return;
@@ -427,18 +422,14 @@ Future<void> importTrackIntoLayer(
     var objects = <ExportObject>[
       for (final f in feats)
         ExportObject(
-          kind: wantArea
-              ? 'freearea'
-              : wantTrack
-                  ? 'track'
-                  : 'freeline',
+          kind: wantArea ? 'freearea' : 'freeline',
           coords: f.coords,
           label: f.label,
         ),
     ];
     // Freehand lines are bounded to an inclusion circle — let the user pick
     // its radius right at import (each line keeps its own derived centre).
-    if (!wantArea && !wantTrack) {
+    if (!wantArea) {
       if (!context.mounted) return;
       final r = await askFreeLineRadius(
         context,
@@ -462,7 +453,7 @@ Future<void> importTrackIntoLayer(
         content: Text(
           n == 0
               ? 'Nothing usable to import (need ${wantArea ? '3+' : '2+'} points)'
-              : 'Imported $n ${wantArea ? 'area' : 'track'}${n == 1 ? '' : 's'}',
+              : 'Imported $n ${wantArea ? 'area' : 'line'}${n == 1 ? '' : 's'}',
         ),
       ),
     );
@@ -759,19 +750,23 @@ Future<bool> _confirmOnMap(WidgetRef ref, ExportData data) async {
   }
 }
 
-/// Turns one **already-imported** border area into freehand areas — the offline
-/// twin of [importFeatureFlow].
+/// Turns a stored ring set — a border area's outline, or a height region's
+/// generated fill — into freehand areas: the offline twin of
+/// [importFeatureFlow].
 ///
-/// The point is not to re-fetch something you already have on the device: a
-/// borders layer is a read-only OSM snapshot with no editor, and this is how a
-/// shape gets out of it and into geometry you own, can drag, offset, invert and
-/// export. Same new-or-merge choice as every other import, so it lands where
-/// you want it.
+/// The point is not to re-fetch or regenerate something you already have on
+/// the device: a borders layer is a read-only OSM snapshot and a height fill is
+/// derived from terrain tiles, and this is how a shape gets out of either and
+/// into geometry you own, can drag, offset, invert and export. Same
+/// new-or-merge choice as every other import, so it lands where you want it.
 ///
 /// Holes are dropped: a freehand area is a single ring with no notion of one,
 /// so a hole carried across would render as solid fill exactly where the real
-/// area has a gap. Exclaves survive as separate areas ([outerRings]).
-Future<void> convertBorderAreaFlow(
+/// area has a gap. Exclaves survive as separate areas ([outerRings]). For a
+/// height region that means a "below N m" fill — a disk with the mountains
+/// cut out — converts to its outer contour(s) only, and the outline also
+/// traces the bounding circle's arc where the fill was clipped to it.
+Future<void> convertRingsToFreehandFlow(
   BuildContext context,
   Repository repo,
   List<Layer> layers, {

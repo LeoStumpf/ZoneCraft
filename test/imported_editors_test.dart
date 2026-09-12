@@ -22,13 +22,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart' show LatLng;
 
 import 'package:zonecraft/data/database.dart';
+import 'package:zonecraft/data/poi_sets.dart';
 import 'package:zonecraft/data/repository.dart';
 import 'package:zonecraft/data/transit.dart';
 import 'package:zonecraft/state/providers.dart';
 import 'package:zonecraft/ui/border_area_editor.dart';
 import 'package:zonecraft/ui/imported_point_editor.dart';
 import 'package:zonecraft/ui/poi_set_editor.dart';
-import 'package:zonecraft/ui/transit_set_editor.dart';
 
 /// The four editors the import types gained. They exist because Edit mode and
 /// long-press used to be dead over `poi`, `transit` and `borders`, and each is
@@ -83,15 +83,12 @@ void main() {
         borderLevel: borderLevel,
         borderFillAreas: false,
         borderShowNames: false,
-        trackStrokeWidth: 4,
-        trackMinDistanceMeters: 10,
         createdAt: DateTime(2026),
       );
 
   group('ImportedPointEditorSheet', () {
     Widget poiSheet({String? name}) => ImportedPointEditorSheet(
           id: 'p1',
-          kind: ObjectKind.poiPoint,
           name: name,
           lat: 48.001,
           lng: 11.002,
@@ -134,14 +131,13 @@ void main() {
       expect(container.read(selectedPoiPointProvider), isNull);
     });
 
-    testWidgets('the same sheet edits a station, through the other table',
+    testWidgets('the same sheet edits a station — it is the same row',
         (tester) async {
-      container.read(selectedTransitStopProvider.notifier).select('s1');
+      container.read(selectedPoiPointProvider.notifier).select('s1');
       await pump(
         tester,
         const ImportedPointEditorSheet(
           id: 's1',
-          kind: ObjectKind.transitStop,
           name: 'Hauptbahnhof',
           lat: 48.14,
           lng: 11.56,
@@ -152,12 +148,12 @@ void main() {
       );
       await tester.enterText(find.byType(TextField), 'Hbf');
       await tester.pump();
-      expect(repo.calls, contains('updateTransitStop s1 name=Hbf'));
+      expect(repo.calls, contains('updatePoiPoint s1 name=Hbf'));
 
       await tester.tap(find.byTooltip('Remove from this import'));
       await tester.pump();
-      expect(repo.calls, contains('deleteTransitStop s1'));
-      expect(container.read(selectedTransitStopProvider), isNull);
+      expect(repo.calls, contains('deletePoiPoint s1'));
+      expect(container.read(selectedPoiPointProvider), isNull);
     });
 
     testWidgets('the position is shown but never offered as a field',
@@ -184,9 +180,12 @@ void main() {
           label: label,
           createdAt: DateTime(2026),
           colorShade: 0,
-          isManual: isManual,
+          source: isManual ? kPoiSourceManual : kPoiSourceRadius,
+          fetchedAt: isManual ? null : DateTime(2026),
           iconKey: iconKey,
           zOrder: 0,
+          modeMask: 0,
+          visibleModeMask: -1,
         );
 
     testWidgets('it names the category, the count and the circle that ran',
@@ -263,18 +262,22 @@ void main() {
     });
   });
 
-  group('TransitSetEditorSheet', () {
-    TransitSet set({required int modeMask, required int visible}) => TransitSet(
+  group('PoiSetEditorSheet on a station import', () {
+    PoiSet set({required int modeMask, required int visible}) => PoiSet(
           id: 'ts1',
           layerId: 'L',
+          categoryKey: kTransitStationCategoryKey,
+          centerLat: 48.1,
+          centerLng: 11.15,
+          radiusMeters: 1,
+          source: kPoiSourceBox,
           south: 48.0,
           west: 11.0,
           north: 48.2,
           east: 11.3,
           modeMask: modeMask,
           visibleModeMask: visible,
-          stationCount: 3,
-          nodeCount: 9,
+          fetchedAt: DateTime(2026),
           createdAt: DateTime(2026),
           colorShade: 0,
           zOrder: 0,
@@ -287,12 +290,13 @@ void main() {
       final rail = transitRailMask;
       await pump(
         tester,
-        TransitSetEditorSheet(
+        PoiSetEditorSheet(
           set: set(modeMask: rail, visible: rail),
-          stopCount: 3,
-          layers: [layerOf('transit')],
+          pointCount: 3,
+          layers: [layerOf('poi')],
         ),
       );
+      expect(find.text('Edit station import'), findsOneWidget);
       for (final m in transitModes) {
         expect(
           find.widgetWithText(FilterChip, m.label),
@@ -309,10 +313,10 @@ void main() {
       final bus = transitModeByKey('bus')!;
       await pump(
         tester,
-        TransitSetEditorSheet(
+        PoiSetEditorSheet(
           set: set(modeMask: all, visible: all),
-          stopCount: 9,
-          layers: [layerOf('transit')],
+          pointCount: 9,
+          layers: [layerOf('poi')],
         ),
       );
       await tester.tap(find.widgetWithText(FilterChip, bus.label));
@@ -320,10 +324,10 @@ void main() {
 
       expect(
         repo.calls,
-        contains('setTransitVisibleModes [ts1] ${all & ~bus.bit}'),
+        contains('setPoiVisibleModes [ts1] ${all & ~bus.bit}'),
       );
       expect(
-        repo.calls.where((c) => c.startsWith('updateTransitSet')),
+        repo.calls.where((c) => c.startsWith('updatePoiSet')),
         isEmpty,
         reason: 'hiding a type must not rewrite what was fetched',
       );
@@ -335,30 +339,49 @@ void main() {
       final bus = transitModeByKey('bus')!;
       await pump(
         tester,
-        TransitSetEditorSheet(
+        PoiSetEditorSheet(
           set: set(modeMask: all, visible: all & ~bus.bit),
-          stopCount: 9,
-          layers: [layerOf('transit')],
+          pointCount: 9,
+          layers: [layerOf('poi')],
         ),
       );
       await tester.tap(find.widgetWithText(FilterChip, bus.label));
       await tester.pump();
-      expect(repo.calls, contains('setTransitVisibleModes [ts1] $all'));
+      expect(repo.calls, contains('setPoiVisibleModes [ts1] $all'));
     });
 
     testWidgets('an import that fetched nothing offers no Show section',
         (tester) async {
       await pump(
         tester,
-        TransitSetEditorSheet(
+        PoiSetEditorSheet(
           set: set(modeMask: 0, visible: 0),
-          stopCount: 0,
-          layers: [layerOf('transit')],
+          pointCount: 0,
+          layers: [layerOf('poi')],
         ),
       );
       expect(find.text('Show'), findsNothing);
       expect(find.byType(FilterChip), findsNothing);
       expect(find.textContaining('0 stations stored'), findsOneWidget);
+    });
+
+    testWidgets('a pending import says so and offers a retry',
+        (tester) async {
+      await pump(
+        tester,
+        PoiSetEditorSheet(
+          set: set(modeMask: transitAllModesMask, visible: -1).copyWith(
+            fetchedAt: const Value(null),
+            lastError: const Value('Overpass is busy'),
+          ),
+          pointCount: 0,
+          layers: [layerOf('poi')],
+        ),
+      );
+      expect(find.textContaining('Overpass is busy'), findsOneWidget);
+      await tester.tap(find.text('Try again'));
+      await tester.pump();
+      expect(container.read(pendingImportRetryProvider)?.setId, 'ts1');
     });
   });
 
@@ -524,16 +547,6 @@ class _RecordingRepository extends Repository {
   Future<void> deletePoiPoint(String id) async => calls.add('deletePoiPoint $id');
 
   @override
-  Future<void> updateTransitStop(String id,
-      {required Value<String?> name}) async {
-    calls.add('updateTransitStop $id name=${_v(name)}');
-  }
-
-  @override
-  Future<void> deleteTransitStop(String id) async =>
-      calls.add('deleteTransitStop $id');
-
-  @override
   Future<void> updatePoiSet(
     String id, {
     String? layerId,
@@ -551,24 +564,10 @@ class _RecordingRepository extends Repository {
   Future<void> deletePoiSet(String id) async => calls.add('deletePoiSet $id');
 
   @override
-  Future<void> updateTransitSet(
-    String id, {
-    String? layerId,
-    Value<String?> label = const Value.absent(),
-  }) async {
-    calls.add('updateTransitSet $id label=${_v(label)}'
-        '${layerId == null ? '' : ' layer=$layerId'}');
-  }
-
-  @override
-  Future<void> setTransitVisibleModes(
+  Future<void> setPoiVisibleModes(
       Iterable<String> setIds, int visibleModeMask) async {
-    calls.add('setTransitVisibleModes ${setIds.toList()} $visibleModeMask');
+    calls.add('setPoiVisibleModes ${setIds.toList()} $visibleModeMask');
   }
-
-  @override
-  Future<void> deleteTransitSet(String id) async =>
-      calls.add('deleteTransitSet $id');
 
   @override
   Future<void> updateBorderArea(

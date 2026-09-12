@@ -12,33 +12,26 @@ Android-first, iOS-ready. Built with Flutter.
 
 ## What you can build
 
-Each **layer** holds one kind of object. The six *region* types paint a single flat-coloured
-area — overlapping objects within a layer never darken each other — and a per-layer **invert**
-fills everything *outside* the region instead. The three *import* types pull a snapshot of real
-OpenStreetMap data and draw it directly. The **track** type records where you actually went.
+Each **layer** holds one kind of object (or, as a *combined* layer, several). The five *region*
+types paint a single flat-coloured area — overlapping objects within a layer never darken each
+other — and a per-layer **invert** fills everything *outside* the region instead. The two
+*import* types pull a snapshot of real OpenStreetMap data and draw it directly.
 
 ### Region types
 
 | Type | What it draws |
 |---|---|
 | **Circle** | A true **geodesic** circle — radius in real-world metres, accurate on the globe (so it looks like an ellipse at high latitudes in Web Mercator, as it should). |
-| **Plane** | The "**closer to one of two points**" region — one side of two points' perpendicular bisector, with a toggle for which side. |
-| **Subspace** | The "**closest of N points**" region — a Voronoi cell: everywhere closer to a chosen *main* point than to any of the others. |
+| **Subspace** | The "**closest of N points**" region — a Voronoi cell: everywhere closer to a chosen *main* point than to any of the others. With two points it is the "closer to A than to B" half-plane. |
 | **Freehand line** | A polyline **you draw** that cuts an inclusion circle in two; the layer fills one half-disk, invert fills the other. |
 | **Freehand area** | A closed polygon **you draw**; the layer fills the inside (invert fills the outside). |
-| **Height** | Terrain **above or below an elevation**, bounded to a circle. Generated once from public terrain tiles by marching squares, then stored — so it renders cheaply and works offline afterwards. |
+| **Height** | Terrain **above or below an elevation**, bounded to a circle. Generated once from public terrain tiles by marching squares, then stored — so it renders cheaply and works offline afterwards. Any generated region can be **converted to a freehand area** (outer contours; holes are dropped). |
 
 Every region carries a measurement **uncertainty band** — a lighter strip on the *coloured* side
 of the boundary, so the fill only turns solid a band-width in. It is set globally in Settings.
 The two freehand types additionally have a signed **offset** in metres: positive pushes the
 boundary inward from the area / away from the line (*"inside the city **and** more than 5 km
 from its border"*), negative extends the fill past what you drew.
-
-### Track
-
-| Type | What it draws |
-|---|---|
-| **Track** | A line **recorded from your phone's GPS**. Press Record and it appends your position as you move — a point every 10 m by default, adjustable per layer along with the line width. Recording is **foreground-only**: no background service, no background-location permission, so it runs while the app is open and a gap in the recording is drawn as a break in the line rather than a straight jump. One track per layer, so a second walk continues the same line; a GPX from another device can be imported into one. |
 
 ### Import types
 
@@ -47,8 +40,7 @@ never refetch and never poll.
 
 | Type | What it imports |
 |---|---|
-| **Points of interest** | One OSM category (cafés, benches, drinking water, toilets…) within a radius. Drawn as icon markers that collapse into count badges when they would overlap. |
-| **Transit** | Every public-transport **station** in a box you tap out, plus which types serve each one — bus, tram, subway, light rail, train, monorail, ferry. Per-layer tick boxes switch types on and off; a station stays visible while at least one ticked type stops there, so "Rail only" keeps the big interchanges. **Line geometry is deliberately never fetched** — it proved unobtainable from the public API at any useful scale. |
+| **Points of interest** | One OSM category (cafés, benches, drinking water, toilets…) within a radius — or every public-transport **station** in a box you tap out, plus which types serve each one (bus, tram, subway, light rail, train, monorail, ferry). Drawn as icon markers that collapse into count badges when they would overlap. For a station import, per-layer tick boxes switch types on and off; a station stays visible while at least one ticked type stops there, so "Rail only" keeps the big interchanges. **Line geometry is deliberately never fetched** — it proved unobtainable from the public API at any useful scale. You can also name a category of your own and place its points by hand. |
 | **Borders** | Administrative areas of one OSM `admin_level`, chosen when the layer is created. Whole relations come down (a clipped boundary has no fillable interior) and are assembled on the device. **Nothing is cut to the box** — it limits the download, not the result — so an area may reach well past it. Optional neighbour-distinct colouring and name plates; any area can be **converted to a freehand area** you can then edit. |
 
 ## Features
@@ -57,7 +49,8 @@ never refetch and never poll.
 - Full-bleed OpenStreetMap base map (no API key needed); one floating menu button opens the
   layers drawer.
 - Layers drawer: show/hide, reorder, rename, recolour, adjust opacity, **invert**, add, delete.
-  The active layer receives new objects; each layer is single-type, chosen when you add it.
+  The active layer receives new objects; a layer is single-type, chosen when you add it, or
+  **combined** to hold several types at once.
   The base map is a pinned bottom layer — hideable and dimmable, never deletable.
 - An **Elements** list per layer, naming that layer's objects with Edit / Zoom to / Rename /
   Delete.
@@ -119,9 +112,9 @@ core (solid) + band (`outer − core`, lighter) + outline — or `viewport − o
 is inverted. That single contract is why invert and the uncertainty band behave the same for
 every type.
 
-Geometry that does not depend on where the camera is — buffered freehand offsets, plane and
-Voronoi clips, circle rings — is resolved once and memoised, so a pan re-projects cached rings
-instead of rebuilding them. Freehand areas and the three import types have their own painters:
+Geometry that does not depend on where the camera is — buffered freehand offsets, Voronoi
+clips, circle rings — is resolved once and memoised, so a pan re-projects cached rings
+instead of rebuilding them. Freehand areas and the two import types have their own painters:
 buffered city-sized outlines are exactly the input Skia's path-ops fail on, so those composite
 by overpainting inside a layer rather than by boolean operations.
 
@@ -144,10 +137,9 @@ by overpainting inside a layer rather than by boolean operations.
 
 ```
 lib/
-  data/   Drift schema + repository (Layers; Circles, Planes, Subspaces,
+  data/   Drift schema + repository (Layers; Circles, Subspaces,
           FreeLines, FreeAreas, HeightRegions and their point tables;
-          PoiSets, TransitSets, BorderSets and their rows; TileCache,
-          AppSettings). Shared Overpass transport with endpoint failover
+          PoiSets, BorderSets and their rows; TileCache, AppSettings). Shared Overpass transport with endpoint failover
           (overpass_client.dart) used by overpass.dart (POIs),
           transit.dart and borders.dart; request pacing + result caching
           (request_pacer.dart); Nominatim geocoding (place_search.dart);
@@ -155,14 +147,14 @@ lib/
           (cached_tile_provider.dart); GeoJSON/KML export (serialization.dart)
           and GeoJSON/KML/KMZ/GPX import (geo_import.dart); terrain
           generation (height_generator.dart)
-  geo/    region geometry — geodesic, plane, subspace, freeline, freearea,
+  geo/    region geometry — geodesic, subspace, freeline, freearea,
           height (marching squares), border_areas (ring assembly + colouring),
           simplify (Douglas–Peucker), tiles (slippy maths), coords (parsing)
   state/  Riverpod providers — per-object streams, point lookups grouped by
           owner, settings, selection/placement, map mode
   ui/     map_screen, layers_panel (drawer), one *_editor.dart per region type
           on a shared editor_sheet, settings_screen, region_layer (the
-          compositing engine), poi/transit/border layers, import dialogs
+          compositing engine), poi/border layers, import dialogs
 assets/icon/   app-icon source art (transparent PNG + adaptive foreground)
 drift_schemas/ schema snapshots that guard the migrations
 scripts/       build.sh — analyze / test / build / install / run / bundle

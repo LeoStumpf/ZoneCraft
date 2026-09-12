@@ -25,13 +25,11 @@ import '../geo/coords.dart' show formatLatLng, parseLatLng;
 import '../state/providers.dart';
 import 'editor_sheet.dart';
 
-/// Docked editor for **one imported point** — a stored POI or a transit
-/// station. One widget for both, because the two rows differ only in which
-/// table they came from and what the subtitle says; the thing being edited is
-/// identical.
+/// Docked editor for **one stored point** — a POI or a station; since v27
+/// both are `PoiPoints` rows, and only the icon and subtitle differ.
 ///
-/// This is the level *below* an element: a POI belongs to a set, a station to
-/// an import, and it is the set or import that appears in the Elements list.
+/// This is the level *below* an element: a point belongs to a set, and it is
+/// the set that appears in the Elements list.
 /// The point is reachable only by tapping it on the map, which is where you
 /// noticed it was wrong.
 ///
@@ -49,7 +47,6 @@ class ImportedPointEditorSheet extends ConsumerStatefulWidget {
   const ImportedPointEditorSheet({
     super.key,
     required this.id,
-    required this.kind,
     required this.name,
     required this.lat,
     required this.lng,
@@ -59,12 +56,8 @@ class ImportedPointEditorSheet extends ConsumerStatefulWidget {
     this.movable = false,
   });
 
-  /// The row id, in the table [kind] names.
+  /// The `PoiPoints` row id.
   final String id;
-
-  /// Which of the two point kinds this is ([ObjectKind.poiPoint] or
-  /// [ObjectKind.transitStop]) — decides the repository calls.
-  final ObjectKind kind;
 
   final String? name;
   final double lat;
@@ -136,32 +129,16 @@ class _ImportedPointEditorSheetState
 
   void _close() {
     ref.read(poiPointPlacementProvider.notifier).arm(on: false);
-    // Name both kinds. A `default:` here cleared the *transit* selection for
-    // anything that was not a POI, so a third kind routed to this editor would
-    // silently deselect the wrong thing.
-    switch (widget.kind) {
-      case ObjectKind.poiPoint:
-        ref.read(selectedPoiPointProvider.notifier).select(null);
-      case ObjectKind.transitStop:
-        ref.read(selectedTransitStopProvider.notifier).select(null);
-      case _:
-        break;
-    }
+    ref.read(selectedPoiPointProvider.notifier).select(null);
   }
 
   Future<void> _rename(String text) {
     final label = Value<String?>(text.trim().isEmpty ? null : text.trim());
-    return widget.kind == ObjectKind.poiPoint
-        ? _repo.updatePoiPoint(widget.id, name: label)
-        : _repo.updateTransitStop(widget.id, name: label);
+    return _repo.updatePoiPoint(widget.id, name: label);
   }
 
   Future<void> _delete() async {
-    if (widget.kind == ObjectKind.poiPoint) {
-      await _repo.deletePoiPoint(widget.id);
-    } else {
-      await _repo.deleteTransitStop(widget.id);
-    }
+    await _repo.deletePoiPoint(widget.id);
     _close();
   }
 

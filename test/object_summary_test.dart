@@ -25,6 +25,7 @@ import 'package:zonecraft/data/repository.dart';
 import 'package:zonecraft/data/transit.dart';
 import 'package:zonecraft/state/providers.dart';
 import 'package:zonecraft/data/layer_types.dart';
+import 'package:zonecraft/data/poi_sets.dart';
 import 'package:zonecraft/ui/object_summary.dart';
 
 void main() {
@@ -64,21 +65,27 @@ void main() {
         name: 'Everything', colorArgb: 0xFF0000FF, type: kMixedType);
     await repo.createCircle(
         layerId: layerId, centerLat: 48.1, centerLng: 11.5, radiusMeters: 500);
-    await repo.createPlane(
-        layerId: layerId, aLat: 48.0, aLng: 11.0, bLat: 48.2, bLng: 11.4);
-    await repo.createTrack(layerId: layerId);
+    await repo.createSubspace(layerId: layerId);
+    await repo.createPoiSet(
+      layerId: layerId,
+      source: kPoiSourceManual,
+      categoryKey: 'pin',
+      centerLat: 48.1,
+      centerLng: 11.5,
+      radiusMeters: 0,
+    );
 
     final rows = summariseLayer(
       await layerById(layerId),
       circles: await db.select(db.circles).get(),
-      planes: await db.select(db.planes).get(),
-      tracks: await db.select(db.tracks).get(),
+      subspaces: await db.select(db.subspaces).get(),
+      poiSets: await db.select(db.poiSets).get(),
     );
 
     expect(
       rows.map((r) => r.ref.kind).toList(),
-      [ObjectKind.circle, ObjectKind.plane, ObjectKind.track],
-      reason: 'circles, planes then tracks — kMixedContentTypes order',
+      [ObjectKind.circle, ObjectKind.subspace, ObjectKind.poiSet],
+      reason: 'circles, subspaces then POI sets — kMixedContentTypes order',
     );
     // Each row still names its own kind, which is what lets the list show a
     // per-element icon and resolve a per-element colour.
@@ -116,28 +123,6 @@ void main() {
     // Eight ring points, so the camera can frame the whole disc.
     expect(rows.first.fitPoints.length, 8);
     expect(rows.first.center.latitude, closeTo(48.1, 1e-9));
-  });
-
-  test('plane rows report the near side and frame both foci', () async {
-    final layerId =
-        await repo.createLayer(name: 'P', colorArgb: 0xFF00FF00, type: 'planes');
-    await repo.createPlane(
-        layerId: layerId,
-        aLat: 48.0,
-        aLng: 11.0,
-        bLat: 48.4,
-        bLng: 11.8,
-        nearA: false);
-
-    final rows = summariseLayer(
-      await layerById(layerId),
-      planes: await db.select(db.planes).get(),
-    );
-
-    expect(rows.single.title, 'Plane 1');
-    expect(rows.single.subtitle, 'Nearer side: B');
-    expect(rows.single.fitPoints.length, 2);
-    expect(rows.single.center.latitude, closeTo(48.2, 1e-9));
   });
 
   test('subspace rows count points and centre on the main point', () async {
@@ -236,13 +221,14 @@ void main() {
         await repo.createLayer(name: 'POI', colorArgb: 0xFF123456, type: 'poi');
     final id = await repo.createPoiSet(
       layerId: layerId,
+      source: kPoiSourceRadius,
       categoryKey: 'bench',
       centerLat: 48.0,
       centerLng: 11.0,
       radiusMeters: 800,
       label: 'Benches',
     );
-    await repo.addPoiPoints(id, [
+    await repo.fillPoiSet(id, [
       PoiResult(lat: 48.001, lng: 11.001, categoryKey: 'bench', name: 'A'),
       PoiResult(lat: 48.002, lng: 11.002, categoryKey: 'bench', name: null),
     ]);
@@ -263,12 +249,14 @@ void main() {
         await repo.createLayer(name: 'POI', colorArgb: 0xFF123456, type: 'poi');
     final id = await repo.createPoiSet(
       layerId: layerId,
+      source: kPoiSourceRadius,
       categoryKey: 'bench',
       centerLat: 48.0,
       centerLng: 11.0,
       radiusMeters: 800,
       label: 'Benches',
     );
+    await repo.fillPoiSet(id, const []);
 
     await repo.updatePoiSet(id, label: const Value('Seating'));
     var set = await (db.select(db.poiSets)..where((s) => s.id.equals(id)))
@@ -304,40 +292,43 @@ void main() {
     expect(rows.single.fitPoints, hasLength(1));
   });
 
-  test('transit rows summarise the import, not individual stations', () async {
+  test('station-import rows summarise the import, not individual stations',
+      () async {
     final layerId = await repo.createLayer(
-        name: 'T', colorArgb: 0xFF123456, type: 'transit');
-    final setId = await repo.createPendingTransitSet(
+        name: 'T', colorArgb: 0xFF123456, type: 'poi');
+    final setId = await repo.createPoiSet(
       layerId: layerId,
-      south: 48.10,
-      west: 11.50,
-      north: 48.15,
-      east: 11.60,
+      source: kPoiSourceBox,
+      categoryKey: kTransitStationCategoryKey,
+      centerLat: 0,
+      centerLng: 0,
+      radiusMeters: 0,
+      bbox: [48.10, 11.50, 48.15, 11.60],
       modeMask: transitAllModesMask,
       visibleModeMask: transitAllModesMask,
       label: 'Centre',
     );
-    await repo.fillTransitSet(setId, [
-      (
-        osmId: 9,
+    await repo.fillPoiSet(setId, [
+      PoiResult(
         lat: 48.11,
         lng: 11.51,
+        categoryKey: kTransitStationCategoryKey,
         name: 'A',
+        osmType: 'node',
+        osmId: 9,
         modeMask: transitModeByKey('subway')!.bit,
-        nodeCount: 3,
-        routeRef: null,
       ),
     ]);
 
     final rows = summariseLayer(
       await layerById(layerId),
-      transitSets: await db.select(db.transitSets).get(),
-      transitStops: await db.select(db.transitStops).get(),
+      poiSets: await db.select(db.poiSets).get(),
+      poiPoints: await db.select(db.poiPoints).get(),
     );
 
     expect(rows, hasLength(1));
     expect(rows.single.title, 'Centre');
-    expect(rows.single.ref.kind, ObjectKind.transitSet);
+    expect(rows.single.ref.kind, ObjectKind.poiSet);
     expect(rows.single.isPending, isFalse);
     expect(rows.single.subtitle, startsWith('1 station · '));
     expect(rows.single.subtitle, contains('imported '));
@@ -348,31 +339,71 @@ void main() {
   });
 
   test('an import that never finished reads as a retry row', () async {
+    // Both import kinds: every import is born pending, so the radius one
+    // reads the same way until it is filled.
     final layerId = await repo.createLayer(
-        name: 'T', colorArgb: 0xFF123456, type: 'transit');
-    final setId = await repo.createPendingTransitSet(
+        name: 'T', colorArgb: 0xFF123456, type: 'poi');
+    final box = await repo.createPoiSet(
       layerId: layerId,
-      south: 48.10,
-      west: 11.50,
-      north: 48.15,
-      east: 11.60,
+      source: kPoiSourceBox,
+      categoryKey: kTransitStationCategoryKey,
+      centerLat: 0,
+      centerLng: 0,
+      radiusMeters: 0,
+      bbox: [48.10, 11.50, 48.15, 11.60],
       modeMask: transitAllModesMask,
       visibleModeMask: transitAllModesMask,
     );
-    await repo.markTransitImportFailed(setId, 'Overpass is busy');
+    await repo.markPoiImportFailed(box, 'Overpass is busy');
+    final radius = await repo.createPoiSet(
+      layerId: layerId,
+      source: kPoiSourceRadius,
+      categoryKey: 'cafe',
+      centerLat: 48.1,
+      centerLng: 11.5,
+      radiusMeters: 800,
+    );
 
     final rows = summariseLayer(
       await layerById(layerId),
-      transitSets: await db.select(db.transitSets).get(),
+      poiSets: await db.select(db.poiSets).get(),
     );
-    expect(rows.single.isPending, isTrue);
-    expect(rows.single.title, contains("didn't finish"));
-    expect(rows.single.subtitle, contains('Overpass is busy'));
-    expect(rows.single.subtitle, contains('tap to try again'));
+    expect(rows, hasLength(2));
+    for (final r in rows) {
+      expect(r.isPending, isTrue, reason: r.ref.id);
+      expect(r.title, contains("didn't finish"));
+      expect(r.subtitle, contains('tap to try again'));
+    }
+    expect(rows.firstWhere((r) => r.ref.id == box).subtitle,
+        contains('Overpass is busy'));
+    expect(rows.firstWhere((r) => r.ref.id == radius).subtitle,
+        contains('within 800 m'));
   });
 
-  test('typeIcon knows the transit type', () {
-    expect(typeIcon('transit'), isNot(typeIcon('unknown-type')));
+  test('a hand-made category is never a retry row', () async {
+    final layerId = await repo.createLayer(
+        name: 'Mine', colorArgb: 0xFF123456, type: 'poi');
+    await repo.createPoiSet(
+      layerId: layerId,
+      source: kPoiSourceManual,
+      categoryKey: 'star',
+      centerLat: 48.1,
+      centerLng: 11.5,
+      radiusMeters: 0,
+      label: 'Favourites',
+    );
+    final rows = summariseLayer(
+      await layerById(layerId),
+      poiSets: await db.select(db.poiSets).get(),
+    );
+    expect(rows.single.isPending, isFalse);
+    expect(rows.single.title, 'Favourites');
+    expect(rows.single.subtitle, '0 POIs · placed by hand');
+  });
+
+  test('typeIcon has no entry for the retired types', () {
+    expect(typeIcon('transit'), typeIcon('unknown-type'));
+    expect(typeIcon('poi'), isNot(typeIcon('unknown-type')));
   });
 
   group('borders elements list the areas, not the imports', () {
@@ -489,7 +520,6 @@ void main() {
     test('the region types are editable', () {
       for (final type in [
         'circles',
-        'planes',
         'subspace',
         'freeline',
         'freearea',
@@ -503,13 +533,16 @@ void main() {
       // They were the exception until their editors landed. A snapshot's editor
       // is scoped — naming, colour, curation, and a border area's outline — but
       // "no editor at all" is what made Edit and long-press dead over them.
-      for (final type in ['poi', 'transit', 'borders']) {
+      for (final type in ['poi', 'borders']) {
         expect(layerHasEditor(type), isTrue, reason: type);
       }
     });
 
-    test('a combined layer has an editor; the per-element gate is the kind', () {
+    test('a combined layer has an editor; the retired types do not', () {
       expect(layerHasEditor(kMixedType), isTrue);
+      for (final type in ['planes', 'transit', 'track']) {
+        expect(layerHasEditor(type), isFalse, reason: type);
+      }
     });
 
     test('an unknown type has no editor, so Edit mode stays honest', () {

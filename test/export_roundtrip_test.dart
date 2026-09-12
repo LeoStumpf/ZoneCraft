@@ -17,7 +17,7 @@
 import 'dart:convert';
 
 import 'package:drift/drift.dart'
-    show OrderingTerm, Table, TableInfo, Value, Variable, driftRuntimeOptions;
+    show OrderingTerm, Table, TableInfo, Variable, driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
@@ -25,6 +25,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:zonecraft/data/database.dart';
 import 'package:zonecraft/data/layer_types.dart';
 import 'package:zonecraft/data/overpass.dart' show PoiResult;
+import 'package:zonecraft/data/poi_sets.dart';
 import 'package:zonecraft/data/repository.dart';
 import 'package:zonecraft/data/serialization.dart';
 import 'package:zonecraft/data/transit.dart';
@@ -83,18 +84,16 @@ void main() {
         radiusMeters: 800);
     await repo.updateLayer(_id(ids, 'circles'), opacity: 0.31);
 
-    // planes — inverted layer.
-    ids['planes'] = await repo.createLayer(
-        name: 'Planes', colorArgb: 0xFFEF5350, type: 'planes');
-    await repo.createPlane(
-        layerId: _id(ids, 'planes'),
-        aLat: 48.0,
-        aLng: 11.0,
-        bLat: 48.5,
-        bLng: 11.9,
-        nearA: false,
-        label: 'A|B');
-    await repo.updateLayer(_id(ids, 'planes'), isInverted: true);
+    // a two-point subspace (what a plane became) — inverted layer.
+    ids['nearer'] = await repo.createLayer(
+        name: 'Nearer', colorArgb: 0xFFEF5350, type: 'subspace');
+    final half = await repo.createSubspace(
+        layerId: _id(ids, 'nearer'), label: 'A|B');
+    await repo.addSubspacePoint(
+        subspaceId: half, lat: 48.0, lng: 11.0);
+    await repo.addSubspacePoint(
+        subspaceId: half, lat: 48.5, lng: 11.9, isMain: true);
+    await repo.updateLayer(_id(ids, 'nearer'), isInverted: true);
 
     // subspace — a main point that is not the first, and named seeds.
     ids['subspace'] = await repo.createLayer(
@@ -161,44 +160,19 @@ void main() {
     ]);
     await repo.markHeightGenerated(region);
 
-    // track — two segments (a recording with a pause) and non-default options.
-    ids['track'] =
-        await repo.createLayer(name: 'Track', colorArgb: 0xFF26A69A, type: 'track');
-    await repo.updateTrackLayerOptions(_id(ids, 'track'),
-        strokeWidth: 7.5, minDistanceMeters: 25);
-    final track = await repo.ensureTrackForLayer(_id(ids, 'track'));
-    await repo.updateTrack(track, label: const Value('morning run'));
-    await repo.addTrackPoints(
-      track,
-      [
-        for (var i = 0; i < 8; i++)
-          LatLng(48.10 + i * 0.00003, 11.50 + i * 0.00003),
-      ],
-      segmentIndex: 0,
-    );
-    await repo.addTrackPoints(
-      track,
-      [LatLng(48.30, 11.70), LatLng(48.31, 11.71), LatLng(48.32, 11.70)],
-      segmentIndex: 1,
-    );
-    // A segment of one point: the recorder got a fix and then nothing before
-    // the next gap. It draws no line, but it is a real recorded position and
-    // it moves the track's bounds — found on a real device database, where an
-    // import dropped it.
-    await repo.addTrackPoints(track, [LatLng(48.40, 11.90)], segmentIndex: 2);
-
     // poi — POIs that carry their OSM identity, and one that never had any.
     ids['poi'] =
         await repo.createLayer(name: 'POIs', colorArgb: 0xFF00ACC1, type: 'poi');
     final poiSet = await repo.createPoiSet(
       layerId: _id(ids, 'poi'),
+      source: kPoiSourceRadius,
       categoryKey: 'cafe',
       centerLat: 48.137,
       centerLng: 11.575,
       radiusMeters: 2000,
       label: 'Cafés',
     );
-    await repo.addPoiPoints(poiSet, const [
+    await repo.fillPoiSet(poiSet, const [
       PoiResult(
           lat: 48.14,
           lng: 11.58,
@@ -227,7 +201,7 @@ void main() {
       centerLng: 11.50,
       radiusMeters: 0,
       label: 'Swimming spots',
-      isManual: true,
+      source: kPoiSourceManual,
       iconKey: 'peak',
     );
     await repo.addManualPoiPoint(
@@ -235,51 +209,52 @@ void main() {
     await repo.addManualPoiPoint(
         poiSetId: manualSet, lat: 48.102, lng: 11.502);
 
-    // transit — one filled import and one that failed (a retry row).
-    ids['transit'] = await repo.createLayer(
-        name: 'Transit', colorArgb: 0xFF7E57C2, type: 'transit');
-    final filled = await repo.createPendingTransitSet(
-      layerId: _id(ids, 'transit'),
-      south: 48.00,
-      west: 11.30,
-      north: 48.30,
-      east: 11.80,
+    // …and station imports on a second POI layer: one filled and one that
+    // failed (a retry row). Both are box-sourced sets since v27.
+    ids['stations'] = await repo.createLayer(
+        name: 'Stations', colorArgb: 0xFF7E57C2, type: 'poi');
+    final filled = await repo.createPoiSet(
+      layerId: _id(ids, 'stations'),
+      source: kPoiSourceBox,
+      categoryKey: kTransitStationCategoryKey,
+      centerLat: 0,
+      centerLng: 0,
+      radiusMeters: 0,
+      bbox: [48.00, 11.30, 48.30, 11.80],
       modeMask: transitAllModesMask,
       visibleModeMask: transitModeByKey('subway')!.bit,
       label: 'München',
     );
-    await repo.fillTransitSet(filled, [
-      (
+    await repo.fillPoiSet(filled, [
+      TransitStationData(
         osmId: 1,
         lat: 48.14,
         lng: 11.46,
         name: 'Pasing Bahnhof',
         modeMask:
             transitModeByKey('bus')!.bit | transitModeByKey('train')!.bit,
-        nodeCount: 31,
-        routeRef: null,
-      ),
-      (
+      ).toPoiResult(),
+      TransitStationData(
         osmId: 2,
         lat: 48.13,
         lng: 11.57,
         name: 'Marienplatz',
         modeMask: transitModeByKey('subway')!.bit,
-        nodeCount: 4,
-        routeRef: 'U3;U6',
-      ),
+      ).toPoiResult(),
     ]);
-    final failed = await repo.createPendingTransitSet(
-      layerId: _id(ids, 'transit'),
-      south: 49.0,
-      west: 12.0,
-      north: 49.5,
-      east: 12.5,
+    final failed = await repo.createPoiSet(
+      layerId: _id(ids, 'stations'),
+      source: kPoiSourceBox,
+      categoryKey: kTransitStationCategoryKey,
+      centerLat: 0,
+      centerLng: 0,
+      radiusMeters: 0,
+      bbox: [49.0, 12.0, 49.5, 12.5],
       modeMask: transitModeByKey('train')!.bit,
       visibleModeMask: -1,
       label: 'Regensburg',
     );
-    await repo.markTransitImportFailed(failed, 'Overpass was busy');
+    await repo.markPoiImportFailed(failed, 'Overpass was busy');
 
     // borders — a named import, one area reshaped by hand (so it is a fork),
     // and the display toggles on. Hidden, to prove that survives too.
@@ -329,27 +304,25 @@ void main() {
       radiusMeters: 750,
       label: 'in the mix',
     );
-    await repo.createPlane(
-      layerId: _id(ids, 'mixed'),
-      aLat: 48.10,
-      aLng: 11.50,
-      bLat: 48.20,
-      bLng: 11.70,
-    );
-    final mixedTrack = await repo.ensureTrackForLayer(_id(ids, 'mixed'));
-    await repo.addTrackPoints(
-      mixedTrack,
-      [const LatLng(48.16, 11.61), const LatLng(48.17, 11.62)],
-      segmentIndex: 0,
-    );
+    final mixedSub = await repo.createSubspace(layerId: _id(ids, 'mixed'));
+    await repo.addSubspacePoint(
+        subspaceId: mixedSub, lat: 48.10, lng: 11.50, isMain: true);
+    await repo.addSubspacePoint(
+        subspaceId: mixedSub, lat: 48.20, lng: 11.70);
+    final mixedArea = await repo.createFreeArea(layerId: _id(ids, 'mixed'));
+    await repo.addFreeAreaPoints(mixedArea, const [
+      LatLng(48.16, 11.61),
+      LatLng(48.17, 11.62),
+      LatLng(48.17, 11.60),
+    ]);
     final mixedPoi = await repo.createPoiSet(
       layerId: _id(ids, 'mixed'),
+      source: kPoiSourceManual,
       categoryKey: 'star',
       centerLat: 48.15,
       centerLng: 11.60,
       radiusMeters: 0,
       label: 'Favourites',
-      isManual: true,
       iconKey: 'star',
     );
     await repo.addManualPoiPoint(
@@ -384,8 +357,6 @@ void main() {
         'borderLevel': l.borderLevel,
         'borderFillAreas': l.borderFillAreas,
         'borderShowNames': l.borderShowNames,
-        'trackStrokeWidth': l.trackStrokeWidth,
-        'trackMinDistanceMeters': l.trackMinDistanceMeters,
         'objects': await _objectsOf(db, l),
       });
     }
@@ -417,8 +388,6 @@ void main() {
         'borderLevel': l.borderLevel,
         'borderFillAreas': l.borderFillAreas,
         'borderShowNames': l.borderShowNames,
-        'trackStrokeWidth': l.trackStrokeWidth,
-        'trackMinDistanceMeters': l.trackMinDistanceMeters,
         'objects': await _objectsOf(fresh, l),
       });
     }
@@ -431,8 +400,9 @@ void main() {
   test('the whole database survives an export/import round-trip', () async {
     await seedEverything();
     final before = await snapshot();
-    expect(before, hasLength(11),
-        reason: 'one layer of every type, plus a combined one');
+    expect(before, hasLength(10),
+        reason: 'one layer of every type, a second subspace and POI layer '
+            '(the shapes planes and transit became), plus a combined one');
 
     final after = await reimport(await repo.exportData());
     expect(after, hasLength(before.length));
@@ -447,8 +417,10 @@ void main() {
     final ids = await seedEverything();
     final before = await snapshot();
 
+    final layers = await repo.watchLayers().first;
     for (final entry in ids.entries) {
-      final mine = before.firstWhere((l) => l['type'] == entry.key);
+      final name = layers.firstWhere((l) => l.id == entry.value).name;
+      final mine = before.firstWhere((l) => l['name'] == name);
       final after = await reimport(await repo.exportData(onlyLayerId: entry.value));
       expect(after, hasLength(1), reason: '${entry.key}: one layer in, one out');
       expect(after.single, mine,
@@ -541,28 +513,33 @@ void main() {
     expect(region['fills'], hasLength(2));
   });
 
-  test("a track's pauses survive as breaks, not as a straight jump", () async {
+  test('a station import round-trips with its box, filter and retry row',
+      () async {
     final ids = await seedEverything();
-    final data = await repo.exportData(onlyLayerId: _id(ids, 'track'));
-    final o = data.layers.single.objects.single;
-    expect(o.segments, hasLength(3));
-    expect(o.segments!.first, hasLength(8));
-    expect(o.segments!.last, hasLength(1), reason: 'a lone fix is still data');
-
-    // A MultiLineString, so every other tool draws the break too.
-    final gj = jsonDecode(exportToGeoJson(data)) as Map<String, dynamic>;
-    final feature = (gj['features']! as List).single as Map<String, Object?>;
-    expect(
-      (feature['geometry']! as Map<String, Object?>)['type'],
-      'MultiLineString',
-    );
+    final data = await repo.exportData(onlyLayerId: _id(ids, 'stations'));
+    final objects = data.layers.single.objects;
+    expect(objects, hasLength(2));
+    final filled = objects.firstWhere((o) => o.pending != true);
+    expect(filled.kind, 'poi');
+    expect(filled.bbox, [48.00, 11.30, 48.30, 11.80]);
+    expect(filled.coords, hasLength(3), reason: 'box centre + 2 stations');
+    expect(filled.pointModeMasks, hasLength(2));
+    expect(filled.visibleModeMask, transitModeByKey('subway')!.bit);
+    expect(filled.radiusMeters, isNull, reason: 'derived from the box');
+    final pending = objects.firstWhere((o) => o.pending == true);
+    expect(pending.errorMessage, 'Overpass was busy');
+    expect(pending.coords, hasLength(1), reason: 'the box centre only');
 
     final after = await reimport(data);
-    final track = _objRows(after.single).single;
-    final segs = (track['points']! as List)
-        .map((p) => (p as Map<String, Object?>)['segmentIndex'])
-        .toSet();
-    expect(segs, hasLength(3));
+    final rows = _objRows(after.single);
+    expect(rows, hasLength(2));
+    final back = rows.firstWhere((r) => r['label'] == 'München');
+    expect(back['source'], kPoiSourceBox);
+    expect(back['bbox'], [48.00, 11.30, 48.30, 11.80]);
+    expect((back['points']! as List), hasLength(2));
+    final retry = rows.firstWhere((r) => r['label'] == 'Regensburg');
+    expect(retry['pending'], isTrue);
+    expect(retry['lastError'], 'Overpass was busy');
   });
 
   test('freehand geometry is not thinned by our own round-trip', () async {
@@ -634,15 +611,15 @@ void main() {
   test('a combined layer round-trips with every one of its types', () async {
     // The format needs nothing new for this — objects already say what they
     // are — so what is actually at risk is the *layer*: coming back as
-    // 'circles' would strand the plane, the track and the POIs on a layer that
-    // no longer paints them.
+    // 'circles' would strand the subspace, the area and the POIs on a layer
+    // that no longer paints them.
     final ids = await seedEverything();
     final data = await repo.exportData(onlyLayerId: _id(ids, 'mixed'));
     final layer = data.layers.single;
     expect(layer.type, kMixedType);
     expect(
       layer.objects.map((o) => o.kind).toSet(),
-      {'circle', 'plane', 'track', 'poi'},
+      {'circle', 'subspace', 'freearea', 'poi'},
       reason: 'every type on the layer has to be collected, not just the first',
     );
 
@@ -667,8 +644,8 @@ void main() {
     expect((await repo.watchAllCircles().first).length,
         greaterThan(before));
 
-    // A combined file into a circles layer: refused, because it carries planes
-    // and a track that a circles layer cannot hold.
+    // A combined file into a circles layer: refused, because it carries a
+    // subspace and an area that a circles layer cannot hold.
     final mixedFile =
         (await repo.exportData(onlyLayerId: _id(ids, 'mixed'))).layers.single;
     await expectLater(
@@ -695,25 +672,25 @@ void main() {
 
     final after = await reimport(data);
     final sets = _objRows(after.single);
-    final manual = sets.firstWhere((s) => s['isManual'] == true);
+    final manual = sets.firstWhere((s) => s['source'] == kPoiSourceManual);
     expect(manual['iconKey'], 'peak');
     expect(manual['label'], 'Swimming spots');
     expect(manual['radiusMeters'], 0);
 
     // And the import on the same layer is *not* flagged, which is what stops
     // "manual" from being a field that quietly defaults to true.
-    final imported = sets.firstWhere((s) => s['isManual'] == false);
+    final imported = sets.firstWhere((s) => s['source'] == kPoiSourceRadius);
     expect(imported['categoryKey'], 'cafe');
     expect(imported['iconKey'], isNull);
   });
 
-  test('a failed transit import comes back as a retry row', () async {
+  test('a failed station import comes back as a retry row', () async {
     final ids = await seedEverything();
-    final data = await repo.exportData(onlyLayerId: _id(ids, 'transit'));
+    final data = await repo.exportData(onlyLayerId: _id(ids, 'stations'));
     expect(data.layers.single.objects, hasLength(2));
     final failed =
         data.layers.single.objects.firstWhere((o) => o.pending == true);
-    expect(failed.coords, isEmpty);
+    expect(failed.coords, hasLength(1), reason: 'the box centre, no stations');
     expect(failed.errorMessage, 'Overpass was busy');
     expect(failed.bbox, [49.0, 12.0, 49.5, 12.5]);
 
@@ -774,8 +751,9 @@ void main() {
   });
 
   test('a v1 file still imports, with the v1 defaults', () async {
-    // Everything shipped before schema v2: no isVisible, a LineString track,
-    // a height region with no fills.
+    // Everything shipped before schema v2: no isVisible, a LineString track
+    // (a type that no longer exists, so its layer is dropped), a height
+    // region with no fills.
     const v1 = '''
 {
   "type": "FeatureCollection",
@@ -802,15 +780,15 @@ void main() {
 ''';
     final data = importFromGeoJson(v1);
     expect(data, isNotNull);
-    expect(data!.layers, hasLength(2));
+    expect(data!.layers, hasLength(1),
+        reason: 'the track layer is dropped: the type is gone');
+    expect(data.layers.single.type, 'height');
     expect(data.layers.first.isVisible, isNull, reason: 'absent = shown');
-    expect(await repo.importData(data), 2);
+    expect(await repo.importData(data), 1);
 
     final layers = await repo.watchLayers().first;
     expect(layers.every((l) => l.isVisible), isTrue);
-    // A v1 track is one unbroken segment.
-    final pts = await repo.watchAllTrackPoints().first;
-    expect(pts.map((p) => p.segmentIndex).toSet(), {0});
+    expect(layers.map((l) => l.type), isNot(contains('track')));
     // A v1 height region carried no fills, so it stays ungenerated — the user
     // taps Generate, exactly as before.
     final region = (await repo.watchAllHeightRegions().first).single;
@@ -879,17 +857,6 @@ Future<List<Map<String, Object?>>> _objectsOf(
             'colorShade': c.colorShade,
           });
         }
-      case 'planes':
-        for (final p in await _rows(db, db.planes, layer.id)) {
-          out.add({
-            'a': [p.aLat, p.aLng],
-            'b': [p.bLat, p.bLng],
-            'nearA': p.nearA,
-            'label': p.label,
-            'colorArgb': p.colorArgb,
-            'colorShade': p.colorShade,
-          });
-        }
       case 'subspace':
         final pts = await (db.select(db.subspacePoints)
               ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
@@ -942,32 +909,6 @@ Future<List<Map<String, Object?>>> _objectsOf(
             ],
           });
         }
-      case 'track':
-        final pts = await (db.select(db.trackPoints)
-              ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
-            .get();
-        for (final t in await _rows(db, db.tracks, layer.id)) {
-          final mine = pts.where((p) => p.trackId == t.id).toList();
-          // Segment *numbering* is a running counter, so compare the breaks the
-          // painter reads rather than the ids they happen to have.
-          final ranks = <int, int>{};
-          for (final p in mine) {
-            ranks.putIfAbsent(p.segmentIndex, () => ranks.length);
-          }
-          out.add({
-            'label': t.label,
-            'colorArgb': t.colorArgb,
-            'colorShade': t.colorShade,
-            'bounds': [t.south, t.west, t.north, t.east],
-            'points': [
-              for (final p in mine)
-                {
-                  'at': [p.lat, p.lng],
-                  'segmentIndex': ranks[p.segmentIndex],
-                },
-            ],
-          });
-        }
       case 'height':
         final polys = await (db.select(db.heightPolygons)
               ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
@@ -1007,11 +948,17 @@ Future<List<Map<String, Object?>>> _objectsOf(
             'label': s.label,
             'colorArgb': s.colorArgb,
             'colorShade': s.colorShade,
-            // v25: hand-made categories. In the snapshot, so the whole-database
-            // round-trip catches a manual set coming back as an import without
-            // anyone having to write a test for it.
-            'isManual': s.isManual,
+            // v25/v27: the kind of set. In the snapshot, so the whole-database
+            // round-trip catches a manual set coming back as an import — or a
+            // station import coming back as a radius one — without anyone
+            // having to write a test for it.
+            'source': s.source,
             'iconKey': s.iconKey,
+            'bbox': s.bbox,
+            'modeMask': s.modeMask,
+            'visibleModeMask': s.visibleModeMask,
+            'pending': s.isPending,
+            'lastError': s.lastError,
             'points': [
               for (final p in pts.where((p) => p.poiSetId == s.id))
                 {
@@ -1019,35 +966,9 @@ Future<List<Map<String, Object?>>> _objectsOf(
                   'name': p.name,
                   'osmType': p.osmType,
                   'osmId': p.osmId,
+                  'modeMask': p.modeMask,
                 },
             ],
-          });
-        }
-      case 'transit':
-        final stops = await db.select(db.transitStops).get();
-        for (final t in await _rows(db, db.transitSets, layer.id)) {
-          out.add({
-            'box': [t.south, t.west, t.north, t.east],
-            'modeMask': t.modeMask,
-            'visibleModeMask': t.visibleModeMask,
-            'label': t.label,
-            'pending': t.fetchedAt == null,
-            'lastError': t.lastError,
-            'stationCount': t.stationCount,
-            'nodeCount': t.nodeCount,
-            'colorArgb': t.colorArgb,
-            'colorShade': t.colorShade,
-            'stops': _sorted([
-              for (final x in stops.where((x) => x.setId == t.id))
-                {
-                  'osmId': x.osmId,
-                  'at': [x.lat, x.lng],
-                  'name': x.name,
-                  'modeMask': x.modeMask,
-                  'nodeCount': x.nodeCount,
-                  'routeRef': x.routeRef,
-                },
-            ]),
           });
         }
       case 'borders':

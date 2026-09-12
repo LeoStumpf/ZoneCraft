@@ -94,11 +94,6 @@ final circlesProvider = StreamProvider<List<Circle>>((ref) {
   return ref.watch(repositoryProvider).watchAllCircles();
 });
 
-/// Reactive list of every plane across all layers.
-final planesProvider = StreamProvider<List<Plane>>((ref) {
-  return ref.watch(repositoryProvider).watchAllPlanes();
-});
-
 /// Reactive list of every subspace object across all layers.
 final subspacesProvider = StreamProvider<List<Subspace>>((ref) {
   return ref.watch(repositoryProvider).watchAllSubspaces();
@@ -117,16 +112,6 @@ final freeLinesProvider = StreamProvider<List<FreeLine>>((ref) {
 /// Reactive list of every freehand-line point (across all lines), ordered.
 final freeLinePointsProvider = StreamProvider<List<FreeLinePoint>>((ref) {
   return ref.watch(repositoryProvider).watchAllFreeLinePoints();
-});
-
-/// Reactive list of every recorded track across all layers.
-final tracksProvider = StreamProvider<List<Track>>((ref) {
-  return ref.watch(repositoryProvider).watchAllTracks();
-});
-
-/// Reactive list of every recorded fix (across all tracks), ordered.
-final trackPointsProvider = StreamProvider<List<TrackPoint>>((ref) {
-  return ref.watch(repositoryProvider).watchAllTrackPoints();
 });
 
 /// Reactive list of every freehand area across all layers.
@@ -164,16 +149,6 @@ final poiSetsProvider = StreamProvider<List<PoiSet>>((ref) {
 /// Reactive list of every stored POI (across all sets), ordered.
 final poiPointsProvider = StreamProvider<List<PoiPoint>>((ref) {
   return ref.watch(repositoryProvider).watchAllPoiPoints();
-});
-
-/// Reactive list of every public-transport import across all layers.
-final transitSetsProvider = StreamProvider<List<TransitSet>>((ref) {
-  return ref.watch(repositoryProvider).watchAllTransitSets();
-});
-
-/// Reactive list of every imported transit station (across all sets).
-final transitStopsProvider = StreamProvider<List<TransitStop>>((ref) {
-  return ref.watch(repositoryProvider).watchAllTransitStops();
 });
 
 /// Reactive list of every administrative-border import across all layers.
@@ -237,11 +212,12 @@ final freeAreaPointsByAreaProvider =
   return _groupBy(rows, (p) => p.freeAreaId);
 });
 
-/// Recorded fixes keyed by their track id.
-final trackPointsByTrackProvider =
-    Provider<Map<String, List<TrackPoint>>>((ref) {
-  final rows = ref.watch(trackPointsProvider).asData?.value ?? const [];
-  return _groupBy(rows, (p) => p.trackId);
+/// Stored POIs keyed by their set id. A city of stations is thousands of
+/// rows, so the marker painter must not scan the flat list per set per frame.
+final poiPointsBySetProvider =
+    Provider<Map<String, List<PoiPoint>>>((ref) {
+  final rows = ref.watch(poiPointsProvider).asData?.value ?? const [];
+  return _groupBy(rows, (p) => p.poiSetId);
 });
 
 /// Generated height polygons keyed by their height-region id.
@@ -271,67 +247,50 @@ final seedProvider = FutureProvider<String>((ref) {
 /// Everything selectable, in one closed enum — the type tag the parallel
 /// `selectedXProvider`s don't carry themselves.
 ///
-/// Nine of these are a layer's **elements**, one kind per layer type, and are
-/// what the Elements list shows. The last two — [poiPoint] and [transitStop] —
-/// are one level *below* an element: an imported POI or station inside its set.
-/// They are selectable on the map but deliberately never listed, because a
-/// city import is thousands of them and the list is a place to find an import,
-/// not to scroll past 2 672 bus stops.
+/// Seven of these are a layer's **elements**, one kind per layer type, and are
+/// what the Elements list shows. The last — [poiPoint] — is one level *below*
+/// an element: an imported POI or station inside its set. It is selectable on
+/// the map but deliberately never listed, because a city import is thousands
+/// of them and the list is a place to find an import, not to scroll past
+/// 2 672 bus stops.
+///
+/// Every kind opens an editor when selected (the imported ones get a sheet
+/// scoped to what a snapshot can honestly offer), so there is no per-kind
+/// "has editor" flag any more: `track`, the one exception, is gone.
 enum ObjectKind {
   circle,
-  plane,
   subspace,
   freeLine,
   freeArea,
   heightRegion,
   poiSet,
-  transitSet,
   borderArea,
-  track,
-  poiPoint,
-  transitStop;
+  poiPoint;
 
   /// The `Layers.type` string that holds this kind of object.
   String get layerType => switch (this) {
         ObjectKind.circle => 'circles',
-        ObjectKind.plane => 'planes',
         ObjectKind.subspace => 'subspace',
         ObjectKind.freeLine => 'freeline',
         ObjectKind.freeArea => 'freearea',
         ObjectKind.heightRegion => 'height',
         ObjectKind.poiSet || ObjectKind.poiPoint => 'poi',
-        ObjectKind.transitSet || ObjectKind.transitStop => 'transit',
         ObjectKind.borderArea => 'borders',
-        ObjectKind.track => 'track',
       };
 
   /// Whether this is a layer *element* (a row of the Elements list) rather than
   /// a point inside one.
-  bool get isElement =>
-      this != ObjectKind.poiPoint && this != ObjectKind.transitStop;
-
-  /// Whether selecting one of these opens an editor.
-  ///
-  /// The per-*kind* half of `layerHasEditor`, and the half that matters once a
-  /// layer can hold several kinds: a mixed layer has an editor in general, but
-  /// a track inside it still has none, so Edit mode must not arm against a
-  /// mixed layer whose only contents are tracks. `track` is the standing
-  /// exception — a recording has no property to edit in place — and the two
-  /// sub-element kinds have their own sheet.
-  bool get hasEditor => this != ObjectKind.track;
+  bool get isElement => this != ObjectKind.poiPoint;
 
   /// The kind a layer of [layerType] holds, or null for an unknown type.
   static ObjectKind? forLayerType(String layerType) => switch (layerType) {
         'circles' => ObjectKind.circle,
-        'planes' => ObjectKind.plane,
         'subspace' => ObjectKind.subspace,
         'freeline' => ObjectKind.freeLine,
         'freearea' => ObjectKind.freeArea,
         'height' => ObjectKind.heightRegion,
         'poi' => ObjectKind.poiSet,
-        'transit' => ObjectKind.transitSet,
         'borders' => ObjectKind.borderArea,
-        'track' => ObjectKind.track,
         _ => null,
       };
 }
@@ -385,33 +344,8 @@ final circlePlacementProvider =
     NotifierProvider<CirclePlacementNotifier, bool>(
         CirclePlacementNotifier.new);
 
-/// Id of the currently selected plane, or null. Mutually exclusive with
-/// [selectedCircleProvider] (an object of one type is selected at a time).
-class SelectedPlaneNotifier extends Notifier<String?> {
-  @override
-  String? build() => null;
-
-  void select(String? id) => state = id;
-}
-
-final selectedPlaneProvider =
-    NotifierProvider<SelectedPlaneNotifier, String?>(SelectedPlaneNotifier.new);
-
-/// While a plane is selected, which endpoint the next map tap relocates —
-/// `'A'`, `'B'`, or null for "no placement armed".
-class PlanePlacementNotifier extends Notifier<String?> {
-  @override
-  String? build() => null;
-
-  void arm(String? point) => state = point;
-}
-
-final planePlacementProvider =
-    NotifierProvider<PlanePlacementNotifier, String?>(
-        PlanePlacementNotifier.new);
-
 /// Id of the currently selected subspace, or null. Mutually exclusive with the
-/// circle/plane selections (one object of one type is selected at a time).
+/// other selections (one object of one type is selected at a time).
 class SelectedSubspaceNotifier extends Notifier<String?> {
   @override
   String? build() => null;
@@ -584,48 +518,21 @@ final selectedPoiPointProvider =
     NotifierProvider<SelectedPoiPointNotifier, String?>(
         SelectedPoiPointNotifier.new);
 
-/// Id of the selected transit import, or null.
-class SelectedTransitSetNotifier extends Notifier<String?> {
-  @override
-  String? build() => null;
-
-  void select(String? id) => state = id;
-}
-
-final selectedTransitSetProvider =
-    NotifierProvider<SelectedTransitSetNotifier, String?>(
-        SelectedTransitSetNotifier.new);
-
-/// Id of the selected individual station, or null — one level below an import.
-class SelectedTransitStopNotifier extends Notifier<String?> {
-  @override
-  String? build() => null;
-
-  void select(String? id) => state = id;
-}
-
-final selectedTransitStopProvider =
-    NotifierProvider<SelectedTransitStopNotifier, String?>(
-        SelectedTransitStopNotifier.new);
-
 /// Clears every object selection and disarms every "the next map tap places
 /// this point" flag.
 ///
-/// The six `selectedXProvider`s are mutually exclusive **by convention only**
+/// The `selectedXProvider`s are mutually exclusive **by convention only**
 /// (nothing in the providers enforces it), so this is the single place that
 /// convention is implemented. Callers outside the map screen (the layers
 /// drawer's Elements list) rely on it too — keep it here, not in a widget.
 void clearSelection(WidgetRef ref) {
   ref.read(selectedCircleProvider.notifier).select(null);
-  ref.read(selectedPlaneProvider.notifier).select(null);
   ref.read(selectedSubspaceProvider.notifier).select(null);
   ref.read(selectedFreeLineProvider.notifier).select(null);
   ref.read(selectedFreeAreaProvider.notifier).select(null);
   ref.read(selectedHeightRegionProvider.notifier).select(null);
   ref.read(selectedPoiSetProvider.notifier).select(null);
   ref.read(selectedPoiPointProvider.notifier).select(null);
-  ref.read(selectedTransitSetProvider.notifier).select(null);
-  ref.read(selectedTransitStopProvider.notifier).select(null);
   ref.read(selectedBorderAreaProvider.notifier).select(null);
   clearTransientModes(ref);
 }
@@ -639,7 +546,6 @@ void clearSelection(WidgetRef ref) {
 /// geometry back over what was just restored.
 void clearTransientModes(WidgetRef ref) {
   ref.read(circlePlacementProvider.notifier).arm(on: false);
-  ref.read(planePlacementProvider.notifier).arm(null);
   ref.read(subspacePlacementProvider.notifier).arm(null);
   ref.read(freeLinePlacementProvider.notifier).arm(null);
   ref.read(freeLineCenterPlacementProvider.notifier).arm(on: false);
@@ -652,25 +558,20 @@ void clearTransientModes(WidgetRef ref) {
 /// Whether any object is currently selected.
 bool hasAnySelection(WidgetRef ref) =>
     ref.read(selectedCircleProvider) != null ||
-    ref.read(selectedPlaneProvider) != null ||
     ref.read(selectedSubspaceProvider) != null ||
     ref.read(selectedFreeLineProvider) != null ||
     ref.read(selectedFreeAreaProvider) != null ||
     ref.read(selectedHeightRegionProvider) != null ||
     ref.read(selectedPoiSetProvider) != null ||
     ref.read(selectedPoiPointProvider) != null ||
-    ref.read(selectedTransitSetProvider) != null ||
-    ref.read(selectedTransitStopProvider) != null ||
     ref.read(selectedBorderAreaProvider) != null;
 
 /// Selects exactly one object, clearing the others (and any armed placement),
 /// and leaves whatever map mode was armed — editing the object is now the job.
 ///
-/// Every kind but [ObjectKind.track] has an editor, including the imported ones
-/// — theirs is scoped to what a snapshot can honestly offer (name, colour,
-/// curation, and for a border area its outline), rather than pretending the
-/// geometry is yours. A track has none at all: it is a recording of where the
-/// phone was, and there is nothing about it to edit in place.
+/// Every kind has an editor, including the imported ones — theirs is scoped to
+/// what a snapshot can honestly offer (name, colour, curation, and for a
+/// border area its outline), rather than pretending the geometry is yours.
 void selectObject(WidgetRef ref, ObjectKind kind, String id) {
   clearSelection(ref);
   if (ref.read(mapModeProvider) != MapMode.edit) {
@@ -679,8 +580,6 @@ void selectObject(WidgetRef ref, ObjectKind kind, String id) {
   switch (kind) {
     case ObjectKind.circle:
       ref.read(selectedCircleProvider.notifier).select(id);
-    case ObjectKind.plane:
-      ref.read(selectedPlaneProvider.notifier).select(id);
     case ObjectKind.subspace:
       ref.read(selectedSubspaceProvider.notifier).select(id);
     case ObjectKind.freeLine:
@@ -693,17 +592,8 @@ void selectObject(WidgetRef ref, ObjectKind kind, String id) {
       ref.read(selectedPoiSetProvider.notifier).select(id);
     case ObjectKind.poiPoint:
       ref.read(selectedPoiPointProvider.notifier).select(id);
-    case ObjectKind.transitSet:
-      ref.read(selectedTransitSetProvider.notifier).select(id);
-    case ObjectKind.transitStop:
-      ref.read(selectedTransitStopProvider.notifier).select(id);
     case ObjectKind.borderArea:
       ref.read(selectedBorderAreaProvider.notifier).select(id);
-    case ObjectKind.track:
-      // Nothing to select into: `layerHasEditor('track')` is false, so no sheet
-      // would open and a selection would only be an invisible mode. The
-      // Elements list still focuses the map on it.
-      break;
   }
 }
 
@@ -736,28 +626,29 @@ final pendingFocusProvider =
     NotifierProvider<PendingFocusNotifier, MapFocusRequest?>(
         PendingFocusNotifier.new);
 
-/// A one-shot request to re-run a transit import that didn't finish.
+/// A one-shot request to re-run a POI import (radius or box) that didn't
+/// finish.
 ///
 /// The Elements list lives in the drawer and has no access to the map screen's
 /// import machinery, so it posts the set id here — the same shape
 /// [pendingFocusProvider] uses, and for the same reason. No `operator ==`, so
 /// asking twice for the same set re-fires.
-class TransitRetryRequest {
-  const TransitRetryRequest(this.setId);
+class ImportRetryRequest {
+  const ImportRetryRequest(this.setId);
   final String setId;
 }
 
-class PendingTransitRetryNotifier extends Notifier<TransitRetryRequest?> {
+class PendingImportRetryNotifier extends Notifier<ImportRetryRequest?> {
   @override
-  TransitRetryRequest? build() => null;
+  ImportRetryRequest? build() => null;
 
-  void request(String setId) => state = TransitRetryRequest(setId);
+  void request(String setId) => state = ImportRetryRequest(setId);
   void clear() => state = null;
 }
 
-final pendingTransitRetryProvider =
-    NotifierProvider<PendingTransitRetryNotifier, TransitRetryRequest?>(
-        PendingTransitRetryNotifier.new);
+final pendingImportRetryProvider =
+    NotifierProvider<PendingImportRetryNotifier, ImportRetryRequest?>(
+        PendingImportRetryNotifier.new);
 
 /// While a hand-placed POI is selected, whether the next map tap moves it.
 ///

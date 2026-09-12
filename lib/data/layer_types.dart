@@ -16,19 +16,19 @@
 
 import 'database.dart';
 
-/// The ten object-type strings a `Layers.type` can hold, plus [kMixedType].
+/// The seven object-type strings a `Layers.type` can hold, plus [kMixedType].
 ///
 /// These are the persisted format — a layer's type is stored as one of these
-/// strings — so they may be added to but never renamed.
+/// strings — so they may be added to but never renamed. Three earlier ones
+/// are gone: `planes` (v27 folded every plane into a two-point `subspace`),
+/// `transit` (v27 merged station imports into `poi`) and `track` (dropped).
+/// The GeoJSON reader still maps the first two; the migration retypes rows.
 const kCircles = 'circles';
-const kPlanes = 'planes';
 const kSubspace = 'subspace';
 const kFreeLine = 'freeline';
 const kFreeArea = 'freearea';
 const kHeight = 'height';
-const kTrack = 'track';
 const kPoi = 'poi';
-const kTransit = 'transit';
 const kBorders = 'borders';
 
 /// A layer that holds several object types at once.
@@ -37,8 +37,8 @@ const kMixedType = 'mixed';
 /// What a mixed layer may hold, **in draw order** (bottom first).
 ///
 /// The order is the answer to "what happens when a circle and a POI share a
-/// layer": the region composite is ground, a track is a line drawn on it, and
-/// markers are labels that have to stay legible on top. It is deliberately
+/// layer": the region composite is ground, and markers are labels that have
+/// to stay legible on top. It is deliberately
 /// fixed rather than per-element, and stays that way: the per-element `z_order`
 /// added in v26 is scoped to one layer **and one table**, because each kind is
 /// drawn by its own painter in its own pass and no number stored on a row could
@@ -51,13 +51,10 @@ const kMixedType = 'mixed';
 /// existing "Convert to freehand area" is the way into a mixed layer.
 const kMixedContentTypes = <String>[
   kCircles,
-  kPlanes,
   kSubspace,
   kFreeLine,
   kFreeArea,
   kHeight,
-  kTrack,
-  kTransit,
   kPoi,
 ];
 
@@ -65,14 +62,11 @@ const kMixedContentTypes = <String>[
 /// and by tests that want to be exhaustive.
 const kAllLayerTypes = <String>[
   kCircles,
-  kPlanes,
   kSubspace,
   kFreeLine,
   kFreeArea,
   kHeight,
-  kTrack,
   kPoi,
-  kTransit,
   kBorders,
   kMixedType,
 ];

@@ -17,6 +17,7 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
+import 'poi_sets.dart';
 import 'undo_journal.dart';
 
 part 'database.g.dart';
@@ -31,27 +32,23 @@ const double kDefaultRegionLayerOpacity = 0.45;
 
 /// The opacity a freshly created layer of [type] gets.
 ///
-/// Marker/line layers ('poi', 'transit', 'track') are crisp at 1.0 — there is
-/// no fill to see the map through. One source of truth, because the repository
-/// (on create) and the drawer (deciding whether to show an opacity chip) must
-/// agree; they used to duplicate the rule inline, which is how a third type
-/// silently drifts. 'borders' is region-like (it has an area fill), so it takes
-/// the region default even though its fill is off until "Colour areas" is
-/// ticked.
+/// The marker layer type ('poi') is crisp at 1.0 — there is no fill to see
+/// the map through. One source of truth, because the repository (on create)
+/// and the drawer (deciding whether to show an opacity chip) must agree; they
+/// used to duplicate the rule inline, which is how a third type silently
+/// drifts. 'borders' is region-like (it has an area fill), so it takes the
+/// region default even though its fill is off until "Colour areas" is ticked.
 /// A **mixed** layer takes the region default: its opacity governs the region
-/// composite, while its markers and tracks stay crisp (they are drawn, not
-/// filled — there is nothing to see the map through). Defaulting it to 1.0
-/// instead would make a circle moved into it opaque, which is the more
-/// surprising of the two.
+/// composite, while its markers stay crisp (they are drawn, not filled — there
+/// is nothing to see the map through). Defaulting it to 1.0 instead would make
+/// a circle moved into it opaque, which is the more surprising of the two.
 double defaultLayerOpacity(String type) =>
-    (type == 'poi' || type == 'transit' || type == 'track')
-        ? 1.0
-        : kDefaultRegionLayerOpacity;
+    type == 'poi' ? 1.0 : kDefaultRegionLayerOpacity;
 
 /// A map overlay layer. Layers stack on the map ordered by [sortOrder]
 /// (higher = drawn on top) and can be toggled on/off via [isVisible].
 ///
-/// A layer holds a single object [type] ('circles' or 'planes'). When
+/// A layer holds a single object [type] (see `layer_types.dart`). When
 /// [isInverted] is true the layer fills everything *not* covered by its objects.
 class Layers extends Table {
   TextColumn get id => text()();
@@ -62,7 +59,7 @@ class Layers extends Table {
   BoolColumn get isVisible => boolean().withDefault(const Constant(true))();
   IntColumn get sortOrder => integer()();
 
-  /// Object kind this layer holds: 'circles' or 'planes'.
+  /// Object kind this layer holds: one of the `k*` types in `layer_types.dart`.
   TextColumn get type => text().withDefault(const Constant('circles'))();
 
   /// When true, render the complement (outside the objects) instead.
@@ -90,15 +87,6 @@ class Layers extends Table {
   /// **`borders` only.** Draw each area's name on a plate at its label anchor.
   BoolColumn get borderShowNames =>
       boolean().withDefault(const Constant(false))();
-
-  /// **`track` only.** Stroke width, in logical pixels, of the recorded line.
-  RealColumn get trackStrokeWidth => real().withDefault(const Constant(4.0))();
-
-  /// **`track` only.** How far the phone must move before another fix is
-  /// stored, in metres — the recorder's `distanceFilter`. Lower is a smoother
-  /// line and more rows; standing still stores nothing either way.
-  RealColumn get trackMinDistanceMeters =>
-      real().withDefault(const Constant(10.0))();
 
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 
@@ -132,51 +120,7 @@ class Circles extends Table {
 
   /// Where this element sits in its layer's stack (v26). **Higher is drawn
   /// later, i.e. in front**, and the scope is one layer *and one table*: a
-  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
-  /// because that is the only order its separate painters can honour.
-  ///
-  /// Deliberately not [colorShade], which used to imply this: that column also
-  /// picks the auto shade, so moving an element forward would have recoloured
-  /// it. Assigned one past the layer's current maximum on create, so a new
-  /// element lands on top — which is what "the newest element wins an overlap"
-  /// already meant, now said out loud instead of inferred.
-  IntColumn get zOrder => integer().withDefault(const Constant(0))();
-
-
-  @override
-  Set<Column> get primaryKey => {id};
-}
-
-/// A "plane": the region of points closer to one of two points (A, B) than the
-/// other — i.e. one side of their perpendicular bisector. [nearA] selects which
-/// point's side is the enabled region.
-class Planes extends Table {
-  TextColumn get id => text()();
-  TextColumn get layerId =>
-      text().references(Layers, #id, onDelete: KeyAction.cascade)();
-  RealColumn get aLat => real()();
-  RealColumn get aLng => real()();
-  RealColumn get bLat => real()();
-  RealColumn get bLng => real()();
-  BoolColumn get nearA => boolean().withDefault(const Constant(true))();
-  TextColumn get label => text().nullable()();
-  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
-
-  /// Per-element colour (v22). Null = follow the layer: the element paints in
-  /// its auto **shade** of the layer colour, picked by [colorShade] so the
-  /// elements of one layer tell each other apart and all follow a layer
-  /// recolour. A set value overrides that and survives a layer recolour, which
-  /// is what makes the recolour dialog ask what to do with them.
-  IntColumn get colorArgb => integer().nullable()();
-
-  /// Which auto shade this element takes, assigned in creation order within the
-  /// layer. **0 is the layer colour exactly**, which is what every row
-  /// migrating in from v21 gets — an untouched map must look untouched.
-  IntColumn get colorShade => integer().withDefault(const Constant(0))();
-
-  /// Where this element sits in its layer's stack (v26). **Higher is drawn
-  /// later, i.e. in front**, and the scope is one layer *and one table*: a
-  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// mixed layer's cross-kind order stays fixed (regions -> markers),
   /// because that is the only order its separate painters can honour.
   ///
   /// Deliberately not [colorShade], which used to imply this: that column also
@@ -216,7 +160,7 @@ class Subspaces extends Table {
 
   /// Where this element sits in its layer's stack (v26). **Higher is drawn
   /// later, i.e. in front**, and the scope is one layer *and one table*: a
-  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// mixed layer's cross-kind order stays fixed (regions -> markers),
   /// because that is the only order its separate painters can honour.
   ///
   /// Deliberately not [colorShade], which used to imply this: that column also
@@ -287,7 +231,7 @@ class FreeLines extends Table {
 
   /// Where this element sits in its layer's stack (v26). **Higher is drawn
   /// later, i.e. in front**, and the scope is one layer *and one table*: a
-  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// mixed layer's cross-kind order stays fixed (regions -> markers),
   /// because that is the only order its separate painters can honour.
   ///
   /// Deliberately not [colorShade], which used to imply this: that column also
@@ -311,75 +255,6 @@ class FreeLinePoints extends Table {
   RealColumn get lng => real()();
   IntColumn get sortOrder => integer()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
-
-  @override
-  Set<Column> get primaryKey => {id};
-}
-
-/// A **recorded** line: the phone's own positions, appended while track
-/// recording is on. Unlike every other type this is not a shape the user
-/// states, so it has no editor — what it says is where the phone was.
-///
-/// A `track` layer holds exactly one of these today (the recorder appends to
-/// it), which is why there is no "new track" action; the table is per-layer
-/// rather than per-recording so that a second walk keeps the same colour,
-/// name and Elements row.
-class Tracks extends Table {
-  TextColumn get id => text()();
-  TextColumn get layerId =>
-      text().references(Layers, #id, onDelete: KeyAction.cascade)();
-  TextColumn get label => text().nullable()();
-  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
-
-  /// Per-element colour (v22). Null = follow the layer — see [FreeLines].
-  IntColumn get colorArgb => integer().nullable()();
-
-  /// Which auto shade this element takes; **0 is the layer colour exactly**.
-  IntColumn get colorShade => integer().withDefault(const Constant(0))();
-
-  /// Where this element sits in its layer's stack (v26). **Higher is drawn
-  /// later, i.e. in front**, and the scope is one layer *and one table*: a
-  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
-  /// because that is the only order its separate painters can honour.
-  ///
-  /// Deliberately not [colorShade], which used to imply this: that column also
-  /// picks the auto shade, so moving an element forward would have recoloured
-  /// it. Assigned one past the layer's current maximum on create, so a new
-  /// element lands on top — which is what "the newest element wins an overlap"
-  /// already meant, now said out loud instead of inferred.
-  IntColumn get zOrder => integer().withDefault(const Constant(0))();
-
-  /// Denormalised bounds of every point, for viewport culling — the
-  /// [BorderAreas] precedent. Null while the track is still empty, which is
-  /// also how the painter knows there is nothing to draw.
-  RealColumn get south => real().nullable()();
-  RealColumn get west => real().nullable()();
-  RealColumn get north => real().nullable()();
-  RealColumn get east => real().nullable()();
-
-  @override
-  Set<Column> get primaryKey => {id};
-}
-
-/// One recorded fix of a [Tracks] line, in recording order.
-class TrackPoints extends Table {
-  TextColumn get id => text()();
-  TextColumn get trackId =>
-      text().references(Tracks, #id, onDelete: KeyAction.cascade)();
-  RealColumn get lat => real()();
-  RealColumn get lng => real()();
-  IntColumn get sortOrder => integer()();
-
-  /// Which recording run this fix belongs to. A change of segment is a **break**
-  /// in the drawn line, never a new element: recording two walks into one track
-  /// must not join them with a straight line across the map. Bumped when
-  /// recording starts and when a fix arrives after a long gap (a lost signal, a
-  /// tunnel, or the app having been in the background).
-  IntColumn get segmentIndex => integer().withDefault(const Constant(0))();
-
-  /// When the fix was taken — the input to the gap rule above, and the only
-  /// thing that says a track is a recording rather than a drawing.
-  DateTimeColumn get recordedAt => dateTime().withDefault(currentDateAndTime)();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -415,7 +290,7 @@ class FreeAreas extends Table {
 
   /// Where this element sits in its layer's stack (v26). **Higher is drawn
   /// later, i.e. in front**, and the scope is one layer *and one table*: a
-  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// mixed layer's cross-kind order stays fixed (regions -> markers),
   /// because that is the only order its separate painters can honour.
   ///
   /// Deliberately not [colorShade], which used to imply this: that column also
@@ -486,7 +361,7 @@ class HeightRegions extends Table {
 
   /// Where this element sits in its layer's stack (v26). **Higher is drawn
   /// later, i.e. in front**, and the scope is one layer *and one table*: a
-  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// mixed layer's cross-kind order stays fixed (regions -> markers),
   /// because that is the only order its separate painters can honour.
   ///
   /// Deliberately not [colorShade], which used to imply this: that column also
@@ -528,10 +403,25 @@ class HeightPolygonPoints extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-/// One POI import on a `poi` layer: a category fetched once (Overpass) within a
-/// bounded circle (centre + radius) and stored offline — the layer never
-/// refetches. A `poi` layer may hold several sets (further imports add more
-/// categories/areas). The actual markers live in [PoiPoints].
+/// How a [PoiSets] row came to be — see [PoiSets.source].
+const kPoiSourceManual = 'manual';
+const kPoiSourceRadius = 'radius';
+const kPoiSourceBox = 'box';
+
+/// One set of markers on a `poi` layer. Three kinds share the table, told
+/// apart by [source]:
+///
+/// * **radius** — an OSM category fetched once (Overpass) within a bounded
+///   circle (centre + radius) and stored offline; the layer never refetches.
+/// * **box** — every public-transport **station** in a chosen bounding box
+///   (v27; formerly the `transit` layer type). Line geometry is deliberately
+///   **not** stored: fetching route relations with geometry proved
+///   unobtainable from the public API for anything larger than a few km² (see
+///   `data/transit.dart`), while stops for a whole city come back in seconds.
+///   Each station records only *which modes serve it* ([PoiPoints.modeMask]).
+/// * **manual** — a category the user named and fills by tapping (v25).
+///
+/// A `poi` layer may hold several sets. The actual markers live in [PoiPoints].
 class PoiSets extends Table {
   TextColumn get id => text()();
   TextColumn get layerId =>
@@ -559,7 +449,7 @@ class PoiSets extends Table {
 
   /// Where this element sits in its layer's stack (v26). **Higher is drawn
   /// later, i.e. in front**, and the scope is one layer *and one table*: a
-  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
+  /// mixed layer's cross-kind order stays fixed (regions -> markers),
   /// because that is the only order its separate painters can honour.
   ///
   /// Deliberately not [colorShade], which used to imply this: that column also
@@ -569,15 +459,49 @@ class PoiSets extends Table {
   /// already meant, now said out loud instead of inferred.
   IntColumn get zOrder => integer().withDefault(const Constant(0))();
 
-  /// A category the user made rather than an Overpass import (v25).
+  /// Which kind of set this is: [kPoiSourceManual], [kPoiSourceRadius] or
+  /// [kPoiSourceBox] (v27; replaced the v25 `is_manual` flag when station
+  /// imports joined the table — a bool and a nullable box read together in
+  /// eight places is exactly the two-copies rule this app keeps avoiding).
   ///
   /// The distinction is what keeps an import honest: a fetched set is a
-  /// snapshot of what OSM returned, so its category, centre and radius describe
-  /// a query that already ran and nothing may be added to it by hand. A manual
-  /// set describes no query at all — [centerLat]/[centerLng]/[radiusMeters]
-  /// hold the map centre and 0 purely because the columns are NOT NULL, and the
-  /// editor does not show them.
-  BoolColumn get isManual => boolean().withDefault(const Constant(false))();
+  /// snapshot of what OSM returned, so its query describes something that
+  /// already ran and nothing may be added to it by hand. A manual set describes
+  /// no query at all — [centerLat]/[centerLng]/[radiusMeters] hold the map
+  /// centre and 0 purely because the columns are NOT NULL, and the editor does
+  /// not show them. A box set likewise holds its box's centre and half-diagonal
+  /// there; nothing reads them for a box either.
+  // A literal, not [kPoiSourceRadius]: the schema dump copies the default
+  // expression verbatim into a file that cannot see this library's constants.
+  TextColumn get source => text().withDefault(const Constant('radius'))();
+
+  /// **Box sets only.** The imported bounding box; null on the other kinds.
+  RealColumn get south => real().nullable()();
+  RealColumn get west => real().nullable()();
+  RealColumn get north => real().nullable()();
+  RealColumn get east => real().nullable()();
+
+  /// **Box sets only.** Which modes were fetched (packed `TransitMode.bit`s),
+  /// chosen in the import dialog. This is the **contents** of the set, not a
+  /// filter: what it omits was never stored, so widening it means importing
+  /// again — which is exactly what a retry of a failed import must not do
+  /// differently. 0 on the other kinds.
+  IntColumn get modeMask => integer().withDefault(const Constant(0))();
+
+  /// **Box sets only.** Which of those modes are **shown**. This is what the
+  /// filter sheet writes; it starts from `modeMask & defaultVisibleModes(...)`,
+  /// which hides buses on a city-sized import because they outnumber
+  /// everything else ~7:1.
+  IntColumn get visibleModeMask => integer().withDefault(const Constant(-1))();
+
+  /// When the data was pulled from OSM. **Null on an import = it hasn't
+  /// succeeded yet** — the layer shows it as a retry row until it does, so a
+  /// failure is something you can come back to rather than a lost snackbar.
+  /// Always null on a manual set, which was never fetched.
+  DateTimeColumn get fetchedAt => dateTime().nullable()();
+
+  /// Why the last attempt failed, shown on that retry row.
+  TextColumn get lastError => text().nullable()();
 
   /// Marker icon for a manual set — a key into `poiIcons` (`ui/poi_icons.dart`).
   ///
@@ -590,7 +514,7 @@ class PoiSets extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-/// One stored POI of a [PoiSets] import: its position and OSM `name` (if any).
+/// One stored point of a [PoiSets] set: its position and OSM `name` (if any).
 class PoiPoints extends Table {
   TextColumn get id => text()();
   TextColumn get poiSetId =>
@@ -609,118 +533,15 @@ class PoiPoints extends Table {
   /// Nullable because rows imported before v21 never recorded it, and a
   /// backfill is impossible — the id was not merely unstored, it was never
   /// fetched. An unidentified row simply doesn't participate in dedup; see
-  /// [Repository.addPoiPoints].
+  /// [Repository.fillPoiSet].
   TextColumn get osmType => text().nullable()();
   IntColumn get osmId => integer().nullable()();
 
-  @override
-  Set<Column> get primaryKey => {id};
-}
-
-/// One public-transport import on a `transit` layer: every **station** in a
-/// chosen bounding box, fetched once (Overpass) and stored offline — the layer
-/// never refetches. A `transit` layer may hold several sets.
-///
-/// Line geometry is deliberately **not** stored: fetching route relations with
-/// geometry proved unobtainable from the public API for anything larger than a
-/// few km² (see `data/transit.dart`), while stops for a whole city come back in
-/// seconds. Each station records only *which modes serve it*.
-class TransitSets extends Table {
-  TextColumn get id => text()();
-  TextColumn get layerId =>
-      text().references(Layers, #id, onDelete: KeyAction.cascade)();
-
-  /// The imported bounding box.
-  RealColumn get south => real()();
-  RealColumn get west => real()();
-  RealColumn get north => real()();
-  RealColumn get east => real()();
-
-  /// Which modes were fetched (packed `TransitMode.bit`s), chosen in the import
-  /// dialog. This is the **contents** of the set, not a filter: what it omits
-  /// was never stored, so widening it means importing again — which is exactly
-  /// what a retry of a failed import must not do differently.
-  IntColumn get modeMask => integer()();
-
-  /// Which of those modes are **shown**. This is what the filter sheet writes;
-  /// it starts from `modeMask & defaultVisibleModes(diagonal)`, which hides
-  /// buses on a city-sized import because they outnumber everything else ~7:1.
-  IntColumn get visibleModeMask => integer().withDefault(const Constant(-1))();
-
-  TextColumn get label => text().nullable()();
-
-  /// When the data was pulled from OSM. **Null = the import hasn't succeeded
-  /// yet** — the layer shows it as a retry row until it does, so a failure is
-  /// something you can come back to rather than a lost snackbar.
-  DateTimeColumn get fetchedAt => dateTime().nullable()();
-
-  /// Why the last attempt failed, shown on that retry row.
-  TextColumn get lastError => text().nullable()();
-
-  /// Denormalised for the Elements subtitle without a join: stations stored,
-  /// and how many raw OSM nodes merged into them.
-  IntColumn get stationCount => integer().withDefault(const Constant(0))();
-  IntColumn get nodeCount => integer().withDefault(const Constant(0))();
-
-  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
-
-  /// Per-element colour (v22). Null = follow the layer: the element paints in
-  /// its auto **shade** of the layer colour, picked by [colorShade] so the
-  /// elements of one layer tell each other apart and all follow a layer
-  /// recolour. A set value overrides that and survives a layer recolour, which
-  /// is what makes the recolour dialog ask what to do with them.
-  IntColumn get colorArgb => integer().nullable()();
-
-  /// Which auto shade this element takes, assigned in creation order within the
-  /// layer. **0 is the layer colour exactly**, which is what every row
-  /// migrating in from v21 gets — an untouched map must look untouched.
-  IntColumn get colorShade => integer().withDefault(const Constant(0))();
-
-  /// Where this element sits in its layer's stack (v26). **Higher is drawn
-  /// later, i.e. in front**, and the scope is one layer *and one table*: a
-  /// mixed layer's cross-kind order stays fixed (regions -> tracks -> markers),
-  /// because that is the only order its separate painters can honour.
-  ///
-  /// Deliberately not [colorShade], which used to imply this: that column also
-  /// picks the auto shade, so moving an element forward would have recoloured
-  /// it. Assigned one past the layer's current maximum on create, so a new
-  /// element lands on top — which is what "the newest element wins an overlap"
-  /// already meant, now said out loud instead of inferred.
-  IntColumn get zOrder => integer().withDefault(const Constant(0))();
-
-
-  @override
-  Set<Column> get primaryKey => {id};
-}
-
-/// One station of a [TransitSets] import — several OSM nodes (a `stop_position`
-/// per platform, plus `platform` nodes) merged into the stop a person would
-/// name. Munich's 8 215 raw nodes are 2 672 stations; Pasing Bahnhof alone is
-/// 31 of them.
-class TransitStops extends Table {
-  TextColumn get id => text()();
-  TextColumn get setId =>
-      text().references(TransitSets, #id, onDelete: KeyAction.cascade)();
-
-  /// The OSM node the station was keyed on (the `station` node when there was
-  /// one), so it can be looked up on osm.org.
-  IntColumn get osmId => integer()();
-  RealColumn get lat => real()();
-  RealColumn get lng => real()();
-  TextColumn get name => text().nullable()();
-
-  /// The modes serving this station (packed bits); 0 = the data doesn't say.
-  /// A station is drawn iff `modeMask & set.visibleModeMask != 0`.
+  /// **Stations only** (a box set's points): the modes serving this station
+  /// (packed bits); 0 = the data doesn't say, and 0 on every other kind of
+  /// point. A station is drawn iff `poiPointVisible` says so — one predicate
+  /// for the painter and the hit test.
   IntColumn get modeMask => integer().withDefault(const Constant(0))();
-
-  /// How many OSM nodes merged into this station.
-  IntColumn get nodeCount => integer().withDefault(const Constant(1))();
-
-  /// The OSM `route_ref` tag when present (~18 % of stops) — free text shown as
-  /// a hint. Never parsed, never relied on.
-  TextColumn get routeRef => text().nullable()();
-
-  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -950,14 +771,11 @@ class AppSettings extends Table {
   tables: [
     Layers,
     Circles,
-    Planes,
     AppSettings,
     Subspaces,
     SubspacePoints,
     FreeLines,
     FreeLinePoints,
-    Tracks,
-    TrackPoints,
     FreeAreas,
     FreeAreaPoints,
     HeightRegions,
@@ -965,8 +783,6 @@ class AppSettings extends Table {
     HeightPolygonPoints,
     PoiSets,
     PoiPoints,
-    TransitSets,
-    TransitStops,
     BorderSets,
     BorderAreas,
     TileCache,
@@ -1002,7 +818,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 26;
+  int get schemaVersion => 27;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1011,7 +827,9 @@ class AppDatabase extends _$AppDatabase {
           if (from < 2) {
             await m.addColumn(layers, layers.type);
             await m.addColumn(layers, layers.isInverted);
-            await m.createTable(planes);
+            // `planes` was created here until v27 folded the type into
+            // `subspace`. A v1 database has no planes to carry across, so the
+            // table is simply never built; v27 copies only when `from >= 2`.
             await m.createTable(appSettings);
           }
           if (from < 3) {
@@ -1114,8 +932,9 @@ class AppDatabase extends _$AppDatabase {
             ]) {
               await customStatement('DROP TABLE IF EXISTS $t');
             }
-            await m.createTable(transitSets);
-            await m.createTable(transitStops);
+            // The two survivors were created here until v27 merged them into
+            // `poi_sets`/`poi_points`; a database this old has no stations to
+            // carry, so v27 copies only when `from >= 19`.
             await m.addColumn(appSettings, appSettings.transitEndpoint);
           }
           if (from < 20) {
@@ -1151,8 +970,18 @@ class AppDatabase extends _$AppDatabase {
             // recolours something. Only new elements start taking shades.
             await m.addColumn(circles, circles.colorArgb);
             await m.addColumn(circles, circles.colorShade);
-            await m.addColumn(planes, planes.colorArgb);
-            await m.addColumn(planes, planes.colorShade);
+            // `planes` and `transit_sets` are gone in v27, but the copy there
+            // reads these columns, so a database that still has the tables
+            // gets them by raw SQL (the Dart table classes no longer exist).
+            if (from >= 2) {
+              await customStatement(
+                'ALTER TABLE planes ADD COLUMN color_argb INTEGER NULL',
+              );
+              await customStatement(
+                'ALTER TABLE planes ADD COLUMN color_shade INTEGER '
+                'NOT NULL DEFAULT 0',
+              );
+            }
             await m.addColumn(subspaces, subspaces.colorArgb);
             await m.addColumn(subspaces, subspaces.colorShade);
             await m.addColumn(freeLines, freeLines.colorArgb);
@@ -1163,8 +992,15 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(heightRegions, heightRegions.colorShade);
             await m.addColumn(poiSets, poiSets.colorArgb);
             await m.addColumn(poiSets, poiSets.colorShade);
-            await m.addColumn(transitSets, transitSets.colorArgb);
-            await m.addColumn(transitSets, transitSets.colorShade);
+            if (from >= 19) {
+              await customStatement(
+                'ALTER TABLE transit_sets ADD COLUMN color_argb INTEGER NULL',
+              );
+              await customStatement(
+                'ALTER TABLE transit_sets ADD COLUMN color_shade INTEGER '
+                'NOT NULL DEFAULT 0',
+              );
+            }
             await m.addColumn(borderAreas, borderAreas.colorArgb);
           }
           if (from < 23) {
@@ -1174,19 +1010,17 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(borderAreas, borderAreas.editedAt);
           }
           if (from < 24) {
-            // The `track` type: recorded GPS lines. New tables plus the two
-            // per-layer display/capture settings, which every existing layer
-            // takes at their defaults (they mean nothing off a track layer).
-            await m.createTable(tracks);
-            await m.createTable(trackPoints);
-            await m.addColumn(layers, layers.trackStrokeWidth);
-            await m.addColumn(layers, layers.trackMinDistanceMeters);
+            // The `track` type (recorded GPS lines) was added here and removed
+            // in v27. Its tables and the two `layers` columns are no longer
+            // created on the way up: v27 drops them wherever they exist.
           }
           if (from < 25) {
             // Hand-placed POIs. Every existing set is an Overpass import by
             // definition, so `is_manual` starts false and `icon_key` null —
             // which is exactly what those columns mean for an import.
-            await m.addColumn(poiSets, poiSets.isManual);
+            // `is_manual` was added here and folded into `source` in v27; a
+            // database this old has no manual sets, and `source` defaults to
+            // radius, so only `icon_key` is still added.
             await m.addColumn(poiSets, poiSets.iconKey);
           }
           if (from < 26) {
@@ -1205,7 +1039,12 @@ class AppDatabase extends _$AppDatabase {
             // it, the table came from the old database and needs the column;
             // below it, `createTable` above already put it there.
             await m.addColumn(circles, circles.zOrder); // in the first schema
-            if (from >= 2) await m.addColumn(planes, planes.zOrder);
+            if (from >= 2) {
+              await customStatement(
+                'ALTER TABLE planes ADD COLUMN z_order INTEGER '
+                'NOT NULL DEFAULT 0',
+              );
+            }
             if (from >= 5) await m.addColumn(subspaces, subspaces.zOrder);
             if (from >= 9) await m.addColumn(freeLines, freeLines.zOrder);
             if (from >= 9) await m.addColumn(freeAreas, freeAreas.zOrder);
@@ -1213,18 +1052,24 @@ class AppDatabase extends _$AppDatabase {
               await m.addColumn(heightRegions, heightRegions.zOrder);
             }
             if (from >= 15) await m.addColumn(poiSets, poiSets.zOrder);
-            if (from >= 19) await m.addColumn(transitSets, transitSets.zOrder);
-            if (from >= 24) await m.addColumn(tracks, tracks.zOrder);
-            for (final table in const [
+            if (from >= 19) {
+              await customStatement(
+                'ALTER TABLE transit_sets ADD COLUMN z_order INTEGER '
+                'NOT NULL DEFAULT 0',
+              );
+            }
+            // `planes` and `transit_sets` are ranked too, although v27 drops
+            // them: the copy there carries `z_order` across, so the order a
+            // plane or a station import painted in survives the fold.
+            for (final table in [
               'circles',
-              'planes',
+              if (from >= 2) 'planes',
               'subspaces',
               'free_lines',
               'free_areas',
               'height_regions',
               'poi_sets',
-              'transit_sets',
-              'tracks',
+              if (from >= 19) 'transit_sets',
             ]) {
               // A correlated count is O(n^2) in a layer's element count, which
               // is tens — not the thousands a *point* table holds. These are
@@ -1241,9 +1086,154 @@ class AppDatabase extends _$AppDatabase {
               );
             }
           }
+          if (from < 27) {
+            // Ten object types became seven. Nothing is silently lost except
+            // `track`, which the user chose to drop:
+            //
+            // * `planes` -> `subspace`. A plane *is* the two-point subspace
+            //   (`sphericalCell(main, [far])`), so each row becomes a subspace
+            //   with two points, the near side as main. Ids are kept (the
+            //   plane id is the subspace id) and z is lifted above the layer's
+            //   existing subspaces so the two stacks concatenate.
+            // * `transit` -> `poi`. Station imports become box-sourced POI
+            //   sets, stations become points with a `mode_mask`; ids kept.
+            //   A pending/failed import stays a pending row.
+            // * `track` is gone: tables, layer rows and the two `layers`
+            //   columns. FKs are off during migration, so the layer delete
+            //   cascades nothing — the child tables are dropped regardless.
+            //
+            // Every raw statement names only columns that exist on *every*
+            // database old enough to have the table: the guards above put the
+            // v22/v26 columns on `planes`/`transit_sets` by raw SQL.
+            if (from >= 2) {
+              await customStatement(
+                'INSERT INTO subspaces '
+                '(id, layer_id, label, created_at, color_argb, color_shade, '
+                'z_order) '
+                'SELECT p.id, p.layer_id, p.label, p.created_at, p.color_argb, '
+                'p.color_shade, p.z_order + (SELECT COALESCE(MAX(s.z_order), '
+                '-1) + 1 FROM subspaces s WHERE s.layer_id = p.layer_id) '
+                'FROM planes p',
+              );
+              await customStatement(
+                'INSERT INTO subspace_points '
+                '(id, subspace_id, lat, lng, sort_order, is_main, label, '
+                'created_at) '
+                "SELECT p.id || '-a', p.id, "
+                'CASE WHEN p.near_a THEN p.a_lat ELSE p.b_lat END, '
+                'CASE WHEN p.near_a THEN p.a_lng ELSE p.b_lng END, '
+                '0, 1, NULL, p.created_at FROM planes p',
+              );
+              await customStatement(
+                'INSERT INTO subspace_points '
+                '(id, subspace_id, lat, lng, sort_order, is_main, label, '
+                'created_at) '
+                "SELECT p.id || '-b', p.id, "
+                'CASE WHEN p.near_a THEN p.b_lat ELSE p.a_lat END, '
+                'CASE WHEN p.near_a THEN p.b_lng ELSE p.a_lng END, '
+                '1, 0, NULL, p.created_at FROM planes p',
+              );
+              await customStatement(
+                "UPDATE layers SET type = 'subspace' WHERE type = 'planes'",
+              );
+              await customStatement('DROP TABLE planes');
+            }
+
+            // The POI tables grow what a station import needs. Guarded like
+            // v26: below v15 `createTable` already built today's shape.
+            if (from >= 15) {
+              await m.addColumn(poiSets, poiSets.source);
+              await m.addColumn(poiSets, poiSets.south);
+              await m.addColumn(poiSets, poiSets.west);
+              await m.addColumn(poiSets, poiSets.north);
+              await m.addColumn(poiSets, poiSets.east);
+              await m.addColumn(poiSets, poiSets.modeMask);
+              await m.addColumn(poiSets, poiSets.visibleModeMask);
+              await m.addColumn(poiSets, poiSets.fetchedAt);
+              await m.addColumn(poiSets, poiSets.lastError);
+              await m.addColumn(poiPoints, poiPoints.modeMask);
+            }
+            if (from >= 25) {
+              await customStatement(
+                "UPDATE poi_sets SET source = '$kPoiSourceManual' "
+                'WHERE is_manual = 1',
+              );
+              await m.dropColumn(poiSets, 'is_manual');
+            }
+            // A radius set was only ever created *after* a successful fetch,
+            // so its creation instant is its fetch instant. Without this every
+            // existing import would come up as a retry row.
+            await customStatement(
+              'UPDATE poi_sets SET fetched_at = created_at '
+              "WHERE source = '$kPoiSourceRadius'",
+            );
+
+            if (from >= 19) {
+              await customStatement(
+                'INSERT INTO poi_sets '
+                '(id, layer_id, category_key, center_lat, center_lng, '
+                'radius_meters, label, created_at, color_argb, color_shade, '
+                'z_order, icon_key, source, south, west, north, east, '
+                'mode_mask, visible_mode_mask, fetched_at, last_error) '
+                "SELECT t.id, t.layer_id, '$kTransitStationCategoryKey', "
+                '(t.south + t.north) / 2.0, (t.west + t.east) / 2.0, 0, '
+                't.label, t.created_at, t.color_argb, t.color_shade, '
+                't.z_order + (SELECT COALESCE(MAX(s.z_order), -1) + 1 '
+                'FROM poi_sets s WHERE s.layer_id = t.layer_id), '
+                "NULL, '$kPoiSourceBox', t.south, t.west, t.north, t.east, "
+                't.mode_mask, t.visible_mode_mask, t.fetched_at, t.last_error '
+                'FROM transit_sets t',
+              );
+              // The covering radius is derived in Dart, by the same helper
+              // the repository uses for a new box set, so the database and
+              // the app agree by construction rather than by two formulas.
+              final boxes = await customSelect(
+                'SELECT id, south, west, north, east FROM poi_sets '
+                "WHERE source = '$kPoiSourceBox'",
+              ).get();
+              for (final b in boxes) {
+                final r = boxCoveringRadiusMeters(
+                  south: b.read<double>('south'),
+                  west: b.read<double>('west'),
+                  north: b.read<double>('north'),
+                  east: b.read<double>('east'),
+                );
+                await customStatement(
+                  'UPDATE poi_sets SET radius_meters = $r '
+                  "WHERE id = '${b.read<String>('id')}'",
+                );
+              }
+              // A station's `osm_id` of 0 was the "no identity" placeholder;
+              // as a POI that is a NULL id (the `osmKey` rule).
+              await customStatement(
+                'INSERT INTO poi_points '
+                '(id, poi_set_id, lat, lng, name, sort_order, created_at, '
+                'osm_type, osm_id, mode_mask) '
+                'SELECT x.id, x.set_id, x.lat, x.lng, x.name, '
+                'ROW_NUMBER() OVER (PARTITION BY x.set_id '
+                'ORDER BY x.created_at, x.rowid) - 1, '
+                "x.created_at, 'node', "
+                'CASE WHEN x.osm_id = 0 THEN NULL ELSE x.osm_id END, '
+                'x.mode_mask FROM transit_stops x',
+              );
+              await customStatement(
+                "UPDATE layers SET type = 'poi' WHERE type = 'transit'",
+              );
+              await customStatement('DROP TABLE transit_stops');
+              await customStatement('DROP TABLE transit_sets');
+            }
+
+            await customStatement('DROP TABLE IF EXISTS track_points');
+            await customStatement('DROP TABLE IF EXISTS tracks');
+            await customStatement("DELETE FROM layers WHERE type = 'track'");
+            if (from >= 24) {
+              await m.dropColumn(layers, 'track_stroke_width');
+              await m.dropColumn(layers, 'track_min_distance_meters');
+            }
+          }
         },
         beforeOpen: (details) async {
-          // Required for the Circles/Planes -> Layers ON DELETE CASCADE to fire.
+          // Required for the element -> Layers ON DELETE CASCADE to fire.
           await customStatement('PRAGMA foreign_keys = ON');
           // ...and, because they fire *inside* SQLite where no Dart code sees
           // what a cascade removed, the undo journal has to be installed here

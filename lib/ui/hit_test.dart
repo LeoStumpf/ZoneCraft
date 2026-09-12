@@ -22,7 +22,7 @@ import 'package:latlong2/latlong.dart' hide Circle;
 
 import '../data/database.dart';
 import '../data/layer_types.dart';
-import '../data/transit.dart' show transitStationVisible;
+import '../data/poi_sets.dart' show poiPointVisible;
 import '../state/providers.dart';
 import 'object_summary.dart';
 import 'region_geometry.dart';
@@ -108,7 +108,7 @@ class HitCandidate {
 /// `sizeProxyMeters` it would let a large element in front swallow taps meant
 /// for a small one behind it, which is exactly the failure the size rule exists
 /// to prevent. The kind ordinal sits between the two because `z` is scoped per
-/// table — a circle's z and a plane's z are not comparable — and without it the
+/// table — a circle's z and a subspace's z are not comparable — and without it the
 /// comparator would not be a total order on a mixed layer.
 ///
 /// Pure, so the arbitration is unit-testable without a camera.
@@ -153,7 +153,6 @@ List<HitCandidate> collectCandidates({
   required LatLng tap,
   required Layer layer,
   List<Circle> circles = const [],
-  List<Plane> planes = const [],
   List<Subspace> subspaces = const [],
   List<SubspacePoint> subspacePoints = const [],
   List<FreeLine> freeLines = const [],
@@ -163,8 +162,6 @@ List<HitCandidate> collectCandidates({
   List<HeightRegion> heightRegions = const [],
   List<PoiSet> poiSets = const [],
   List<PoiPoint> poiPoints = const [],
-  List<TransitSet> transitSets = const [],
-  List<TransitStop> transitStops = const [],
   List<BorderShapeRef> borderShapes = const [],
   List<List<LatLng>> Function(FreeArea area)? areaContours,
 }) {
@@ -177,7 +174,7 @@ List<HitCandidate> collectCandidates({
   // Same predicate the painter uses, driven the same way: a mixed layer
   // offers every type it holds, a single-type layer exactly its own. When
   // "what is drawn" and "what can be tapped" were decided separately the two
-  // drifted apart — see `transitStationVisible`.
+  // drifted apart — see `poiPointVisible`.
   for (final type in layerContentTypes(layer)) {
     switch (type) {
       case 'circles':
@@ -208,24 +205,6 @@ List<HitCandidate> collectCandidates({
             edgeDistPx: metersToPixels(camera, tap, (d - r.radiusMeters).abs()),
             sizeProxyMeters: r.radiusMeters,
             z: r.zOrder,
-          ));
-        }
-      case 'planes':
-        for (final p in planes.where((p) => p.layerId == layer.id)) {
-          if (!_finite(p.aLat, p.aLng) || !_finite(p.bLat, p.bLng)) continue;
-          final near = p.nearA ? LatLng(p.aLat, p.aLng) : LatLng(p.bLat, p.bLng);
-          final far = p.nearA ? LatLng(p.bLat, p.bLng) : LatLng(p.aLat, p.aLng);
-          final dn = geoDistance.as(LengthUnit.Meter, near, tap);
-          final df = geoDistance.as(LengthUnit.Meter, far, tap);
-          if (!dn.isFinite || !df.isFinite) continue;
-          out.add(HitCandidate(
-            ref: refOf(ObjectKind.plane, p.id),
-            inside: dn <= df,
-            // Distance to the bisector is half the difference of the two.
-            edgeDistPx: metersToPixels(camera, tap, (dn - df).abs() / 2),
-            // A half-plane is unbounded, so it never wins on specificity.
-            sizeProxyMeters: double.infinity,
-            z: p.zOrder,
           ));
         }
       case 'subspace':
@@ -339,11 +318,19 @@ List<HitCandidate> collectCandidates({
         // see, so a tap on the map can only sensibly mean the dot under it.
         final mine = {
           for (final st in poiSets)
-            if (st.layerId == layer.id) st.id,
+            if (st.layerId == layer.id) st.id: st,
         };
         for (final p in poiPoints) {
-          if (!mine.contains(p.poiSetId)) continue;
+          final set = mine[p.poiSetId];
+          if (set == null) continue;
           if (!_finite(p.lat, p.lng)) continue;
+          // A station the type filter is hiding is not on screen, so it must not
+          // be tappable — picking an invisible marker is indistinguishable from
+          // the app picking at random. Same predicate the painter culls with, so
+          // the two cannot drift: notably, unticking *every* type hides even the
+          // mode-less stations, which an "is any bit shared?" test would leave
+          // answering taps over blank ground.
+          if (!poiPointVisible(p, set)) continue;
           final d = (camera.latLngToScreenOffset(LatLng(p.lat, p.lng)) - tapPx)
               .distance;
           if (!d.isFinite) continue;
@@ -352,33 +339,6 @@ List<HitCandidate> collectCandidates({
             // A marker has no interior — only its own disc counts, which is what
             // stops a tap on empty ground from picking the nearest POI a screen
             // away.
-            inside: false,
-            edgeDistPx: d,
-            sizeProxyMeters: 0,
-          ));
-        }
-      case 'transit':
-        final visibleMask = {
-          for (final st in transitSets)
-            if (st.layerId == layer.id) st.id: st.visibleModeMask,
-        };
-        for (final st in transitStops) {
-          if (!visibleMask.containsKey(st.setId)) continue;
-          if (!_finite(st.lat, st.lng)) continue;
-          // A station the type filter is hiding is not on screen, so it must not
-          // be tappable — picking an invisible marker is indistinguishable from
-          // the app picking at random. Same predicate the painter culls with, so
-          // the two cannot drift: notably, unticking *every* type hides even the
-          // mode-less stations, which an "is any bit shared?" test would leave
-          // answering taps over blank ground.
-          if (!transitStationVisible(st.modeMask, visibleMask[st.setId])) {
-            continue;
-          }
-          final d = (camera.latLngToScreenOffset(LatLng(st.lat, st.lng)) - tapPx)
-              .distance;
-          if (!d.isFinite) continue;
-          out.add(HitCandidate(
-            ref: refOf(ObjectKind.transitStop, st.id),
             inside: false,
             edgeDistPx: d,
             sizeProxyMeters: 0,

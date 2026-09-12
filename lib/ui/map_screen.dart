@@ -36,6 +36,7 @@ import '../data/database.dart';
 import '../data/height_generator.dart';
 import '../data/location.dart';
 import '../data/overpass.dart';
+import '../data/poi_sets.dart';
 import '../data/overpass_client.dart'
     show OverpassCancel, OverpassOutcome, kOverpassPreferenceMaxElapsed;
 import '../data/layer_types.dart';
@@ -51,7 +52,6 @@ import '../geo/tiles.dart';
 import '../state/map_mode.dart';
 import '../state/import_preview.dart';
 import '../state/providers.dart';
-import '../state/track_recorder.dart';
 import 'circle_editor.dart';
 import 'collapsible_sheet.dart';
 import 'freearea_editor.dart';
@@ -62,14 +62,12 @@ import 'camera_viewport.dart';
 import 'height_editor.dart';
 import 'imported_point_editor.dart';
 import 'poi_set_editor.dart';
-import 'transit_set_editor.dart';
 import 'hit_test.dart';
 import 'import_actions.dart';
 import 'import_progress.dart';
 import 'layers_panel.dart';
 import 'object_summary.dart';
 import 'pending_import_sheet.dart';
-import 'plane_editor.dart';
 import 'draw_stroke.dart';
 import 'poi_import_dialog.dart';
 import 'poi_category_dialog.dart';
@@ -84,8 +82,6 @@ import 'region_layer.dart';
 import 'share_place.dart';
 import 'subspace_editor.dart';
 import 'transit_import_dialog.dart';
-import 'track_layer.dart';
-import 'transit_layer.dart';
 import 'undo_buttons.dart';
 
 /// How far in "Locate me" and "Zoom to" will zoom when the map is far out.
@@ -107,8 +103,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     with WidgetsBindingObserver {
   final _mapController = MapController();
 
-  /// Deep-link subscription (`zonecraft://…`); the app's only one besides
-  /// the track recorder's position stream.
+  /// Deep-link subscription (`zonecraft://…`); the app's only one.
   StreamSubscription<Uri>? _linkSub;
 
   /// Guards against a second shared file stacking its dialogs on the first's.
@@ -141,10 +136,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// Null on every other type.
   String? _placePoiSetId;
 
-  /// Buffered first tap of a two-tap type (a plane's point A).
-  LatLng? _pendingPlaneA;
-
-  /// Buffered first corner of a transit import box. While set, the live second
+  /// Buffered first corner of a station or border import box. While set, the live second
   /// corner is the map centre (a phone has no hover), so the rubber band
   /// follows as you pan.
   LatLng? _pendingBoxA;
@@ -159,7 +151,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   double? _importCircleRadius;
   LatLng? _importCircleCentre;
 
-  /// The box a transit or borders import is about to cover, while its sheet is
+  /// The box a station or borders import is about to cover, while its sheet is
   /// open. The rubber band drawn during the two corner taps used to vanish the
   /// moment the dialog opened, and the "import what you can see" path never
   /// drew one at all — so this is the same band, kept up for the half of the
@@ -690,57 +682,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
     });
   }
 
-  /// Starts or stops recording into [layer].
-  ///
-  /// Starting asks for location permission the same way "Locate me" does — on
-  /// the tap, never before — and says so if it is refused. There is no
-  /// background service behind this: recording runs while the app is open, and
-  /// a gap becomes a break in the line rather than an invented straight one.
-  Future<void> _toggleRecording(Layer layer) async {
-    final recorder = ref.read(trackRecordingProvider.notifier);
-    if (ref.read(trackRecordingProvider).isRecording) {
-      recorder.stop();
-      _hint('Recording stopped.');
-      return;
-    }
-    final problem = await recorder.start(layer);
-    if (problem != null) {
-      _hint(problem);
-      return;
-    }
-    _hint(
-      'Recording. Keep ZoneCraft open — it does not record in the '
-      'background.',
-    );
-  }
-
-  /// "Recording · 12 points · 8 s ago". The age of the last fix is the part
-  /// that matters: a recording that has stopped receiving (indoors, no signal)
-  /// looks exactly like a working one otherwise.
-  static String _recordingBannerText(TrackRecording r) {
-    final b = StringBuffer('Recording · ');
-    b.write('${r.pointCount} point${r.pointCount == 1 ? '' : 's'}');
-    final last = r.lastFixAt;
-    if (last == null) {
-      b.write(' · waiting for a fix');
-    } else {
-      final secs = DateTime.now().difference(last).inSeconds;
-      if (secs >= 30) b.write(' · last fix ${_ago(secs)}');
-    }
-    return b.toString();
-  }
-
-  static String _ago(int seconds) =>
-      seconds < 120 ? '${seconds}s ago' : '${(seconds / 60).round()} min ago';
-
   /// Requests the device's current position, handling permission/service state
   /// with dismissible hints. Returns the fix, or null on denial / disabled
   /// services / a bad (non-finite) fix / any error. Has no side effects on the
   /// map camera — callers decide what to do with the result.
   Future<LatLng?> _getCurrentPosition() async {
     try {
-      // Service + permission live in `data/location.dart`, shared with the
-      // track recorder — the two used to be the same twenty lines twice.
+      // Service + permission live in `data/location.dart`.
       final problem = await ensureLocationReady();
       if (problem != null) {
         _hint(problem);
@@ -1307,33 +1255,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
     }
   }
 
-  /// Popup menu for a long-pressed plane endpoint: rename the plane, swap which
-  /// side is included, or delete it.
-  Future<void> _showPlaneMenu(Plane pl, Offset pos) async {
-    final title = (pl.label != null && pl.label!.isNotEmpty)
-        ? pl.label!
-        : 'Plane';
-    final selected = await _showPointMenu(title, pos, [
-      _pointMenuItem('rename', Icons.label_outline, 'Rename…'),
-      _pointMenuItem('swap', Icons.swap_horiz, 'Swap included side'),
-      _pointMenuItem('delete', Icons.delete_outline, 'Delete plane'),
-    ]);
-    if (selected == null || !mounted) return;
-    final repo = ref.read(repositoryProvider);
-    switch (selected) {
-      case 'rename':
-        final name = await _promptPointName('Name plane', pl.label);
-        if (name == null || !mounted) return;
-        await repo.updatePlane(pl.id, label: Value(name.isEmpty ? null : name));
-      case 'swap':
-        await repo.updatePlane(pl.id, nearA: !pl.nearA);
-        if (mounted) _hint('Included side swapped.');
-      case 'delete':
-        await repo.deletePlane(pl.id);
-        if (mounted) _hint('Plane deleted.');
-    }
-  }
-
   /// A default radius (metres) scaled so a new circle is visible at the current
   /// zoom: roughly 15% of the visible map width.
   ///
@@ -1448,7 +1369,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
   void _selectCircle(String id) => _select(ObjectKind.circle, id);
 
-  void _selectPlane(String id) => _select(ObjectKind.plane, id);
 
   void _selectSubspace(String id) => _select(ObjectKind.subspace, id);
 
@@ -1556,9 +1476,46 @@ class _MapScreenState extends ConsumerState<MapScreen>
             () => _runPoiImport(layer, at: at),
           );
 
+  /// The import FAB on a POI layer: nearby POIs of one category (a circle
+  /// around the map centre), or the public-transport stations of a box you
+  /// mark with two corners. One button, because both fill the same layer
+  /// with the same kind of row — a station is a POI (v27).
+  Future<void> _pickPoiImport(Layer layer) async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            ListTile(title: Text('Import into "${layer.name}"')),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.travel_explore),
+              title: const Text('Nearby POIs'),
+              subtitle: const Text('One category around the map centre'),
+              onTap: () => Navigator.pop(ctx, 'pois'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.directions_transit),
+              title: const Text('Transit stations'),
+              subtitle: const Text('Tap two corners of an area'),
+              onTap: () => Navigator.pop(ctx, 'stations'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+    if (choice == 'pois') {
+      await _importPois(layer);
+    } else {
+      await _enterAddMode(layer, placeType: _kPlaceStations);
+    }
+  }
+
   Future<void> _runPoiImport(Layer layer, {LatLng? at}) async {
     final isCircleLayer = layer.type == 'circles';
-    final isPoiLayer = layer.type == 'poi';
+    final isPoiLayer = layerHolds(layer, kPoi);
     setState(() => _importCircleCentre = at);
     final config = await _showImportSheet<PoiImportConfig>(
       (done) => PoiImportSheet(
@@ -1582,67 +1539,38 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
     final center = at ?? _mapController.camera.center;
     final r = config.searchRadiusMeters;
-    // Bounding box from the centre + search radius (N/S/E/W offsets).
-    final north = _hitTest.offset(center, r, 0).latitude;
-    final south = _hitTest.offset(center, r, 180).latitude;
-    final east = _hitTest.offset(center, r, 90).longitude;
-    final west = _hitTest.offset(center, r, -90).longitude;
-
-    // Same spinner transit and borders use: a public Overpass instance can sit
-    // on a request for a minute, and an unexplained frozen UI is what that
-    // looked like before.
-    final cancel = OverpassCancel();
-    final progress = showImportProgress(
-      context,
-      title: 'Importing ${config.category.label.toLowerCase()}',
-      message: 'Preparing the query…',
-      onCancel: cancel.cancel,
-    );
-    final repoForEndpoint = ref.read(repositoryProvider);
-    final settings = ref.read(settingsProvider).asData?.value;
-    final elapsed = Stopwatch()..start();
-    final OverpassOutcome<List<PoiResult>> outcome;
-    try {
-      outcome = await fetchPois(
-        south: south,
-        west: west,
-        north: north,
-        east: east,
-        categories: [config.category],
-        client: _tileClient,
-        preferEndpoint: settings?.transitEndpoint,
-        onProgress: progress.report,
-        cancel: cancel,
+    if (isPoiLayer) {
+      // A POI layer stores the fetch as an offline set, through the same
+      // pending-row lifecycle a station import uses (see [_runRadiusImport]).
+      final sid = await ref.read(repositoryProvider).createPoiSet(
+            layerId: layer.id,
+            source: kPoiSourceRadius,
+            categoryKey: config.category.key,
+            centerLat: center.latitude,
+            centerLng: center.longitude,
+            radiusMeters: r,
+            label: config.category.label,
+          );
+      if (!mounted) return;
+      await _runRadiusImport(
+        setId: sid,
+        fresh: true,
+        category: config.category,
+        center: center,
+        radiusMeters: r,
       );
-    } finally {
-      progress.close(); // idempotent; guarantees the spinner never sticks
-    }
-    if (!mounted) return;
-    if (outcome.cancelled) {
-      _hint('Import cancelled.');
       return;
     }
-    if (!outcome.ok) {
-      _hint(outcome.message!);
-      return;
-    }
-    _rememberEndpoint(
-      repoForEndpoint,
-      outcome.endpoint,
-      settings?.transitEndpoint,
-      elapsed.elapsed,
+
+    final within = await _fetchPoisAround(
+      category: config.category,
+      center: center,
+      radiusMeters: r,
+      // Circle/subspace seeding keeps the default tighter cap so the created
+      // geometry stays manageable.
+      cap: 60,
     );
-    final fetched = outcome.value!;
-    // A POI layer stores everything the fetch returned (up to the Overpass
-    // cap); circle/subspace seeding keeps the default tighter cap so the
-    // created geometry stays manageable.
-    final within = poisWithinRadius(
-      center.latitude,
-      center.longitude,
-      r,
-      fetched,
-      cap: isPoiLayer ? overpassResultCap : 60,
-    );
+    if (within == null || !mounted) return;
     final label = config.category.label.toLowerCase();
     if (within.isEmpty) {
       _hint('No $label found within ${r.round()} m.');
@@ -1650,25 +1578,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
     }
 
     final repo = ref.read(repositoryProvider);
-    if (isPoiLayer) {
-      // Stored as-is (unnamed POIs stay unnamed — the icon carries the type),
-      // bounded to the searched circle so the import is a single offline set.
-      final sid = await repo.createPoiSet(
-        layerId: layer.id,
-        categoryKey: config.category.key,
-        centerLat: center.latitude,
-        centerLng: center.longitude,
-        radiusMeters: r,
-        label: config.category.label,
-      );
-      final tally = await repo.addPoiPoints(sid, within);
-      // Everything was already here, so the set would be an empty row that
-      // draws nothing — drop it rather than leave litter behind.
-      if (tally.added == 0) await repo.deletePoiSet(sid);
-      if (mounted) _hint(describeImportTally(tally, label));
-      return;
-    }
-
     // Many OSM categories (benches, post boxes, toilets…) carry no `name` tag,
     // so fall back to the category plus an index — every imported POI is named.
     String labelFor(int i) =>
@@ -1717,20 +1626,359 @@ class _MapScreenState extends ConsumerState<MapScreen>
     );
   }
 
+  /// Fetches one category around [center] with the shared progress dialog and
+  /// returns what lies within [radiusMeters], nearest first — or null when the
+  /// fetch was cancelled or failed (already reported as a hint).
+  ///
+  /// The lower half of a radius import, without any set row: the circle and
+  /// subspace seeding paths want the POIs and nothing else.
+  Future<List<PoiResult>?> _fetchPoisAround({
+    required PoiCategory category,
+    required LatLng center,
+    required double radiusMeters,
+    required int cap,
+  }) async {
+    final r = radiusMeters;
+    // Bounding box from the centre + search radius (N/S/E/W offsets).
+    final north = _hitTest.offset(center, r, 0).latitude;
+    final south = _hitTest.offset(center, r, 180).latitude;
+    final east = _hitTest.offset(center, r, 90).longitude;
+    final west = _hitTest.offset(center, r, -90).longitude;
+    final outcome = await _fetchWithProgress<List<PoiResult>>(
+      title: 'Importing ${category.label.toLowerCase()}',
+      message: 'Preparing the query…',
+      fetch: (progress, cancel, preferEndpoint) => fetchPois(
+        south: south,
+        west: west,
+        north: north,
+        east: east,
+        categories: [category],
+        client: _tileClient,
+        preferEndpoint: preferEndpoint,
+        onProgress: progress.report,
+        cancel: cancel,
+      ),
+    );
+    if (outcome == null || !outcome.ok) return null;
+    return poisWithinRadius(
+      center.latitude,
+      center.longitude,
+      r,
+      outcome.value!,
+      cap: cap,
+    );
+  }
+
+  /// Runs [fetch] behind the shared progress dialog — a public Overpass
+  /// instance can sit on a request for a minute, and an unexplained frozen UI
+  /// is what that looked like before — remembers a quick endpoint, and turns a
+  /// cancel or a failure into a hint. Returns the outcome (so a caller with a
+  /// set row can settle it, see [_settleImportRow]), or null once the widget
+  /// is gone.
+  Future<OverpassOutcome<T>?> _fetchWithProgress<T>({
+    required String title,
+    required String message,
+    required Future<OverpassOutcome<T>> Function(
+      ImportProgress progress,
+      OverpassCancel cancel,
+      String? preferEndpoint,
+    ) fetch,
+  }) async {
+    final cancel = OverpassCancel();
+    // The handle is captured, so the spinner is dismissed by identity rather
+    // than by popping whatever happens to be on top of the ambient navigator.
+    final progress = showImportProgress(
+      context,
+      title: title,
+      message: message,
+      onCancel: cancel.cancel,
+    );
+    final repo = ref.read(repositoryProvider);
+    final settings = ref.read(settingsProvider).asData?.value;
+    final elapsed = Stopwatch()..start();
+    final OverpassOutcome<T> outcome;
+    try {
+      outcome = await fetch(progress, cancel, settings?.transitEndpoint);
+    } finally {
+      progress.close(); // idempotent; guarantees the spinner never sticks
+    }
+    if (!mounted) return null;
+    if (outcome.cancelled) {
+      _hint('Import cancelled.');
+    } else if (outcome.ok) {
+      _rememberEndpoint(
+        repo,
+        outcome.endpoint,
+        settings?.transitEndpoint,
+        elapsed.elapsed,
+      );
+    }
+    return outcome;
+  }
+
+  /// The one lifecycle a POI import's **set row** goes through after its
+  /// fetch, radius or box alike: cancelled → a set this import created is
+  /// removed (a retry leaves its row exactly as it found it); failed → the row
+  /// is marked and kept, so it shows as a retry row; ok → the caller fills it.
+  /// Returns whether to go on.
+  Future<bool> _settleImportRow({
+    required String setId,
+    required bool fresh,
+    required OverpassOutcome<Object?>? outcome,
+  }) async {
+    final repo = ref.read(repositoryProvider);
+    if (outcome == null) return false;
+    if (outcome.cancelled) {
+      // Nothing went wrong, so nothing may be recorded as having gone wrong.
+      if (fresh) await repo.deletePoiSet(setId);
+      return false;
+    }
+    if (!outcome.ok) {
+      await repo.markPoiImportFailed(setId, outcome.message!);
+      if (mounted) {
+        _hint('${outcome.message!} It\'s saved — retry it from Elements.');
+      }
+      return false;
+    }
+    return true;
+  }
+
+  /// Fills the pending radius set [setId] — fetch, settle, store. [fresh]
+  /// says this import created the row (a retry re-runs an existing one).
+  Future<void> _runRadiusImport({
+    required String setId,
+    required bool fresh,
+    required PoiCategory category,
+    required LatLng center,
+    required double radiusMeters,
+  }) async {
+    final repo = ref.read(repositoryProvider);
+    final r = radiusMeters;
+    final north = _hitTest.offset(center, r, 0).latitude;
+    final south = _hitTest.offset(center, r, 180).latitude;
+    final east = _hitTest.offset(center, r, 90).longitude;
+    final west = _hitTest.offset(center, r, -90).longitude;
+    final label = category.label.toLowerCase();
+    try {
+      final outcome = await _fetchWithProgress<List<PoiResult>>(
+        title: 'Importing $label',
+        message: 'Preparing the query…',
+        fetch: (progress, cancel, preferEndpoint) => fetchPois(
+          south: south,
+          west: west,
+          north: north,
+          east: east,
+          categories: [category],
+          client: _tileClient,
+          preferEndpoint: preferEndpoint,
+          onProgress: progress.report,
+          cancel: cancel,
+        ),
+      );
+      if (!await _settleImportRow(
+          setId: setId, fresh: fresh, outcome: outcome)) {
+        return;
+      }
+      // A POI layer stores everything the fetch returned (up to the Overpass
+      // cap), bounded to the searched circle so the import is a single
+      // offline set. Unnamed POIs stay unnamed — the icon carries the type.
+      final within = poisWithinRadius(
+        center.latitude,
+        center.longitude,
+        r,
+        outcome!.value!,
+        cap: overpassResultCap,
+      );
+      final tally = await repo.fillPoiSet(setId, within);
+      if (!mounted) return;
+      if (within.isEmpty) {
+        // Nothing there: a fresh set would be an empty row that draws
+        // nothing, so drop it rather than leave litter behind. A retry that
+        // finds nothing keeps its row — now fetched and empty, which is an
+        // answer.
+        if (fresh) await repo.deletePoiSet(setId);
+        _hint('No $label found within ${r.round()} m.');
+        return;
+      }
+      if (tally.added == 0 && fresh) await repo.deletePoiSet(setId);
+      _hint(describeImportTally(tally, label));
+      // A write failure used to become an unhandled async error with no
+      // message at all, whatever its type. Say so, and leave the retry row.
+      // ignore: avoid_catches_without_on_clauses
+    } catch (e) {
+      await repo.markPoiImportFailed(setId, 'Could not save the import.');
+      if (mounted) _hint('Could not save the import — retry from Elements.');
+    }
+  }
+
+  /// Imports every public-transport **station** in [box] into [layer] as a
+  /// box-sourced POI set, once, offline. One cheap Overpass query — see
+  /// `data/transit.dart` for why line geometry is not fetched.
+  ///
+  /// The set row is written **before** the fetch, so a failure leaves a retry
+  /// row on the layer instead of a snackbar the user might miss.
+  Future<void> _importStations(Layer layer, {required LatLngBounds box}) async {
+    final config = await _showBoxImportSheet<TransitImportConfig>(
+      box,
+      (done, preview) =>
+          TransitImportSheet(initial: box, onPreview: preview, onDone: done),
+    );
+    if (config == null || !mounted) return;
+    final diagonal = config.diagonalMeters;
+    final repo = ref.read(repositoryProvider);
+    await repo.undo.group('Import stations', () async {
+      final sid = await repo.createPoiSet(
+        layerId: layer.id,
+        source: kPoiSourceBox,
+        categoryKey: kTransitStationCategoryKey,
+        // Derived from the box inside createPoiSet; these are placeholders.
+        centerLat: 0,
+        centerLng: 0,
+        radiusMeters: 0,
+        bbox: [config.south, config.west, config.north, config.east],
+        modeMask: config.modeMask,
+        // Never show what wasn't fetched; within that, a city-sized import
+        // still starts with buses hidden so it doesn't open as a wall of pins.
+        visibleModeMask: config.modeMask & defaultVisibleModes(diagonal),
+      );
+      if (!mounted) return;
+      await _runStationImport(
+        setId: sid,
+        fresh: true,
+        bbox: [config.south, config.west, config.north, config.east],
+        modeMask: config.modeMask,
+      );
+    });
+  }
+
+  /// Re-runs an import that didn't finish, using the query the row remembers
+  /// — its category and circle, or its box **and the types** — because a
+  /// retry has to ask the same question, or the row would come back holding
+  /// something other than what was asked for. One retry, one undo step.
+  Future<void> retryImport(PoiSet set) {
+    final repo = ref.read(repositoryProvider);
+    if (set.isStationImport) {
+      return repo.undo.group(
+        'Import stations',
+        () => _runStationImport(
+          setId: set.id,
+          fresh: false,
+          bbox: set.bbox!,
+          modeMask: set.modeMask,
+        ),
+      );
+    }
+    final category = poiCategories
+        .where((c) => c.key == set.categoryKey)
+        .firstOrNull;
+    if (category == null) {
+      _hint('That category is no longer available.');
+      return Future.value();
+    }
+    return repo.undo.group(
+      'Import POIs',
+      () => _runRadiusImport(
+        setId: set.id,
+        fresh: false,
+        category: category,
+        center: LatLng(set.centerLat, set.centerLng),
+        radiusMeters: set.radiusMeters,
+      ),
+    );
+  }
+
+  /// Fills the pending box set [setId] — fetch, settle, store. [fresh] says
+  /// this import created the row (a retry re-runs an existing one).
+  Future<void> _runStationImport({
+    required String setId,
+    required bool fresh,
+    required List<double> bbox,
+    required int modeMask,
+  }) async {
+    final repo = ref.read(repositoryProvider);
+    final [south, west, north, east] = bbox;
+    final diagonal = bboxDiagonalMeters(south, west, north, east);
+    try {
+      final outcome = await _fetchWithProgress<List<TransitStationData>>(
+        title: 'Importing transit stations',
+        message: diagonal > kTransitRegionalMaxMeters
+            ? 'A large area can take a minute…'
+            : 'Preparing the query…',
+        fetch: (progress, cancel, preferEndpoint) => fetchTransitStations(
+          south: south,
+          west: west,
+          north: north,
+          east: east,
+          modeMask: modeMask,
+          client: _tileClient,
+          preferEndpoint: preferEndpoint,
+          onProgress: progress.report,
+          cancel: cancel,
+        ),
+      );
+      if (!await _settleImportRow(
+          setId: setId, fresh: fresh, outcome: outcome)) {
+        return;
+      }
+      final stations = outcome!.value!;
+      final tally = await repo.fillPoiSet(
+        setId,
+        [for (final s in stations) s.toPoiResult()],
+      );
+      if (!mounted) return;
+      if (stations.isEmpty) {
+        if (fresh) await repo.deletePoiSet(setId);
+        _hint(
+          modeMask == transitAllModesMask
+              ? 'No transit stations found in that area.'
+              : 'No ${transitModeLabels(modeMask).toLowerCase()} stations found '
+                  'in that area.',
+        );
+        return;
+      }
+      // Everything this box holds is already on the layer from an earlier,
+      // overlapping import. Say so plainly — the map does not change, so
+      // silence would read as a failed import.
+      if (tally.allSkipped) {
+        if (fresh) await repo.deletePoiSet(setId);
+        _hint(describeImportTally(tally, 'stations'));
+        return;
+      }
+      // Hidden *within what was imported* — saying "bus hidden" about buses
+      // that were never fetched would send people to a filter that can't help.
+      final visible = (ref.read(poiSetsProvider).asData?.value ?? const [])
+          .where((s) => s.id == setId)
+          .firstOrNull
+          ?.visibleModeMask;
+      final hidden = visible == null ? 0 : modeMask & ~visible;
+      _hint(
+        hidden == 0
+            ? describeImportTally(tally, 'stations')
+            : '${describeImportTally(tally, 'stations')} '
+                '${transitModeLabels(hidden).toLowerCase()} hidden for now '
+                '(Stations… to show).',
+      );
+      // A write failure used to become an unhandled async error with no
+      // message at all, whatever its type. Say so, and leave the retry row.
+      // ignore: avoid_catches_without_on_clauses
+    } catch (e) {
+      await repo.markPoiImportFailed(setId, 'Could not save the import.');
+      if (mounted) _hint('Could not save the import — retry from Elements.');
+    }
+  }
+
   /// The Add button's label for a layer type. A nested ternary got unreadable
   /// at seven types; this is the same mapping as a switch.
   static String _addFabLabel(String? type) => switch (type) {
-    // A combined layer holds nine kinds, so the button cannot name one: it
+    // A combined layer holds six kinds, so the button cannot name one: it
     // asks first (see [_pickPlaceType]).
     kMixedType => 'Add…',
     'poi' => 'Add POI',
-    'transit' => 'Import transit',
     'borders' => 'Import borders',
     'subspace' => 'Add subspace',
     'freeline' => 'Add line',
     'freearea' => 'Add area',
     'height' => 'Add height area',
-    'planes' => 'Add plane',
     _ => 'Add circle',
   };
 
@@ -1742,211 +1990,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final w = math.min(a.longitude, b.longitude);
     final e = math.max(a.longitude, b.longitude);
     return [LatLng(s, w), LatLng(s, e), LatLng(n, e), LatLng(n, w)];
-  }
-
-  /// Imports every public-transport **station** in [box] into [layer], once,
-  /// offline. One cheap Overpass query — see `data/transit.dart` for why line
-  /// geometry is not fetched.
-  ///
-  /// The set row is written **before** the fetch, so a failure leaves a retry
-  /// row on the layer instead of a snackbar the user might miss.
-  Future<void> _importTransit(Layer layer, {required LatLngBounds box}) async {
-    final config = await _showBoxImportSheet<TransitImportConfig>(
-      box,
-      (done, preview) =>
-          TransitImportSheet(initial: box, onPreview: preview, onDone: done),
-    );
-    if (config == null || !mounted) return;
-    await _runTransitImport(
-      layerId: layer.id,
-      south: config.south,
-      west: config.west,
-      north: config.north,
-      east: config.east,
-      diagonalMeters: config.diagonalMeters,
-      modeMask: config.modeMask,
-    );
-  }
-
-  /// Retries an import that didn't finish, using the box **and the types** it
-  /// remembered — a retry has to ask the same question, or the row would come
-  /// back holding something other than what was asked for.
-  Future<void> retryTransitImport(TransitSet set) {
-    return _runTransitImport(
-      layerId: set.layerId,
-      south: set.south,
-      west: set.west,
-      north: set.north,
-      east: set.east,
-      diagonalMeters: bboxDiagonalMeters(
-        set.south,
-        set.west,
-        set.north,
-        set.east,
-      ),
-      modeMask: set.modeMask,
-      existingSetId: set.id,
-    );
-  }
-
-  Future<void> _runTransitImport({
-    required String layerId,
-    required double south,
-    required double west,
-    required double north,
-    required double east,
-    required double diagonalMeters,
-    required int modeMask,
-    String? existingSetId,
-  }) =>
-      ref.read(repositoryProvider).undo.group(
-            'Import stations',
-            () => _transitImport(
-              layerId: layerId,
-              south: south,
-              west: west,
-              north: north,
-              east: east,
-              diagonalMeters: diagonalMeters,
-              modeMask: modeMask,
-              existingSetId: existingSetId,
-            ),
-          );
-
-  Future<void> _transitImport({
-    required String layerId,
-    required double south,
-    required double west,
-    required double north,
-    required double east,
-    required double diagonalMeters,
-    required int modeMask,
-    String? existingSetId,
-  }) async {
-    final repo = ref.read(repositoryProvider);
-    final setId =
-        existingSetId ??
-        await repo.createPendingTransitSet(
-          layerId: layerId,
-          south: south,
-          west: west,
-          north: north,
-          east: east,
-          modeMask: modeMask,
-          // Never show what wasn't fetched; within that, a city-sized import
-          // still starts with buses hidden so it doesn't open as a wall of pins.
-          visibleModeMask: modeMask & defaultVisibleModes(diagonalMeters),
-        );
-    if (!mounted) return;
-
-    // The handle is captured, so the spinner is dismissed by identity rather
-    // than by popping whatever happens to be on top of the ambient navigator.
-    final cancel = OverpassCancel();
-    final progress = showImportProgress(
-      context,
-      title: 'Importing transit stations',
-      message: diagonalMeters > kTransitRegionalMaxMeters
-          ? 'A large area can take a minute…'
-          : 'Preparing the query…',
-      onCancel: cancel.cancel,
-    );
-    final elapsed = Stopwatch()..start();
-    try {
-      final settings = ref.read(settingsProvider).asData?.value;
-      final outcome = await fetchTransitStations(
-        south: south,
-        west: west,
-        north: north,
-        east: east,
-        modeMask: modeMask,
-        client: _tileClient,
-        preferEndpoint: settings?.transitEndpoint,
-        onProgress: progress.report,
-        cancel: cancel,
-      );
-
-      if (outcome.cancelled) {
-        // Nothing went wrong, so nothing may be recorded as having gone wrong:
-        // a set this import created is removed, while a retry of an existing
-        // row leaves that row exactly as it found it.
-        if (existingSetId == null) await repo.deleteTransitSet(setId);
-        progress.close();
-        if (!mounted) return;
-        _hint('Import cancelled.');
-        return;
-      }
-      if (!outcome.ok) {
-        await repo.markTransitImportFailed(setId, outcome.message!);
-        progress.close();
-        if (!mounted) return;
-        _hint('${outcome.message!} It\'s saved — retry it from Elements.');
-        return;
-      }
-      _rememberEndpoint(
-        repo,
-        outcome.endpoint,
-        settings?.transitEndpoint,
-        elapsed.elapsed,
-      );
-
-      final stations = outcome.value!;
-      progress.update('Saving ${stations.length} stations…');
-      final tally = await repo.fillTransitSet(setId, [
-        for (final s in stations)
-          (
-            osmId: s.osmId,
-            lat: s.lat,
-            lng: s.lng,
-            name: s.name,
-            modeMask: s.modeMask,
-            nodeCount: s.nodeCount,
-            routeRef: s.routeRef,
-          ),
-      ]);
-      progress.close();
-      if (!mounted) return;
-      if (stations.isEmpty) {
-        _hint(
-          modeMask == transitAllModesMask
-              ? 'No transit stations found in that area.'
-              : 'No ${transitModeLabels(modeMask).toLowerCase()} stations found '
-                    'in that area.',
-        );
-        return;
-      }
-      // Everything this box holds is already on the layer from an earlier,
-      // overlapping import. Say so plainly — the map does not change, so
-      // silence would read as a failed import.
-      if (tally.allSkipped) {
-        _hint(describeImportTally(tally, 'stations'));
-        return;
-      }
-      // Hidden *within what was imported* — saying "bus hidden" about buses
-      // that were never fetched would send people to a filter that can't help.
-      final hidden =
-          modeMask &
-          ~(await repo.watchAllTransitSets().first)
-              .firstWhere((t) => t.id == setId)
-              .visibleModeMask;
-      _hint(
-        hidden == 0
-            ? describeImportTally(tally, 'stations')
-            : '${describeImportTally(tally, 'stations')} '
-                  '${transitModeLabels(hidden).toLowerCase()} hidden for now '
-                  '(Stations… to show).',
-      );
-      // A write failure used to become an unhandled async error with no message at
-      // all, whatever its type.
-      // ignore: avoid_catches_without_on_clauses
-    } catch (e) {
-      // A write failure used to become an unhandled async error with no
-      // message at all. Say so, and leave the retry row behind.
-      await repo.markTransitImportFailed(setId, 'Could not save the import.');
-      progress.close();
-      if (mounted) _hint('Could not save the import — retry from Elements.');
-    } finally {
-      progress.close(); // idempotent; guarantees the spinner never sticks
-    }
   }
 
   /// Remembers the instance that answered, so the next import can skip one that
@@ -1971,7 +2014,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// Whole relations come down — the only shape that yields a fillable
   /// interior — and are assembled, clipped to the box, and thinned in an
   /// isolate before anything is written. Nothing is written until that
-  /// succeeds: unlike a transit import there is no retry row, because
+  /// succeeds: unlike a POI import there is no retry row, because
   /// re-running this is two taps and a half-written set would carry no less
   /// state than the query itself.
   Future<void> _importBorders(Layer layer, {required LatLngBounds box}) =>
@@ -2117,24 +2160,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
     }
   }
 
-  Future<void> _addPlaneAt(LatLng center, Layer layer) async {
-    // Seed A and B offset west/east of the map centre, so the new plane is
-    // immediately visible with its dividing line through the centre.
-    final dist = _defaultRadius();
-    final a = _hitTest.offset(center, dist, -90); // west
-    final b = _hitTest.offset(center, dist, 90); // east
-    final id = await ref
-        .read(repositoryProvider)
-        .createPlane(
-          layerId: layer.id,
-          aLat: a.latitude,
-          aLng: a.longitude,
-          bLat: b.latitude,
-          bLng: b.longitude,
-        );
-    _selectPlane(id);
-  }
-
   /// Adds to a subspace layer: a point to the layer's existing object, or a new
   /// object seeded with a main point at [center] plus two flanking points (so
   /// the main cell is immediately visible). Selects the object either way.
@@ -2157,11 +2182,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
     switch (type) {
       case 'poi':
         unawaited(_importPois(layer));
-      case 'transit':
-        // The no-aim analogue of two corner taps: import what you can see.
-        unawaited(
-          _importTransit(layer, box: _mapController.camera.visibleBounds),
-        );
       case 'borders':
         unawaited(
           _importBorders(layer, box: _mapController.camera.visibleBounds),
@@ -2174,8 +2194,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
         unawaited(_addFreeAreaAt(c, layer, freeAreas));
       case 'height':
         unawaited(_addHeightRegionAt(c, layer));
-      case 'planes':
-        unawaited(_addPlaneAt(c, layer));
       default:
         unawaited(_addCircleAt(c, layer));
     }
@@ -2190,22 +2208,18 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// and the Add-FAB long-press. If the layer has no manual category yet, this
   /// offers to make one; declining leaves Add unarmed rather than arming a mode
   /// whose taps would go nowhere.
-  Future<void> _enterAddMode(Layer layer) async {
-    // A mixed layer holds nine kinds, so "the layer's type" no longer says what
+  ///
+  /// [placeType] overrides what a tap places — the station import passes
+  /// [_kPlaceStations], which is not a layer type but an Add *mode* (two
+  /// corners of a box on a `poi` layer), so it cannot come from the layer.
+  Future<void> _enterAddMode(Layer layer, {String? placeType}) async {
+    // A mixed layer holds six kinds, so "the layer's type" no longer says what
     // a tap should place. Ask once, up front, and keep it in `_placeType` —
     // which already existed for exactly this separation.
-    var type = layer.type;
-    if (layer.type == kMixedType) {
+    var type = placeType ?? layer.type;
+    if (placeType == null && layer.type == kMixedType) {
       final picked = await _pickPlaceType(layer);
       if (picked == null || !mounted) return;
-      // A track is *recorded*, not placed — there is no such thing as tapping
-      // a GPS fix onto the map — so this branch starts the recorder instead of
-      // arming a tap mode. It is why a track layer's Add FAB is a Record
-      // button, and a mixed layer needs the same route in.
-      if (picked == kTrack) {
-        await _toggleRecording(layer);
-        return;
-      }
       type = picked;
     }
     String? poiSetId;
@@ -2218,12 +2232,17 @@ class _MapScreenState extends ConsumerState<MapScreen>
       _placeLayerId = layer.id;
       _placeType = type;
       _placePoiSetId = poiSetId;
-      _pendingPlaneA = null;
       _pendingBoxA = null;
       _addSteps.clear();
     });
     _hint(_addBannerText(type, 0));
   }
+
+  /// The Add-mode token for "mark two corners and import the stations in
+  /// between" on a `poi` layer. Deliberately **not** a `Layers.type`: since
+  /// v27 stations are POIs, and the box import is one of the ways a POI layer
+  /// is filled rather than a kind of layer.
+  static const String _kPlaceStations = '\u0000stations';
 
   /// Asks which kind of object a mixed layer's Add mode should place.
   ///
@@ -2252,14 +2271,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
   static String _placeTypeLabel(String type) => switch (type) {
     'circles' => 'Circle',
-    'planes' => 'Plane',
     'subspace' => 'Subspace',
     'freeline' => 'Freehand line',
     'freearea' => 'Freehand area',
     'height' => 'Height area',
-    'track' => 'Record a track',
     'poi' => 'POI',
-    'transit' => 'Transit import',
     _ => type,
   };
 
@@ -2313,16 +2329,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
         .read(repositoryProvider)
         .createPoiSet(
           layerId: layer.id,
+          source: kPoiSourceManual,
           // A manual set's category key is its icon key: there is no OSM tag
           // behind it, and the two must not drift apart.
           categoryKey: choice.iconKey,
-          // Not a query — see [PoiSets.isManual]. The centre is recorded only
+          // Not a query — see [PoiSets.source]. The centre is recorded only
           // because the column is NOT NULL; radius 0 says "no search".
           centerLat: centre.latitude,
           centerLng: centre.longitude,
           radiusMeters: 0,
           label: choice.name,
-          isManual: true,
           iconKey: choice.iconKey,
         );
   }
@@ -2350,17 +2366,17 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// The layer types whose Add mode marks two opposite corners of an import
   /// box, rather than placing an object per tap.
   static bool _isBoxImport(String? type) =>
-      type == 'transit' || type == 'borders';
+      type == _kPlaceStations || type == 'borders';
 
   /// Runs whichever box import Add mode is armed for.
   ///
-  /// Reads `_placeType`, not the layer's type: a mixed layer is neither, and
-  /// the armed type is the thing that actually decided this is a box import
-  /// (see [_isBoxImport]).
+  /// Reads `_placeType`, not the layer's type: a station import is armed on a
+  /// `poi` layer, and the armed token is the thing that actually decided this
+  /// is a box import (see [_isBoxImport]).
   Future<void> _importBox(Layer layer, LatLngBounds box) =>
       (_placeType ?? layer.type) == kBorders
       ? _importBorders(layer, box: box)
-      : _importTransit(layer, box: box);
+      : _importStations(layer, box: box);
 
   /// Leaves Add mode. For the point-set types the object just built is selected
   /// (so its editor and draggable handles appear) — the long-standing "Done ⇒
@@ -2373,7 +2389,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
       _placeLayerId = null;
       _placeType = null;
       _placePoiSetId = null;
-      _pendingPlaneA = null;
       _pendingBoxA = null;
       _addSteps.clear();
     });
@@ -2543,14 +2558,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
     }
   }
 
-  /// Undoes the most recent placement of this Add session (a pending plane
-  /// point A first, since it isn't committed yet).
+  /// Undoes the most recent placement of this Add session (a pending box
+  /// corner first, since it isn't committed yet).
   Future<void> _undoLastAdd() async {
-    if (_pendingPlaneA != null || _pendingBoxA != null) {
-      setState(() {
-        _pendingPlaneA = null;
-        _pendingBoxA = null;
-      });
+    if (_pendingBoxA != null) {
+      setState(() => _pendingBoxA = null);
       return;
     }
     if (_addSteps.isEmpty) return;
@@ -2568,7 +2580,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
       _placeLayerId = null;
       _placeType = null;
       _placePoiSetId = null;
-      _pendingPlaneA = null;
       _pendingBoxA = null;
       _addSteps.clear();
     });
@@ -2592,12 +2603,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
           ? 'Tap one corner of the area'
           : 'Tap the opposite corner · or Done for the centre';
     }
-    if (layerType == 'planes' && _pendingPlaneA != null) {
-      return 'Tap point B';
-    }
     if (placed > 0) return '$placed added · tap for more';
     return switch (layerType) {
-      'planes' => 'Tap point A, then B',
       'subspace' || 'freeline' || 'freearea' => 'Tap to drop points',
       'height' => 'Tap to place a height area',
       _ => 'Tap the map to add a circle',
@@ -2630,24 +2637,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
         final id = await _addHeightRegionAt(latlng, layer, select: false);
         _pushAddStep(
           ObjectRef(kind: ObjectKind.heightRegion, id: id, layerId: layer.id),
-        );
-      case 'planes':
-        // Two taps per plane: the first is buffered (and shown as a pin).
-        final a = _pendingPlaneA;
-        if (a == null) {
-          setState(() => _pendingPlaneA = latlng);
-          return;
-        }
-        setState(() => _pendingPlaneA = null);
-        final id = await repo.createPlane(
-          layerId: layer.id,
-          aLat: a.latitude,
-          aLng: a.longitude,
-          bLat: latlng.latitude,
-          bLng: latlng.longitude,
-        );
-        _pushAddStep(
-          ObjectRef(kind: ObjectKind.plane, id: id, layerId: layer.id),
         );
       case 'subspace':
         final existing = (ref.read(subspacesProvider).asData?.value ?? const [])
@@ -2757,11 +2746,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
         _pushAddStep(
           ObjectRef(kind: ObjectKind.poiPoint, id: pid, layerId: layer.id),
         );
-      case 'transit':
+      case _kPlaceStations:
       case 'borders':
-        // Two taps mark opposite corners of the import box (the plane pattern),
-        // then the dialog takes over and Add mode is done — an import is a
-        // heavyweight action, not something to stay armed for.
+        // Two taps mark opposite corners of the import box, then the dialog
+        // takes over and Add mode is done — an import is a heavyweight action,
+        // not something to stay armed for.
         final a = _pendingBoxA;
         if (a == null) {
           setState(() => _pendingBoxA = latlng);
@@ -2897,8 +2886,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// Double-tap-to-zoom swallows **both** taps when two land near each other in
   /// quick succession: flutter_map holds a single tap back until the double-tap
   /// window closes, then reports a zoom and never delivers `onTap`. That is
-  /// exactly the gesture for marking the two corners of a transit import box, a
-  /// plane's A and B, or dropping freehand points — measured on device: two taps
+  /// exactly the gesture for marking the two corners of an import box or
+  /// dropping freehand points — measured on device: two taps
   /// 60 px apart placed *nothing* and zoomed the map instead, which reads as
   /// "I drew the rectangle and nothing happened".
   ///
@@ -2997,7 +2986,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
         tap: latlng,
         layer: layer,
         circles: ref.read(circlesProvider).asData?.value ?? const [],
-        planes: ref.read(planesProvider).asData?.value ?? const [],
         subspaces: ref.read(subspacesProvider).asData?.value ?? const [],
         subspacePoints:
             ref.read(subspacePointsProvider).asData?.value ?? const [],
@@ -3010,8 +2998,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
             ref.read(heightRegionsProvider).asData?.value ?? const [],
         poiSets: ref.read(poiSetsProvider).asData?.value ?? const [],
         poiPoints: ref.read(poiPointsProvider).asData?.value ?? const [],
-        transitSets: ref.read(transitSetsProvider).asData?.value ?? const [],
-        transitStops: ref.read(transitStopsProvider).asData?.value ?? const [],
         // Already-decoded geometry: `borderShapesProvider` parses each area's
         // ring blob once per stream emission, and a state boundary is 119 238
         // points — re-parsing that per tap is not a thing that can be done.
@@ -3159,28 +3145,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
       return true;
     }
 
-    // Placement mode: relocate the armed endpoint of the selected plane.
-    final armed = ref.read(planePlacementProvider);
-    final selPlaneId = ref.read(selectedPlaneProvider);
-    if (armed != null && selPlaneId != null) {
-      final repo = ref.read(repositoryProvider);
-      if (armed == 'A') {
-        await repo.updatePlane(
-          selPlaneId,
-          aLat: latlng.latitude,
-          aLng: latlng.longitude,
-        );
-      } else {
-        await repo.updatePlane(
-          selPlaneId,
-          bLat: latlng.latitude,
-          bLng: latlng.longitude,
-        );
-      }
-      ref.read(planePlacementProvider.notifier).arm(null);
-      return true;
-    }
-
     return false;
   }
 
@@ -3293,12 +3257,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
       if (items.isNotEmpty) items.add(const PopupMenuDivider());
       items.add(_pointMenuItem('deselect', Icons.close, 'Deselect'));
     }
-    // A transit layer can hold a station here that the type filter is hiding,
-    // which looks exactly like empty ground — say so, but don't swallow the
-    // menu for it the way this used to.
+    // A station import can hold a station here that the type filter is
+    // hiding, which looks exactly like empty ground — say so, but don't
+    // swallow the menu for it the way this used to.
     if (items.isEmpty &&
         activeLayer != null &&
-        layerHolds(activeLayer, kTransit)) {
+        (ref.read(poiSetsProvider).asData?.value ?? const <PoiSet>[])
+            .any((s) => s.layerId == activeLayer.id && s.isStationImport)) {
       _hint(
         'Hidden station types don\'t respond — check Stations… in the '
         'layer menu.',
@@ -3720,20 +3685,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
             .where((x) => x.id == ref_.id)
             .firstOrNull;
         if (p == null) return null;
-        final category = _poiCategoryLabel(
-          ref.read(poiSetsProvider).asData?.value ?? const [],
-          p.poiSetId,
-        );
-        return p.name?.isNotEmpty == true ? '${p.name} · $category' : category;
-      case ObjectKind.transitStop:
-        final st = (ref.read(transitStopsProvider).asData?.value ?? const [])
-            .where((x) => x.id == ref_.id)
-            .firstOrNull;
-        if (st == null) return null;
-        final modes = transitModeLabels(st.modeMask);
-        return st.name?.isNotEmpty == true ? '${st.name} · $modes' : modes;
+        final sets = ref.read(poiSetsProvider).asData?.value ?? const [];
+        final set = _setOf(sets, p.poiSetId);
+        // A station says which modes serve it; a POI says its category.
+        final kind = set != null && set.isStationImport
+            ? transitModeLabels(p.modeMask)
+            : _poiCategoryLabel(sets, p.poiSetId);
+        return p.name?.isNotEmpty == true ? '${p.name} · $kind' : kind;
       // Every other kind carries its own subtitle; this helper only supplements
-      // the two imported point kinds.
+      // the imported point kind.
       case _:
         return null;
     }
@@ -3765,7 +3725,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final rows = summariseLayer(
       layer,
       circles: ref.read(circlesProvider).asData?.value ?? const [],
-      planes: ref.read(planesProvider).asData?.value ?? const [],
       subspaces: ref.read(subspacesProvider).asData?.value ?? const [],
       subspacePoints:
           ref.read(subspacePointsProvider).asData?.value ?? const [],
@@ -3778,8 +3737,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
       heightRegions: ref.read(heightRegionsProvider).asData?.value ?? const [],
       poiSets: ref.read(poiSetsProvider).asData?.value ?? const [],
       poiPoints: ref.read(poiPointsProvider).asData?.value ?? const [],
-      transitSets: ref.read(transitSetsProvider).asData?.value ?? const [],
-      transitStops: ref.read(transitStopsProvider).asData?.value ?? const [],
       borderSets: ref.read(borderSetsProvider).asData?.value ?? const [],
       borderAreas: ref.read(borderAreasProvider).asData?.value ?? const [],
     );
@@ -3850,13 +3807,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
     // posts a focus request here. Applied post-frame (never move the camera
     // during a build) and only once the map is ready (fitCamera throws before).
     // A retry asked for from the drawer's Elements list.
-    ref.listen(pendingTransitRetryProvider, (_, req) {
+    ref.listen(pendingImportRetryProvider, (_, req) {
       if (req == null) return;
-      ref.read(pendingTransitRetryProvider.notifier).clear();
-      final set = (ref.read(transitSetsProvider).asData?.value ?? const [])
+      ref.read(pendingImportRetryProvider.notifier).clear();
+      final set = (ref.read(poiSetsProvider).asData?.value ?? const [])
           .where((t) => t.id == req.setId)
           .firstOrNull;
-      if (set != null) unawaited(retryTransitImport(set));
+      if (set != null) unawaited(retryImport(set));
     });
 
     // A shared position moves the camera once, on arrival. Same floor as
@@ -3909,7 +3866,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final layers = ref.watch(layersProvider).asData?.value ?? const <Layer>[];
     final circles =
         ref.watch(circlesProvider).asData?.value ?? const <Circle>[];
-    final planes = ref.watch(planesProvider).asData?.value ?? const <Plane>[];
     final subspaces =
         ref.watch(subspacesProvider).asData?.value ?? const <Subspace>[];
     // Points arrive grouped by their owning object, built once per stream
@@ -3922,8 +3878,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final freeAreas =
         ref.watch(freeAreasProvider).asData?.value ?? const <FreeArea>[];
     final freeAreaPoints = ref.watch(freeAreaPointsByAreaProvider);
-    final tracks = ref.watch(tracksProvider).asData?.value ?? const <Track>[];
-    final trackPointsByTrack = ref.watch(trackPointsByTrackProvider);
     final heightRegions =
         ref.watch(heightRegionsProvider).asData?.value ??
         const <HeightRegion>[];
@@ -3933,26 +3887,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
         ref.watch(poiSetsProvider).asData?.value ?? const <PoiSet>[];
     final poiPoints =
         ref.watch(poiPointsProvider).asData?.value ?? const <PoiPoint>[];
-    final transitSets =
-        ref.watch(transitSetsProvider).asData?.value ?? const <TransitSet>[];
-    final transitStations =
-        ref.watch(transitStopsProvider).asData?.value ?? const <TransitStop>[];
+    final poiPointsBySet = ref.watch(poiPointsBySetProvider);
     final borderSets =
         ref.watch(borderSetsProvider).asData?.value ?? const <BorderSet>[];
     // The undecoded rows — the editor edits a row, while the painter and the
     // reshape handles work from `borderShapesProvider`'s decoded geometry.
     final borderAreaRows =
         ref.watch(borderAreasProvider).asData?.value ?? const <BorderArea>[];
-    // Stations hang off a *set*, not the layer, so resolve the layer→sets
-    // index (and each set's mode filter) once rather than per station.
-    final transitSetIds = <String, Set<String>>{};
-    final transitVisibleMask = <String, int>{};
-    for (final s in transitSets) {
-      transitSetIds.putIfAbsent(s.layerId, () => {}).add(s.id);
-      transitVisibleMask[s.id] = s.visibleModeMask;
-    }
     final mode = ref.watch(mapModeProvider);
-    final recording = ref.watch(trackRecordingProvider);
     final receivedPoint = ref.watch(receivedPointProvider);
     final pendingImport = ref.watch(pendingImportProvider);
     // Whether a map tap currently *does* something — see [_interactionOptions].
@@ -3964,8 +3906,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
         ref.watch(freeLineCenterPlacementProvider) ||
         ref.watch(freeLinePlacementProvider) != null ||
         ref.watch(freeAreaPlacementProvider) != null ||
-        ref.watch(subspacePlacementProvider) != null ||
-        ref.watch(planePlacementProvider) != null;
+        ref.watch(subspacePlacementProvider) != null;
     final settings = ref.watch(settingsProvider).asData?.value;
     final uncertainty = settings?.uncertaintyMeters ?? 0;
     final toolsExpanded = settings?.toolsExpanded ?? true;
@@ -3979,9 +3920,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
       circles: layerHolds(layer, kCircles)
           ? circles.where((c) => c.layerId == layer.id).toList()
           : const <Circle>[],
-      planes: layerHolds(layer, kPlanes)
-          ? planes.where((p) => p.layerId == layer.id).toList()
-          : const <Plane>[],
       subspaces: layerHolds(layer, kSubspace)
           ? subspaces.where((s) => s.layerId == layer.id).toList()
           : const <Subspace>[],
@@ -4017,9 +3955,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final basemapOpacity = settings?.basemapOpacity ?? 1.0;
     final selectedCircle = circles
         .where((c) => c.id == ref.watch(selectedCircleProvider))
-        .firstOrNull;
-    final selectedPlane = planes
-        .where((p) => p.id == ref.watch(selectedPlaneProvider))
         .firstOrNull;
     final selectedSubspace = subspaces
         .where((s) => s.id == ref.watch(selectedSubspaceProvider))
@@ -4079,12 +4014,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final selectedPoiPoint = poiPoints
         .where((p) => p.id == ref.watch(selectedPoiPointProvider))
         .firstOrNull;
-    final selectedTransitSet = transitSets
-        .where((t) => t.id == ref.watch(selectedTransitSetProvider))
-        .firstOrNull;
-    final selectedTransitStop = transitStations
-        .where((x) => x.id == ref.watch(selectedTransitStopProvider))
-        .firstOrNull;
     final selectedBorderArea = borderAreaRows
         .where((a) => a.id == ref.watch(selectedBorderAreaProvider))
         .firstOrNull;
@@ -4114,15 +4043,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final reshapeDraft = _reshapeDraftShape(selectedBorderShape);
     final hasSelection =
         selectedCircle != null ||
-        selectedPlane != null ||
         selectedSubspace != null ||
         selectedFreeLine != null ||
         selectedFreeArea != null ||
         selectedHeightRegion != null ||
         selectedPoiSet != null ||
         selectedPoiPoint != null ||
-        selectedTransitSet != null ||
-        selectedTransitStop != null ||
         (selectedBorderArea != null && selectedBorderLayer != null);
     // First selection of the session: point out that handles now drag and that
     // long-press adds/edits — the gestures are otherwise invisible.
@@ -4168,25 +4094,21 @@ class _MapScreenState extends ConsumerState<MapScreen>
     // camera tick.
     final activeHasEditor =
         activeLayer != null && layerHasEditor(activeLayer.type);
-    // Counts only elements whose **kind** has an editor, which is what keeps a
-    // mixed layer holding nothing but tracks from arming Edit mode against
-    // something no sheet opens. `layerHasEditor` can no longer answer that on
-    // its own once one layer holds several kinds.
+    // Per content type, because `layerHasEditor` answers for the layer and a
+    // mixed layer holds several kinds: Edit mode needs at least one element
+    // of *some* kind it holds, or it is a lit button that does nothing.
     bool holdsSelectable(String type) {
       if (activeLayer == null || !layerHolds(activeLayer, type)) return false;
-      final kind = ObjectKind.forLayerType(type);
-      if (kind == null || !kind.hasEditor) return false;
+      if (ObjectKind.forLayerType(type) == null) return false;
       return switch (type) {
         kCircles => circles.any((c) => c.layerId == activeLayer.id),
-        kPlanes => planes.any((p) => p.layerId == activeLayer.id),
         kSubspace => subspaces.any((s) => s.layerId == activeLayer.id),
         kFreeLine => freeLines.any((l) => l.layerId == activeLayer.id),
         kFreeArea => freeAreas.any((a) => a.layerId == activeLayer.id),
         kHeight => heightRegions.any((r) => r.layerId == activeLayer.id),
-        // Imports count as elements to select: a POI layer offers its markers,
-        // a transit layer its stations, a borders layer its areas.
+        // Imports count as elements to select: a POI layer offers its markers
+        // and stations, a borders layer its areas.
         kPoi => poiSets.any((s) => s.layerId == activeLayer.id),
-        kTransit => transitSets.any((s) => s.layerId == activeLayer.id),
         kBorders => borderSets.any((s) => s.layerId == activeLayer.id),
         _ => false,
       };
@@ -4208,19 +4130,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && ref.read(mapModeProvider) == MapMode.draw) {
           _finishDraw();
-        }
-      });
-    }
-    // Deleting the layer being recorded into has to end the recording: the
-    // track went with it (cascade), so every further fix would be written to a
-    // row that no longer exists. Guarded on a *loaded* layer list, so the
-    // stream's first empty frame doesn't stop a recording on its own.
-    if (recording.isRecording &&
-        ref.watch(layersProvider).hasValue &&
-        !layers.any((l) => l.id == recording.layerId)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          ref.read(trackRecordingProvider.notifier).stopIfLayerGone(layers);
         }
       });
     }
@@ -4357,7 +4266,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     // holds. A single-type layer builds exactly one of these;
                     // a mixed layer builds the ones its content types cover,
                     // in `kMixedContentTypes` order — regions are ground,
-                    // tracks are drawn on them, markers are labels on top.
+                    // markers are labels on top.
                     for (final layer in layers)
                       if (layer.isVisible) ...[
                         // `borders` keeps its own branch: it is the one type a
@@ -4379,17 +4288,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           // layer: it is fed only the types the layer holds,
                           // and an all-empty one paints nothing.
                           regionPass(layer, RegionPhase.fill),
-                        // Tracks: the painter applies the layer opacity to the
-                        // stroke, which is the only thing a track has.
-                        if (layerHolds(layer, kTrack))
-                          TracksLayer(
-                            key: ValueKey('track-${layer.id}'),
-                            layer: layer,
-                            tracks: tracks
-                                .where((t) => t.layerId == layer.id)
-                                .toList(),
-                            pointsByTrack: trackPointsByTrack,
-                          ),
                         // Markers last, so a layer's own POIs and stations stay
                         // legible over its fills — including when it is
                         // inverted, where the complement covers everything the
@@ -4400,33 +4298,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         // A *mixed* layer's opacity is meant for its region
                         // composite, so its markers stay crisp rather than
                         // being dimmed to the region default.
-                        if (layerHolds(layer, kTransit))
-                          Opacity(
-                            opacity: layer.type == kMixedType
-                                ? 1.0
-                                : layer.opacity.clamp(0.0, 1.0),
-                            child: TransitStationsLayer(
-                              key: ValueKey('transit-${layer.id}'),
-                              layer: layer,
-                              sets: transitSets
-                                  .where((s) => s.layerId == layer.id)
-                                  .toList(),
-                              stations: visibleTransitStations(
-                                transitStations.where(
-                                  (s) => (transitSetIds[layer.id] ?? const {})
-                                      .contains(s.setId),
-                                ),
-                                transitVisibleMask,
-                              ),
-                              onClusterTap: (center) => _mapController.move(
-                                center,
-                                (_mapController.camera.zoom + 1.5).clamp(
-                                  2.0,
-                                  19.0,
-                                ),
-                              ),
-                            ),
-                          ),
                         if (layerHolds(layer, kPoi))
                           Opacity(
                             opacity: layer.type == kMixedType
@@ -4438,7 +4309,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               sets: poiSets
                                   .where((s) => s.layerId == layer.id)
                                   .toList(),
-                              points: poiPoints,
+                              pointsBySet: poiPointsBySet,
                               onClusterTap: (center) => _mapController.move(
                                 center,
                                 (_mapController.camera.zoom + 1.5).clamp(
@@ -4580,7 +4451,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           ),
                         ],
                       ),
-                    // Box import (transit / borders): the rubber-band box
+                    // Box import (stations / borders): the rubber-band box
                     // between the two corner taps. The live corner is the map
                     // centre, so panning reshapes it (no hover on a phone).
                     if (_pendingBoxA != null) ...[
@@ -4654,24 +4525,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               Icons.place,
                               color: Colors.deepPurple,
                               size: 32,
-                            ),
-                          ),
-                        ],
-                      ),
-                    // Add mode, planes: the buffered first tap (point A), shown
-                    // until the second tap completes the plane.
-                    if (_pendingPlaneA != null)
-                      MarkerLayer(
-                        markers: [
-                          Marker(
-                            point: _pendingPlaneA!,
-                            width: 32,
-                            height: 40,
-                            alignment: Alignment.topCenter,
-                            child: Icon(
-                              Icons.place,
-                              size: 32,
-                              color: Theme.of(context).colorScheme.primary,
                             ),
                           ),
                         ],
@@ -4751,7 +4604,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       ),
                     // Draggable handles for the object being edited: drag to
                     // move a point (persisted on release), long-press for its
-                    // menu. Circle/plane/subspace/freehand points and the
+                    // menu. Circle/subspace/freehand points and the
                     // freehand-line & height bounding-circle centres.
                     if (hasSelection)
                       DragMarkers(
@@ -4787,35 +4640,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                     selectedCircle.id,
                                     radiusMeters: m,
                                   ),
-                            ),
-                          ],
-                          if (selectedPlane != null) ...[
-                            _dragHandle(
-                              LatLng(selectedPlane.aLat, selectedPlane.aLng),
-                              key: ValueKey('plane-${selectedPlane.id}-A'),
-                              label: selectedPlane.label,
-                              onMoved: (ll) => ref
-                                  .read(repositoryProvider)
-                                  .updatePlane(
-                                    selectedPlane.id,
-                                    aLat: ll.latitude,
-                                    aLng: ll.longitude,
-                                  ),
-                              onMenu: (pos) =>
-                                  _showPlaneMenu(selectedPlane, pos),
-                            ),
-                            _dragHandle(
-                              LatLng(selectedPlane.bLat, selectedPlane.bLng),
-                              key: ValueKey('plane-${selectedPlane.id}-B'),
-                              onMoved: (ll) => ref
-                                  .read(repositoryProvider)
-                                  .updatePlane(
-                                    selectedPlane.id,
-                                    bLat: ll.latitude,
-                                    bLng: ll.longitude,
-                                  ),
-                              onMenu: (pos) =>
-                                  _showPlaneMenu(selectedPlane, pos),
                             ),
                           ],
                           for (final p in selectedSubspacePoints)
@@ -5080,7 +4904,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                 TextButton(
                                   onPressed:
                                       (_addSteps.isEmpty &&
-                                          _pendingPlaneA == null)
+                                          _pendingBoxA == null)
                                       ? null
                                       : _undoLastAdd,
                                   child: const Text('Undo'),
@@ -5135,54 +4959,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                 TextButton(
                                   onPressed: _finishDraw,
                                   child: const Text('Done'),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                // Recording banner. Deliberately unmissable and always on
-                // screen while recording: the phone is reading its position,
-                // which is the one thing this app does that the user must
-                // never be able to forget is running.
-                if (recording.isRecording)
-                  SafeArea(
-                    child: Align(
-                      alignment: Alignment.topCenter,
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 12),
-                        child: Material(
-                          color: Colors.red.shade600,
-                          elevation: 2,
-                          borderRadius: BorderRadius.circular(8),
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.fiber_manual_record,
-                                  size: 16,
-                                  color: Colors.white,
-                                ),
-                                const SizedBox(width: 6),
-                                Flexible(
-                                  child: Text(
-                                    _recordingBannerText(recording),
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(color: Colors.white),
-                                  ),
-                                ),
-                                TextButton(
-                                  onPressed: () => ref
-                                      .read(trackRecordingProvider.notifier)
-                                      .stop(),
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: Colors.white,
-                                  ),
-                                  child: const Text('Stop'),
                                 ),
                               ],
                             ),
@@ -5442,7 +5218,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   ),
                   const SizedBox(height: 12),
                   // Freehand layers only: there is nothing to draw into on a
-                  // circle, a plane or an import layer.
+                  // circle, a subspace or an import layer.
                   if (canDraw) ...[
                     FloatingActionButton.small(
                       heroTag: 'draw',
@@ -5540,10 +5316,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       const SizedBox(width: 12),
                       FloatingActionButton.small(
                         heroTag: 'poiImport',
-                        tooltip: 'Import nearby POIs from OpenStreetMap',
+                        tooltip: 'Import from OpenStreetMap',
                         // Reached only when the layer holds one of the three
                         // types above, which already implies it is non-null.
-                        onPressed: () => _importPois(activeLayer),
+                        // A POI layer has two imports to choose from; the
+                        // seeding types (circles, subspace) only the one.
+                        onPressed: () => isPoiLayer
+                            ? _pickPoiImport(activeLayer)
+                            : _importPois(activeLayer),
                         child: const Icon(Icons.travel_explore),
                       ),
                     ],
@@ -5552,31 +5332,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     // arms the map so a tap places the object exactly where you
                     // point. Long-press keeps the old one-shot behaviour (place
                     // at the map centre, open the editor) as a no-aim fallback.
-                    if (activeLayer?.type == 'track')
-                      // A track layer records rather than places: the primary
-                      // action is the recorder, and Add mode is never armed
-                      // (there is no such thing as tapping a fix onto the map).
-                      FloatingActionButton.extended(
-                        heroTag: 'add',
-                        tooltip: recording.isRecording
-                            ? 'Stop recording'
-                            : 'Record your position into this layer',
-                        onPressed: () => _toggleRecording(activeLayer!),
-                        backgroundColor: recording.isRecording
-                            ? Colors.red.shade600
-                            : null,
-                        foregroundColor: recording.isRecording
-                            ? Colors.white
-                            : null,
-                        icon: Icon(
-                          recording.isRecording
-                              ? Icons.stop
-                              : Icons.fiber_manual_record,
-                        ),
-                        label: Text(recording.isRecording ? 'Stop' : 'Record'),
-                      )
-                    else
-                      GestureDetector(
+                    GestureDetector(
                         onLongPress: activeLayer == null
                             ? null
                             : () => _addAtMapCentre(
@@ -5652,18 +5408,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   // back. Discarding the subtree re-seeds every editor at once.
                   key: ValueKey(
                     'sheet-${ref.watch(undoRevisionProvider)}-'
-                    '${selectedCircle?.id ?? selectedPlane?.id ?? selectedSubspace?.id ?? selectedFreeLine?.id ?? selectedFreeArea?.id ?? selectedHeightRegion?.id ?? selectedPoiSet?.id ?? selectedPoiPoint?.id ?? selectedTransitSet?.id ?? selectedTransitStop?.id ?? selectedBorderArea?.id}',
+                    '${selectedCircle?.id ?? selectedSubspace?.id ?? selectedFreeLine?.id ?? selectedFreeArea?.id ?? selectedHeightRegion?.id ?? selectedPoiSet?.id ?? selectedPoiPoint?.id ?? selectedBorderArea?.id}',
                   ),
                   child: selectedCircle != null
                       ? CircleEditorSheet(
                           key: ValueKey(selectedCircle.id),
                           circle: selectedCircle,
-                          layers: layers,
-                        )
-                      : selectedPlane != null
-                      ? PlaneEditorSheet(
-                          key: ValueKey(selectedPlane.id),
-                          plane: selectedPlane,
                           layers: layers,
                         )
                       : selectedSubspace != null
@@ -5718,50 +5468,36 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           layers: layers,
                         )
                       : selectedPoiPoint != null
-                      ? ImportedPointEditorSheet(
-                          key: ValueKey(selectedPoiPoint.id),
-                          id: selectedPoiPoint.id,
-                          kind: ObjectKind.poiPoint,
-                          name: selectedPoiPoint.name,
-                          lat: selectedPoiPoint.lat,
-                          lng: selectedPoiPoint.lng,
-                          icon: () {
-                            final set = _setOf(
-                              poiSets,
-                              selectedPoiPoint.poiSetId,
-                            );
-                            return set == null
-                                ? Icons.place_outlined
-                                : poiSetIcon(set);
-                          }(),
-                          title: 'Edit POI',
-                          subtitle: _poiCategoryLabel(
+                      ? () {
+                          // A station and a POI are the same row; the set
+                          // says which it is, and that decides the sheet's
+                          // icon, wording and whether the point may move.
+                          final set = _setOf(
                             poiSets,
                             selectedPoiPoint.poiSetId,
-                          ),
-                          // Only a hand-placed POI can be moved; an imported one's
-                          // position is the fetched fact.
-                          movable:
-                              _setOf(
-                                poiSets,
-                                selectedPoiPoint.poiSetId,
-                              )?.isManual ??
-                              false,
-                        )
-                      : selectedTransitStop != null
-                      ? ImportedPointEditorSheet(
-                          key: ValueKey(selectedTransitStop.id),
-                          id: selectedTransitStop.id,
-                          kind: ObjectKind.transitStop,
-                          name: selectedTransitStop.name,
-                          lat: selectedTransitStop.lat,
-                          lng: selectedTransitStop.lng,
-                          icon: Icons.directions_transit,
-                          title: 'Edit station',
-                          subtitle: transitModeLabels(
-                            selectedTransitStop.modeMask,
-                          ),
-                        )
+                          );
+                          final station = set != null && set.isStationImport;
+                          return ImportedPointEditorSheet(
+                            key: ValueKey(selectedPoiPoint.id),
+                            id: selectedPoiPoint.id,
+                            name: selectedPoiPoint.name,
+                            lat: selectedPoiPoint.lat,
+                            lng: selectedPoiPoint.lng,
+                            icon: set == null
+                                ? Icons.place_outlined
+                                : poiPointIcon(selectedPoiPoint, set),
+                            title: station ? 'Edit station' : 'Edit POI',
+                            subtitle: station
+                                ? transitModeLabels(selectedPoiPoint.modeMask)
+                                : _poiCategoryLabel(
+                                    poiSets,
+                                    selectedPoiPoint.poiSetId,
+                                  ),
+                            // Only a hand-placed POI can be moved; an
+                            // imported one's position is the fetched fact.
+                            movable: set?.isManual ?? false,
+                          );
+                        }()
                       : selectedPoiSet != null
                       ? PoiSetEditorSheet(
                           key: ValueKey(selectedPoiSet.id),
@@ -5772,18 +5508,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           layers: [
                             for (final l in layers)
                               if (layerHolds(l, kPoi)) l,
-                          ],
-                        )
-                      : selectedTransitSet != null
-                      ? TransitSetEditorSheet(
-                          key: ValueKey(selectedTransitSet.id),
-                          set: selectedTransitSet,
-                          stopCount: transitStations
-                              .where((x) => x.setId == selectedTransitSet.id)
-                              .length,
-                          layers: [
-                            for (final l in layers)
-                              if (layerHolds(l, kTransit)) l,
                           ],
                         )
                       : selectedBorderArea != null &&

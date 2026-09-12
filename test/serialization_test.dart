@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:zonecraft/data/serialization.dart';
@@ -35,15 +37,16 @@ void main() {
           ],
         ),
         ExportLayer(
-          name: 'Planes',
+          name: 'Nearer',
           colorArgb: 0xFFEF5350,
-          type: 'planes',
+          type: 'subspace',
           isInverted: true,
           objects: const [
+            // A two-point subspace: what a `plane` became in v27.
             ExportObject(
-              kind: 'plane',
+              kind: 'subspace',
               coords: [LatLng(52.4, 13.3), LatLng(52.6, 13.5)],
-              nearA: false,
+              mainIndex: 1,
             ),
           ],
         ),
@@ -137,45 +140,21 @@ void main() {
           ],
         ),
         ExportLayer(
-          name: 'Track',
-          colorArgb: 0xFF26A69A,
-          type: 'track',
-          isInverted: false,
-          trackStrokeWidth: 7.5,
-          trackMinDistanceMeters: 25,
-          objects: const [
-            ExportObject(
-              kind: 'track',
-              coords: [
-                LatLng(48.1, 11.5),
-                LatLng(48.11, 11.51),
-                LatLng(48.3, 11.7),
-                LatLng(48.31, 11.71),
-              ],
-              // Two segments: the recording paused between them, and a single
-              // LineString would draw a straight jump across the gap.
-              segments: [
-                [LatLng(48.1, 11.5), LatLng(48.11, 11.51)],
-                [LatLng(48.3, 11.7), LatLng(48.31, 11.71)],
-              ],
-              label: 'morning run',
-            ),
-          ],
-        ),
-        ExportLayer(
-          name: 'Transit',
+          name: 'Stations',
           colorArgb: 0xFF7E57C2,
-          type: 'transit',
+          type: 'poi',
           isInverted: false,
           objects: const [
+            // A station import: a box-sourced POI set. coords[0] is the box
+            // centre; the stations carry mode bits.
             ExportObject(
-              kind: 'transitstop',
-              coords: [LatLng(48.14, 11.46)],
+              kind: 'poi',
+              coords: [LatLng(48.15, 11.55), LatLng(48.14, 11.46)],
+              categoryKey: 'transit_station',
               pointLabels: ['Pasing Bahnhof'],
               pointOsmIds: [1],
+              pointOsmTypes: ['node'],
               pointModeMasks: [3],
-              pointNodeCounts: [31],
-              pointRouteRefs: ['S3;S4'],
               bbox: [48.0, 11.3, 48.3, 11.8],
               modeMask: 7,
               visibleModeMask: 3,
@@ -184,8 +163,10 @@ void main() {
             // An import that never succeeded: no stations, but still a retry
             // row on the layer, so it has to survive the trip.
             ExportObject(
-              kind: 'transitstop',
-              coords: [],
+              kind: 'poi',
+              coords: [LatLng(49.25, 12.25)],
+              categoryKey: 'transit_station',
+              pointLabels: [],
               bbox: [49.0, 12.0, 49.5, 12.5],
               modeMask: 1,
               visibleModeMask: -1,
@@ -229,7 +210,6 @@ void main() {
     expect(b.label, a.label);
     expect(b.colorArgb, a.colorArgb);
     expect(b.radiusMeters, a.radiusMeters);
-    expect(b.nearA, a.nearA);
     expect(b.offsetMeters, a.offsetMeters);
     expect(b.mainIndex, a.mainIndex);
     expect(b.thresholdMeters, a.thresholdMeters);
@@ -244,8 +224,6 @@ void main() {
     expect(b.pointOsmIds, a.pointOsmIds);
     expect(b.pointOsmTypes, a.pointOsmTypes);
     expect(b.pointModeMasks, a.pointModeMasks);
-    expect(b.pointNodeCounts, a.pointNodeCounts);
-    expect(b.pointRouteRefs, a.pointRouteRefs);
     expect(b.bbox, a.bbox);
     expect(b.osmId, a.osmId);
     expect(b.adminLevel, a.adminLevel);
@@ -262,7 +240,6 @@ void main() {
     expectSamePoints(a.coords, b.coords, '${a.kind} coords');
     expectSameRings(a.rings, b.rings, '${a.kind} rings');
     expectSameRings(a.heightRings, b.heightRings, '${a.kind} heightRings');
-    expectSameRings(a.segments, b.segments, '${a.kind} segments');
   }
 
   group('GeoJSON round-trip', () {
@@ -283,8 +260,6 @@ void main() {
         expect(b.borderLevel, a.borderLevel);
         expect(b.borderFillAreas, a.borderFillAreas);
         expect(b.borderShowNames, a.borderShowNames);
-        expect(b.trackStrokeWidth, a.trackStrokeWidth);
-        expect(b.trackMinDistanceMeters, a.trackMinDistanceMeters);
         expect(b.objects.length, a.objects.length);
         for (var oi = 0; oi < a.objects.length; oi++) {
           expectSameObject(a.objects[oi], b.objects[oi]);
@@ -297,6 +272,119 @@ void main() {
       expect(text, contains('"type": "FeatureCollection"'));
       expect(text, contains('"type": "Feature"'));
       expect(text, contains('"zonecraftLayer"'));
+    });
+  });
+
+  group('a v2 file still reads', () {
+    // The kinds and layer types that v27 retired are translated on the way
+    // in, so a file exported before then opens as the same map: a plane is a
+    // two-point subspace, a transit import is a box POI set, and a track —
+    // the one thing that was dropped — is skipped with its layer.
+    const v2 = {
+      'type': 'FeatureCollection',
+      'zonecraft': {
+        'version': 2,
+        'layers': [
+          {'name': 'Planes', 'colorArgb': 1, 'type': 'planes',
+            'isInverted': false},
+          {'name': 'Walk', 'colorArgb': 2, 'type': 'track',
+            'isInverted': false, 'trackStrokeWidth': 7.5},
+          {'name': 'Transit', 'colorArgb': 3, 'type': 'transit',
+            'isInverted': false},
+        ],
+      },
+      'features': [
+        {
+          'type': 'Feature',
+          'properties': {'kind': 'plane', 'zonecraftLayer': 0, 'nearA': false},
+          'geometry': {
+            'type': 'LineString',
+            'coordinates': [[11.0, 48.0], [11.4, 48.2]],
+          },
+        },
+        {
+          'type': 'Feature',
+          'properties': {'kind': 'track', 'zonecraftLayer': 1},
+          'geometry': {
+            'type': 'MultiLineString',
+            'coordinates': [[[11.5, 48.1], [11.51, 48.11]]],
+          },
+        },
+        {
+          'type': 'Feature',
+          'properties': {
+            'kind': 'transitstop',
+            'zonecraftLayer': 2,
+            'pointLabels': ['Pasing'],
+            'pointOsmIds': [42],
+            'pointModeMasks': [3],
+            'pointNodeCounts': [31],
+            'pointRouteRefs': ['S3'],
+            'bbox': [48.0, 11.3, 48.3, 11.8],
+            'modeMask': 7,
+            'visibleModeMask': 3,
+          },
+          'geometry': {'type': 'MultiPoint', 'coordinates': [[11.46, 48.14]]},
+        },
+        {
+          'type': 'Feature',
+          'properties': {
+            'kind': 'transitstop',
+            'zonecraftLayer': 2,
+            'pending': true,
+            'errorMessage': 'busy',
+            'bbox': [49.0, 12.0, 49.5, 12.5],
+            'modeMask': 1,
+          },
+          'geometry': {'type': 'MultiPoint', 'coordinates': <Object>[]},
+        },
+        {
+          'type': 'Feature',
+          'properties': {
+            'kind': 'transitstop',
+            'zonecraftLayer': 2,
+            'pointOsmIds': [7],
+          },
+          // No bbox: the box is derived from the stations themselves.
+          'geometry': {'type': 'MultiPoint', 'coordinates': [[11.0, 48.0]]},
+        },
+      ],
+    };
+
+    test('planes and transit translate, track is dropped with its layer', () {
+      final data = importFromGeoJson(jsonEncode(v2))!;
+      expect(data.layers.map((l) => l.type), ['subspace', 'poi'],
+          reason: 'the track layer is gone, and the indices closed up');
+      expect(data.layers.map((l) => l.name), ['Planes', 'Transit']);
+
+      final sub = data.layers[0].objects.single;
+      expect(sub.kind, 'subspace');
+      expect(sub.mainIndex, 1, reason: 'nearA = false: B is the kept side');
+      expect(sub.coords, hasLength(2));
+
+      final sets = data.layers[1].objects;
+      expect(sets, hasLength(3));
+      final fetched = sets[0];
+      expect(fetched.kind, 'poi');
+      expect(fetched.categoryKey, 'transit_station');
+      expect(fetched.bbox, [48.0, 11.3, 48.3, 11.8]);
+      expect(fetched.coords, hasLength(2), reason: 'centre + the station');
+      expect(fetched.coords.first.latitude, closeTo(48.15, 1e-9));
+      expect(fetched.pointLabels, ['Pasing']);
+      expect(fetched.pointOsmIds, [42]);
+      expect(fetched.pointOsmTypes, ['node']);
+      expect(fetched.pointModeMasks, [3]);
+      expect((fetched.modeMask, fetched.visibleModeMask), (7, 3));
+
+      final pending = sets[1];
+      expect(pending.pending, isTrue);
+      expect(pending.errorMessage, 'busy');
+      expect(pending.coords, hasLength(1), reason: 'just the box centre');
+
+      final boxless = sets[2];
+      expect(boxless.bbox, [48.0, 11.0, 48.0, 11.0],
+          reason: 'derived from its one station');
+      expect(boxless.pointOsmTypes, ['node']);
     });
   });
 
@@ -318,20 +406,16 @@ void main() {
       final kml = exportToKml(sample());
       expect(kml, startsWith('<?xml'));
       expect(kml, contains('<kml xmlns="http://www.opengis.net/kml/2.2">'));
-      expect('<Folder>'.allMatches(kml).length, 9); // one per layer
+      expect('<Folder>'.allMatches(kml).length, 8); // one per layer
       expect(kml, contains('<Polygon>')); // circle ring + freearea
-      expect(kml, contains('<LineString>')); // plane + freeline
+      expect(kml, contains('<LineString>')); // freeline
       expect(kml, contains('<MultiGeometry>')); // subspace seed points
       // A generated height region draws its actual fill, not its bound.
       expect(kml, contains('47.4,0 10.9,47.45,0'));
-      // A recording's pauses are separate LineStrings, so nothing draws a
-      // straight jump across them.
-      expect(kml, contains('11.51,48.11,0</coordinates></LineString>'));
       // POIs: one named Placemark per stored point (centre is skipped).
       expect(kml, contains('<name>Café A</name>'));
+      expect(kml, contains('<name>Pasing Bahnhof</name>'));
       // The search centre is not a POI, so it gets no Placemark of its own.
-      // Matched as a Point, because the track layer's line passes through
-      // the same coordinate.
       expect(kml, isNot(contains('<Point><coordinates>11.5,48.1,0')));
     });
 

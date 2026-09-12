@@ -62,8 +62,8 @@ List<({Color color, List<T> items})> colorRuns<T>(
 ///   pass disappears and the map is exactly what it was before bands moved;
 /// * hidden layers are skipped, as they are for the fill pass;
 /// * `borders` is skipped — it is drawn by its own painter and has no band;
-/// * so is a layer holding none of the six region types (a pure track/POI/
-///   transit layer paints no region at all).
+/// * so is a layer holding none of the five region types (a pure POI layer
+///   paints no region at all).
 ///
 /// The order is [layers]' own order, which is the layers' draw order, so the
 /// bands keep the same relative stacking as the fills above them.
@@ -84,7 +84,6 @@ bool layerHoldsRegion(Layer layer) =>
 /// it is a read-only snapshot with its own painter and no band.
 const kRegionContentTypes = <String>[
   kCircles,
-  kPlanes,
   kSubspace,
   kFreeLine,
   kFreeArea,

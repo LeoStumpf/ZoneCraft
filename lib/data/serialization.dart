@@ -30,14 +30,13 @@ import '../geo/geodesic.dart';
 
 /// One object inside an exported layer. Only the fields relevant to [kind] are
 /// populated; [coords] carries the geometry (a single point for a circle, the
-/// two foci for a plane, the point list for the rest).
+/// point list for the rest).
 class ExportObject {
   const ExportObject({
     required this.kind,
     required this.coords,
     this.label,
     this.radiusMeters,
-    this.nearA,
     this.offsetMeters,
     this.mainIndex,
     this.thresholdMeters,
@@ -64,19 +63,19 @@ class ExportObject {
     this.visibleModeMask,
     this.pointOsmIds,
     this.pointModeMasks,
-    this.pointNodeCounts,
-    this.pointRouteRefs,
     this.pointOsmTypes,
     this.heightRings,
     this.generated,
-    this.segments,
     this.setLabel,
     this.pending,
     this.errorMessage,
   });
 
-  /// One of: circle, plane, subspace, freeline, freearea, height, poi,
-  /// transitstop, borderarea, track.
+  /// One of: circle, subspace, freeline, freearea, height, poi, borderarea.
+  ///
+  /// Three v1/v2 kinds no longer exist and are **translated on read** by
+  /// [importFromGeoJson]: `plane` becomes a two-point `subspace`, `transitstop`
+  /// a box-sourced `poi`, and `track` is skipped (the type was dropped).
   final String kind;
 
   /// The object's geometry as a flat point list. For a `borderarea` — the one
@@ -90,10 +89,10 @@ class ExportObject {
   /// shade is derived from the layer, so it is not a thing to carry across.
   final int? colorArgb;
 
-  // circle / height: radius of the circle (height uses it as its bound)
+  // circle / height: radius of the circle (height uses it as its bound);
+  // poi: the search radius of a radius import (absent on a box import, whose
+  // radius is derived from its box, and 0 on a manual set)
   final double? radiusMeters;
-  // plane
-  final bool? nearA;
   // freeline / freearea
   final double? offsetMeters;
   // freeline: the inclusion circle that bounds the line to a half-disk (null =
@@ -124,8 +123,8 @@ class ExportObject {
   final String? iconKey;
   final bool? manual;
 
-  /// poi / transitstop: the per-point names, aligned with the point coords
-  /// (`coords[1..]` for a POI set, `coords` for a transit import).
+  /// poi: the per-point names, aligned with the point coords (`coords[1..]`;
+  /// `coords[0]` is the set's centre).
   final List<String?>? pointLabels;
 
   /// borderarea: the whole multi-ring geometry, outer rings and holes together
@@ -134,14 +133,14 @@ class ExportObject {
   /// outer+holes polygons on the way out and flattens it back on the way in.
   final List<List<LatLng>>? rings;
 
-  /// borderarea / transitstop: the bounding box of the *import* this element
-  /// came from, as `[south, west, north, east]`. It is what re-groups areas
-  /// back into the sets they were fetched in, so an imported layer keeps the
-  /// same elements-to-imports structure the sender had.
+  /// borderarea / poi: the bounding box of the *import* this element came
+  /// from, as `[south, west, north, east]`. For a border area it is what
+  /// re-groups areas back into the sets they were fetched in, so an imported
+  /// layer keeps the same elements-to-imports structure the sender had. For a
+  /// POI set its presence is what *makes* it a station (box) import.
   final List<double>? bbox;
 
-  /// borderarea: the OSM relation id. transitstop: unused (the stops carry
-  /// their own ids in [pointOsmIds]).
+  /// borderarea: the OSM relation id.
   final int? osmId;
 
   /// borderarea: the OSM `admin_level` of the import this area came from.
@@ -161,22 +160,19 @@ class ExportObject {
   /// where it would matter.
   final bool? edited;
 
-  // transitstop: which station types the import fetched, and which of them are
-  // shown.
+  // poi (station import): which station types the import fetched, and which
+  // of them are shown.
   final int? modeMask;
   final int? visibleModeMask;
 
-  /// transitstop: the OSM node ids of the stations, aligned with [coords].
-  /// **Required for re-import** — a station row is keyed on its node id, which
-  /// is also what re-import dedup matches on, and inventing one would let two
-  /// genuinely different stations collide.
+  /// poi: the OSM ids of the points, aligned with `coords[1..]`. It is what
+  /// re-import dedup matches on; a point without one simply stays outside the
+  /// check rather than being given a made-up identity.
   final List<int>? pointOsmIds;
 
-  // transitstop: the per-station mode bits, merged-node counts and `route_ref`
-  // hints, all aligned with [coords].
+  /// poi (station import): the per-station mode bits, aligned with
+  /// `coords[1..]`.
   final List<int>? pointModeMasks;
-  final List<int>? pointNodeCounts;
-  final List<String?>? pointRouteRefs;
 
   /// poi: the OSM element *type* of each point, paired with [pointOsmIds].
   /// Both halves are needed — ids are unique only within a type — and without
@@ -196,17 +192,12 @@ class ExportObject {
   /// pending state.
   final bool? generated;
 
-  /// track: the recording's points split per segment — a segment change is a
-  /// **break** in the drawn line (the recorder starts one after a long gap).
-  /// [coords] stays the flat list; this is what keeps the pauses.
-  final List<List<LatLng>>? segments;
-
   /// borderarea: the name of the *import* the area belongs to. The area's own
   /// name is [label]; a set carries its own, and losing it renames the import.
   final String? setLabel;
 
-  // transitstop: an import that never succeeded — it has no stations and shows
-  // as a retry row, which is data about a query, so it round-trips as one.
+  // poi: an import that never succeeded — it has no points and shows as a
+  // retry row, which is data about a query, so it round-trips as one.
   final bool? pending;
   final String? errorMessage;
 
@@ -233,16 +224,15 @@ class ExportLayer {
     this.borderLevel,
     this.borderFillAreas,
     this.borderShowNames,
-    this.trackStrokeWidth,
-    this.trackMinDistanceMeters,
     this.isVisible,
   });
 
   final String name;
   final int colorArgb;
 
-  /// circles | planes | subspace | freeline | freearea | height | poi |
-  /// transit | borders | track.
+  /// circles | subspace | freeline | freearea | height | poi | borders |
+  /// mixed. (A v1/v2 file's `planes` and `transit` read as `subspace` and
+  /// `poi`; its `track` layers are dropped.)
   final String type;
   final bool isInverted;
   final List<ExportObject> objects;
@@ -260,11 +250,6 @@ class ExportLayer {
   // `borders` only: the two per-layer display toggles. Null = the defaults.
   final bool? borderFillAreas;
   final bool? borderShowNames;
-
-  // `track` only: stroke width in px and the recorder's minimum spacing in
-  // metres. Null = the defaults.
-  final double? trackStrokeWidth;
-  final double? trackMinDistanceMeters;
 
   /// Whether the layer is shown. Null = shown, which is both the default and
   /// what a file written before this field carried — so only a *hidden* layer
@@ -296,7 +281,14 @@ class ExportData {
 /// the reused `pointOsmIds`; per-point `pointLabels` on a `subspace`; a border
 /// area's `setLabel`; and `pending`/`errorMessage` for a transit import that
 /// never succeeded. Every one of them is optional, so a v1 file still reads.
-const int geoJsonSchemaVersion = 2;
+///
+/// v3 removed three kinds: `plane` (now a two-point `subspace`), `transitstop`
+/// (now a `poi` carrying `bbox`, `modeMask`, `visibleModeMask`,
+/// `pointModeMasks`, `pending`, `errorMessage`) and `track` (dropped). The
+/// reader translates a v1/v2 file's kinds and layer types on the way in
+/// ([importFromGeoJson]); `nearA`, `pointNodeCounts`, `pointRouteRefs`,
+/// `trackStrokeWidth` and `trackMinDistanceMeters` are no longer written.
+const int geoJsonSchemaVersion = 3;
 
 /// Serialises [data] to a pretty-printed GeoJSON `FeatureCollection`. Each object
 /// becomes a `Feature`; layer attributes ride in a non-standard top-level
@@ -324,10 +316,6 @@ String exportToGeoJson(ExportData data) {
             if (l.borderLevel != null) 'borderLevel': l.borderLevel,
             if (l.borderFillAreas != null) 'borderFillAreas': l.borderFillAreas,
             if (l.borderShowNames != null) 'borderShowNames': l.borderShowNames,
-            if (l.trackStrokeWidth != null)
-              'trackStrokeWidth': l.trackStrokeWidth,
-            if (l.trackMinDistanceMeters != null)
-              'trackMinDistanceMeters': l.trackMinDistanceMeters,
             // Only a hidden layer writes a key: absent means shown, which is
             // what every v1 file means too.
             if (l.isVisible == false) 'isVisible': false,
@@ -345,7 +333,6 @@ Map<String, dynamic> _objectToFeature(ExportObject o, int layerIndex) {
     'zonecraftLayer': layerIndex,
     if (o.label != null) 'label': o.label,
     if (o.radiusMeters != null) 'radiusMeters': o.radiusMeters,
-    if (o.nearA != null) 'nearA': o.nearA,
     if (o.offsetMeters != null) 'offsetMeters': o.offsetMeters,
     if (o.mainIndex != null) 'mainIndex': o.mainIndex,
     if (o.thresholdMeters != null) 'thresholdMeters': o.thresholdMeters,
@@ -372,8 +359,6 @@ Map<String, dynamic> _objectToFeature(ExportObject o, int layerIndex) {
     if (o.visibleModeMask != null) 'visibleModeMask': o.visibleModeMask,
     if (o.pointOsmIds != null) 'pointOsmIds': o.pointOsmIds,
     if (o.pointModeMasks != null) 'pointModeMasks': o.pointModeMasks,
-    if (o.pointNodeCounts != null) 'pointNodeCounts': o.pointNodeCounts,
-    if (o.pointRouteRefs != null) 'pointRouteRefs': o.pointRouteRefs,
     if (o.pointOsmTypes != null) 'pointOsmTypes': o.pointOsmTypes,
     // A height region's fills stay in `properties`, not in the geometry: the
     // centre is the region, the fills are what was generated from it, and a
@@ -391,27 +376,13 @@ Map<String, dynamic> _objectToFeature(ExportObject o, int layerIndex) {
       geometry = o.coords.isEmpty
           ? {'type': 'Point', 'coordinates': <double>[]}
           : {'type': 'Point', 'coordinates': _pt(o.coords.first)};
-    case 'plane':
     case 'freeline':
       geometry = {
         'type': 'LineString',
         'coordinates': [for (final c in o.coords) _pt(c)],
       };
-    case 'track':
-      // MultiLineString, one part per segment: a recording *breaks* where it
-      // paused, and a single LineString would draw a straight jump across the
-      // gap — here and in every other tool that opens the file. A track with
-      // no recorded segments still writes one part, so the shape is uniform.
-      final parts = o.segments ?? [o.coords];
-      geometry = {
-        'type': 'MultiLineString',
-        'coordinates': [
-          for (final seg in parts) [for (final c in seg) _pt(c)],
-        ],
-      };
     case 'subspace':
     case 'poi':
-    case 'transitstop':
       geometry = {
         'type': 'MultiPoint',
         'coordinates': [for (final c in o.coords) _pt(c)],
@@ -477,20 +448,28 @@ ExportData? importFromGeoJson(String text) {
 
   final layerMeta = <ExportLayer>[];
   final buckets = <List<ExportObject>>[];
+  // A v1/v2 file may hold layers of types that no longer exist. `planes` and
+  // `transit` are retyped (their objects translate, see [_featureToObject]);
+  // a `track` layer is dropped outright, so the feature index a file wrote
+  // (`zonecraftLayer`) is remapped onto the layers that survive.
+  final bucketOfFileLayer = <int?>[];
   for (final l in (zc['layers'] as List)) {
     if (l is! Map) return null;
+    final type = legacyLayerType((l['type'] as String?) ?? 'circles');
+    if (type == null) {
+      bucketOfFileLayer.add(null);
+      continue;
+    }
+    bucketOfFileLayer.add(layerMeta.length);
     layerMeta.add(ExportLayer(
       name: (l['name'] as String?) ?? 'Imported',
       colorArgb: (l['colorArgb'] as num?)?.toInt() ?? 0xFF2196F3,
-      type: (l['type'] as String?) ?? 'circles',
+      type: type,
       isInverted: l['isInverted'] == true,
       opacity: (l['opacity'] as num?)?.toDouble(),
       borderLevel: l['borderLevel'] as String?,
       borderFillAreas: l['borderFillAreas'] as bool?,
       borderShowNames: l['borderShowNames'] as bool?,
-      trackStrokeWidth: (l['trackStrokeWidth'] as num?)?.toDouble(),
-      trackMinDistanceMeters:
-          (l['trackMinDistanceMeters'] as num?)?.toDouble(),
       isVisible: l['isVisible'] as bool?,
       objects: const [],
     ));
@@ -503,8 +482,12 @@ ExportData? importFromGeoJson(String text) {
     if (f is! Map<String, dynamic>) continue;
     final obj = _featureToObject(f);
     if (obj == null) continue;
-    final idx = ((f['properties'] as Map<String, dynamic>?)?['zonecraftLayer'] as num?)?.toInt();
-    if (idx == null || idx < 0 || idx >= buckets.length) continue;
+    final fileIdx = ((f['properties'] as Map<String, dynamic>?)?['zonecraftLayer'] as num?)?.toInt();
+    if (fileIdx == null || fileIdx < 0 || fileIdx >= bucketOfFileLayer.length) {
+      continue;
+    }
+    final idx = bucketOfFileLayer[fileIdx];
+    if (idx == null) continue;
     buckets[idx].add(obj);
   }
 
@@ -519,8 +502,6 @@ ExportData? importFromGeoJson(String text) {
         borderLevel: layerMeta[i].borderLevel,
         borderFillAreas: layerMeta[i].borderFillAreas,
         borderShowNames: layerMeta[i].borderShowNames,
-        trackStrokeWidth: layerMeta[i].trackStrokeWidth,
-        trackMinDistanceMeters: layerMeta[i].trackMinDistanceMeters,
         isVisible: layerMeta[i].isVisible,
         objects: buckets[i],
       ),
@@ -533,31 +514,65 @@ ExportObject? _featureToObject(Map<String, dynamic> f) {
   if (props is! Map<String, dynamic> || geom is! Map<String, dynamic>) {
     return null;
   }
-  final kind = props['kind'] as String?;
-  if (kind == null) return null;
+  final fileKind = props['kind'] as String?;
+  if (fileKind == null) return null;
+  // The three retired kinds, translated here so the repository only ever sees
+  // today's vocabulary.
+  if (fileKind == 'track') return null; // the type was dropped
+  final kind = switch (fileKind) {
+    'plane' => 'subspace',
+    'transitstop' => 'poi',
+    _ => fileKind,
+  };
   final rings = kind == 'borderarea' ? _readRings(geom) : null;
-  final segments = kind == 'track' ? _readSegments(geom) : null;
-  final coords = rings != null && rings.isNotEmpty
+  var coords = rings != null && rings.isNotEmpty
       ? rings.first
-      : segments != null
-          ? [for (final seg in segments) ...seg]
-          : _readCoords(kind, geom);
-  // A transit import that never succeeded has no stations — it is a retry row,
-  // which describes a query rather than geometry. Every other kind without
-  // coordinates is unusable.
-  if (coords.isEmpty && kind != 'transitstop') return null;
+      : _readCoords(kind, geom);
+  var bbox = _readDoubles(props['bbox'], exactly: 4);
+  var mainIndex = (props['mainIndex'] as num?)?.toInt();
+  var categoryKey = props['categoryKey'] as String?;
+  var pointOsmTypes = _readStrings(props['pointOsmTypes']);
+  final pointOsmIds = _readInts(props['pointOsmIds']);
+  switch (fileKind) {
+    case 'plane':
+      // A plane's coords were its two foci and `nearA` said which side was
+      // kept; as a subspace the kept side is the main point.
+      if (coords.length < 2) return null;
+      mainIndex = (props['nearA'] as bool? ?? true) ? 0 : 1;
+    case 'transitstop':
+      // A transit import's coords were its stations alone; a POI set's start
+      // with the set's centre. The box it was fetched over is what marks it
+      // as a station import on the way in, so one is derived from the
+      // stations when the file carries none — a retry row with neither has
+      // nothing to say and is skipped. Every station was an OSM node.
+      if (bbox == null) {
+        if (coords.isEmpty) return null;
+        bbox = _extentOf(coords);
+      }
+      coords = [
+        LatLng((bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2),
+        ...coords,
+      ];
+      categoryKey ??= 'transit_station';
+      if (pointOsmIds != null && pointOsmTypes == null) {
+        pointOsmTypes = List<String?>.filled(pointOsmIds.length, 'node');
+      }
+  }
+  // A POI import that never succeeded has only its centre — it is a retry
+  // row, which describes a query rather than geometry. Every other kind
+  // without coordinates is unusable.
+  if (coords.isEmpty) return null;
   return ExportObject(
     kind: kind,
     coords: coords,
     rings: rings,
-    segments: segments,
-    pointOsmTypes: _readStrings(props['pointOsmTypes']),
+    pointOsmTypes: pointOsmTypes,
     heightRings: _readRingArray(props['heightRings']),
     generated: props['generated'] as bool?,
     setLabel: props['setLabel'] as String?,
     pending: props['pending'] as bool?,
     errorMessage: props['errorMessage'] as String?,
-    bbox: _readDoubles(props['bbox'], exactly: 4),
+    bbox: bbox,
     osmId: (props['osmId'] as num?)?.toInt(),
     adminLevel: props['adminLevel'] as String?,
     colorIndex: (props['colorIndex'] as num?)?.toInt(),
@@ -567,22 +582,19 @@ ExportObject? _featureToObject(Map<String, dynamic> f) {
     edited: props['edited'] as bool?,
     modeMask: (props['modeMask'] as num?)?.toInt(),
     visibleModeMask: (props['visibleModeMask'] as num?)?.toInt(),
-    pointOsmIds: _readInts(props['pointOsmIds']),
+    pointOsmIds: pointOsmIds,
     pointModeMasks: _readInts(props['pointModeMasks']),
-    pointNodeCounts: _readInts(props['pointNodeCounts']),
-    pointRouteRefs: _readStrings(props['pointRouteRefs']),
     label: props['label'] as String?,
     radiusMeters: (props['radiusMeters'] as num?)?.toDouble(),
-    nearA: props['nearA'] as bool?,
     offsetMeters: (props['offsetMeters'] as num?)?.toDouble(),
-    mainIndex: (props['mainIndex'] as num?)?.toInt(),
+    mainIndex: mainIndex,
     thresholdMeters: (props['thresholdMeters'] as num?)?.toDouble(),
     aboveThreshold: props['aboveThreshold'] as bool?,
     sampleZoom: (props['sampleZoom'] as num?)?.toInt(),
     inclusionLat: (props['inclusionLat'] as num?)?.toDouble(),
     inclusionLng: (props['inclusionLng'] as num?)?.toDouble(),
     inclusionRadiusMeters: (props['inclusionRadiusMeters'] as num?)?.toDouble(),
-    categoryKey: props['categoryKey'] as String?,
+    categoryKey: categoryKey,
     iconKey: props['iconKey'] as String?,
     manual: props['manual'] as bool?,
     colorArgb: (props['colorArgb'] as num?)?.toInt(),
@@ -644,26 +656,17 @@ List<List<LatLng>>? _readRingArray(Object? raw) {
   return out;
 }
 
-/// A `track`'s parts. A `MultiLineString` carries the recording's segment
-/// breaks; a plain `LineString` (every v1 file) is one unbroken segment.
-List<List<LatLng>>? _readSegments(Map<String, dynamic> geom) {
-  final c = geom['coordinates'];
-  if (c is! List) return null;
-  switch (geom['type']) {
-    case 'MultiLineString':
-      final out = <List<LatLng>>[];
-      for (final part in c) {
-        if (part is! List) continue;
-        final seg = _latLngList(part);
-        if (seg.isNotEmpty) out.add(seg);
-      }
-      return out.isEmpty ? null : out;
-    case 'LineString':
-      final seg = _latLngList(c);
-      return seg.isEmpty ? null : [seg];
-    default:
-      return null;
+/// `[south, west, north, east]` of [points] — the box a v2 transit export
+/// without one is given, so it reads as the station import it was.
+List<double> _extentOf(List<LatLng> points) {
+  var s = 90.0, w = 180.0, n = -90.0, e = -180.0;
+  for (final p in points) {
+    if (p.latitude < s) s = p.latitude;
+    if (p.latitude > n) n = p.latitude;
+    if (p.longitude < w) w = p.longitude;
+    if (p.longitude > e) e = p.longitude;
   }
+  return [s, w, n, e];
 }
 
 List<int>? _readInts(Object? raw) => raw is List
@@ -735,9 +738,9 @@ LatLng? _latLng(List<dynamic> pair) {
 
 /// Serialises [data] to KML for Google Earth / Maps interop. Each layer becomes
 /// a `<Folder>`; objects export their source geometry (circles as a geodesic
-/// ring polygon, planes as the A→B segment, subspaces as their seed points,
-/// freehand line/area as line/polygon). This is a one-way export — re-import via
-/// GeoJSON.
+/// ring polygon, subspaces as their seed points, freehand line/area as
+/// line/polygon, POI sets as one Placemark per point). This is a one-way
+/// export — re-import via GeoJSON.
 String exportToKml(ExportData data) {
   final b = StringBuffer()
     ..writeln('<?xml version="1.0" encoding="UTF-8"?>')
@@ -748,15 +751,11 @@ String exportToKml(ExportData data) {
       ..writeln('  <Folder>')
       ..writeln('    <name>${_xml(layer.name)}</name>');
     for (final o in layer.objects) {
-      // POI sets and transit stops are *collections* of named points, so they
-      // become one Placemark each rather than one Placemark of many points.
-      // For a POI set coords[0] is the search centre, not a POI — skip it.
+      // A POI set is a *collection* of named points, so it becomes one
+      // Placemark each rather than one Placemark of many points. coords[0] is
+      // the set's centre, not a POI — skip it.
       if (o.kind == 'poi') {
         _kmlPoints(b, o, from: 1);
-        continue;
-      }
-      if (o.kind == 'transitstop') {
-        _kmlPoints(b, o, from: 0);
         continue;
       }
       _kmlPlacemark(b, o);
@@ -813,21 +812,8 @@ void _kmlPlacemark(StringBuffer b, ExportObject o) {
         }
         b.writeln('      </MultiGeometry>');
       }
-    case 'plane':
     case 'freeline':
       b.writeln(_kmlLine(o.coords));
-    case 'track':
-      // One LineString per recorded segment, so the pauses stay pauses.
-      final parts = o.segments ?? [o.coords];
-      if (parts.length == 1) {
-        b.writeln(_kmlLine(parts.first));
-      } else {
-        b.writeln('      <MultiGeometry>');
-        for (final seg in parts) {
-          b.writeln(_kmlLine(seg));
-        }
-        b.writeln('      </MultiGeometry>');
-      }
     case 'subspace':
       b.writeln('      <MultiGeometry>');
       for (final c in o.coords) {
@@ -896,14 +882,21 @@ String _xml(String s) => s
 /// kind this build does not know, which a file from a newer version can carry.
 String? layerTypeForExportKind(String kind) => switch (kind) {
       'circle' => 'circles',
-      'plane' => 'planes',
       'subspace' => 'subspace',
       'freeline' => 'freeline',
       'freearea' => 'freearea',
       'height' => 'height',
-      'track' => 'track',
       'poi' => 'poi',
-      'transitstop' => 'transit',
       'borderarea' => 'borders',
       _ => null,
+    };
+
+/// Today's name for a layer type a v1/v2 file may carry: `planes` became
+/// `subspace` and `transit` became `poi` in v27; a `track` layer has no
+/// successor and reads as null (dropped). Everything else is itself.
+String? legacyLayerType(String type) => switch (type) {
+      'planes' => 'subspace',
+      'transit' => 'poi',
+      'track' => null,
+      _ => type,
     };

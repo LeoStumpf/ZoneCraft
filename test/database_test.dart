@@ -23,6 +23,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:zonecraft/data/database.dart';
 import 'package:zonecraft/data/layer_types.dart';
 import 'package:zonecraft/data/overpass.dart' show PoiResult;
+import 'package:zonecraft/data/poi_sets.dart';
 import 'package:zonecraft/data/repository.dart';
 import 'package:zonecraft/data/serialization.dart';
 import 'package:zonecraft/data/transit.dart';
@@ -52,27 +53,29 @@ void main() {
     expect(updated.isInverted, isTrue);
   });
 
-  test('planes table CRUD works', () async {
-    final layerId =
-        await repo.createLayer(name: 'P', colorArgb: 0xFF00FF00, type: 'planes');
-    final planeId = await repo.createPlane(
-      layerId: layerId,
-      aLat: 48.1,
-      aLng: 11.5,
-      bLat: 48.2,
-      bLng: 11.6,
-    );
-    var planes = await repo.watchAllPlanes().first;
-    expect(planes, hasLength(1));
-    expect(planes.single.nearA, isTrue);
+  test('a two-point subspace is the half-plane a plane used to be', () async {
+    // v27 folded `planes` into `subspace`; the migration makes exactly this
+    // shape, so the repository has to keep it editable: swap the kept side
+    // by promoting the other point, and cascade with the layer.
+    final layerId = await repo.createLayer(
+        name: 'P', colorArgb: 0xFF00FF00, type: 'subspace');
+    final subId = await repo.createSubspace(layerId: layerId);
+    final a = await repo.addSubspacePoint(
+        subspaceId: subId, lat: 48.1, lng: 11.5, isMain: true);
+    final b = await repo.addSubspacePoint(
+        subspaceId: subId, lat: 48.2, lng: 11.6);
+    var pts = await repo.watchAllSubspacePoints().first;
+    expect(pts.map((p) => p.isMain), [true, false]);
 
-    await repo.updatePlane(planeId, nearA: false);
-    planes = await repo.watchAllPlanes().first;
-    expect(planes.single.nearA, isFalse);
+    await repo.setMainPoint(subId, b);
+    pts = await repo.watchAllSubspacePoints().first;
+    expect(pts.firstWhere((p) => p.id == a).isMain, isFalse);
+    expect(pts.firstWhere((p) => p.id == b).isMain, isTrue);
 
-    // Deleting the layer cascades to its planes.
+    // Deleting the layer cascades to its subspaces and their points.
     await repo.deleteLayer(layerId);
-    expect(await repo.watchAllPlanes().first, isEmpty);
+    expect(await repo.watchAllSubspaces().first, isEmpty);
+    expect(await repo.watchAllSubspacePoints().first, isEmpty);
   });
 
   test('subspace points: CRUD, single main, ordering, layer cascade', () async {
@@ -254,7 +257,7 @@ void main() {
     expect(layers, hasLength(1));
     expect(layers.single.id, seededId);
     expect(await repo.watchAllCircles().first, isEmpty);
-    expect(await repo.watchAllPlanes().first, isEmpty);
+    expect(await repo.watchAllSubspaces().first, isEmpty);
 
     // Settings revert to defaults: uncertainty 500, camera null.
     final settings = await repo.watchSettings().first;
@@ -285,13 +288,14 @@ void main() {
     final b = await repo.createLayer(name: 'B', colorArgb: 2, type: 'poi');
     final sid = await repo.createPoiSet(
       layerId: a,
+      source: kPoiSourceRadius,
       categoryKey: 'cafe',
       centerLat: 48.1,
       centerLng: 11.5,
       radiusMeters: 1500,
       label: 'Cafés',
     );
-    await repo.addPoiPoints(sid, [
+    await repo.fillPoiSet(sid, [
       PoiResult(lat: 48.11, lng: 11.51, categoryKey: 'cafe', name: 'Café A'),
       PoiResult(lat: 48.09, lng: 11.49, categoryKey: 'cafe', name: null),
     ]);
@@ -315,13 +319,14 @@ void main() {
         await repo.createLayer(name: 'POIs', colorArgb: 3, type: 'poi');
     final sid = await repo.createPoiSet(
       layerId: layerId,
+      source: kPoiSourceRadius,
       categoryKey: 'bench',
       centerLat: 48.0,
       centerLng: 11.0,
       radiusMeters: 800,
       label: 'Benches',
     );
-    await repo.addPoiPoints(sid, [
+    await repo.fillPoiSet(sid, [
       PoiResult(lat: 48.001, lng: 11.001, categoryKey: 'bench', name: 'Park bench'),
       PoiResult(lat: 47.999, lng: 10.999, categoryKey: 'bench', name: null),
     ]);
@@ -356,12 +361,13 @@ void main() {
         await repo.createLayer(name: 'POIs', colorArgb: 3, type: 'poi');
     final sid = await repo.createPoiSet(
       layerId: layerId,
+      source: kPoiSourceRadius,
       categoryKey: 'cafe',
       centerLat: 48.0,
       centerLng: 11.0,
       radiusMeters: 800,
     );
-    await repo.addPoiPoints(sid, [
+    await repo.fillPoiSet(sid, [
       PoiResult(lat: 48.001, lng: 11.001, categoryKey: 'cafe', name: 'Closed'),
       PoiResult(lat: 47.999, lng: 10.999, categoryKey: 'cafe', name: 'Open'),
     ]);
@@ -384,22 +390,24 @@ void main() {
         reason: 'curating a POI away must not delete its import');
   });
 
-  // --- transit (schema v19: stations only) ------------------------------------
+  // --- station imports (v27: box-sourced POI sets) ----------------------------
 
-  Future<String> seedTransit(String layerId, {bool pendingOnly = false}) async {
-    final setId = await repo.createPendingTransitSet(
+  Future<String> seedStations(String layerId, {bool pendingOnly = false}) async {
+    final setId = await repo.createPoiSet(
       layerId: layerId,
-      south: 48.00,
-      west: 11.30,
-      north: 48.30,
-      east: 11.80,
+      source: kPoiSourceBox,
+      categoryKey: kTransitStationCategoryKey,
+      centerLat: 0,
+      centerLng: 0,
+      radiusMeters: 0,
+      bbox: [48.00, 11.30, 48.30, 11.80],
       modeMask: transitAllModesMask,
       visibleModeMask: defaultVisibleModes(45000),
       label: 'München',
     );
     if (pendingOnly) return setId;
-    await repo.fillTransitSet(setId, [
-      (
+    await repo.fillPoiSet(setId, [
+      TransitStationData(
         osmId: 1,
         lat: 48.14,
         lng: 11.46,
@@ -408,209 +416,269 @@ void main() {
             transitModeByKey('train')!.bit |
             transitModeByKey('tram')!.bit,
         nodeCount: 31,
-        routeRef: null,
-      ),
-      (
+      ).toPoiResult(),
+      TransitStationData(
         osmId: 2,
-        lat: 48.13,
-        lng: 11.57,
+        lat: 48.137,
+        lng: 11.575,
         name: 'Marienplatz',
         modeMask: transitModeByKey('subway')!.bit,
         nodeCount: 4,
         routeRef: 'U3;U6',
-      ),
-      (
+      ).toPoiResult(),
+      TransitStationData(
         osmId: 3,
         lat: 48.11,
         lng: 11.52,
         name: 'Irgendwo',
         modeMask: transitModeByKey('bus')!.bit,
         nodeCount: 2,
-        routeRef: null,
-      ),
+      ).toPoiResult(),
     ]);
     return setId;
   }
 
-  test('an import stores stations with their modes and counts', () async {
-    final layerId = await repo.createLayer(
-        name: 'T', colorArgb: 0xFF123456, type: 'transit');
-    final setId = await seedTransit(layerId);
+  Future<PoiSet> theSet() async => (await repo.watchAllPoiSets().first).single;
 
-    final set = (await repo.watchAllTransitSets().first).single;
+  test('an import stores stations with their modes, keyed on their node',
+      () async {
+    final layerId =
+        await repo.createLayer(name: 'T', colorArgb: 0xFF123456, type: 'poi');
+    final setId = await seedStations(layerId);
+
+    final set = await theSet();
     expect(set.id, setId);
     expect(set.label, 'München');
+    expect(set.source, kPoiSourceBox);
+    expect(set.isStationImport, isTrue);
     expect(set.fetchedAt, isNotNull, reason: 'a filled import is not pending');
     expect(set.lastError, isNull);
-    expect(set.stationCount, 3);
-    expect(set.nodeCount, 37); // 31 + 4 + 2 raw OSM nodes merged
+    // The box, and the centre/radius derived from it — never passed in.
+    expect(set.bbox, [48.00, 11.30, 48.30, 11.80]);
+    expect(set.centerLat, closeTo(48.15, 1e-9));
+    expect(set.centerLng, closeTo(11.55, 1e-9));
+    expect(
+      set.radiusMeters,
+      closeTo(
+          boxCoveringRadiusMeters(
+              south: 48.00, west: 11.30, north: 48.30, east: 11.80),
+          1e-6),
+    );
     // A city-sized box starts with bus hidden.
     expect(set.visibleModeMask & transitModeByKey('bus')!.bit, 0);
 
-    final stops = await repo.watchAllTransitStops().first;
+    final stops = await repo.watchAllPoiPoints().first;
     expect(stops, hasLength(3));
     final pasing = stops.firstWhere((s) => s.name == 'Pasing Bahnhof');
-    expect(pasing.nodeCount, 31);
+    expect((pasing.osmType, pasing.osmId), ('node', 1));
     expect(
       pasing.modeMask,
       transitModeByKey('bus')!.bit |
           transitModeByKey('train')!.bit |
           transitModeByKey('tram')!.bit,
     );
-    expect(stops.firstWhere((s) => s.name == 'Marienplatz').routeRef, 'U3;U6');
+    expect(pasing.poiSetId, setId);
+  });
+
+  test('a box import must have a box, and only a box import may', () async {
+    final layerId =
+        await repo.createLayer(name: 'T', colorArgb: 0xFF123456, type: 'poi');
+    expect(
+      () => repo.createPoiSet(
+        layerId: layerId,
+        source: kPoiSourceBox,
+        categoryKey: kTransitStationCategoryKey,
+        centerLat: 0,
+        centerLng: 0,
+        radiusMeters: 0,
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => repo.createPoiSet(
+        layerId: layerId,
+        source: kPoiSourceRadius,
+        categoryKey: 'cafe',
+        centerLat: 48,
+        centerLng: 11,
+        radiusMeters: 500,
+        bbox: [48, 11, 48.1, 11.1],
+      ),
+      throwsArgumentError,
+    );
   });
 
   test('a failed import stays as a pending set you can retry', () async {
-    final layerId = await repo.createLayer(
-        name: 'T', colorArgb: 0xFF123456, type: 'transit');
-    final setId = await seedTransit(layerId, pendingOnly: true);
-    await repo.markTransitImportFailed(setId, 'Overpass is busy');
+    final layerId =
+        await repo.createLayer(name: 'T', colorArgb: 0xFF123456, type: 'poi');
+    final setId = await seedStations(layerId, pendingOnly: true);
+    await repo.markPoiImportFailed(setId, 'Overpass is busy');
 
-    var set = (await repo.watchAllTransitSets().first).single;
+    var set = await theSet();
     expect(set.fetchedAt, isNull, reason: 'null fetchedAt == not imported yet');
+    expect(set.isPending, isTrue);
     expect(set.lastError, 'Overpass is busy');
-    expect(set.stationCount, 0);
+    expect(await repo.watchAllPoiPoints().first, isEmpty);
     // The box is remembered, so the retry knows exactly what to ask for.
     expect(set.south, 48.00);
     expect(set.east, 11.80);
 
     // Retrying fills it in and clears the error.
-    await repo.fillTransitSet(setId, [
-      (
+    await repo.fillPoiSet(setId, [
+      const TransitStationData(
         osmId: 9,
         lat: 48.1,
         lng: 11.5,
         name: 'Later',
-        modeMask: transitModeByKey('tram')!.bit,
-        nodeCount: 1,
-        routeRef: null,
-      ),
+        modeMask: 1,
+      ).toPoiResult(),
     ]);
-    set = (await repo.watchAllTransitSets().first).single;
+    set = await theSet();
     expect(set.fetchedAt, isNotNull);
+    expect(set.isPending, isFalse);
     expect(set.lastError, isNull);
-    expect(set.stationCount, 1);
+    expect(await repo.watchAllPoiPoints().first, hasLength(1));
+  });
+
+  test('every import is born pending, a hand-made category never is',
+      () async {
+    final layerId =
+        await repo.createLayer(name: 'T', colorArgb: 0xFF123456, type: 'poi');
+    final radius = await repo.createPoiSet(
+      layerId: layerId,
+      source: kPoiSourceRadius,
+      categoryKey: 'cafe',
+      centerLat: 48,
+      centerLng: 11,
+      radiusMeters: 500,
+    );
+    final manual = await repo.createPoiSet(
+      layerId: layerId,
+      source: kPoiSourceManual,
+      categoryKey: 'star',
+      centerLat: 48,
+      centerLng: 11,
+      radiusMeters: 0,
+    );
+    final sets = {for (final s in await repo.watchAllPoiSets().first) s.id: s};
+    expect(sets[radius]!.isPending, isTrue);
+    expect(sets[manual]!.isPending, isFalse);
+    await repo.fillPoiSet(radius, const []);
+    expect((await repo.watchAllPoiSets().first)
+        .firstWhere((s) => s.id == radius)
+        .isPending, isFalse, reason: 'fetched and empty is an answer');
   });
 
   test('refilling replaces the stations rather than duplicating them',
       () async {
-    final layerId = await repo.createLayer(
-        name: 'T', colorArgb: 0xFF123456, type: 'transit');
-    final setId = await seedTransit(layerId);
-    await repo.fillTransitSet(setId, [
-      (
+    final layerId =
+        await repo.createLayer(name: 'T', colorArgb: 0xFF123456, type: 'poi');
+    final setId = await seedStations(layerId);
+    await repo.fillPoiSet(setId, [
+      const TransitStationData(
         osmId: 1,
         lat: 48.1,
         lng: 11.5,
         name: 'Only one now',
-        modeMask: 0,
-        nodeCount: 1,
-        routeRef: null,
-      ),
+      ).toPoiResult(),
     ]);
-    expect(await repo.watchAllTransitStops().first, hasLength(1));
+    expect(await repo.watchAllPoiPoints().first, hasLength(1));
   });
 
   test('deleting the layer cascades to sets and stations', () async {
-    final layerId = await repo.createLayer(
-        name: 'T', colorArgb: 0xFF123456, type: 'transit');
-    await seedTransit(layerId);
+    final layerId =
+        await repo.createLayer(name: 'T', colorArgb: 0xFF123456, type: 'poi');
+    await seedStations(layerId);
     await repo.deleteLayer(layerId);
-    expect(await repo.watchAllTransitSets().first, isEmpty);
-    expect(await repo.watchAllTransitStops().first, isEmpty);
+    expect(await repo.watchAllPoiSets().first, isEmpty);
+    expect(await repo.watchAllPoiPoints().first, isEmpty);
   });
 
-  test('setTransitVisibleModes writes the filter', () async {
-    final layerId = await repo.createLayer(
-        name: 'T', colorArgb: 0xFF123456, type: 'transit');
-    final setId = await seedTransit(layerId);
+  test('setPoiVisibleModes writes the filter', () async {
+    final layerId =
+        await repo.createLayer(name: 'T', colorArgb: 0xFF123456, type: 'poi');
+    final setId = await seedStations(layerId);
 
-    await repo.setTransitVisibleModes([setId], transitRailMask);
-    final set = (await repo.watchAllTransitSets().first).single;
+    await repo.setPoiVisibleModes([setId], transitRailMask);
+    final set = await theSet();
     expect(set.visibleModeMask, transitRailMask);
     expect(set.visibleModeMask & transitModeByKey('bus')!.bit, 0);
 
     // An empty id list is a no-op, not "hide everything everywhere".
-    await repo.setTransitVisibleModes(const [], 0);
-    expect((await repo.watchAllTransitSets().first).single.visibleModeMask,
-        transitRailMask);
+    await repo.setPoiVisibleModes(const [], 0);
+    expect((await theSet()).visibleModeMask, transitRailMask);
   });
 
-  test('combining transit layers keeps both imports', () async {
-    // combineLayers' `default` re-points *circles*, then deletes the source —
-    // a type without its own case loses everything to the cascade.
+  test('combining POI layers keeps both station imports', () async {
     final a = await repo.createLayer(
-        name: 'A', colorArgb: 0xFF111111, type: 'transit');
+        name: 'A', colorArgb: 0xFF111111, type: 'poi');
     final b = await repo.createLayer(
-        name: 'B', colorArgb: 0xFF222222, type: 'transit');
-    await seedTransit(a);
-    await seedTransit(b);
+        name: 'B', colorArgb: 0xFF222222, type: 'poi');
+    await seedStations(a);
+    await seedStations(b);
 
     await repo.combineLayers(sourceId: a, targetId: b);
 
-    final sets = await repo.watchAllTransitSets().first;
+    final sets = await repo.watchAllPoiSets().first;
     expect(sets, hasLength(2), reason: 'the combined-away import must survive');
     expect(sets.every((s) => s.layerId == b), isTrue);
-    expect(await repo.watchAllTransitStops().first, hasLength(6));
+    expect(await repo.watchAllPoiPoints().first, hasLength(6));
   });
 
-  test('a transit layer is created fully opaque', () async {
-    final id = await repo.createLayer(
-        name: 'T', colorArgb: 0xFF123456, type: 'transit');
+  test('a poi layer is created fully opaque', () async {
+    final id =
+        await repo.createLayer(name: 'T', colorArgb: 0xFF123456, type: 'poi');
     final layer =
         await (db.select(db.layers)..where((l) => l.id.equals(id))).getSingle();
     expect(layer.opacity, 1.0);
-    expect(defaultLayerOpacity('transit'), 1.0);
+    expect(defaultLayerOpacity('poi'), 1.0);
     expect(defaultLayerOpacity('circles'), kDefaultRegionLayerOpacity);
   });
 
-  test('removing one station keeps its import\'s counts honest', () async {
-    final layerId = await repo.createLayer(
-        name: 'T', colorArgb: 0xFF123456, type: 'transit');
-    final setId = await seedTransit(layerId);
-    final before = (await repo.watchAllTransitSets().first).single;
-    expect(before.stationCount, 3);
+  test('one station can be renamed and removed without touching the rest',
+      () async {
+    final layerId =
+        await repo.createLayer(name: 'T', colorArgb: 0xFF123456, type: 'poi');
+    await seedStations(layerId);
 
-    final pasing = (await repo.watchAllTransitStops().first)
+    final pasing = (await repo.watchAllPoiPoints().first)
         .firstWhere((s) => s.name == 'Pasing Bahnhof');
-    await repo.updateTransitStop(pasing.id, name: const Value('Pasing'));
+    await repo.updatePoiPoint(pasing.id, name: const Value('Pasing'));
     expect(
-      (await repo.watchAllTransitStops().first)
+      (await repo.watchAllPoiPoints().first)
           .firstWhere((s) => s.id == pasing.id)
           .name,
       'Pasing',
     );
 
-    await repo.deleteTransitStop(pasing.id);
-    expect(await repo.watchAllTransitStops().first, hasLength(2));
-    final after = (await repo.watchAllTransitSets().first).single;
-    expect(after.id, setId);
-    expect(after.stationCount, 2,
-        reason: 'the layer tile reads this number, so it has to follow');
-    expect(after.nodeCount, before.nodeCount - pasing.nodeCount);
+    await repo.deletePoiPoint(pasing.id);
+    expect(await repo.watchAllPoiPoints().first, hasLength(2));
+    expect(await repo.watchAllPoiSets().first, hasLength(1));
   });
 
-  test('a transit layer survives an export/import round-trip', () async {
-    final layerId = await repo.createLayer(
-        name: 'T', colorArgb: 0xFF123456, type: 'transit');
-    await seedTransit(layerId);
+  test('a station import survives an export/import round-trip', () async {
+    final layerId =
+        await repo.createLayer(name: 'T', colorArgb: 0xFF123456, type: 'poi');
+    await seedStations(layerId);
 
     final data = await repo.exportData(onlyLayerId: layerId);
     final objects = data.layers.single.objects;
     expect(objects, hasLength(1));
     final o = objects.single;
-    expect(o.kind, 'transitstop');
-    expect(o.coords, hasLength(3));
+    expect(o.kind, 'poi');
+    expect(o.coords, hasLength(4), reason: 'the box centre, then 3 stations');
     expect(o.pointLabels, contains('Pasing Bahnhof'));
     // The station attributes the painter and the filter sheet need.
     expect(o.pointOsmIds, hasLength(3));
+    expect(o.pointOsmTypes, everyElement('node'));
+    expect(o.pointModeMasks, hasLength(3));
     expect(o.bbox, [48.00, 11.30, 48.30, 11.80]);
     expect(o.modeMask, isNotNull);
-    // Borders-only layer options don't ride along on a transit layer.
+    expect(o.radiusMeters, isNull,
+        reason: 'a box set\'s radius is derived, never written');
+    // Borders-only layer options don't ride along.
     expect(data.layers.single.borderFillAreas, isNull);
     expect(data.layers.single.borderShowNames, isNull);
-    // No line geometry exists any more.
-    expect(objects.where((x) => x.kind == 'transitline'), isEmpty);
 
     // Still readable as plain named points by any other tool.
     final gj = jsonDecode(exportToGeoJson(data)) as Map<String, dynamic>;
@@ -625,52 +693,53 @@ void main() {
     // Re-importing rebuilds the import, its box and its stations.
     expect(await repo.importData(data), 1);
     final fresh = (await repo.watchLayers().first)
-        .firstWhere((l) => l.type == 'transit' && l.id != layerId);
-    final set = (await repo.watchAllTransitSets().first)
+        .firstWhere((l) => l.type == 'poi' && l.id != layerId);
+    final set = (await repo.watchAllPoiSets().first)
         .firstWhere((t) => t.layerId == fresh.id);
+    expect(set.isStationImport, isTrue);
     expect(set.south, 48.00);
     expect(set.east, 11.80);
     expect(set.modeMask, o.modeMask);
     expect(set.visibleModeMask, o.visibleModeMask);
-    expect(set.stationCount, 3);
-    final stops = (await repo.watchAllTransitStops().first)
-        .where((x) => x.setId == set.id)
+    final stops = (await repo.watchAllPoiPoints().first)
+        .where((x) => x.poiSetId == set.id)
         .toList();
     expect(stops, hasLength(3));
     final pasing = stops.firstWhere((x) => x.name == 'Pasing Bahnhof');
-    expect(pasing.nodeCount, 31);
     expect(pasing.modeMask, isNot(0));
-    expect(
-      stops.firstWhere((x) => x.name == 'Marienplatz').routeRef,
-      'U3;U6',
-    );
+    expect((pasing.osmType, pasing.osmId), ('node', 1));
   });
 
-  test('a transit export without station ids still refuses to re-import',
+  test('a station export without ids imports as unidentified points',
       () async {
-    // Every export written before the round-trip landed is this file: the
-    // station id is the row's identity, and there is nothing to invent it from.
-    final layerId = await repo.createLayer(
-        name: 'T', colorArgb: 0xFF123456, type: 'transit');
-    await seedTransit(layerId);
+    // The old transit type refused such a file because a station row was
+    // keyed on its node id. As POIs they simply sit outside dedup — the rule
+    // every other unidentified POI already follows.
+    final layerId =
+        await repo.createLayer(name: 'T', colorArgb: 0xFF123456, type: 'poi');
+    await seedStations(layerId);
     final data = await repo.exportData(onlyLayerId: layerId);
     final o = data.layers.single.objects.single;
     final stripped = ExportData([
       ExportLayer(
         name: 'Old file',
         colorArgb: 0xFF123456,
-        type: 'transit',
+        type: 'poi',
         isInverted: false,
         objects: [
           ExportObject(
-            kind: 'transitstop',
+            kind: 'poi',
             coords: o.coords,
             pointLabels: o.pointLabels,
+            bbox: o.bbox,
           ),
         ],
       ),
     ]);
-    expect(await repo.importData(stripped), 0);
+    expect(await repo.importData(stripped), 1);
+    final stops = (await repo.watchAllPoiPoints().first)
+        .where((x) => x.osmId == null);
+    expect(stops, hasLength(3));
   });
 
   // --- borders (schema v20) ---------------------------------------------------
@@ -1395,48 +1464,42 @@ void main() {
     });
   });
 
-  group('transit dedup', () {
-    ({
-      int osmId,
-      double lat,
-      double lng,
-      String? name,
-      int modeMask,
-      int nodeCount,
-      String? routeRef,
-    }) stop(int id, String name) => (
-          osmId: id,
+  group('station dedup', () {
+    PoiResult stop(int id, String name) => PoiResult(
           lat: 48.1,
           lng: 11.5,
+          categoryKey: kTransitStationCategoryKey,
           name: name,
+          osmType: 'node',
+          osmId: id,
           modeMask: 1,
-          nodeCount: 1,
-          routeRef: null,
         );
 
-    Future<String> pendingSet(String layerId) => repo.createPendingTransitSet(
+    Future<String> pendingSet(String layerId) => repo.createPoiSet(
           layerId: layerId,
-          south: 48.0,
-          west: 11.0,
-          north: 48.2,
-          east: 11.3,
+          source: kPoiSourceBox,
+          categoryKey: kTransitStationCategoryKey,
+          centerLat: 0,
+          centerLng: 0,
+          radiusMeters: 0,
+          bbox: [48.0, 11.0, 48.2, 11.3],
           modeMask: -1,
           visibleModeMask: -1,
         );
 
     test('a station already on the layer is not stored again', () async {
       final layerId =
-          await repo.createLayer(name: 'T', colorArgb: 1, type: 'transit');
+          await repo.createLayer(name: 'T', colorArgb: 1, type: 'poi');
       final first = await pendingSet(layerId);
-      await repo.fillTransitSet(first, [stop(1, 'Pasing'), stop(2, 'Laim')]);
+      await repo.fillPoiSet(first, [stop(1, 'Pasing'), stop(2, 'Laim')]);
 
       final second = await pendingSet(layerId);
-      final tally = await repo
-          .fillTransitSet(second, [stop(2, 'Laim'), stop(3, 'Hbf')]);
+      final tally =
+          await repo.fillPoiSet(second, [stop(2, 'Laim'), stop(3, 'Hbf')]);
 
       expect(tally.added, 1);
       expect(tally.skipped, 1);
-      final stops = await repo.watchAllTransitStops().first;
+      final stops = await repo.watchAllPoiPoints().first;
       expect(stops.map((s) => s.osmId).toList()..sort(), [1, 2, 3]);
     });
 
@@ -1444,35 +1507,47 @@ void main() {
       // The set is refilled in place, so its own previous rows must not count
       // as "already here" — otherwise every retry would import nothing.
       final layerId =
-          await repo.createLayer(name: 'T', colorArgb: 1, type: 'transit');
+          await repo.createLayer(name: 'T', colorArgb: 1, type: 'poi');
       final setId = await pendingSet(layerId);
-      await repo.fillTransitSet(setId, [stop(1, 'Pasing'), stop(2, 'Laim')]);
+      await repo.fillPoiSet(setId, [stop(1, 'Pasing'), stop(2, 'Laim')]);
 
-      final again = await repo
-          .fillTransitSet(setId, [stop(1, 'Pasing'), stop(2, 'Laim')]);
+      final again =
+          await repo.fillPoiSet(setId, [stop(1, 'Pasing'), stop(2, 'Laim')]);
 
       expect(again.added, 2);
       expect(again.skipped, 0);
-      expect(await repo.watchAllTransitStops().first, hasLength(2));
+      expect(await repo.watchAllPoiPoints().first, hasLength(2));
     });
 
-    test('the stored counts follow what was kept', () async {
+    test('a station and a café on one layer never collide', () async {
+      // Dedup is by OSM identity, and a station is a node — a café that is
+      // also a node with the same id would be the same OSM element, which is
+      // the one case the rule is *for*. Different ids: both stay.
       final layerId =
-          await repo.createLayer(name: 'T', colorArgb: 1, type: 'transit');
-      await repo.fillTransitSet(await pendingSet(layerId), [stop(1, 'Pasing')]);
-      final second = await pendingSet(layerId);
-      await repo.fillTransitSet(second, [stop(1, 'Pasing'), stop(2, 'Laim')]);
-
-      final set = (await repo.watchAllTransitSets().first)
-          .firstWhere((s) => s.id == second);
-      expect(set.stationCount, 1);
-      expect(set.nodeCount, 1);
+          await repo.createLayer(name: 'T', colorArgb: 1, type: 'poi');
+      await repo.fillPoiSet(await pendingSet(layerId), [stop(1, 'Pasing')]);
+      final cafes = await repo.createPoiSet(
+        layerId: layerId,
+        source: kPoiSourceRadius,
+        categoryKey: 'cafe',
+        centerLat: 48.1,
+        centerLng: 11.5,
+        radiusMeters: 500,
+      );
+      final tally = await repo.fillPoiSet(cafes, const [
+        PoiResult(
+            lat: 48.1, lng: 11.5, categoryKey: 'cafe', osmType: 'node',
+            osmId: 2),
+      ]);
+      expect(tally.added, 1);
+      expect(await repo.watchAllPoiPoints().first, hasLength(2));
     });
   });
 
   group('poi dedup', () {
     Future<String> setOn(String layerId) => repo.createPoiSet(
           layerId: layerId,
+          source: kPoiSourceRadius,
           categoryKey: 'cafe',
           centerLat: 48.1,
           centerLng: 11.5,
@@ -1491,10 +1566,10 @@ void main() {
     test('the same OSM element is stored once per layer', () async {
       final layerId =
           await repo.createLayer(name: 'P', colorArgb: 1, type: 'poi');
-      await repo.addPoiPoints(
+      await repo.fillPoiSet(
           await setOn(layerId), [poi('node', 1, 'A'), poi('node', 2, 'B')]);
 
-      final tally = await repo.addPoiPoints(
+      final tally = await repo.fillPoiSet(
           await setOn(layerId), [poi('node', 2, 'B'), poi('node', 3, 'C')]);
 
       expect(tally.added, 1);
@@ -1507,7 +1582,7 @@ void main() {
       // Keying on the id alone would silently drop the way.
       final layerId =
           await repo.createLayer(name: 'P', colorArgb: 1, type: 'poi');
-      final tally = await repo.addPoiPoints(await setOn(layerId), [
+      final tally = await repo.fillPoiSet(await setOn(layerId), [
         poi('node', 240109189, 'A café'),
         poi('way', 240109189, 'A café building'),
       ]);
@@ -1524,7 +1599,7 @@ void main() {
           await repo.createLayer(name: 'P', colorArgb: 1, type: 'poi');
       const anonymous = PoiResult(lat: 48.1, lng: 11.5, categoryKey: 'cafe');
       final tally =
-          await repo.addPoiPoints(await setOn(layerId), [anonymous, anonymous]);
+          await repo.fillPoiSet(await setOn(layerId), [anonymous, anonymous]);
 
       expect(tally.added, 2);
       expect(tally.skipped, 0);
@@ -1533,7 +1608,7 @@ void main() {
     test('duplicates inside one response are collapsed too', () async {
       final layerId =
           await repo.createLayer(name: 'P', colorArgb: 1, type: 'poi');
-      final tally = await repo.addPoiPoints(
+      final tally = await repo.fillPoiSet(
           await setOn(layerId), [poi('node', 7, 'A'), poi('node', 7, 'A')]);
 
       expect(tally.added, 1);
@@ -1545,8 +1620,8 @@ void main() {
       // the markers against the list.
       final layerId =
           await repo.createLayer(name: 'P', colorArgb: 1, type: 'poi');
-      await repo.addPoiPoints(await setOn(layerId), [poi('node', 1, 'A')]);
-      await repo.addPoiPoints(await setOn(layerId),
+      await repo.fillPoiSet(await setOn(layerId), [poi('node', 1, 'A')]);
+      await repo.fillPoiSet(await setOn(layerId),
           [poi('node', 1, 'A'), poi('node', 2, 'B'), poi('node', 3, 'C')]);
 
       final second = (await repo.watchAllPoiSets().first).last;
@@ -1578,29 +1653,27 @@ void main() {
       final id = await mixedLayer();
       await repo.createCircle(
           layerId: id, centerLat: 48.1, centerLng: 11.5, radiusMeters: 500);
-      await repo.createPlane(
-          layerId: id, aLat: 48.0, aLng: 11.0, bLat: 48.2, bLng: 11.4);
-      await repo.createTrack(layerId: id);
+      await repo.createSubspace(layerId: id);
+      await repo.createFreeArea(layerId: id);
 
       expect(await repo.watchAllCircles().first, hasLength(1));
-      expect(await repo.watchAllPlanes().first, hasLength(1));
-      expect(await repo.watchAllTracks().first, hasLength(1));
+      expect(await repo.watchAllSubspaces().first, hasLength(1));
+      expect(await repo.watchAllFreeAreas().first, hasLength(1));
     });
 
     test('auto shades stay distinct across types on one layer', () async {
-      // Counting per table would give the first circle and the first plane
+      // Counting per table would give the first circle and the first area
       // both shade 0 — the same colour — which is exactly what the auto shades
       // exist to prevent.
       final id = await mixedLayer();
       await repo.createCircle(
           layerId: id, centerLat: 48.1, centerLng: 11.5, radiusMeters: 500);
-      await repo.createPlane(
-          layerId: id, aLat: 48.0, aLng: 11.0, bLat: 48.2, bLng: 11.4);
+      await repo.createFreeArea(layerId: id);
       await repo.createSubspace(layerId: id);
 
       final shades = <int>[
         (await repo.watchAllCircles().first).single.colorShade,
-        (await repo.watchAllPlanes().first).single.colorShade,
+        (await repo.watchAllFreeAreas().first).single.colorShade,
         (await repo.watchAllSubspaces().first).single.colorShade,
       ];
       expect(shades.toSet(), hasLength(3), reason: 'shades: $shades');
@@ -1626,15 +1699,14 @@ void main() {
       final id = await mixedLayer();
       final circleId = await repo.createCircle(
           layerId: id, centerLat: 48.1, centerLng: 11.5, radiusMeters: 500);
-      final planeId = await repo.createPlane(
-          layerId: id, aLat: 48.0, aLng: 11.0, bLat: 48.2, bLng: 11.4);
-      await repo.createTrack(layerId: id); // no override
+      final areaId = await repo.createFreeArea(layerId: id);
+      await repo.createSubspace(layerId: id); // no override
 
       await repo.setElementColor(ColoredElement.circle, circleId, 0xFFFF0000);
-      await repo.setElementColor(ColoredElement.plane, planeId, 0xFF0000FF);
+      await repo.setElementColor(ColoredElement.freeArea, areaId, 0xFF0000FF);
 
       final overridden = await repo.elementsWithColorOverride(id, kMixedType);
-      expect(overridden.toSet(), {circleId, planeId});
+      expect(overridden.toSet(), {circleId, areaId});
     });
 
     group('combineLayers', () {
@@ -1666,17 +1738,16 @@ void main() {
             centerLat: 48.1,
             centerLng: 11.5,
             radiusMeters: 500);
-        await repo.createPlane(
-            layerId: source, aLat: 48.0, aLng: 11.0, bLat: 48.2, bLng: 11.4);
-        await repo.createTrack(layerId: source);
+        await repo.createSubspace(layerId: source);
+        await repo.createFreeArea(layerId: source);
         final target = await repo.createLayer(
             name: 'Target', colorArgb: 2, type: kMixedType);
 
         await repo.combineLayers(sourceId: source, targetId: target);
 
         expect((await repo.watchAllCircles().first).single.layerId, target);
-        expect((await repo.watchAllPlanes().first).single.layerId, target);
-        expect((await repo.watchAllTracks().first).single.layerId, target);
+        expect((await repo.watchAllSubspaces().first).single.layerId, target);
+        expect((await repo.watchAllFreeAreas().first).single.layerId, target);
       });
 
       test('a combined source refuses a single-type target', () async {
@@ -1707,6 +1778,7 @@ void main() {
             name: 'P', colorArgb: 1, type: 'poi'); // default opacity 1.0
         await repo.createPoiSet(
           layerId: id,
+          source: kPoiSourceRadius,
           categoryKey: 'cafe',
           centerLat: 48.1,
           centerLng: 11.5,
@@ -1765,12 +1837,13 @@ void main() {
           centerLng: 11.5,
           radiusMeters: 0,
           label: 'Swimming spots',
-          isManual: true,
+          source: kPoiSourceManual,
           iconKey: 'peak',
         );
 
     Future<String> importedSetOn(String layerId) => repo.createPoiSet(
           layerId: layerId,
+          source: kPoiSourceRadius,
           categoryKey: 'cafe',
           centerLat: 48.1,
           centerLng: 11.5,
@@ -1834,7 +1907,7 @@ void main() {
       final layerId =
           await repo.createLayer(name: 'P', colorArgb: 1, type: 'poi');
       final setId = await importedSetOn(layerId);
-      await repo.addPoiPoints(setId, const [
+      await repo.fillPoiSet(setId, const [
         PoiResult(
             lat: 48.1,
             lng: 11.5,

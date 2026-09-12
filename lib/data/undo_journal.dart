@@ -180,7 +180,7 @@ class UndoJournal {
   }
 
   /// Runs [body] as exactly one step called [label], however long it takes and
-  /// however many writes it makes — an import, or a whole track recording.
+  /// however many writes it makes — an import, say.
   Future<T> group<T>(String label, Future<T> Function() body) async {
     // An inner group joins the outer one rather than splitting it: an import
     // that happens to call another grouped routine is still one action.
@@ -193,20 +193,6 @@ class UndoJournal {
       _group = null;
       await sealStep(label: label);
     }
-  }
-
-  /// Opens a group that ends at a later [endGroup] rather than at the end of a
-  /// callback — the shape track recording needs, where start and stop are two
-  /// separate user actions.
-  Future<void> beginGroup(String label) async {
-    await sealStep();
-    _group = label;
-  }
-
-  Future<void> endGroup() async {
-    final label = _group;
-    _group = null;
-    await sealStep(label: label);
   }
 
   /// Closes the open step, if any, and pushes it onto the undo stack.
@@ -404,22 +390,17 @@ String? undoNounFor(String table) => undoNouns[table];
 const undoNouns = <String, String>{
   'layers': 'layer',
   'circles': 'circle',
-  'planes': 'plane',
   'subspaces': 'subspace',
   'subspace_points': 'point',
   'free_lines': 'line',
   'free_line_points': 'point',
   'free_areas': 'area',
   'free_area_points': 'point',
-  'tracks': 'track',
-  'track_points': 'point',
   'height_regions': 'height region',
   'height_polygons': 'height shape',
   'height_polygon_points': 'point',
-  'poi_sets': 'POI category',
+  'poi_sets': 'POI set',
   'poi_points': 'POI',
-  'transit_sets': 'station import',
-  'transit_stops': 'station',
   'border_sets': 'border import',
   'border_areas': 'area',
   'app_settings': 'setting',

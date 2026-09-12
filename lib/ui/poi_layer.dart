@@ -19,6 +19,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' hide Circle;
 
 import '../data/database.dart';
+import '../data/poi_sets.dart';
 import 'camera_viewport.dart';
 import 'element_color.dart';
 import 'poi_icons.dart';
@@ -46,8 +47,8 @@ IconData poiIconFor(String categoryKey) => switch (categoryKey) {
       _ => Icons.place_outlined,
     };
 
-/// Renders one `poi` layer's stored POIs as markers, collapsing any that would
-/// overlap at the current zoom into count badges (clusters).
+/// Renders one `poi` layer's stored points as markers, collapsing any that
+/// would overlap at the current zoom into count badges (clusters).
 ///
 /// The look of a single POI matches the old global Overpass overlay: a small
 /// white disc with the category icon and the OSM name (when present) on a tiny
@@ -55,15 +56,22 @@ IconData poiIconFor(String categoryKey) => switch (categoryKey) {
 /// showing the member count (plus the category icon when all members share
 /// one); tapping a cluster zooms in via [onClusterTap], which splits it apart.
 ///
+/// A **station import** (a box set) draws by the same rules with three
+/// differences it brought with it from the old `transit` layer: each station
+/// icons itself from the modes that serve it ([poiPointIcon]), the set's
+/// per-mode filter decides which draw at all ([poiPointVisible] — the one
+/// predicate the hit test reads too), and name plates only appear from zoom
+/// [_labelMinZoom], because a state-sized import is thousands of names.
+///
 /// Clustering runs in screen space per frame ([clusterOffsets]) after culling
 /// to the viewport (+margin), so panning/zooming only ever handles the visible
-/// points — the layer stays cheap even with hundreds of stored POIs.
+/// points — the layer stays cheap even with thousands of stored points.
 class PoiMarkersLayer extends StatelessWidget {
   const PoiMarkersLayer({
     super.key,
     required this.layer,
     required this.sets,
-    required this.points,
+    required this.pointsBySet,
     this.onClusterTap,
   });
 
@@ -72,8 +80,15 @@ class PoiMarkersLayer extends StatelessWidget {
   /// This layer's POI sets (each carries the category its points render as).
   final List<PoiSet> sets;
 
-  /// The points of [sets].
-  final List<PoiPoint> points;
+  /// Every stored point keyed by set id (`poiPointsBySetProvider`); only the
+  /// entries of [sets] are read. A map rather than a flat list because this
+  /// widget rebuilds on every camera tick, and a city of stations is thousands
+  /// of rows to scan per set per frame.
+  final Map<String, List<PoiPoint>> pointsBySet;
+
+  /// A station import's name plates appear from this zoom; a hand-placed or
+  /// radius-imported POI shows its name at any zoom, as it always did.
+  static const double _labelMinZoom = 14;
 
   /// Called with a cluster's position when it is tapped (the map should zoom).
   final void Function(LatLng center)? onClusterTap;
@@ -85,9 +100,7 @@ class PoiMarkersLayer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final camera = MapCamera.of(context);
-    // Resolved once per set, not per point: a hand-made category icons itself
-    // from its own `iconKey`, so there is no category string to carry around.
-    final iconBySet = {for (final s in sets) s.id: poiSetIcon(s)};
+    final showStationLabels = camera.zoom >= _labelMinZoom;
     // One POI *set* is one element of the layer, so the colour lives there:
     // two categories imported into one layer read apart at a glance.
     final layerColor = Color(layer.colorArgb);
@@ -105,19 +118,27 @@ class PoiMarkersLayer extends StatelessWidget {
     final lls = <LatLng>[];
     final names = <String?>[];
     final icons = <IconData>[];
+    final masks = <int>[];
     final colors = <Color>[];
     final offs = <Offset>[];
-    for (final p in points) {
-      final icon = iconBySet[p.poiSetId];
-      if (icon == null) continue;
-      final ll = LatLng(p.lat, p.lng);
-      final o = camera.latLngToScreenOffset(ll);
-      if (!bounds.contains(o)) continue;
-      lls.add(ll);
-      names.add(p.name);
-      icons.add(icon);
-      colors.add(colorBySet[p.poiSetId] ?? layerColor);
-      offs.add(o);
+    for (final s in sets) {
+      final points = pointsBySet[s.id];
+      if (points == null) continue;
+      final color = colorBySet[s.id] ?? layerColor;
+      final labels = !s.isStationImport || showStationLabels;
+      for (final p in points) {
+        if (!poiPointVisible(p, s)) continue;
+        final ll = LatLng(p.lat, p.lng);
+        if (!ll.latitude.isFinite || !ll.longitude.isFinite) continue;
+        final o = camera.latLngToScreenOffset(ll);
+        if (!bounds.contains(o)) continue;
+        lls.add(ll);
+        names.add(labels ? p.name : null);
+        icons.add(poiPointIcon(p, s));
+        masks.add(p.modeMask);
+        colors.add(color);
+        offs.add(o);
+      }
     }
     if (offs.isEmpty) return const SizedBox.shrink();
 
@@ -133,11 +154,20 @@ class PoiMarkersLayer extends StatelessWidget {
         var lat = 0.0, lng = 0.0;
         IconData? sharedIcon = icons[c.indices.first];
         Color? sharedColor = colors[c.indices.first];
+        var allStations = true;
+        var maskUnion = 0;
         for (final i in c.indices) {
           lat += lls[i].latitude;
           lng += lls[i].longitude;
           if (icons[i] != sharedIcon) sharedIcon = null;
           if (colors[i] != sharedColor) sharedColor = null;
+          if (masks[i] == 0) allStations = false;
+          maskUnion |= masks[i];
+        }
+        // A badge over stations of several modes still says what it holds:
+        // the icon of the most specific mode among them.
+        if (sharedIcon == null && allStations) {
+          sharedIcon = transitIconFor(maskUnion);
         }
         final center =
             LatLng(lat / c.indices.length, lng / c.indices.length);

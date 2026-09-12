@@ -32,9 +32,11 @@ void main() {
         radiusMeters: manual ? 0 : 800,
         createdAt: DateTime(2026),
         colorShade: 0,
-        isManual: manual,
+        source: manual ? kPoiSourceManual : kPoiSourceRadius,
         iconKey: iconKey,
         zOrder: 0,
+        modeMask: 0,
+        visibleModeMask: -1,
       );
 
   group('the catalogue', () {

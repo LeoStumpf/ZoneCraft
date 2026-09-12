@@ -22,9 +22,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/database.dart';
 import '../data/layer_types.dart';
+import '../data/poi_sets.dart';
 import '../data/repository.dart' show ColoredElement, ZMove;
 import '../state/providers.dart';
-import 'import_actions.dart' show convertBorderAreaFlow;
+import 'import_actions.dart' show convertRingsToFreehandFlow;
 import 'element_color.dart';
 import 'element_color_dialog.dart';
 import 'object_summary.dart';
@@ -81,14 +82,12 @@ class _LayerObjectsList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final summaries = ref.watch(layerSummariesProvider(layer.id));
-    // The transit sections describe *imports that exist*, not a capability. On
-    // a transit layer the two are the same thing; on a combined layer they are
-    // not, and gating on the capability alone put "No stations imported yet —
-    // tap Import transit" above a circle and a track.
-    final hasTransit = layerHolds(layer, kTransit) &&
-        summaries.any((s) => s.ref.kind == ObjectKind.transitSet);
-    // Imports (POI, transit, borders) have no editor sheet, so their row taps
-    // frame the object instead of selecting it.
+    // The station-type section describes *imports that exist*, not a
+    // capability: every POI layer *could* hold a station import, and gating on
+    // that alone put "No stations imported yet" above a layer of cafés.
+    final poiSets = ref.watch(poiSetsProvider).asData?.value ?? const [];
+    final hasStations = layerHolds(layer, kPoi) &&
+        poiSets.any((s) => s.layerId == layer.id && s.isStationImport);
     final canEdit = layerHasEditor(layer.type);
 
     return Column(
@@ -107,11 +106,12 @@ class _LayerObjectsList extends ConsumerWidget {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
-              // A transit layer's headline number is how many stations the
-              // filter is currently drawing — the import count belongs to the
-              // Imports heading, where it can't be read as "stations".
+              // With a station import the headline number is how many
+              // stations the filter is currently drawing — the element count
+              // belongs to the Elements heading, where it can't be read as
+              // "stations".
               Text(
-                hasTransit
+                hasStations
                     ? () {
                         final t = ref.watch(transitTallyProvider(layer.id));
                         return '${t.shown} / ${t.total} shown';
@@ -125,38 +125,27 @@ class _LayerObjectsList extends ConsumerWidget {
         ),
         const Divider(height: 1),
         Expanded(
-          child: summaries.isEmpty && !layerHolds(layer, kTransit)
+          child: summaries.isEmpty
               ? _EmptyState(scrollController: scrollController, layer: layer)
               : ListView(
                   controller: scrollController,
                   children: [
-                    // A transit layer has two very different lists in it, and
-                    // reading one as the other is the obvious mistake: the
-                    // *types* are tick boxes that hide markers, the *imports*
-                    // are fetched areas that delete data. Both live here, each
-                    // under a heading that says which it is.
-                    if (hasTransit) ...[
+                    // A layer with a station import has two very different
+                    // lists in it, and reading one as the other is the obvious
+                    // mistake: the *types* are tick boxes that hide markers,
+                    // the *elements* are fetched sets that delete data. Both
+                    // live here, each under a heading that says which it is.
+                    if (hasStations) ...[
                       const _SectionHeader('Station types',
                           'Tick which kinds of stop to draw'),
                       TransitModeFilter(layer: layer),
                       const Divider(height: 1),
                       _SectionHeader(
-                        layer.type == kMixedType ? 'Elements' : 'Imports',
-                        layer.type == kMixedType
-                            ? 'Everything on this layer'
-                            : 'Areas you fetched — deleting one removes its '
-                                'stations',
+                        'Elements',
+                        'Everything on this layer — deleting an import '
+                            'removes its points',
                         trailing: '${summaries.length}',
                       ),
-                    ]
-                    // A pure transit layer with no import yet still shows the
-                    // (empty) type filter, which is where its own empty hint
-                    // lives.
-                    else if (layer.type == 'transit') ...[
-                      const _SectionHeader('Station types',
-                          'Tick which kinds of stop to draw'),
-                      TransitModeFilter(layer: layer),
-                      const Divider(height: 1),
                     ],
                     if (summaries.isEmpty)
                       _EmptyHint(layer: layer)
@@ -204,7 +193,7 @@ class _LayerObjectsList extends ConsumerWidget {
     return ListTile(
       // The *element's* icon, not the layer's: a combined layer's rows are
       // of different kinds, and one shared icon would make the list
-      // unreadable — a circle and a track would look identical.
+      // unreadable — a circle and a POI set would look identical.
       leading: Icon(
           s.isPending ? Icons.refresh : typeIcon(s.ref.kind.layerType)),
       title: Text(s.title, overflow: TextOverflow.ellipsis),
@@ -260,9 +249,11 @@ class _LayerObjectsList extends ConsumerWidget {
           if (canEdit && !s.isPending)
             const PopupMenuItem(value: 'edit', child: Text('Edit')),
           const PopupMenuItem(value: 'zoom', child: Text('Zoom to')),
-          // A borders layer is a read-only snapshot; this is how a shape gets
-          // out of it and into geometry you can actually edit.
-          if (s.ref.kind == ObjectKind.borderArea)
+          // A borders layer is a read-only snapshot and a height fill is
+          // generated; this is how a shape gets out of either and into
+          // geometry you can actually edit.
+          if (s.ref.kind == ObjectKind.borderArea ||
+              s.ref.kind == ObjectKind.heightRegion)
             const PopupMenuItem(
               value: 'toFreehand',
               child: Text('Convert to freehand area…'),
@@ -288,15 +279,18 @@ class _LayerObjectsList extends ConsumerWidget {
     );
   }
 
-  /// Copies one imported border area into a freehand area layer, so it becomes
-  /// geometry the user owns. Reads the rings from the database rather than the
-  /// summary row — the row carries a bounding box, not the outline.
+  /// Copies one imported border area, or one generated height fill, into a
+  /// freehand area layer, so it becomes geometry the user owns. Reads the
+  /// rings from the database rather than the summary row — the row carries a
+  /// bounding box, not the outline.
   Future<void> _convertToFreehand(
       BuildContext context, WidgetRef ref, ObjectSummary s) async {
     final repo = ref.read(repositoryProvider);
-    final rings = await repo.borderAreaRings(s.ref.id);
+    final rings = s.ref.kind == ObjectKind.heightRegion
+        ? await repo.heightRegionRings(s.ref.id)
+        : await repo.borderAreaRings(s.ref.id);
     if (!context.mounted) return;
-    await convertBorderAreaFlow(
+    await convertRingsToFreehandFlow(
       context,
       repo,
       ref.read(layersProvider).asData?.value ?? const [],
@@ -370,8 +364,6 @@ class _LayerObjectsList extends ConsumerWidget {
     switch (s.ref.kind) {
       case ObjectKind.circle:
         await repo.updateCircle(s.ref.id, label: label);
-      case ObjectKind.plane:
-        await repo.updatePlane(s.ref.id, label: label);
       case ObjectKind.subspace:
         await repo.updateSubspace(s.ref.id, label: label);
       case ObjectKind.freeLine:
@@ -382,18 +374,12 @@ class _LayerObjectsList extends ConsumerWidget {
         await repo.updateHeightRegion(s.ref.id, label: label);
       case ObjectKind.poiSet:
         await repo.updatePoiSet(s.ref.id, label: label);
-      case ObjectKind.transitSet:
-        await repo.updateTransitSet(s.ref.id, label: label);
       case ObjectKind.borderArea:
         await repo.updateBorderArea(s.ref.id, name: label);
-      case ObjectKind.track:
-        await repo.updateTrack(s.ref.id, label: label);
       // Points inside an import are renamed from their own map editor; the
       // Elements list never lists them (see [ObjectKind]).
       case ObjectKind.poiPoint:
         await repo.updatePoiPoint(s.ref.id, name: label);
-      case ObjectKind.transitStop:
-        await repo.updateTransitStop(s.ref.id, name: label);
     }
   }
 
@@ -433,8 +419,6 @@ class _LayerObjectsList extends ConsumerWidget {
     switch (s.ref.kind) {
       case ObjectKind.circle:
         await repo.deleteCircle(s.ref.id);
-      case ObjectKind.plane:
-        await repo.deletePlane(s.ref.id);
       case ObjectKind.subspace:
         await repo.deleteSubspace(s.ref.id);
       case ObjectKind.freeLine:
@@ -445,18 +429,10 @@ class _LayerObjectsList extends ConsumerWidget {
         await repo.deleteHeightRegion(s.ref.id);
       case ObjectKind.poiSet:
         await repo.deletePoiSet(s.ref.id);
-      case ObjectKind.transitSet:
-        await repo.deleteTransitSet(s.ref.id);
       case ObjectKind.borderArea:
         await repo.deleteBorderArea(s.ref.id);
-      case ObjectKind.track:
-        // Deletes the recording itself, not the layer: recording again starts a
-        // fresh track on the same layer.
-        await repo.deleteTrack(s.ref.id);
       case ObjectKind.poiPoint:
         await repo.deletePoiPoint(s.ref.id);
-      case ObjectKind.transitStop:
-        await repo.deleteTransitStop(s.ref.id);
     }
     // The editor sheet resolves its row from the global list, so a deleted
     // selection would just vanish — clear it explicitly to keep the state tidy.
@@ -523,9 +499,8 @@ class _EmptyHint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hint = switch (layer.type) {
-      'poi' => 'No POI sets yet — use Import POIs to fetch some for an area.',
-      'transit' =>
-        'No imports yet — tap Import transit, then tap two corners of an area.',
+      'poi' => 'No POI sets yet — use Import POIs to fetch a category or the '
+          'transit stations of an area, or Add to place your own.',
       'borders' =>
         'No areas yet — tap Import borders, then tap two corners of an area to '
             'fetch every boundary that crosses it.',
