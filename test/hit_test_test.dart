@@ -35,18 +35,19 @@ HitCandidate candidate(
   double sizeProxyMeters = double.infinity,
   ObjectKind kind = ObjectKind.circle,
   int z = 0,
+  int layerZ = 0,
 }) {
   return HitCandidate(
-    ref: ObjectRef(kind: kind, id: id, layerId: 'L'),
+    ref: ObjectRef(kind: kind, id: id, layerId: 'L$layerZ'),
     inside: inside,
     edgeDistPx: edgeDistPx,
     sizeProxyMeters: sizeProxyMeters,
     z: z,
+    layerZ: layerZ,
   );
 }
 
-List<String> idsOf(List<HitCandidate> hits) =>
-    [for (final h in hits) h.ref.id];
+List<String> idsOf(List<HitCandidate> hits) => [for (final h in hits) h.ref.id];
 
 void main() {
   group('distToSegment', () {
@@ -92,8 +93,20 @@ void main() {
     // of the one the user can actually see.
     test('a tie is broken in favour of the element in front', () {
       final ranked = rankCandidates([
-        candidate('back', inside: true, edgeDistPx: 900, sizeProxyMeters: 500, z: 0),
-        candidate('front', inside: true, edgeDistPx: 900, sizeProxyMeters: 500, z: 3),
+        candidate(
+          'back',
+          inside: true,
+          edgeDistPx: 900,
+          sizeProxyMeters: 500,
+          z: 0,
+        ),
+        candidate(
+          'front',
+          inside: true,
+          edgeDistPx: 900,
+          sizeProxyMeters: 500,
+          z: 3,
+        ),
       ]);
       expect(idsOf(ranked).first, 'front');
     });
@@ -111,8 +124,20 @@ void main() {
     // which is exactly the failure the size rule exists to prevent.
     test('being in front never beats being the smaller target', () {
       final ranked = rankCandidates([
-        candidate('big-front', inside: true, edgeDistPx: 900, sizeProxyMeters: 5e5, z: 99),
-        candidate('small-back', inside: true, edgeDistPx: 900, sizeProxyMeters: 200, z: 0),
+        candidate(
+          'big-front',
+          inside: true,
+          edgeDistPx: 900,
+          sizeProxyMeters: 5e5,
+          z: 99,
+        ),
+        candidate(
+          'small-back',
+          inside: true,
+          edgeDistPx: 900,
+          sizeProxyMeters: 200,
+          z: 0,
+        ),
       ]);
       expect(idsOf(ranked).first, 'small-back');
     });
@@ -137,11 +162,13 @@ void main() {
 
     test('away from every edge, the smallest container wins', () {
       final ranked = rankCandidates([
-        candidate('plane',
-            inside: true,
-            edgeDistPx: 5000,
-            sizeProxyMeters: double.infinity,
-            kind: ObjectKind.subspace),
+        candidate(
+          'plane',
+          inside: true,
+          edgeDistPx: 5000,
+          sizeProxyMeters: double.infinity,
+          kind: ObjectKind.subspace,
+        ),
         candidate('big', inside: true, edgeDistPx: 400, sizeProxyMeters: 9000),
         candidate('tight', inside: true, edgeDistPx: 300, sizeProxyMeters: 80),
       ]);
@@ -159,8 +186,7 @@ void main() {
 
     test('caps the list so an overlapping pile stays readable', () {
       final ranked = rankCandidates([
-        for (var i = 0; i < 20; i++)
-          candidate('c$i', edgeDistPx: i.toDouble()),
+        for (var i = 0; i < 20; i++) candidate('c$i', edgeDistPx: i.toDouble()),
       ]);
       expect(ranked, hasLength(kMaxHitCandidates));
       expect(idsOf(ranked).first, 'c0');
@@ -187,18 +213,86 @@ void main() {
   );
 
   Layer layerOf(String type) => Layer(
-        id: 'L',
-        name: type,
-        colorArgb: 0xFF000000,
-        isVisible: true,
-        sortOrder: 0,
-        type: type,
-        isInverted: false,
-        opacity: 1,
-        borderFillAreas: false,
-        borderShowNames: false,
-        createdAt: DateTime(2026),
+    id: 'L',
+    name: type,
+    colorArgb: 0xFF000000,
+    isVisible: true,
+    sortOrder: 0,
+    type: type,
+    isInverted: false,
+    opacity: 1,
+    borderFillAreas: false,
+    borderShowNames: false,
+    createdAt: DateTime(2026),
+  );
+
+  group('rankCandidates across layers', () {
+    test('between equals, the layer on top wins', () {
+      final hits = rankCandidates([
+        candidate('back', inside: true, sizeProxyMeters: 100, layerZ: 0),
+        candidate('front', inside: true, sizeProxyMeters: 100, layerZ: 1),
+      ]);
+      expect(idsOf(hits), ['front', 'back']);
+    });
+
+    test('layer order never beats size or edge distance', () {
+      // A small element behind a large one: the small one is what a tap
+      // inside both most likely meant, whichever layer is in front.
+      expect(
+        idsOf(
+          rankCandidates([
+            candidate(
+              'big-front',
+              inside: true,
+              sizeProxyMeters: 1000,
+              layerZ: 5,
+            ),
+            candidate(
+              'small-back',
+              inside: true,
+              sizeProxyMeters: 10,
+              layerZ: 0,
+            ),
+          ]),
+        ),
+        ['small-back', 'big-front'],
       );
+      expect(
+        idsOf(
+          rankCandidates([
+            candidate('near-back', edgeDistPx: 2, layerZ: 0),
+            candidate('far-front', edgeDistPx: 20, layerZ: 5),
+          ]),
+        ),
+        ['near-back', 'far-front'],
+      );
+    });
+
+    test(
+      'layer order outranks the per-table z, which is scoped to a layer',
+      () {
+        final hits = rankCandidates([
+          candidate('back-high-z', inside: true, sizeProxyMeters: 100, z: 9),
+          candidate(
+            'front-low-z',
+            inside: true,
+            sizeProxyMeters: 100,
+            z: 0,
+            layerZ: 1,
+          ),
+        ]);
+        expect(idsOf(hits), ['front-low-z', 'back-high-z']);
+      },
+    );
+
+    test('without a layerZ, ranking is exactly the single-layer one', () {
+      final hits = rankCandidates([
+        candidate('a', inside: true, sizeProxyMeters: 100, z: 0),
+        candidate('b', inside: true, sizeProxyMeters: 100, z: 1),
+      ]);
+      expect(idsOf(hits), ['b', 'a']);
+    });
+  });
 
   group('collectCandidates on a poi layer', () {
     final set = PoiSet(
@@ -216,14 +310,14 @@ void main() {
       visibleModeMask: -1,
     );
     PoiPoint poi(String id, LatLng at) => PoiPoint(
-          id: id,
-          poiSetId: 'S',
-          lat: at.latitude,
-          lng: at.longitude,
-          sortOrder: 0,
-          createdAt: DateTime(2026),
-          modeMask: 0,
-        );
+      id: id,
+      poiSetId: 'S',
+      lat: at.latitude,
+      lng: at.longitude,
+      sortOrder: 0,
+      createdAt: DateTime(2026),
+      modeMask: 0,
+    );
 
     test('a tap on a marker offers that POI, not its set', () {
       final hits = collectCandidates(
@@ -254,6 +348,19 @@ void main() {
       expect(rankCandidates(hits), isEmpty);
     });
 
+    test('layerZ is stamped on every candidate collected', () {
+      final hits = collectCandidates(
+        camera: camera,
+        tap: center,
+        layer: layerOf('poi'),
+        layerZ: 2,
+        poiSets: [set],
+        poiPoints: [poi('p1', center)],
+      );
+      expect(hits.single.layerZ, 2);
+      expect(hits.single.ref.id, 'p1');
+    });
+
     test('POIs from another layer are not offered', () {
       final hits = collectCandidates(
         camera: camera,
@@ -268,23 +375,23 @@ void main() {
 
   group('collectCandidates on a poi layer with a station import', () {
     PoiSet setWith(int visible) => PoiSet(
-          id: 'S',
-          layerId: 'L',
-          categoryKey: kTransitStationCategoryKey,
-          centerLat: 48.1,
-          centerLng: 11.5,
-          radiusMeters: 1,
-          source: kPoiSourceBox,
-          south: 48.0,
-          west: 11.4,
-          north: 48.2,
-          east: 11.6,
-          modeMask: 3,
-          visibleModeMask: visible,
-          createdAt: DateTime(2026),
-          colorShade: 0,
-          zOrder: 0,
-        );
+      id: 'S',
+      layerId: 'L',
+      categoryKey: kTransitStationCategoryKey,
+      centerLat: 48.1,
+      centerLng: 11.5,
+      radiusMeters: 1,
+      source: kPoiSourceBox,
+      south: 48.0,
+      west: 11.4,
+      north: 48.2,
+      east: 11.6,
+      modeMask: 3,
+      visibleModeMask: visible,
+      createdAt: DateTime(2026),
+      colorShade: 0,
+      zOrder: 0,
+    );
     final stop = PoiPoint(
       id: 's1',
       poiSetId: 'S',
@@ -448,10 +555,10 @@ void main() {
         subspaces: [sub],
         subspacePoints: subPoints,
       );
-      expect(
-        hits.map((h) => h.ref.kind).toSet(),
-        {ObjectKind.circle, ObjectKind.subspace},
-      );
+      expect(hits.map((h) => h.ref.kind).toSet(), {
+        ObjectKind.circle,
+        ObjectKind.subspace,
+      });
     });
 
     test('a single-type layer still sees only its own', () {
@@ -480,7 +587,7 @@ void main() {
                 LatLng(48.0, 11.6),
                 LatLng(48.2, 11.6),
                 LatLng(48.2, 11.4),
-              ]
+              ],
             ],
             south: 48.0,
             west: 11.4,

@@ -92,6 +92,13 @@ import 'undo_buttons.dart';
 /// throwing you back out to a neighbourhood view.
 const double kMinFocusZoom = 14.0;
 
+/// How long the view-mode info chip stays up before fading on its own.
+const Duration kInfoChipTimeout = Duration(seconds: 4);
+
+/// Where the top-centre banners start: below the chrome row (8 dp padding +
+/// a 48 dp round button + 8 dp), so a banner never lands on the menu button.
+const double kBannerTop = 68;
+
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key});
 
@@ -122,9 +129,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
   // Shows the "handles are draggable" hint once per app session, the first time
   // an object is selected.
   bool _editHintShown = false;
-  // Shown once per session, the first time a view-mode tap lands on an object
-  // (i.e. the user tried the old tap-to-select and nothing happened).
-  bool _viewTapHintShown = false;
+  // --- Info chip ------------------------------------------------------------
+  // What a view-mode tap landed on, shown as a transient chip with an Edit
+  // button. The chip *shows* and never *changes*: the tap itself selects
+  // nothing, so nudging the map can neither open nor close an editor.
+  HitCandidate? _infoHit;
+  Timer? _infoTimer;
   // --- Add mode -------------------------------------------------------------
   // While [MapMode.add] is armed these hold the layer being added to. Sticky:
   // each tap places one object (or one vertex, for the point-set types) and the
@@ -409,6 +419,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
   @override
   void dispose() {
+    _infoTimer?.cancel();
     _saveCamera();
     unawaited(_linkSub?.cancel());
     _prefetchDebounce?.cancel();
@@ -747,9 +758,35 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// Switches the map mode, dropping the scratch state of the mode being left.
   /// Arming anything other than [MapMode.edit] also clears the selection, so a
   /// docked editor never covers a mode's banner.
+  /// Shows (or, with null, hides) the info chip for [hit]. Auto-hides after a
+  /// few seconds; also cleared by a pan, a mode change and any selection.
+  void _showInfo(HitCandidate? hit) {
+    _infoTimer?.cancel();
+    _infoTimer = null;
+    if (hit == null && _infoHit == null) return;
+    setState(() => _infoHit = hit);
+    if (hit != null) {
+      _infoTimer = Timer(kInfoChipTimeout, () {
+        if (mounted) setState(() => _infoHit = null);
+      });
+    }
+  }
+
+  /// The chip's text for [hit]: the Elements-list name, or an imported point's
+  /// own name; suffixed with the layer when that is not the active one.
+  String _infoLabel(HitCandidate hit, Layer? layer, Layer? activeLayer) {
+    final s = layer == null ? null : _summariesFor(layer)[hit.ref];
+    final label = s != null
+        ? '${s.title} · ${s.subtitle}'
+        : _importedPointLabel(hit.ref) ?? 'Element';
+    if (layer == null || layer.id == activeLayer?.id) return label;
+    return '$label — ${layer.name}';
+  }
+
   void _enterMode(MapMode mode) {
     final previous = _mode;
     if (previous == mode) return;
+    _showInfo(null);
     // Leaving a mode ends whatever was being done in it, so it ends the undo
     // step too — otherwise a quick switch would run two unrelated actions
     // together under the 600 ms idle rule.
@@ -1363,12 +1400,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// screen's vertex marks.
   void _select(ObjectKind kind, String id) {
     if (_markedPoints.isNotEmpty) _markedPoints.clear();
+    _showInfo(null);
     _sealUndoStep();
     selectObject(ref, kind, id);
   }
 
   void _selectCircle(String id) => _select(ObjectKind.circle, id);
-
 
   void _selectSubspace(String id) => _select(ObjectKind.subspace, id);
 
@@ -1470,11 +1507,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// One import, one undo step. The writes straddle a network call — a set row
   /// is created before it and filled after — so the idle rule alone would split
   /// them into two steps and Back would leave an empty category behind.
-  Future<void> _importPois(Layer layer, {LatLng? at}) =>
-      ref.read(repositoryProvider).undo.group(
-            'Import POIs',
-            () => _runPoiImport(layer, at: at),
-          );
+  Future<void> _importPois(Layer layer, {LatLng? at}) => ref
+      .read(repositoryProvider)
+      .undo
+      .group('Import POIs', () => _runPoiImport(layer, at: at));
 
   /// Runs a [MapRequest] posted from outside the map (see [mapRequestProvider]).
   ///
@@ -1576,7 +1612,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (isPoiLayer) {
       // A POI layer stores the fetch as an offline set, through the same
       // pending-row lifecycle a station import uses (see [_runRadiusImport]).
-      final sid = await ref.read(repositoryProvider).createPoiSet(
+      final sid = await ref
+          .read(repositoryProvider)
+          .createPoiSet(
             layerId: layer.id,
             source: kPoiSourceRadius,
             categoryKey: config.category.key,
@@ -1716,7 +1754,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
       ImportProgress progress,
       OverpassCancel cancel,
       String? preferEndpoint,
-    ) fetch,
+    )
+    fetch,
   }) async {
     final cancel = OverpassCancel();
     // The handle is captured, so the spinner is dismissed by identity rather
@@ -1810,7 +1849,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
         ),
       );
       if (!await _settleImportRow(
-          setId: setId, fresh: fresh, outcome: outcome)) {
+        setId: setId,
+        fresh: fresh,
+        outcome: outcome,
+      )) {
         return;
       }
       // A POI layer stores everything the fetch returned (up to the Overpass
@@ -1951,14 +1993,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
         ),
       );
       if (!await _settleImportRow(
-          setId: setId, fresh: fresh, outcome: outcome)) {
+        setId: setId,
+        fresh: fresh,
+        outcome: outcome,
+      )) {
         return;
       }
       final stations = outcome!.value!;
-      final tally = await repo.fillPoiSet(
-        setId,
-        [for (final s in stations) s.toPoiResult()],
-      );
+      final tally = await repo.fillPoiSet(setId, [
+        for (final s in stations) s.toPoiResult(),
+      ]);
       if (!mounted) return;
       if (stations.isEmpty) {
         if (fresh) await repo.deletePoiSet(setId);
@@ -1966,7 +2010,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
           modeMask == transitAllModesMask
               ? 'No transit stations found in that area.'
               : 'No ${transitModeLabels(modeMask).toLowerCase()} stations found '
-                  'in that area.',
+                    'in that area.',
         );
         return;
       }
@@ -1989,8 +2033,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
         hidden == 0
             ? describeImportTally(tally, 'stations')
             : '${describeImportTally(tally, 'stations')} '
-                '${transitModeLabels(hidden).toLowerCase()} hidden for now '
-                '(Stations… to show).',
+                  '${transitModeLabels(hidden).toLowerCase()} hidden for now '
+                  '(Stations… to show).',
       );
       // A write failure used to become an unhandled async error with no
       // message at all, whatever its type. Say so, and leave the retry row.
@@ -2051,11 +2095,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// succeeds: unlike a POI import there is no retry row, because
   /// re-running this is two taps and a half-written set would carry no less
   /// state than the query itself.
-  Future<void> _importBorders(Layer layer, {required LatLngBounds box}) =>
-      ref.read(repositoryProvider).undo.group(
-            'Import borders',
-            () => _runBorderImport(layer, box: box),
-          );
+  Future<void> _importBorders(Layer layer, {required LatLngBounds box}) => ref
+      .read(repositoryProvider)
+      .undo
+      .group('Import borders', () => _runBorderImport(layer, box: box));
 
   Future<void> _runBorderImport(
     Layer layer, {
@@ -2974,17 +3017,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
         // select either — the finger is the pen while this mode is on.
         return;
       case MapMode.view:
-        // A plain tap is a complete no-op — no select, no create, no deselect.
-        // Panning and pinching must never disturb what's on screen; objects are
-        // reached by long-press, by Edit mode, or from the Elements list.
-        //
-        // Once per session, if the tap *did* land on something, say so: that's
-        // exactly the moment someone expects the old tap-to-select and needs to
-        // learn where it went. The hit-test only runs until the hint is shown.
-        if (!_viewTapHintShown && _hitsAt(latlng).isNotEmpty) {
-          _viewTapHintShown = true;
-          _hint('Long-press to select · or turn on ✎ to select by tapping');
-        }
+        // A plain tap *changes* nothing — no select, no create, no deselect.
+        // Panning and pinching must never disturb what's on screen. What it
+        // may do is *show*: a tap that lands on something raises a transient
+        // chip naming it, with an Edit button that is the deliberate act. So
+        // the map answers "what is this?" without anyone having to know that
+        // long-press or ✎ exist.
+        final hits = _hitsAt(latlng);
+        _showInfo(hits.isEmpty ? null : hits.first);
         return;
       case MapMode.edit:
         break; // fall through to the hit-test below
@@ -2994,80 +3034,101 @@ class _MapScreenState extends ConsumerState<MapScreen>
     // Objects are never *created* here — that's Add mode.
     final hits = _hitsAt(latlng);
     if (hits.isNotEmpty) {
-      _select(hits.first.ref.kind, hits.first.ref.id);
+      _selectHit(hits.first);
       return;
     }
     if (hasAnySelection(ref)) _clearSelection();
   }
 
-  /// The active layer's objects under [latlng], best guess first (see
-  /// [rankCandidates]). Empty when there is no active *visible* layer —
-  /// selection stays gated to the layer chosen in the drawer, so you only ever
-  /// interact with the layer you meant to.
+  /// Selects [hit] and makes its layer the active one, so the Add button, the
+  /// drag handles and the long-press context all follow the object being
+  /// edited — the same rule the Elements list applies.
+  void _selectHit(HitCandidate hit) {
+    ref.read(activeLayerProvider.notifier).select(hit.ref.layerId);
+    _select(hit.ref.kind, hit.ref.id);
+  }
+
+  /// Every visible layer's objects under [latlng], best guess first (see
+  /// [rankCandidates]).
+  ///
+  /// Cross-layer on purpose: what you can *see* you can point at, whichever
+  /// layer it is on, and choosing a hit makes its layer active. When hits
+  /// were gated to the active layer an element in plain view could be
+  /// un-tappable with nothing on screen saying why. Layers without an editor
+  /// (an unknown type) are skipped — there would be nothing to open.
   List<HitCandidate> _hitsAt(LatLng latlng) {
     final layers = ref.read(layersProvider).asData?.value ?? const <Layer>[];
-    final activeId = effectiveActiveLayerId(
-      layers,
-      ref.read(activeLayerProvider),
-    );
-    final layer = layers
-        .where((l) => l.id == activeId && l.isVisible)
-        .firstOrNull;
-    if (layer == null) return const [];
     final freeAreaPoints =
         ref.read(freeAreaPointsProvider).asData?.value ??
         const <FreeAreaPoint>[];
     final uncertainty =
         ref.read(settingsProvider).asData?.value.uncertaintyMeters ?? 0;
-    return rankCandidates(
-      collectCandidates(
-        camera: _mapController.camera,
-        tap: latlng,
-        layer: layer,
-        circles: ref.read(circlesProvider).asData?.value ?? const [],
-        subspaces: ref.read(subspacesProvider).asData?.value ?? const [],
-        subspacePoints:
-            ref.read(subspacePointsProvider).asData?.value ?? const [],
-        freeLines: ref.read(freeLinesProvider).asData?.value ?? const [],
-        freeLinePoints:
-            ref.read(freeLinePointsProvider).asData?.value ?? const [],
-        freeAreas: ref.read(freeAreasProvider).asData?.value ?? const [],
-        freeAreaPoints: freeAreaPoints,
-        heightRegions:
-            ref.read(heightRegionsProvider).asData?.value ?? const [],
-        poiSets: ref.read(poiSetsProvider).asData?.value ?? const [],
-        poiPoints: ref.read(poiPointsProvider).asData?.value ?? const [],
-        // Already-decoded geometry: `borderShapesProvider` parses each area's
-        // ring blob once per stream emission, and a state boundary is 119 238
-        // points — re-parsing that per tap is not a thing that can be done.
-        borderShapes: !layerHolds(layer, kBorders)
-            ? const []
-            : [
-                for (final sh in ref.read(borderShapesProvider(layer.id)))
-                  BorderShapeRef(
-                    id: sh.id,
-                    rings: sh.rings,
-                    south: sh.south,
-                    west: sh.west,
-                    north: sh.north,
-                    east: sh.east,
-                  ),
-              ],
-        // Same arguments the painter uses, so this is a cache hit and the hit
-        // area matches the outline actually drawn (offset included).
-        areaContours: (a) => areaGeometryCache
-            .resolve(
-              a,
-              [
-                for (final p in freeAreaPoints)
-                  if (p.freeAreaId == a.id) p,
-              ],
-              bandMeters: uncertainty,
-              inverted: layer.isInverted,
-            )
-            .core,
-      ),
-    );
+    final circles = ref.read(circlesProvider).asData?.value ?? const [];
+    final subspaces = ref.read(subspacesProvider).asData?.value ?? const [];
+    final subspacePoints =
+        ref.read(subspacePointsProvider).asData?.value ?? const [];
+    final freeLines = ref.read(freeLinesProvider).asData?.value ?? const [];
+    final freeLinePoints =
+        ref.read(freeLinePointsProvider).asData?.value ?? const [];
+    final freeAreas = ref.read(freeAreasProvider).asData?.value ?? const [];
+    final heightRegions =
+        ref.read(heightRegionsProvider).asData?.value ?? const [];
+    final poiSets = ref.read(poiSetsProvider).asData?.value ?? const [];
+    final poiPoints = ref.read(poiPointsProvider).asData?.value ?? const [];
+    final raw = <HitCandidate>[];
+    for (var i = 0; i < layers.length; i++) {
+      final layer = layers[i];
+      if (!layer.isVisible || !layerHasEditor(layer.type)) continue;
+      raw.addAll(
+        collectCandidates(
+          camera: _mapController.camera,
+          tap: latlng,
+          layer: layer,
+          layerZ: i,
+          circles: circles,
+          subspaces: subspaces,
+          subspacePoints: subspacePoints,
+          freeLines: freeLines,
+          freeLinePoints: freeLinePoints,
+          freeAreas: freeAreas,
+          freeAreaPoints: freeAreaPoints,
+          heightRegions: heightRegions,
+          poiSets: poiSets,
+          poiPoints: poiPoints,
+          // Already-decoded geometry: `borderShapesProvider` parses each
+          // area's ring blob once per stream emission, and a state boundary
+          // is 119 238 points — re-parsing that per tap is not a thing that
+          // can be done.
+          borderShapes: !layerHolds(layer, kBorders)
+              ? const []
+              : [
+                  for (final sh in ref.read(borderShapesProvider(layer.id)))
+                    BorderShapeRef(
+                      id: sh.id,
+                      rings: sh.rings,
+                      south: sh.south,
+                      west: sh.west,
+                      north: sh.north,
+                      east: sh.east,
+                    ),
+                ],
+          // Same arguments the painter uses, so this is a cache hit and the
+          // hit area matches the outline actually drawn (offset included).
+          areaContours: (a) => areaGeometryCache
+              .resolve(
+                a,
+                [
+                  for (final p in freeAreaPoints)
+                    if (p.freeAreaId == a.id) p,
+                ],
+                bandMeters: uncertainty,
+                inverted: layer.isInverted,
+              )
+              .core,
+        ),
+      );
+    }
+    return rankCandidates(raw);
   }
 
   /// Consumes the tap if one of the editors has armed "the next map tap places
@@ -3203,13 +3264,21 @@ class _MapScreenState extends ConsumerState<MapScreen>
     // While placing, a long-press would fight the tap-to-place flow.
     if (_mode == MapMode.add) return;
 
-    // A null active layer no longer bails out: the menu still offers what is
-    // true of the *coordinate* — share it, copy it — which is the whole point
-    // of long-pressing empty ground.
-    final hits = activeLayer == null ? const <HitCandidate>[] : _hitsAt(latlng);
-    final summaries = activeLayer == null
-        ? const <ObjectRef, ObjectSummary>{}
-        : _summariesFor(activeLayer);
+    // The hits span every visible layer (see [_hitsAt]); a null active layer
+    // still gets a menu, because it also offers what is true of the
+    // *coordinate* — share it, copy it — which is the whole point of
+    // long-pressing empty ground.
+    final hits = _hitsAt(latlng);
+    final layerById = {
+      for (final l in ref.read(layersProvider).asData?.value ?? const <Layer>[])
+        l.id: l,
+    };
+    final summaries = <String, Map<ObjectRef, ObjectSummary>>{};
+    for (final h in hits) {
+      final l = layerById[h.ref.layerId];
+      if (l != null) summaries.putIfAbsent(l.id, () => _summariesFor(l));
+    }
+    final hitLayerIds = {for (final h in hits) h.ref.layerId};
     final selectedSubspaceId = ref.read(selectedSubspaceProvider);
     final selectedFreeLineId = ref.read(selectedFreeLineProvider);
     final selectedFreeAreaId = ref.read(selectedFreeAreaProvider);
@@ -3218,14 +3287,21 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final items = <PopupMenuEntry<String>>[];
     for (var i = 0; i < hits.length; i++) {
       final ref_ = hits[i].ref;
-      final s = summaries[ref_];
+      final layer = layerById[ref_.layerId];
+      final s = summaries[ref_.layerId]?[ref_];
       // Individual POIs and stations are never in [summaries] — they are one
       // level below an element and deliberately unlisted (see [ObjectKind]) —
       // so they name themselves from their own row.
-      final label = s != null
+      var label = s != null
           ? '${s.title} · ${s.subtitle}'
           : _importedPointLabel(ref_) ?? 'Element ${i + 1}';
-      items.add(_pointMenuItem('hit:$i', typeIcon(activeLayer!.type), label));
+      // Name the layer whenever it is not the obvious one: the rows span
+      // layers, or the one row is not on the active layer.
+      if (layer != null &&
+          (hitLayerIds.length > 1 || layer.id != activeLayer?.id)) {
+        label = '$label — ${layer.name}';
+      }
+      items.add(_pointMenuItem('hit:$i', typeIcon(layer?.type ?? ''), label));
     }
 
     // Contextual add actions — a strict superset of what long-press used to do.
@@ -3300,9 +3376,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
     // hiding, which looks exactly like empty ground — say so, but don't
     // swallow the menu for it the way this used to.
     if (items.isEmpty &&
-        activeLayer != null &&
-        (ref.read(poiSetsProvider).asData?.value ?? const <PoiSet>[])
-            .any((s) => s.layerId == activeLayer.id && s.isStationImport)) {
+        (ref.read(poiSetsProvider).asData?.value ?? const <PoiSet>[]).any(
+          (s) =>
+              s.isStationImport && (layerById[s.layerId]?.isVisible ?? false),
+        )) {
       _hint(
         'Hidden station types don\'t respond — check Stations… in the '
         'layer menu.',
@@ -3339,7 +3416,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final repo = ref.read(repositoryProvider);
     if (selected.startsWith('hit:')) {
       final hit = hits[int.parse(selected.substring(4))];
-      _select(hit.ref.kind, hit.ref.id);
+      _selectHit(hit);
       return;
     }
     switch (selected) {
@@ -4153,37 +4230,38 @@ class _MapScreenState extends ConsumerState<MapScreen>
         (layerHolds(activeLayer, kFreeLine) ||
             layerHolds(activeLayer, kFreeArea));
 
-    // Edit mode arms tap-to-select, so it is meaningful only when the active
-    // layer has an editor *and* holds something to select. Left always-on it
-    // was a button that visibly did nothing on an import layer or an empty one.
-    // `any` rather than a count: the answer is a boolean and this runs on every
-    // camera tick.
-    final activeHasEditor =
-        activeLayer != null && layerHasEditor(activeLayer.type);
+    // Edit mode arms tap-to-select, and a tap reaches every *visible* layer
+    // (see [_hitsAt]) — so it is meaningful when any visible layer has an
+    // editor *and* holds something to select. Left always-on it was a button
+    // that visibly did nothing on an empty map. `any` rather than a count: the
+    // answer is a boolean and this runs on every camera tick.
+    //
     // Per content type, because `layerHasEditor` answers for the layer and a
     // mixed layer holds several kinds: Edit mode needs at least one element
-    // of *some* kind it holds, or it is a lit button that does nothing.
-    bool holdsSelectable(String type) {
-      if (activeLayer == null || !layerHolds(activeLayer, type)) return false;
+    // of *some* kind, or it is a lit button that does nothing.
+    bool holdsSelectable(Layer layer, String type) {
+      if (!layerHolds(layer, type)) return false;
       if (ObjectKind.forLayerType(type) == null) return false;
       return switch (type) {
-        kCircles => circles.any((c) => c.layerId == activeLayer.id),
-        kSubspace => subspaces.any((s) => s.layerId == activeLayer.id),
-        kFreeLine => freeLines.any((l) => l.layerId == activeLayer.id),
-        kFreeArea => freeAreas.any((a) => a.layerId == activeLayer.id),
-        kHeight => heightRegions.any((r) => r.layerId == activeLayer.id),
+        kCircles => circles.any((c) => c.layerId == layer.id),
+        kSubspace => subspaces.any((s) => s.layerId == layer.id),
+        kFreeLine => freeLines.any((l) => l.layerId == layer.id),
+        kFreeArea => freeAreas.any((a) => a.layerId == layer.id),
+        kHeight => heightRegions.any((r) => r.layerId == layer.id),
         // Imports count as elements to select: a POI layer offers its markers
         // and stations, a borders layer its areas.
-        kPoi => poiSets.any((s) => s.layerId == activeLayer.id),
-        kBorders => borderSets.any((s) => s.layerId == activeLayer.id),
+        kPoi => poiSets.any((s) => s.layerId == layer.id),
+        kBorders => borderSets.any((s) => s.layerId == layer.id),
         _ => false,
       };
     }
 
-    final activeHasElements =
-        activeLayer != null &&
-        layerContentTypes(activeLayer).any(holdsSelectable);
-    final canEditByTap = activeHasEditor && activeHasElements;
+    final canEditByTap = layers.any(
+      (l) =>
+          l.isVisible &&
+          layerHasEditor(l.type) &&
+          layerContentTypes(l).any((t) => holdsSelectable(l, t)),
+    );
     // Only the two freehand types can be drawn into — everything else is built
     // from points, radii or an import.
     final canDraw =
@@ -4276,6 +4354,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       }
                       _lastGoodCenter = c;
                       _lastGoodZoom = camera.zoom;
+                      // The chip described what was under the finger; once
+                      // the map moves it no longer is.
+                      if (_infoHit != null) _showInfo(null);
                       // An import box's live corner *is* the map centre, so it
                       // has to follow the camera. Only runs while a corner is
                       // buffered.
@@ -4940,242 +5021,296 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       ),
                     ),
                   ),
-                // Add-mode banner: what to tap, plus Undo / Edit last / Done.
-                if (mode == MapMode.add && _placeLayerId != null)
-                  SafeArea(
-                    child: Align(
-                      alignment: Alignment.topCenter,
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 12),
-                        child: Material(
-                          color: Theme.of(context).colorScheme.surface,
-                          elevation: 2,
-                          borderRadius: BorderRadius.circular(8),
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.touch_app_outlined, size: 16),
-                                const SizedBox(width: 6),
-                                Flexible(
-                                  child: Text(
-                                    _addBannerText(
-                                      _placeType,
-                                      _addSteps.length,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
+                // Every banner stacks in one column under the chrome row,
+                // so none of them can land on the menu button — or on each
+                // other, when two show at once (a bulk-delete banner over an
+                // elevation readout). Last comes the info chip a view-mode
+                // tap raises.
+                SafeArea(
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: kBannerTop),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Add-mode banner: what to tap, plus Undo / Edit last / Done.
+                          if (mode == MapMode.add && _placeLayerId != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Material(
+                                color: Theme.of(context).colorScheme.surface,
+                                elevation: 2,
+                                borderRadius: BorderRadius.circular(8),
+                                child: Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    12,
+                                    4,
+                                    4,
+                                    4,
                                   ),
-                                ),
-                                TextButton(
-                                  onPressed:
-                                      (_addSteps.isEmpty &&
-                                          _pendingBoxA == null)
-                                      ? null
-                                      : _undoLastAdd,
-                                  child: const Text('Undo'),
-                                ),
-                                if (_addSteps.isNotEmpty)
-                                  TextButton(
-                                    onPressed: _editLastAdded,
-                                    child: const Text('Edit'),
-                                  ),
-                                TextButton(
-                                  onPressed: _finishAdd,
-                                  child: const Text('Done'),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                // Draw-mode banner. It earns its place twice over: it is the
-                // only thing that says one-finger pan is off for the moment.
-                if (mode == MapMode.draw && _drawLayerId != null)
-                  SafeArea(
-                    child: Align(
-                      alignment: Alignment.topCenter,
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 12),
-                        child: Material(
-                          color: Theme.of(context).colorScheme.surface,
-                          elevation: 2,
-                          borderRadius: BorderRadius.circular(8),
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.gesture, size: 16),
-                                const SizedBox(width: 6),
-                                Flexible(
-                                  child: Text(
-                                    _drawBannerText(_addSteps.length),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                TextButton(
-                                  onPressed: _addSteps.isEmpty
-                                      ? null
-                                      : _undoLastAdd,
-                                  child: const Text('Undo'),
-                                ),
-                                TextButton(
-                                  onPressed: _finishDraw,
-                                  child: const Text('Done'),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                // Bulk-delete banner: appears while any vertices are marked.
-                if (_markedPoints.isNotEmpty)
-                  SafeArea(
-                    child: Align(
-                      alignment: Alignment.topCenter,
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 12),
-                        child: Material(
-                          color: Theme.of(context).colorScheme.surface,
-                          elevation: 2,
-                          borderRadius: BorderRadius.circular(8),
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text('${_markedPoints.length} selected'),
-                                TextButton.icon(
-                                  onPressed: _deleteMarked,
-                                  icon: const Icon(
-                                    Icons.delete_outline,
-                                    size: 18,
-                                  ),
-                                  label: const Text('Delete'),
-                                ),
-                                TextButton(
-                                  onPressed: () =>
-                                      setState(() => _markedPoints.clear()),
-                                  child: const Text('Clear'),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                // Elevation readout: the measured point and/or current location.
-                if (mode == MapMode.elevation ||
-                    _probePoint != null ||
-                    _myElevation != null ||
-                    mode == MapMode.distance ||
-                    _distA != null)
-                  SafeArea(
-                    child: Align(
-                      alignment: Alignment.topCenter,
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 12),
-                        child: Material(
-                          color: Theme.of(context).colorScheme.surface,
-                          elevation: 2,
-                          borderRadius: BorderRadius.circular(8),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (mode == MapMode.elevation ||
-                                    _probePoint != null)
-                                  Row(
+                                  child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       const Icon(
-                                        Icons.place_outlined,
+                                        Icons.touch_app_outlined,
                                         size: 16,
                                       ),
                                       const SizedBox(width: 6),
-                                      Text(
-                                        _probing
-                                            ? 'Measuring…'
-                                            : _probeElevation != null
-                                            ? 'Point: ${_formatElevation(_probeElevation!)}'
-                                            : _probePoint != null
-                                            ? 'Point: n/a'
-                                            : 'Tap the map to measure',
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.bodyMedium,
-                                      ),
-                                    ],
-                                  ),
-                                if (_myElevation != null)
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(Icons.my_location, size: 16),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        'You: ${_formatElevation(_myElevation!)}',
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.bodyMedium,
-                                      ),
-                                    ],
-                                  ),
-                                if (mode == MapMode.distance || _distA != null)
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(Icons.straighten, size: 16),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        _distA != null && _distB != null
-                                            ? '${_formatDistance(_hitTest(_distA!, _distB!))} · '
-                                                  '${_hitTest.bearing(_distA!, _distB!).round()}°'
-                                            : _distA != null
-                                            ? 'Tap the second point'
-                                            : 'Tap two points',
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.bodyMedium,
-                                      ),
-                                      if (mode == MapMode.distance) ...[
-                                        const SizedBox(width: 8),
-                                        TextButton.icon(
-                                          onPressed: _distanceFromMyLocation,
-                                          icon: const Icon(
-                                            Icons.my_location,
-                                            size: 16,
+                                      Flexible(
+                                        child: Text(
+                                          _addBannerText(
+                                            _placeType,
+                                            _addSteps.length,
                                           ),
-                                          label: const Text('My location'),
-                                          style: TextButton.styleFrom(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                            ),
-                                            minimumSize: const Size(0, 32),
-                                            tapTargetSize: MaterialTapTargetSize
-                                                .shrinkWrap,
-                                          ),
+                                          overflow: TextOverflow.ellipsis,
                                         ),
-                                      ],
+                                      ),
+                                      TextButton(
+                                        onPressed:
+                                            (_addSteps.isEmpty &&
+                                                _pendingBoxA == null)
+                                            ? null
+                                            : _undoLastAdd,
+                                        child: const Text('Undo'),
+                                      ),
+                                      if (_addSteps.isNotEmpty)
+                                        TextButton(
+                                          onPressed: _editLastAdded,
+                                          child: const Text('Edit'),
+                                        ),
+                                      TextButton(
+                                        onPressed: _finishAdd,
+                                        child: const Text('Done'),
+                                      ),
                                     ],
                                   ),
-                              ],
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
+                          // Draw-mode banner. It earns its place twice over: it is the
+                          // only thing that says one-finger pan is off for the moment.
+                          if (mode == MapMode.draw && _drawLayerId != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Material(
+                                color: Theme.of(context).colorScheme.surface,
+                                elevation: 2,
+                                borderRadius: BorderRadius.circular(8),
+                                child: Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    12,
+                                    4,
+                                    4,
+                                    4,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.gesture, size: 16),
+                                      const SizedBox(width: 6),
+                                      Flexible(
+                                        child: Text(
+                                          _drawBannerText(_addSteps.length),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      TextButton(
+                                        onPressed: _addSteps.isEmpty
+                                            ? null
+                                            : _undoLastAdd,
+                                        child: const Text('Undo'),
+                                      ),
+                                      TextButton(
+                                        onPressed: _finishDraw,
+                                        child: const Text('Done'),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          // Bulk-delete banner: appears while any vertices are marked.
+                          if (_markedPoints.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Material(
+                                color: Theme.of(context).colorScheme.surface,
+                                elevation: 2,
+                                borderRadius: BorderRadius.circular(8),
+                                child: Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    12,
+                                    4,
+                                    4,
+                                    4,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text('${_markedPoints.length} selected'),
+                                      TextButton.icon(
+                                        onPressed: _deleteMarked,
+                                        icon: const Icon(
+                                          Icons.delete_outline,
+                                          size: 18,
+                                        ),
+                                        label: const Text('Delete'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () => setState(
+                                          () => _markedPoints.clear(),
+                                        ),
+                                        child: const Text('Clear'),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          // Elevation readout: the measured point and/or current location.
+                          if (mode == MapMode.elevation ||
+                              _probePoint != null ||
+                              _myElevation != null ||
+                              mode == MapMode.distance ||
+                              _distA != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Material(
+                                color: Theme.of(context).colorScheme.surface,
+                                elevation: 2,
+                                borderRadius: BorderRadius.circular(8),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 8,
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (mode == MapMode.elevation ||
+                                          _probePoint != null)
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(
+                                              Icons.place_outlined,
+                                              size: 16,
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              _probing
+                                                  ? 'Measuring…'
+                                                  : _probeElevation != null
+                                                  ? 'Point: ${_formatElevation(_probeElevation!)}'
+                                                  : _probePoint != null
+                                                  ? 'Point: n/a'
+                                                  : 'Tap the map to measure',
+                                              style: Theme.of(
+                                                context,
+                                              ).textTheme.bodyMedium,
+                                            ),
+                                          ],
+                                        ),
+                                      if (_myElevation != null)
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(
+                                              Icons.my_location,
+                                              size: 16,
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              'You: ${_formatElevation(_myElevation!)}',
+                                              style: Theme.of(
+                                                context,
+                                              ).textTheme.bodyMedium,
+                                            ),
+                                          ],
+                                        ),
+                                      if (mode == MapMode.distance ||
+                                          _distA != null)
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(
+                                              Icons.straighten,
+                                              size: 16,
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              _distA != null && _distB != null
+                                                  ? '${_formatDistance(_hitTest(_distA!, _distB!))} · '
+                                                        '${_hitTest.bearing(_distA!, _distB!).round()}°'
+                                                  : _distA != null
+                                                  ? 'Tap the second point'
+                                                  : 'Tap two points',
+                                              style: Theme.of(
+                                                context,
+                                              ).textTheme.bodyMedium,
+                                            ),
+                                            if (mode == MapMode.distance) ...[
+                                              const SizedBox(width: 8),
+                                              TextButton.icon(
+                                                onPressed:
+                                                    _distanceFromMyLocation,
+                                                icon: const Icon(
+                                                  Icons.my_location,
+                                                  size: 16,
+                                                ),
+                                                label: const Text(
+                                                  'My location',
+                                                ),
+                                                style: TextButton.styleFrom(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 8,
+                                                      ),
+                                                  minimumSize: const Size(
+                                                    0,
+                                                    32,
+                                                  ),
+                                                  tapTargetSize:
+                                                      MaterialTapTargetSize
+                                                          .shrinkWrap,
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                          if (_infoHit != null)
+                            _InfoChip(
+                              icon: typeIcon(
+                                layers
+                                        .where(
+                                          (l) => l.id == _infoHit!.ref.layerId,
+                                        )
+                                        .firstOrNull
+                                        ?.type ??
+                                    '',
+                              ),
+                              label: _infoLabel(
+                                _infoHit!,
+                                layers
+                                    .where((l) => l.id == _infoHit!.ref.layerId)
+                                    .firstOrNull,
+                                activeLayer,
+                              ),
+                              onEdit: () => _selectHit(_infoHit!),
+                              onDismiss: () => _showInfo(null),
+                            ),
+                        ],
                       ),
                     ),
                   ),
+                ),
               ],
             ),
       // While an editor sheet is open it provides its own delete/close, and the
@@ -5326,13 +5461,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       heroTag: 'editMode',
                       // Disabled states say *why*, so a grey button reads as an
                       // answer rather than as breakage.
-                      tooltip: activeLayer == null
-                          ? 'No layer to edit'
-                          : !activeHasEditor
-                          ? 'Imported layers have no editor — use '
-                                'Elements to find an item'
-                          : !activeHasElements
-                          ? 'Nothing to edit yet — add something '
+                      tooltip: !canEditByTap
+                          ? 'Nothing visible to edit yet — add something '
                                 'first'
                           : mode == MapMode.edit
                           ? 'Stop selecting by tap'
@@ -5399,44 +5529,44 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     // point. Long-press keeps the old one-shot behaviour (place
                     // at the map centre, open the editor) as a no-aim fallback.
                     GestureDetector(
-                        onLongPress: activeLayer == null
+                      onLongPress: activeLayer == null
+                          ? null
+                          : () => _addAtMapCentre(
+                              activeLayer,
+                              subspaces: subspaces,
+                              freeLines: freeLines,
+                              freeAreas: freeAreas,
+                            ),
+                      child: FloatingActionButton.extended(
+                        heroTag: 'add',
+                        tooltip:
+                            'Tap the map to add · long-press for the '
+                            'map centre',
+                        onPressed: activeLayer == null
                             ? null
-                            : () => _addAtMapCentre(
-                                activeLayer,
-                                subspaces: subspaces,
-                                freeLines: freeLines,
-                                freeAreas: freeAreas,
-                              ),
-                        child: FloatingActionButton.extended(
-                          heroTag: 'add',
-                          tooltip:
-                              'Tap the map to add · long-press for the '
-                              'map centre',
-                          onPressed: activeLayer == null
-                              ? null
-                              : () => mode == MapMode.add
-                                    ? _finishAdd()
-                                    : _enterAddMode(activeLayer),
-                          backgroundColor: activeLayer == null
-                              ? Theme.of(context).disabledColor
-                              : mode == MapMode.add
-                              ? Theme.of(context).colorScheme.primary
-                              : null,
-                          foregroundColor: mode == MapMode.add
-                              ? Theme.of(context).colorScheme.onPrimary
-                              : null,
-                          icon: Icon(
-                            mode == MapMode.add
-                                ? Icons.check
-                                : typeIcon(activeLayer?.type ?? 'circles'),
-                          ),
-                          label: Text(
-                            mode == MapMode.add
-                                ? 'Done'
-                                : _addFabLabel(activeLayer?.type),
-                          ),
+                            : () => mode == MapMode.add
+                                  ? _finishAdd()
+                                  : _enterAddMode(activeLayer),
+                        backgroundColor: activeLayer == null
+                            ? Theme.of(context).disabledColor
+                            : mode == MapMode.add
+                            ? Theme.of(context).colorScheme.primary
+                            : null,
+                        foregroundColor: mode == MapMode.add
+                            ? Theme.of(context).colorScheme.onPrimary
+                            : null,
+                        icon: Icon(
+                          mode == MapMode.add
+                              ? Icons.check
+                              : typeIcon(activeLayer?.type ?? 'circles'),
+                        ),
+                        label: Text(
+                          mode == MapMode.add
+                              ? 'Done'
+                              : _addFabLabel(activeLayer?.type),
                         ),
                       ),
+                    ),
                   ],
                 ),
               ],
@@ -5585,6 +5715,51 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         )
                       : const SizedBox.shrink(),
                 )),
+    );
+  }
+}
+
+/// What a view-mode tap landed on: a name and an Edit button.
+///
+/// Deliberately not a selection — see `_MapScreenState._showInfo`. The whole
+/// chip is tappable (Edit), the × just dismisses it.
+class _InfoChip extends StatelessWidget {
+  const _InfoChip({
+    required this.icon,
+    required this.label,
+    required this.onEdit,
+    required this.onDismiss,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onEdit;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Theme.of(context).colorScheme.surface,
+      elevation: 2,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16),
+            const SizedBox(width: 6),
+            Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
+            TextButton(onPressed: onEdit, child: const Text('Edit')),
+            IconButton(
+              tooltip: 'Dismiss',
+              visualDensity: VisualDensity.compact,
+              onPressed: onDismiss,
+              icon: const Icon(Icons.close, size: 18),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

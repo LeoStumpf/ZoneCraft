@@ -80,6 +80,7 @@ class HitCandidate {
     required this.edgeDistPx,
     required this.sizeProxyMeters,
     this.z = 0,
+    this.layerZ = 0,
   });
 
   final ObjectRef ref;
@@ -92,6 +93,22 @@ class HitCandidate {
   /// A **tie-break only**; see [rankCandidates] for why it must never outrank
   /// size. Defaults to 0 so a candidate built without one simply ties.
   final int z;
+
+  /// The owning *layer's* place in the map stack — higher is drawn in front.
+  ///
+  /// The outer tie-break, above [z]: a tap that several layers answer equally
+  /// well resolves to the one on top, which is the one whose fill you see.
+  /// Defaults to 0, so a single-layer collection ranks exactly as before.
+  final int layerZ;
+
+  HitCandidate copyWith({int? layerZ}) => HitCandidate(
+    ref: ref,
+    inside: inside,
+    edgeDistPx: edgeDistPx,
+    sizeProxyMeters: sizeProxyMeters,
+    z: z,
+    layerZ: layerZ ?? this.layerZ,
+  );
 }
 
 /// Orders candidates by what the user most likely meant, best first.
@@ -127,6 +144,10 @@ List<HitCandidate> rankCandidates(
     }
   }
   int byStack(HitCandidate a, HitCandidate b) {
+    // Layer first: `z` is scoped per table *within* a layer, so across
+    // layers only the layer order is comparable.
+    final l = b.layerZ.compareTo(a.layerZ);
+    if (l != 0) return l;
     final k = a.ref.kind.index.compareTo(b.ref.kind.index);
     return k != 0 ? k : b.z.compareTo(a.z);
   }
@@ -148,10 +169,13 @@ List<HitCandidate> rankCandidates(
 /// [areaContours] optionally supplies a freehand area's *resolved* boundary
 /// (the offset outline the painter actually draws); without it the raw drawn
 /// ring is used, which differs only when the area carries an offset.
+/// [layerZ] stamps every candidate with the layer's stack position, for a
+/// caller that collects over several layers and ranks them together.
 List<HitCandidate> collectCandidates({
   required MapCamera camera,
   required LatLng tap,
   required Layer layer,
+  int layerZ = 0,
   List<Circle> circles = const [],
   List<Subspace> subspaces = const [],
   List<SubspacePoint> subspacePoints = const [],
@@ -182,30 +206,48 @@ List<HitCandidate> collectCandidates({
           if (!c.radiusMeters.isFinite || c.radiusMeters <= 0) continue;
           if (!c.centerLat.isFinite || !c.centerLng.isFinite) continue;
           final d = geoDistance.as(
-              LengthUnit.Meter, LatLng(c.centerLat, c.centerLng), tap);
+            LengthUnit.Meter,
+            LatLng(c.centerLat, c.centerLng),
+            tap,
+          );
           if (!d.isFinite) continue;
-          out.add(HitCandidate(
-            ref: refOf(ObjectKind.circle, c.id),
-            inside: d <= c.radiusMeters,
-            edgeDistPx: metersToPixels(camera, tap, (d - c.radiusMeters).abs()),
-            sizeProxyMeters: c.radiusMeters,
-            z: c.zOrder,
-          ));
+          out.add(
+            HitCandidate(
+              ref: refOf(ObjectKind.circle, c.id),
+              inside: d <= c.radiusMeters,
+              edgeDistPx: metersToPixels(
+                camera,
+                tap,
+                (d - c.radiusMeters).abs(),
+              ),
+              sizeProxyMeters: c.radiusMeters,
+              z: c.zOrder,
+            ),
+          );
         }
       case 'height':
         for (final r in heightRegions.where((r) => r.layerId == layer.id)) {
           if (!r.radiusMeters.isFinite || r.radiusMeters <= 0) continue;
           if (!r.centerLat.isFinite || !r.centerLng.isFinite) continue;
           final d = geoDistance.as(
-              LengthUnit.Meter, LatLng(r.centerLat, r.centerLng), tap);
+            LengthUnit.Meter,
+            LatLng(r.centerLat, r.centerLng),
+            tap,
+          );
           if (!d.isFinite) continue;
-          out.add(HitCandidate(
-            ref: refOf(ObjectKind.heightRegion, r.id),
-            inside: d <= r.radiusMeters,
-            edgeDistPx: metersToPixels(camera, tap, (d - r.radiusMeters).abs()),
-            sizeProxyMeters: r.radiusMeters,
-            z: r.zOrder,
-          ));
+          out.add(
+            HitCandidate(
+              ref: refOf(ObjectKind.heightRegion, r.id),
+              inside: d <= r.radiusMeters,
+              edgeDistPx: metersToPixels(
+                camera,
+                tap,
+                (d - r.radiusMeters).abs(),
+              ),
+              sizeProxyMeters: r.radiusMeters,
+              z: r.zOrder,
+            ),
+          );
         }
       case 'subspace':
         for (final s in subspaces.where((s) => s.layerId == layer.id)) {
@@ -217,8 +259,11 @@ List<HitCandidate> collectCandidates({
           var dOtherMin = double.infinity;
           var nearestOther = double.infinity;
           for (final p in pts) {
-            final d =
-                geoDistance.as(LengthUnit.Meter, LatLng(p.lat, p.lng), tap);
+            final d = geoDistance.as(
+              LengthUnit.Meter,
+              LatLng(p.lat, p.lng),
+              tap,
+            );
             if (!d.isFinite) continue;
             if (p.isMain) {
               dMain = dMain == null ? d : math.min(dMain, d);
@@ -232,29 +277,40 @@ List<HitCandidate> collectCandidates({
           if (main != null) {
             for (final p in pts) {
               if (p.id == main.id) continue;
-              final d = geoDistance.as(LengthUnit.Meter,
-                  LatLng(main.lat, main.lng), LatLng(p.lat, p.lng));
+              final d = geoDistance.as(
+                LengthUnit.Meter,
+                LatLng(main.lat, main.lng),
+                LatLng(p.lat, p.lng),
+              );
               if (d.isFinite && d < nearestOther) nearestOther = d;
             }
           }
-          out.add(HitCandidate(
-            ref: refOf(ObjectKind.subspace, s.id),
-            inside: dMain <= dOtherMin,
-            // The cell border is equidistant, so it sits half the gap away.
-            edgeDistPx:
-                metersToPixels(camera, tap, (dMain - dOtherMin).abs() / 2),
-            sizeProxyMeters: nearestOther,
-            z: s.zOrder,
-          ));
+          out.add(
+            HitCandidate(
+              ref: refOf(ObjectKind.subspace, s.id),
+              inside: dMain <= dOtherMin,
+              // The cell border is equidistant, so it sits half the gap away.
+              edgeDistPx: metersToPixels(
+                camera,
+                tap,
+                (dMain - dOtherMin).abs() / 2,
+              ),
+              sizeProxyMeters: nearestOther,
+              z: s.zOrder,
+            ),
+          );
         }
       case 'freeline':
         for (final l in freeLines.where((l) => l.layerId == layer.id)) {
-          final pts = (freeLinePoints
-                  .where((p) => p.freeLineId == l.id && _finite(p.lat, p.lng))
-                  .toList()
-                ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder)))
-              .map((p) => LatLng(p.lat, p.lng))
-              .toList();
+          final pts =
+              (freeLinePoints
+                      .where(
+                        (p) => p.freeLineId == l.id && _finite(p.lat, p.lng),
+                      )
+                      .toList()
+                    ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder)))
+                  .map((p) => LatLng(p.lat, p.lng))
+                  .toList();
           if (pts.length < 2) continue;
           var best = double.infinity;
           for (var i = 0; i < pts.length - 1; i++) {
@@ -272,24 +328,29 @@ List<HitCandidate> collectCandidates({
             radiusMeters: l.inclusionRadiusMeters,
             points: pts,
           );
-          out.add(HitCandidate(
-            ref: refOf(ObjectKind.freeLine, l.id),
-            // The drawn line is the object; its half-disk fill is not a hit area
-            // (that would make half the view select the line).
-            inside: false,
-            edgeDistPx: best,
-            sizeProxyMeters: inc.radiusMeters,
-            z: l.zOrder,
-          ));
+          out.add(
+            HitCandidate(
+              ref: refOf(ObjectKind.freeLine, l.id),
+              // The drawn line is the object; its half-disk fill is not a hit area
+              // (that would make half the view select the line).
+              inside: false,
+              edgeDistPx: best,
+              sizeProxyMeters: inc.radiusMeters,
+              z: l.zOrder,
+            ),
+          );
         }
       case 'freearea':
         for (final a in freeAreas.where((a) => a.layerId == layer.id)) {
-          final raw = (freeAreaPoints
-                  .where((p) => p.freeAreaId == a.id && _finite(p.lat, p.lng))
-                  .toList()
-                ..sort((x, y) => x.sortOrder.compareTo(y.sortOrder)))
-              .map((p) => LatLng(p.lat, p.lng))
-              .toList();
+          final raw =
+              (freeAreaPoints
+                      .where(
+                        (p) => p.freeAreaId == a.id && _finite(p.lat, p.lng),
+                      )
+                      .toList()
+                    ..sort((x, y) => x.sortOrder.compareTo(y.sortOrder)))
+                  .map((p) => LatLng(p.lat, p.lng))
+                  .toList();
           if (raw.length < 3) continue;
           final contours = areaContours?.call(a) ?? [raw];
           var inside = false;
@@ -305,13 +366,15 @@ List<HitCandidate> collectCandidates({
             }
           }
           if (!best.isFinite) continue;
-          out.add(HitCandidate(
-            ref: refOf(ObjectKind.freeArea, a.id),
-            inside: inside,
-            edgeDistPx: best,
-            sizeProxyMeters: ViewBound.ofCorners(raw).diagonalMeters,
-            z: a.zOrder,
-          ));
+          out.add(
+            HitCandidate(
+              ref: refOf(ObjectKind.freeArea, a.id),
+              inside: inside,
+              edgeDistPx: best,
+              sizeProxyMeters: ViewBound.ofCorners(raw).diagonalMeters,
+              z: a.zOrder,
+            ),
+          );
         }
       case 'poi':
         // The marker, not the set: a POI layer's set is a search circle you can't
@@ -334,15 +397,17 @@ List<HitCandidate> collectCandidates({
           final d = (camera.latLngToScreenOffset(LatLng(p.lat, p.lng)) - tapPx)
               .distance;
           if (!d.isFinite) continue;
-          out.add(HitCandidate(
-            ref: refOf(ObjectKind.poiPoint, p.id),
-            // A marker has no interior — only its own disc counts, which is what
-            // stops a tap on empty ground from picking the nearest POI a screen
-            // away.
-            inside: false,
-            edgeDistPx: d,
-            sizeProxyMeters: 0,
-          ));
+          out.add(
+            HitCandidate(
+              ref: refOf(ObjectKind.poiPoint, p.id),
+              // A marker has no interior — only its own disc counts, which is what
+              // stops a tap on empty ground from picking the nearest POI a screen
+              // away.
+              inside: false,
+              edgeDistPx: d,
+              sizeProxyMeters: 0,
+            ),
+          );
         }
       case 'borders':
         for (final shape in borderShapes) {
@@ -373,23 +438,26 @@ List<HitCandidate> collectCandidates({
             }
           }
           if (!best.isFinite) continue;
-          out.add(HitCandidate(
-            ref: refOf(ObjectKind.borderArea, shape.id),
-            inside: inside,
-            edgeDistPx: best,
-            // The stored bounds, not the ring: an administrative area is
-            // hundreds of points and this only has to order "which of the two
-            // areas under the tap is the smaller one".
-            sizeProxyMeters: geoDistance.as(
-              LengthUnit.Meter,
-              LatLng(shape.south, shape.west),
-              LatLng(shape.north, shape.east),
+          out.add(
+            HitCandidate(
+              ref: refOf(ObjectKind.borderArea, shape.id),
+              inside: inside,
+              edgeDistPx: best,
+              // The stored bounds, not the ring: an administrative area is
+              // hundreds of points and this only has to order "which of the two
+              // areas under the tap is the smaller one".
+              sizeProxyMeters: geoDistance.as(
+                LengthUnit.Meter,
+                LatLng(shape.south, shape.west),
+                LatLng(shape.north, shape.east),
+              ),
             ),
-          ));
+          );
         }
     }
   }
-  return out;
+  if (layerZ == 0) return out;
+  return [for (final c in out) c.copyWith(layerZ: layerZ)];
 }
 
 /// The bare geometry of one border area that hit-testing needs.
