@@ -68,6 +68,31 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   *inside* their own fill), so there the **fill** pass punches the strip out and the band pass
   below shows through. Dropping the old `outer − core` difference also removed the one
   `_tryCombine` in the engine — Skia path-ops' worst case, two near-parallel outlines.
+- **Every layer action is defined once** (`ui/layer_actions.dart`): `visibleLayerActions`
+  (pure, tested over every type) says *which* actions a layer gets, `layerActionsFor` attaches
+  label + body, and three surfaces render the list — the drawer's ⋮ menu, the map's **layer
+  sheet** and the FAB row's **quick toggle**. Never add a per-layer action inline in one of
+  them. Actions that need the map (an import's form, a mode's banner, a border import over
+  the visible bounds) are `needsMap` and only post a `MapRequest` (`mapRequestProvider`, the
+  `pendingImportRetryProvider` shape); `map_screen._runMapRequest` answers post-frame, so the
+  asker must dismiss itself first. Deleting a layer / making it combined ends in a snackbar
+  with UNDO that goes through the `ProviderContainer` (`applyUndoIn`), because the tile that
+  raised it is unmounted by the time the button is pressed; the drawer has its own
+  `ScaffoldMessenger` since a Scaffold draws its drawer above its snackbars.
+- **The active layer is always on screen**: the chrome row ends in a chip (swatch · type ·
+  name) that opens the **layer sheet** (`ui/layer_sheet.dart`) — a switcher row plus every
+  setting of the active layer as a direct control, two taps from the map to anything the
+  drawer's ⋮ offers. The sheet is opened with the *map's* context/ref and pops itself before
+  a `needsMap`/delete action runs. Beside Edit, one **per-type quick toggle** FAB: borders →
+  Colour areas, region layers → Invert, a POI layer with stations → the type filter.
+- **A View-mode tap *shows* but never *changes*.** It selects, creates and deselects nothing
+  (nudging the map must never open or close an editor); what it may do is raise the transient
+  **info chip** naming what was hit, whose Edit button is the deliberate act. **Hits are
+  cross-layer** (`_hitsAt` spans every visible layer with an editor; `HitCandidate.layerZ`
+  ranks above the per-table `z` and below edge distance / size) and choosing one makes its
+  layer active — so an element you can see is always reachable, whichever layer is active.
+  ✎ Edit mode is enabled when *any* visible layer holds something to select. The four
+  top-centre banners and the chip stack in one column under the chrome row (`kBannerTop`).
 - **Layers drawer** (show/hide, reorder, recolour, adjust opacity, rename, invert, add/delete),
   plus a pinned bottom **Map** tile (the base OSM tiles as a hideable, opacity-adjustable
   layer that can never be deleted or reordered; its state lives in `AppSettings`) + **compass**,
@@ -365,7 +390,9 @@ lib/
   state/       Riverpod providers (layers, circles, subspaces,
                freehand lines/areas, height regions/polygons, poi sets/points,
                border sets/areas, settings, selection, map mode)
-  ui/          map_screen, layers_panel, circle_editor,
+  ui/          map_screen, layers_panel, layer_actions (the one definition of
+               per-layer actions), layer_sheet (the map's active-layer sheet),
+               circle_editor,
                subspace_editor, freeline_editor, freearea_editor, height_editor,
                import_actions, settings_screen, region_layer, poi_layer
                (clustered POI + station markers, one painter),
