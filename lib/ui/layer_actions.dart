@@ -168,6 +168,44 @@ int layerActionGroup(LayerActionId id) => switch (id) {
 /// What the map's active-layer chip reads.
 String layerChipLabel(Layer? layer) => layer?.name ?? 'No layer';
 
+/// One button an empty Elements list offers.
+typedef EmptyStateAction = ({MapRequestKind kind, IconData icon, String label});
+
+/// What an empty layer of [type] can be filled with, as the map-owned actions
+/// its Elements list offers instead of a hint naming buttons elsewhere.
+List<EmptyStateAction> emptyStateActions(String type) => [
+  if (layerTypeHolds(type, kPoi)) ...[
+    (
+      kind: MapRequestKind.importPois,
+      icon: Icons.travel_explore,
+      label: 'Import POIs',
+    ),
+    (
+      kind: MapRequestKind.importStations,
+      icon: Icons.directions_transit,
+      label: 'Import stations',
+    ),
+  ],
+  if (type == kBorders)
+    (
+      kind: MapRequestKind.importBordersVisible,
+      icon: Icons.public,
+      label: 'Import borders in view',
+    ),
+  if (layerTypeHolds(type, kFreeLine) || layerTypeHolds(type, kFreeArea))
+    (
+      kind: MapRequestKind.importFeature,
+      icon: Icons.search,
+      label: 'Import map feature',
+    ),
+  if (type != kBorders)
+    (
+      kind: MapRequestKind.enterAdd,
+      icon: Icons.add,
+      label: type == kPoi ? 'Add POI' : 'Add',
+    ),
+];
+
 /// One offered action, ready to render as a menu item, a list tile or a
 /// switch.
 class LayerAction {
@@ -827,10 +865,15 @@ class OpacityControl extends StatefulWidget {
     super.key,
     required this.value,
     required this.onChanged,
+    this.inline = false,
   });
 
   final double value;
   final ValueChanged<double> onChanged;
+
+  /// Slider and field side by side on one row (the layer sheet), rather than
+  /// stacked (the dialog, which is narrow).
+  final bool inline;
 
   @override
   State<OpacityControl> createState() => _OpacityControlState();
@@ -852,55 +895,58 @@ class _OpacityControlState extends State<OpacityControl> {
 
   @override
   Widget build(BuildContext context) {
+    final field = SizedBox(
+      width: scaledPx(context, 90),
+      child: TextField(
+        controller: _field,
+        focusNode: _focus,
+        decoration: const InputDecoration(
+          labelText: 'Opaque',
+          suffixText: '%',
+          isDense: true,
+        ),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        onChanged: (s) {
+          final n = parseDecimal(s);
+          if (n == null || !n.isFinite) return;
+          final v = (n / 100).clamp(0.0, 1.0);
+          setState(() => _current = v);
+          widget.onChanged(v);
+        },
+      ),
+    );
+    final slider = Slider(
+      min: 0,
+      max: 1,
+      divisions: 20,
+      value: _current,
+      label: '${(_current * 100).round()}%',
+      onChanged: (v) {
+        setState(() => _current = v);
+        // Mirrored even while the field has focus: the keyboard stays
+        // up during a drag, and a stale number there would contradict
+        // the slider.
+        final t = (v * 100).round().toString();
+        _field.value = TextEditingValue(
+          text: t,
+          selection: TextSelection.collapsed(offset: t.length),
+        );
+        widget.onChanged(v);
+      },
+    );
+    if (widget.inline) {
+      return Row(
+        children: [
+          Expanded(child: slider),
+          field,
+        ],
+      );
+    }
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: scaledPx(context, 90),
-              child: TextField(
-                controller: _field,
-                focusNode: _focus,
-                decoration: const InputDecoration(
-                  labelText: 'Opaque',
-                  suffixText: '%',
-                  isDense: true,
-                ),
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                onChanged: (s) {
-                  final n = parseDecimal(s);
-                  if (n == null || !n.isFinite) return;
-                  final v = (n / 100).clamp(0.0, 1.0);
-                  setState(() => _current = v);
-                  widget.onChanged(v);
-                },
-              ),
-            ),
-          ],
-        ),
-        Slider(
-          min: 0,
-          max: 1,
-          divisions: 20,
-          value: _current,
-          label: '${(_current * 100).round()}%',
-          onChanged: (v) {
-            setState(() => _current = v);
-            // Mirrored even while the field has focus: the keyboard stays
-            // up during a drag, and a stale number there would contradict
-            // the slider.
-            final t = (v * 100).round().toString();
-            _field.value = TextEditingValue(
-              text: t,
-              selection: TextSelection.collapsed(offset: t.length),
-            );
-            widget.onChanged(v);
-          },
-        ),
+        Row(mainAxisSize: MainAxisSize.min, children: [field]),
+        slider,
       ],
     );
   }

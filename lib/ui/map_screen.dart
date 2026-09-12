@@ -65,6 +65,8 @@ import 'poi_set_editor.dart';
 import 'hit_test.dart';
 import 'import_actions.dart';
 import 'import_progress.dart';
+import 'layer_actions.dart';
+import 'layer_sheet.dart';
 import 'layers_panel.dart';
 import 'object_summary.dart';
 import 'pending_import_sheet.dart';
@@ -4958,16 +4960,19 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       ),
                     ),
                   ),
-                // The chrome over the map at the top-left: a menu button, and
-                // beside it the undo/redo pair. They are chrome rather than
-                // FABs for the same reason the compass below is — the FAB
-                // column is hidden while an editor sheet is open, which is
-                // precisely when an edit wants taking back.
+                // The chrome over the map at the top: a menu button, the
+                // undo/redo pair, the active-layer chip, and — only while the
+                // map is rotated — a compass at the right. They are chrome
+                // rather than FABs because the FAB column is hidden while an
+                // editor sheet is open, which is precisely when an edit wants
+                // taking back, and both when the tools are collapsed and while
+                // a sheet is up — so a compass FAB was invisible in exactly
+                // the states where an accidental rotation gets noticed. One
+                // row, so the chip and the compass cannot overlap.
                 SafeArea(
                   child: Padding(
                     padding: const EdgeInsets.all(8),
                     child: Row(
-                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Material(
                           color: Theme.of(context).colorScheme.surface,
@@ -4983,44 +4988,53 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         ),
                         const SizedBox(width: 8),
                         const UndoButtons(),
-                      ],
-                    ),
-                  ),
-                ),
-                // …and a compass at the top-right, but only while the map is
-                // rotated. It is map chrome rather than a FAB on purpose: a
-                // two-finger pinch also rotates, and the FAB column is hidden
-                // both when the tools are collapsed and while an editor sheet
-                // is open — so as a FAB it was invisible in exactly the states
-                // where an accidental rotation gets noticed.
-                if (_rotation != 0)
-                  SafeArea(
-                    child: Align(
-                      alignment: Alignment.topRight,
-                      child: Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Material(
-                          color: Theme.of(context).colorScheme.surface,
-                          elevation: 2,
-                          shape: const CircleBorder(),
-                          clipBehavior: Clip.antiAlias,
-                          child: IconButton(
-                            tooltip: 'Reset to north-up',
-                            onPressed: () => _mapController.rotate(0),
-                            icon: Transform.rotate(
-                              // Counter-rotate so the needle points to
-                              // map-north.
-                              angle: -_rotation * math.pi / 180,
-                              child: const Icon(
-                                Icons.navigation,
-                                color: Colors.red,
+                        const SizedBox(width: 8),
+                        // The active layer, always in view: everything the
+                        // map does — Add, ✎, the import button, the long-press
+                        // context — is about this layer, and until it was
+                        // shown here the only way to learn which one it was
+                        // was to open the drawer.
+                        Expanded(
+                          // Fixed height: an unbounded Align would take the
+                          // Stack's full height and drop the whole row to
+                          // mid-screen.
+                          child: SizedBox(
+                            height: 48,
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: _ActiveLayerChip(
+                                layer: activeLayer,
+                                onTap: () => showLayerSheet(context, ref),
                               ),
                             ),
                           ),
                         ),
-                      ),
+                        if (_rotation != 0) ...[
+                          const SizedBox(width: 8),
+                          Material(
+                            color: Theme.of(context).colorScheme.surface,
+                            elevation: 2,
+                            shape: const CircleBorder(),
+                            clipBehavior: Clip.antiAlias,
+                            child: IconButton(
+                              tooltip: 'Reset to north-up',
+                              onPressed: () => _mapController.rotate(0),
+                              icon: Transform.rotate(
+                                // Counter-rotate so the needle points to
+                                // map-north.
+                                angle: -_rotation * math.pi / 180,
+                                child: const Icon(
+                                  Icons.navigation,
+                                  color: Colors.red,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
+                ),
                 // Every banner stacks in one column under the chrome row,
                 // so none of them can land on the menu button — or on each
                 // other, when two show at once (a bulk-delete banner over an
@@ -5758,6 +5772,68 @@ class _InfoChip extends StatelessWidget {
               icon: const Icon(Icons.close, size: 18),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The chrome row's active-layer chip: swatch · type icon · name.
+///
+/// Tapping it opens the layer sheet — the map's own route to switching the
+/// active layer and to every per-layer setting, which used to live only in
+/// the drawer's ⋮ menu.
+class _ActiveLayerChip extends StatelessWidget {
+  const _ActiveLayerChip({required this.layer, required this.onTap});
+
+  final Layer? layer;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = layer;
+    return Material(
+      color: Theme.of(context).colorScheme.surface,
+      elevation: 2,
+      borderRadius: BorderRadius.circular(24),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 8, 0),
+          child: SizedBox(
+            height: 48,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (l != null) ...[
+                  Container(
+                    width: 14,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: Color(l.colorArgb),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.black26),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Icon(typeIcon(l.type), size: 16),
+                  const SizedBox(width: 6),
+                ] else ...[
+                  const Icon(Icons.layers_outlined, size: 16),
+                  const SizedBox(width: 6),
+                ],
+                Flexible(
+                  child: Text(
+                    layerChipLabel(l),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const Icon(Icons.expand_more, size: 18),
+              ],
+            ),
+          ),
         ),
       ),
     );

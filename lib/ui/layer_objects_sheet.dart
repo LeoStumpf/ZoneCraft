@@ -27,10 +27,10 @@ import '../data/repository.dart' show ColoredElement, ZMove;
 import '../state/providers.dart';
 import 'import_actions.dart' show convertRingsToFreehandFlow;
 import 'element_color.dart';
+import 'layer_actions.dart' show emptyStateActions;
 import 'element_color_dialog.dart';
 import 'object_summary.dart';
-import 'transit_modes_sheet.dart'
-    show TransitModeFilter, transitTallyProvider;
+import 'transit_modes_sheet.dart' show TransitModeFilter, transitTallyProvider;
 
 /// What the caller (the layer tile) must do after the sheet closes. Rename and
 /// delete are applied inside the sheet — they don't need the map or the drawer.
@@ -43,13 +43,62 @@ enum ElementAction {
 
   /// Re-run an import that never finished.
   retry,
+
+  /// Start a map-owned action for the layer — an empty list's "Import…" /
+  /// "Add" buttons. Carries a [MapRequest] rather than a target.
+  request,
 }
 
 class ElementResult {
-  const ElementResult(this.action, this.target);
+  const ElementResult(this.action, this.target) : request = null;
+
+  const ElementResult.request(MapRequest this.request)
+    : action = ElementAction.request,
+      target = null;
 
   final ElementAction action;
-  final ObjectSummary target;
+
+  /// Null only for [ElementAction.request].
+  final ObjectSummary? target;
+  final MapRequest? request;
+}
+
+/// Carries out [result] on the map's providers: selects, focuses, or posts
+/// the one-shot request the map answers.
+///
+/// Shared by the drawer and the layer sheet, which differ only in what has to
+/// be closed so the map is visible — that is [closeHost]. A retry and a
+/// request close it *before* posting: the map answers a retry by pushing a
+/// progress dialog synchronously (a retry already has its set row, so nothing
+/// is awaited first), and a pop issued afterwards would take that dialog
+/// instead of the host.
+void applyElementResult(
+  WidgetRef ref,
+  Layer layer,
+  ElementResult result, {
+  required VoidCallback closeHost,
+}) {
+  switch (result.action) {
+    case ElementAction.retry:
+      final retry = ref.read(pendingImportRetryProvider.notifier);
+      closeHost();
+      retry.request(result.target!.ref.id);
+    case ElementAction.request:
+      final requests = ref.read(mapRequestProvider.notifier);
+      closeHost();
+      requests.post(result.request!);
+    case ElementAction.edit:
+      // Selecting also makes the layer active, so the drag handles, the Add
+      // button and the long-press context all follow the object being edited.
+      final target = result.target!;
+      ref.read(activeLayerProvider.notifier).select(layer.id);
+      selectObject(ref, target.ref.kind, target.ref.id);
+      ref.read(pendingFocusProvider.notifier).request(target.fitPoints);
+      closeHost();
+    case ElementAction.zoom:
+      ref.read(pendingFocusProvider.notifier).request(result.target!.fitPoints);
+      closeHost();
+  }
 }
 
 /// Lists every object in [layer] with per-object edit / zoom / rename / delete.
@@ -74,7 +123,10 @@ Future<ElementResult?> showLayerObjects(BuildContext context, Layer layer) {
 }
 
 class _LayerObjectsList extends ConsumerWidget {
-  const _LayerObjectsList({required this.layer, required this.scrollController});
+  const _LayerObjectsList({
+    required this.layer,
+    required this.scrollController,
+  });
 
   final Layer layer;
   final ScrollController scrollController;
@@ -86,7 +138,8 @@ class _LayerObjectsList extends ConsumerWidget {
     // capability: every POI layer *could* hold a station import, and gating on
     // that alone put "No stations imported yet" above a layer of cafés.
     final poiSets = ref.watch(poiSetsProvider).asData?.value ?? const [];
-    final hasStations = layerHolds(layer, kPoi) &&
+    final hasStations =
+        layerHolds(layer, kPoi) &&
         poiSets.any((s) => s.layerId == layer.id && s.isStationImport);
     final canEdit = layerHasEditor(layer.type);
 
@@ -117,7 +170,7 @@ class _LayerObjectsList extends ConsumerWidget {
                         return '${t.shown} / ${t.total} shown';
                       }()
                     : '${summaries.length} '
-                        'element${summaries.length == 1 ? '' : 's'}',
+                          'element${summaries.length == 1 ? '' : 's'}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
@@ -136,8 +189,10 @@ class _LayerObjectsList extends ConsumerWidget {
                     // the *elements* are fetched sets that delete data. Both
                     // live here, each under a heading that says which it is.
                     if (hasStations) ...[
-                      const _SectionHeader('Station types',
-                          'Tick which kinds of stop to draw'),
+                      const _SectionHeader(
+                        'Station types',
+                        'Tick which kinds of stop to draw',
+                      ),
                       TransitModeFilter(layer: layer),
                       const Divider(height: 1),
                       _SectionHeader(
@@ -184,7 +239,8 @@ class _LayerObjectsList extends ConsumerWidget {
     // that does not move. Their z is honoured on the map; it just is not
     // editable from a list that is not in that order — and areas at one admin
     // level do not overlap anyway.
-    final canStack = kind != null &&
+    final canStack =
+        kind != null &&
         kind != ColoredElement.borderArea &&
         sameKind.length > 1 &&
         at >= 0;
@@ -195,7 +251,8 @@ class _LayerObjectsList extends ConsumerWidget {
       // of different kinds, and one shared icon would make the list
       // unreadable — a circle and a POI set would look identical.
       leading: Icon(
-          s.isPending ? Icons.refresh : typeIcon(s.ref.kind.layerType)),
+        s.isPending ? Icons.refresh : typeIcon(s.ref.kind.layerType),
+      ),
       title: Text(s.title, overflow: TextOverflow.ellipsis),
       subtitle: Text(s.subtitle),
       onTap: () => Navigator.pop(
@@ -206,8 +263,8 @@ class _LayerObjectsList extends ConsumerWidget {
           s.isPending
               ? ElementAction.retry
               : canEdit
-                  ? ElementAction.edit
-                  : ElementAction.zoom,
+              ? ElementAction.edit
+              : ElementAction.zoom,
           s,
         ),
       ),
@@ -259,15 +316,19 @@ class _LayerObjectsList extends ConsumerWidget {
               child: Text('Convert to freehand area…'),
             ),
           // Named against the map, not against the list: the list reads
-              // bottom-of-map first, so "front" is *down* it.
+          // bottom-of-map first, so "front" is *down* it.
           if (canMoveForward) ...[
             const PopupMenuItem(
-                value: 'toFront', child: Text('Bring to front')),
+              value: 'toFront',
+              child: Text('Bring to front'),
+            ),
             const PopupMenuItem(value: 'forward', child: Text('Bring forward')),
           ],
           if (canMoveBack) ...[
             const PopupMenuItem(
-                value: 'backward', child: Text('Send backward')),
+              value: 'backward',
+              child: Text('Send backward'),
+            ),
             const PopupMenuItem(value: 'toBack', child: Text('Send to back')),
           ],
           if (canMoveBack || canMoveForward) const PopupMenuDivider(),
@@ -284,7 +345,10 @@ class _LayerObjectsList extends ConsumerWidget {
   /// rings from the database rather than the summary row — the row carries a
   /// bounding box, not the outline.
   Future<void> _convertToFreehand(
-      BuildContext context, WidgetRef ref, ObjectSummary s) async {
+    BuildContext context,
+    WidgetRef ref,
+    ObjectSummary s,
+  ) async {
     final repo = ref.read(repositoryProvider);
     final rings = s.ref.kind == ObjectKind.heightRegion
         ? await repo.heightRegionRings(s.ref.id)
@@ -302,7 +366,10 @@ class _LayerObjectsList extends ConsumerWidget {
 
   /// Gives one element its own colour, or hands it back to the layer.
   Future<void> _pickElementColor(
-      BuildContext context, WidgetRef ref, ObjectSummary s) async {
+    BuildContext context,
+    WidgetRef ref,
+    ObjectSummary s,
+  ) async {
     // Resolved from the *row's* kind, not the layer's type: a mixed layer holds
     // several kinds, so the layer can no longer answer for one element.
     final kind = ColoredElement.forObjectKindName(s.ref.kind.name);
@@ -321,15 +388,16 @@ class _LayerObjectsList extends ConsumerWidget {
       shadeIndex: s.colorShade,
     );
     if (choice == null) return; // cancelled
-    await ref.read(repositoryProvider).setElementColor(
-          kind,
-          s.ref.id,
-          choice.argb,
-        );
+    await ref
+        .read(repositoryProvider)
+        .setElementColor(kind, s.ref.id, choice.argb);
   }
 
   Future<void> _rename(
-      BuildContext context, WidgetRef ref, ObjectSummary s) async {
+    BuildContext context,
+    WidgetRef ref,
+    ObjectSummary s,
+  ) async {
     final controller = TextEditingController(text: s.title);
     final name = await showDialog<String>(
       context: context,
@@ -396,7 +464,10 @@ class _LayerObjectsList extends ConsumerWidget {
   }
 
   Future<void> _delete(
-      BuildContext context, WidgetRef ref, ObjectSummary s) async {
+    BuildContext context,
+    WidgetRef ref,
+    ObjectSummary s,
+  ) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -486,9 +557,9 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListView(
-        controller: scrollController,
-        children: [_EmptyHint(layer: layer)],
-      );
+    controller: scrollController,
+    children: [_EmptyHint(layer: layer)],
+  );
 }
 
 class _EmptyHint extends StatelessWidget {
@@ -499,19 +570,47 @@ class _EmptyHint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hint = switch (layer.type) {
-      'poi' => 'No POI sets yet — use Import POIs to fetch a category or the '
-          'transit stations of an area, or Add to place your own.',
+      'poi' =>
+        'No POI sets yet — fetch a category around the map centre or '
+            'the transit stations of an area, or place your own.',
       'borders' =>
-        'No areas yet — tap Import borders, then tap two corners of an area to '
-            'fetch every boundary that crosses it.',
-      _ => 'No elements yet — tap Add, then tap the map to place one.',
+        'No areas yet — import every boundary that crosses the '
+            'part of the map in view.',
+      _ => 'No elements yet.',
     };
+    // Buttons, not directions: the hint used to name buttons that live on
+    // the map, behind this sheet and the drawer. Each of these closes both
+    // and starts the action.
+    final actions = emptyStateActions(layer.type);
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
-      child: Text(
-        hint,
-        textAlign: TextAlign.center,
-        style: Theme.of(context).textTheme.bodyMedium,
+      child: Column(
+        children: [
+          Text(
+            hint,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.center,
+            children: [
+              for (final a in actions)
+                FilledButton.tonalIcon(
+                  icon: Icon(a.icon),
+                  label: Text(a.label),
+                  onPressed: () => Navigator.pop(
+                    context,
+                    ElementResult.request(
+                      MapRequest(a.kind, layerId: layer.id),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }

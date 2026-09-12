@@ -454,33 +454,18 @@ class _LayerTile extends ConsumerWidget {
 
   /// Opens this layer's element list and applies whatever it asks for.
   ///
-  /// The sheet handles rename/delete itself; only "edit" and "zoom to" need the
-  /// map, and both end with the drawer closed so the result is visible. This is
-  /// the single place that pops routes for the flow.
+  /// The sheet handles rename/delete itself; what needs the map goes through
+  /// [applyElementResult], which ends with the drawer closed so the result is
+  /// visible. This is the single place that pops routes for the flow.
   Future<void> _openElements(BuildContext context, WidgetRef ref) async {
     final result = await showLayerObjects(context, layer);
     if (result == null || !context.mounted) return;
-    final target = result.target;
-    if (result.action == ElementAction.retry) {
-      // The map screen owns the import machinery, so ask it to re-run this one.
-      // Close the drawer *before* asking: the map answers by pushing a progress
-      // dialog, and — because a retry already has its set row, so nothing is
-      // awaited first — it pushes it synchronously. A pop issued afterwards
-      // would take that dialog instead of the drawer, leaving the drawer up and
-      // the spinner invisible while the import ran unseen.
-      final retry = ref.read(pendingImportRetryProvider.notifier);
-      Navigator.pop(context);
-      retry.request(target.ref.id);
-      return;
-    }
-    if (result.action == ElementAction.edit) {
-      // Selecting also makes the layer active, so the drag handles, the Add
-      // button and the long-press context all follow the object being edited.
-      ref.read(activeLayerProvider.notifier).select(layer.id);
-      selectObject(ref, target.ref.kind, target.ref.id);
-    }
-    ref.read(pendingFocusProvider.notifier).request(target.fitPoints);
-    Navigator.pop(context); // close the drawer so the map is visible
+    applyElementResult(
+      ref,
+      layer,
+      result,
+      closeHost: () => Navigator.pop(context),
+    );
   }
 }
 
