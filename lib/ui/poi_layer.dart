@@ -47,6 +47,23 @@ IconData poiIconFor(String categoryKey) => switch (categoryKey) {
       _ => Icons.place_outlined,
     };
 
+/// What a tapped cluster badge stood for: where it was anchored, how many
+/// points it collapsed, whether every one of them is a station, and the icon
+/// the badge showed (null when the members share none).
+class PoiClusterTap {
+  const PoiClusterTap({
+    required this.center,
+    required this.count,
+    required this.stations,
+    required this.icon,
+  });
+
+  final LatLng center;
+  final int count;
+  final bool stations;
+  final IconData? icon;
+}
+
 /// Renders one `poi` layer's stored points as markers, collapsing any that
 /// would overlap at the current zoom into count badges (clusters).
 ///
@@ -54,7 +71,8 @@ IconData poiIconFor(String categoryKey) => switch (categoryKey) {
 /// white disc with the category icon and the OSM name (when present) on a tiny
 /// plate below. Clusters are a slightly larger disc ringed in the layer colour
 /// showing the member count (plus the category icon when all members share
-/// one); tapping a cluster zooms in via [onClusterTap], which splits it apart.
+/// one); tapping a cluster reports it through [onClusterTap] — the map *says*
+/// what the badge holds and leaves zooming to the gestures everyone knows.
 ///
 /// A **station import** (a box set) draws by the same rules with three
 /// differences it brought with it from the old `transit` layer: each station
@@ -90,8 +108,9 @@ class PoiMarkersLayer extends StatelessWidget {
   /// radius-imported POI shows its name at any zoom, as it always did.
   static const double _labelMinZoom = 14;
 
-  /// Called with a cluster's position when it is tapped (the map should zoom).
-  final void Function(LatLng center)? onClusterTap;
+  /// Called when a cluster badge is tapped. The map shows what was hit; it
+  /// never moves the camera on a plain tap (see `_MapScreenState._showInfo`).
+  final void Function(PoiClusterTap tap)? onClusterTap;
 
   /// Two icon markers closer than this collapse into a cluster. Chosen so
   /// neither the 26 px discs nor their name plates overlap.
@@ -174,7 +193,14 @@ class PoiMarkersLayer extends StatelessWidget {
         // A badge over two differently-coloured sets belongs to neither, so it
         // falls back to the layer's own colour.
         markers.add(_clusterMarker(
-            center, c.indices.length, sharedIcon, sharedColor ?? layerColor));
+          PoiClusterTap(
+            center: center,
+            count: c.indices.length,
+            stations: allStations,
+            icon: sharedIcon,
+          ),
+          sharedColor ?? layerColor,
+        ));
       }
     }
     return MarkerLayer(markers: markers);
@@ -241,18 +267,19 @@ class PoiMarkersLayer extends StatelessWidget {
   }
 
   /// A cluster badge: member count ringed in the layer colour, plus the
-  /// category icon when every member shares one. Tap to zoom in.
-  Marker _clusterMarker(
-      LatLng center, int count, IconData? sharedIcon, Color color) {
+  /// category icon when every member shares one. Tap to learn what it holds.
+  Marker _clusterMarker(PoiClusterTap tap, Color color) {
     const size = 38.0;
+    final count = tap.count;
+    final sharedIcon = tap.icon;
     return Marker(
-      point: center,
+      point: tap.center,
       width: size,
       height: size,
       alignment: Alignment.center,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: onClusterTap == null ? null : () => onClusterTap!(center),
+        onTap: onClusterTap == null ? null : () => onClusterTap!(tap),
         child: Container(
           decoration: BoxDecoration(
             color: Colors.white,

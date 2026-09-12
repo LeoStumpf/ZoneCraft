@@ -93,6 +93,25 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   layer active — so an element you can see is always reachable, whichever layer is active.
   ✎ Edit mode is enabled when *any* visible layer holds something to select. The four
   top-centre banners and the chip stack in one column under the chrome row (`kBannerTop`).
+  The same rule covers a **cluster badge**: tapping one shows a chip, it never zooms.
+- **Map gestures follow Google Maps** (`map_screen._interactionOptions`, `ui/two_finger_gestures.dart`).
+  Double-tap zooms in at the finger, **two-finger tap zooms out** around the fingers
+  (`TwoFingerTapDetector` — flutter_map has no such gesture), and **rotation is never
+  flutter_map's**: its `rotate` flag stays off because without its multi-finger race every
+  wobble of a pinch turned the map, and *with* the race a horizontal pinch reads as a 359°
+  twist (Flutter's `ScaleUpdateDetails.rotation` is un-normalised and flutter_map compares
+  `.abs()` — measured on device, still so in 8.3.2). `TwistDetector` gates it instead: a
+  deliberate ≥ `kRotationThresholdDegrees` (20°) twist, then the map follows the fingers via
+  `rotateAroundPoint`; pinch zoom/pan stay flutter_map's throughout. Both detectors are fed
+  by one *watching* `Listener` around `FlutterMap` (`HitTestBehavior.translucent`, never in
+  the gesture arena). **Every camera move the app makes itself glides** through
+  `_animateTo`/`_animateToFit` (`kCameraGlide`; a user gesture stops it, a continent-away hop
+  cuts) — Locate me, Zoom to, a received place, an import fit, a cluster's Zoom in, the
+  two-finger tap. **Double-tap zoom is off only while a tap *places*** (Add, Draw, the
+  measuring modes, an armed placement — two quick corner taps must not become a zoom); View
+  and ✎ Edit keep it. **A tap never moves the camera**: a cluster badge raises the info chip
+  ("12 POIs · layer" with a *Zoom in* button, the same deliberate act as an element chip's
+  Edit) instead of zooming on its own — `_InfoTarget` is `_HitInfo | _ClusterInfo`.
 - **Layers drawer** (show/hide, reorder, recolour, adjust opacity, rename, invert, add/delete),
   plus a pinned bottom **Map** tile (the base OSM tiles as a hideable, opacity-adjustable
   layer that can never be deleted or reordered; its state lives in `AppSettings`) + **compass**,

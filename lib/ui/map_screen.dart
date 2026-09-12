@@ -71,6 +71,7 @@ import 'layers_panel.dart';
 import 'object_summary.dart';
 import 'pending_import_sheet.dart';
 import 'draw_stroke.dart';
+import 'two_finger_gestures.dart';
 import 'poi_import_dialog.dart';
 import 'poi_category_dialog.dart';
 import 'poi_icons.dart';
@@ -97,6 +98,15 @@ const double kMinFocusZoom = 14.0;
 /// How long the view-mode info chip stays up before fading on its own.
 const Duration kInfoChipTimeout = Duration(seconds: 4);
 
+/// Degrees of two-finger twist before the map starts rotating. Below it a
+/// pinch is a pinch — see `_interactionOptions` and [TwistDetector].
+const double kRotationThresholdDegrees = 20;
+
+/// How long a programmatic camera move glides (Locate me, Zoom to, a cluster's
+/// Zoom in, a two-finger tap). Google Maps animates every camera change; a
+/// cut reads as the map having been replaced.
+const Duration kCameraGlide = Duration(milliseconds: 350);
+
 /// Where the top-centre banners start: below the chrome row (8 dp padding +
 /// a 48 dp round button + 8 dp), so a banner never lands on the menu button.
 const double kBannerTop = 68;
@@ -109,8 +119,24 @@ class MapScreen extends ConsumerStatefulWidget {
 }
 
 class _MapScreenState extends ConsumerState<MapScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   final _mapController = MapController();
+
+  // --- Camera glide ---------------------------------------------------------
+  // The one animation behind every camera move the app makes on its own
+  // (see [_animateTo]). A user gesture stops it mid-flight: the finger wins.
+  late final AnimationController _glide = AnimationController(
+    vsync: this,
+    duration: kCameraGlide,
+  )..addListener(_onGlideTick);
+  LatLngTween? _glideCenter;
+  Tween<double>? _glideZoom;
+
+  /// Two-finger tap → zoom out, and a deliberate twist → rotate (see
+  /// [TwoFingerTapDetector], [TwistDetector]). Both fed from one watching
+  /// `Listener` around the map; neither is in the gesture arena.
+  final _twoFingerTap = TwoFingerTapDetector();
+  final _twist = TwistDetector(thresholdDegrees: kRotationThresholdDegrees);
 
   /// Deep-link subscription (`zonecraft://…`); the app's only one.
   StreamSubscription<Uri>? _linkSub;
@@ -132,10 +158,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
   // an object is selected.
   bool _editHintShown = false;
   // --- Info chip ------------------------------------------------------------
-  // What a view-mode tap landed on, shown as a transient chip with an Edit
-  // button. The chip *shows* and never *changes*: the tap itself selects
-  // nothing, so nudging the map can neither open nor close an editor.
-  HitCandidate? _infoHit;
+  // What a tap landed on, shown as a transient chip with one deliberate
+  // action: Edit for an element, Zoom in for a cluster badge. The chip *shows*
+  // and never *changes*: the tap itself selects nothing and moves nothing, so
+  // nudging the map can neither open an editor nor fly the camera away.
+  _InfoTarget? _info;
   Timer? _infoTimer;
   // --- Add mode -------------------------------------------------------------
   // While [MapMode.add] is armed these hold the layer being added to. Sticky:
@@ -422,6 +449,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
   @override
   void dispose() {
     _infoTimer?.cancel();
+    _glide.dispose();
+    _twoFingerTap.reset();
+    _twist.reset();
     _saveCamera();
     unawaited(_linkSub?.cancel());
     _prefetchDebounce?.cancel();
@@ -431,6 +461,87 @@ class _MapScreenState extends ConsumerState<MapScreen>
     _mapController.dispose();
     super.dispose();
   }
+
+  /// Glides the camera to [center] at [zoom] — the app's one way to move the
+  /// map on its own. Google Maps animates every programmatic camera change,
+  /// and a cut in the middle of a session reads as the map having been
+  /// swapped rather than moved.
+  ///
+  /// A hop this can't make legible — a continent away at a very different
+  /// zoom, where a straight lat/lng tween sweeps a blur across the screen —
+  /// cuts instead. A user gesture that starts mid-glide stops it
+  /// ([_onMapEvent]); a new glide replaces a running one.
+  void _animateTo(LatLng center, double zoom) {
+    final cam = _mapController.camera;
+    _glide.stop();
+    if (!center.latitude.isFinite ||
+        !center.longitude.isFinite ||
+        !zoom.isFinite) {
+      return;
+    }
+    if (center == cam.center && zoom == cam.zoom) return;
+    final onScreen = cameraViewport(
+      cam,
+    ).inflate(64).contains(cam.latLngToScreenOffset(center));
+    if (!onScreen && (zoom - cam.zoom).abs() > 4) {
+      _mapController.move(center, zoom);
+      return;
+    }
+    _glideCenter = LatLngTween(begin: cam.center, end: center);
+    _glideZoom = Tween<double>(begin: cam.zoom, end: zoom);
+    unawaited(_glide.forward(from: 0));
+  }
+
+  /// A two-finger tap at [midpoint] (map-local): one zoom level out, keeping
+  /// the spot between the fingers where it was — the mirror of double-tap
+  /// zoom-in, which flutter_map keys on the tap the same way.
+  void _onTwoFingerTap(Offset midpoint) {
+    final cam = _mapController.camera;
+    final zoom = (cam.zoom - 1).clamp(2.0, 19.0);
+    if (zoom == cam.zoom) return;
+    _animateTo(cam.focusedZoomCenter(midpoint, zoom), zoom);
+  }
+
+  /// A twist step of [degrees] about the fingers' [midpoint] (map-local).
+  /// `rotateAroundPoint` wants the pivot as an offset from the map centre;
+  /// the pinch zoom/pan flutter_map applies in the same gesture re-anchors
+  /// itself on the current camera each frame, so the two compose.
+  void _onTwist(double degrees, Offset midpoint) {
+    _glide.stop();
+    final cam = _mapController.camera;
+    _mapController.rotateAroundPoint(
+      cam.rotation + degrees,
+      offset: midpoint - cameraViewport(cam).center,
+    );
+  }
+
+  /// The camera a [fit] would produce, reached by gliding instead of cutting.
+  void _animateToFit(CameraFit fit) {
+    final target = fit.fit(_mapController.camera);
+    _animateTo(target.center, target.zoom);
+  }
+
+  void _onGlideTick() {
+    final t = Curves.fastOutSlowIn.transform(_glide.value);
+    final c = _glideCenter, z = _glideZoom;
+    if (c == null || z == null) return;
+    _mapController.move(c.transform(t), z.transform(t));
+  }
+
+  /// Whether [source] is a finger, wheel or key — anything that should take
+  /// the camera back from a running glide.
+  static bool _isUserGesture(MapEventSource source) => switch (source) {
+    MapEventSource.dragStart ||
+    MapEventSource.onDrag ||
+    MapEventSource.multiFingerGestureStart ||
+    MapEventSource.onMultiFinger ||
+    MapEventSource.doubleTap ||
+    MapEventSource.doubleTapHold ||
+    MapEventSource.scrollWheel ||
+    MapEventSource.keyboard ||
+    MapEventSource.cursorKeyboardRotation => true,
+    _ => false,
+  };
 
   /// Debounced offline-tile prefetch (same coalescing as the overlays).
   void _schedulePrefetch() {
@@ -670,7 +781,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
         _myPosition = here;
         _myElevation = null;
       });
-      _mapController.move(
+      _animateTo(
         here,
         math.max(_mapController.camera.zoom, kMinFocusZoom).clamp(2.0, 19.0),
       );
@@ -760,18 +871,31 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// Switches the map mode, dropping the scratch state of the mode being left.
   /// Arming anything other than [MapMode.edit] also clears the selection, so a
   /// docked editor never covers a mode's banner.
-  /// Shows (or, with null, hides) the info chip for [hit]. Auto-hides after a
-  /// few seconds; also cleared by a pan, a mode change and any selection.
-  void _showInfo(HitCandidate? hit) {
+  /// Shows (or, with null, hides) the info chip for [target]. Auto-hides after
+  /// a few seconds; also cleared by a pan, a mode change and any selection.
+  void _showInfo(_InfoTarget? target) {
     _infoTimer?.cancel();
     _infoTimer = null;
-    if (hit == null && _infoHit == null) return;
-    setState(() => _infoHit = hit);
-    if (hit != null) {
+    if (target == null && _info == null) return;
+    setState(() => _info = target);
+    if (target != null) {
       _infoTimer = Timer(kInfoChipTimeout, () {
-        if (mounted) setState(() => _infoHit = null);
+        if (mounted) setState(() => _info = null);
       });
     }
+  }
+
+  /// A tapped cluster badge: the chip says what it holds, and its one action
+  /// is the zoom the badge used to perform on its own. Google Maps never moves
+  /// the camera on a plain tap, and neither does anything else on this map.
+  void _showClusterInfo(Layer layer, PoiClusterTap tap) =>
+      _showInfo(_ClusterInfo(layer: layer, tap: tap));
+
+  /// The camera step a cluster's Zoom in takes — enough to split most badges,
+  /// around the badge rather than the screen centre so it stays under the eye.
+  void _zoomIntoCluster(PoiClusterTap tap) {
+    final zoom = (_mapController.camera.zoom + 1.5).clamp(2.0, 19.0);
+    _animateTo(tap.center, zoom);
   }
 
   /// The chip's text for [hit]: the Elements-list name, or an imported point's
@@ -782,6 +906,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
         ? '${s.title} · ${s.subtitle}'
         : _importedPointLabel(hit.ref) ?? 'Element';
     if (layer == null || layer.id == activeLayer?.id) return label;
+    return '$label — ${layer.name}';
+  }
+
+  /// The chip's text for a cluster badge: "12 stations" / "12 POIs", suffixed
+  /// with the layer when that is not the active one — the same rule as
+  /// [_infoLabel].
+  String _clusterLabel(Layer layer, PoiClusterTap tap, Layer? activeLayer) {
+    final noun = tap.stations ? 'stations' : 'POIs';
+    final label = '${tap.count} $noun';
+    if (layer.id == activeLayer?.id) return label;
     return '$label — ${layer.name}';
   }
 
@@ -2965,7 +3099,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
     _selectFreeArea(id);
   }
 
-  /// Map gestures, minus double-tap zoom whenever a tap *places* something.
+  /// Map gestures — the Google Maps vocabulary, minus double-tap zoom whenever
+  /// a tap *places* something.
   ///
   /// Double-tap-to-zoom swallows **both** taps when two land near each other in
   /// quick succession: flutter_map holds a single tap back until the double-tap
@@ -2975,17 +3110,33 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// 60 px apart placed *nothing* and zoomed the map instead, which reads as
   /// "I drew the rectangle and nothing happened".
   ///
-  /// So while a tap means something the zoom gesture is off; pinch, the zoom
-  /// buttons and plain view mode are untouched.
+  /// So while a tap *places* (Add, Draw, the measuring modes, an editor's
+  /// armed "tap the map to move it") the zoom gesture is off. In View and
+  /// ✎ Edit mode it stays on: a tap there only shows or selects, so two of
+  /// them becoming a zoom loses nothing — and double-tap is the zoom-in
+  /// gesture every map user brings along. Pinch and plain panning are never
+  /// touched.
+  ///
   /// While [drawing], one-finger drag belongs to the stroke, so the map's own
   /// drag (and its fling, and the one-finger double-tap-drag zoom) is off and
   /// panning moves to two fingers. That is a big change to make silently —
   /// hence the banner, which says so in as many words.
+  ///
+  /// **Rotation is never flutter_map's.** With its `rotate` flag every wobble
+  /// of a pinch turned the map (the "half my layer disappeared after
+  /// pinching" report in `camera_viewport.dart` started that way), and its
+  /// threshold-gated multi-finger race cannot be used: it compares Flutter's
+  /// raw, un-normalised twist angle, so a horizontal pinch reads as a 359°
+  /// turn and rotation wins at once (measured on device). Rotation therefore
+  /// comes from [TwistDetector] in the pointer `Listener` around the map —
+  /// a deliberate ≥ [kRotationThresholdDegrees] twist, then the map follows
+  /// the fingers — while pinch zoom and two-finger pan stay flutter_map's.
+  /// That is Google Maps' contract: a pinch is a pinch; a twist turns.
   InteractionOptions _interactionOptions(
     bool tapPlaces, {
     bool drawing = false,
   }) {
-    var flags = InteractiveFlag.all;
+    var flags = InteractiveFlag.all & ~InteractiveFlag.rotate;
     if (tapPlaces || drawing) {
       flags &=
           ~InteractiveFlag.doubleTapZoom & ~InteractiveFlag.doubleTapDragZoom;
@@ -3026,7 +3177,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
         // the map answers "what is this?" without anyone having to know that
         // long-press or ✎ exist.
         final hits = _hitsAt(latlng);
-        _showInfo(hits.isEmpty ? null : hits.first);
+        _showInfo(hits.isEmpty ? null : _HitInfo(hits.first));
         return;
       case MapMode.edit:
         break; // fall through to the hit-test below
@@ -3914,13 +4065,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
     ];
     if (pts.isEmpty) return;
     if (pts.length < 2) {
-      _mapController.move(
+      _animateTo(
         pts.first,
         math.max(_mapController.camera.zoom, kMinFocusZoom).clamp(2.0, 19.0),
       );
       return;
     }
-    _mapController.fitCamera(
+    _animateToFit(
       CameraFit.coordinates(
         coordinates: pts,
         padding: const EdgeInsets.all(64),
@@ -3973,7 +4124,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || !_mapReady) return;
         if (hasAnySelection(ref)) setState(_clearSelection);
-        _mapController.move(
+        _animateTo(
           next.latLng,
           math.max(_mapController.camera.zoom, kMinFocusZoom).clamp(2.0, 19.0),
         );
@@ -3990,7 +4141,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || !_mapReady) return;
         if (hasAnySelection(ref)) setState(_clearSelection);
-        _mapController.fitCamera(
+        _animateToFit(
           CameraFit.bounds(
             bounds: next.bounds,
             padding: const EdgeInsets.all(48),
@@ -4042,9 +4193,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final mode = ref.watch(mapModeProvider);
     final receivedPoint = ref.watch(receivedPointProvider);
     final pendingImport = ref.watch(pendingImportProvider);
-    // Whether a map tap currently *does* something — see [_interactionOptions].
+    // Whether a map tap currently *places* something — see
+    // [_interactionOptions]. View shows, Edit selects; neither places.
     final tapPlaces =
-        mode != MapMode.view ||
+        (mode != MapMode.view && mode != MapMode.edit) ||
         ref.watch(poiPointPlacementProvider) ||
         ref.watch(circlePlacementProvider) ||
         ref.watch(heightPlacementProvider) ||
@@ -4334,624 +4486,665 @@ class _MapScreenState extends ConsumerState<MapScreen>
           ? const SizedBox.shrink() // loads instantly from the local database
           : Stack(
               children: [
-                FlutterMap(
-                  key: _mapKey,
-                  mapController: _mapController,
-                  options: MapOptions(
-                    initialCenter: hasSavedCamera
-                        ? LatLng(savedLat, savedLng)
-                        : const LatLng(48.137, 11.575), // Munich
-                    initialZoom: hasSavedCamera ? savedZoom : 5,
-                    // OSM tiles exist up to z19; cap here so zooming further
-                    // doesn't leave a blank (tile-less) screen. A minZoom keeps
-                    // zoom-out gestures from degenerating into a NaN camera.
-                    maxZoom: 19,
-                    minZoom: 2,
-                    interactionOptions: _interactionOptions(
-                      tapPlaces,
-                      drawing: mode == MapMode.draw,
+                // The Listener only *watches* the pointers on their way to
+                // flutter_map — it takes part in no gesture arena — so the
+                // map's own pinch, drag and taps are exactly what they were.
+                // What it adds is the two-finger tap (zoom out).
+                Listener(
+                  behavior: HitTestBehavior.translucent,
+                  onPointerDown: (e) {
+                    _twoFingerTap.down(e.pointer, e.localPosition, e.timeStamp);
+                    _twist.down(e.pointer, e.localPosition);
+                  },
+                  onPointerMove: (e) {
+                    _twoFingerTap.move(e.pointer, e.localPosition);
+                    final turn = _twist.move(e.pointer, e.localPosition);
+                    if (turn != null) _onTwist(turn.degrees, turn.midpoint);
+                  },
+                  onPointerUp: (e) {
+                    _twist.up(e.pointer);
+                    final mid = _twoFingerTap.up(e.pointer, e.timeStamp);
+                    if (mid != null) _onTwoFingerTap(mid);
+                  },
+                  onPointerCancel: (e) {
+                    _twist.cancel(e.pointer);
+                    _twoFingerTap.cancel(e.pointer);
+                  },
+                  child: FlutterMap(
+                    key: _mapKey,
+                    mapController: _mapController,
+                    options: MapOptions(
+                      initialCenter: hasSavedCamera
+                          ? LatLng(savedLat, savedLng)
+                          : const LatLng(48.137, 11.575), // Munich
+                      initialZoom: hasSavedCamera ? savedZoom : 5,
+                      // OSM tiles exist up to z19; cap here so zooming further
+                      // doesn't leave a blank (tile-less) screen. A minZoom keeps
+                      // zoom-out gestures from degenerating into a NaN camera.
+                      maxZoom: 19,
+                      minZoom: 2,
+                      interactionOptions: _interactionOptions(
+                        tapPlaces,
+                        drawing: mode == MapMode.draw,
+                      ),
+                      onMapReady: () {
+                        _mapReady = true;
+                        _schedulePrefetch();
+                      },
+                      // Rotation is tracked off the event stream, not
+                      // onPositionChanged: flutter_map calls that one only for
+                      // move/zoom, so a pure rotate (two-finger twist, or our own
+                      // `rotate(0)`) would leave the compass pointing the wrong
+                      // way — and now also stuck on screen, since it shows only
+                      // while rotated.
+                      onMapEvent: (event) {
+                        if (_glide.isAnimating &&
+                            _isUserGesture(event.source)) {
+                          _glide.stop();
+                        }
+                        final r = event.camera.rotation;
+                        if (r != _rotation) setState(() => _rotation = r);
+                      },
+                      onPositionChanged: (camera, _) {
+                        // Recover from a degenerate gesture that produced a
+                        // non-finite camera: snap back to the last valid view so
+                        // flutter_map's tile layer (and our code) don't throw
+                        // "LatLng is not finite".
+                        final c = camera.center;
+                        if (!c.latitude.isFinite ||
+                            !c.longitude.isFinite ||
+                            !camera.zoom.isFinite) {
+                          _mapController.move(_lastGoodCenter, _lastGoodZoom);
+                          return;
+                        }
+                        _lastGoodCenter = c;
+                        _lastGoodZoom = camera.zoom;
+                        // The chip described what was under the finger; once
+                        // the map moves it no longer is.
+                        if (_info != null) _showInfo(null);
+                        // An import box's live corner *is* the map centre, so it
+                        // has to follow the camera. Only runs while a corner is
+                        // buffered.
+                        if (_pendingBoxA != null ||
+                            (_importCircleRadius != null &&
+                                _importCircleCentre == null)) {
+                          setState(() {});
+                        }
+                        // Prefetch tiles once the map settles.
+                        _schedulePrefetch();
+                      },
+                      onTap: (_, latlng) => _handleTap(latlng),
+                      onLongPress: (tapPos, latlng) => _handleMapLongPress(
+                        tapPos.global,
+                        latlng,
+                        activeLayer,
+                      ),
+                      // Desktop right-click reaches the same context menu.
+                      onSecondaryTap: (tapPos, latlng) => _handleMapLongPress(
+                        tapPos.global,
+                        latlng,
+                        activeLayer,
+                      ),
                     ),
-                    onMapReady: () {
-                      _mapReady = true;
-                      _schedulePrefetch();
-                    },
-                    // Rotation is tracked off the event stream, not
-                    // onPositionChanged: flutter_map calls that one only for
-                    // move/zoom, so a pure rotate (two-finger twist, or our own
-                    // `rotate(0)`) would leave the compass pointing the wrong
-                    // way — and now also stuck on screen, since it shows only
-                    // while rotated.
-                    onMapEvent: (event) {
-                      final r = event.camera.rotation;
-                      if (r != _rotation) setState(() => _rotation = r);
-                    },
-                    onPositionChanged: (camera, _) {
-                      // Recover from a degenerate gesture that produced a
-                      // non-finite camera: snap back to the last valid view so
-                      // flutter_map's tile layer (and our code) don't throw
-                      // "LatLng is not finite".
-                      final c = camera.center;
-                      if (!c.latitude.isFinite ||
-                          !c.longitude.isFinite ||
-                          !camera.zoom.isFinite) {
-                        _mapController.move(_lastGoodCenter, _lastGoodZoom);
-                        return;
-                      }
-                      _lastGoodCenter = c;
-                      _lastGoodZoom = camera.zoom;
-                      // The chip described what was under the finger; once
-                      // the map moves it no longer is.
-                      if (_infoHit != null) _showInfo(null);
-                      // An import box's live corner *is* the map centre, so it
-                      // has to follow the camera. Only runs while a corner is
-                      // buffered.
-                      if (_pendingBoxA != null ||
-                          (_importCircleRadius != null &&
-                              _importCircleCentre == null)) {
-                        setState(() {});
-                      }
-                      // Prefetch tiles once the map settles.
-                      _schedulePrefetch();
-                    },
-                    onTap: (_, latlng) => _handleTap(latlng),
-                    onLongPress: (tapPos, latlng) =>
-                        _handleMapLongPress(tapPos.global, latlng, activeLayer),
-                    // Desktop right-click reaches the same context menu.
-                    onSecondaryTap: (tapPos, latlng) =>
-                        _handleMapLongPress(tapPos.global, latlng, activeLayer),
-                  ),
-                  children: [
-                    // Base OSM tiles — a pinned bottom "layer": hideable and
-                    // opacity-adjustable from the layers drawer. Opacity is a
-                    // no-op at 1.0 (Flutter skips the layer), so the common case
-                    // costs nothing; when hidden the tiles are dropped entirely
-                    // and the map's background colour shows through.
-                    if (basemapVisible)
-                      Opacity(
-                        opacity: basemapOpacity.clamp(0.0, 1.0),
-                        child: TileLayer(
-                          urlTemplate: _baseTileUrl,
-                          // Must match the real application id: the policy
-                          // requires a User-Agent that identifies the app, and
-                          // forbids relying on a library default.
-                          userAgentPackageName: 'com.leostumpf.zonecraft',
-                          tileProvider: _tileProvider,
-                          maxZoom: 19,
+                    children: [
+                      // Base OSM tiles — a pinned bottom "layer": hideable and
+                      // opacity-adjustable from the layers drawer. Opacity is a
+                      // no-op at 1.0 (Flutter skips the layer), so the common case
+                      // costs nothing; when hidden the tiles are dropped entirely
+                      // and the map's background colour shows through.
+                      if (basemapVisible)
+                        Opacity(
+                          opacity: basemapOpacity.clamp(0.0, 1.0),
+                          child: TileLayer(
+                            urlTemplate: _baseTileUrl,
+                            // Must match the real application id: the policy
+                            // requires a User-Agent that identifies the app, and
+                            // forbids relying on a library default.
+                            userAgentPackageName: 'com.leostumpf.zonecraft',
+                            tileProvider: _tileProvider,
+                            maxZoom: 19,
+                          ),
                         ),
-                      ),
-                    // Uncertainty bands, all of them, before any solid fill.
-                    // A band marks where a region *might* reach; painting one
-                    // over a fill that is certain — the element in front of it
-                    // in the same layer, or any element in a layer below —
-                    // reads as the uncertainty being the more definite of the
-                    // two. So every band goes down here first, in the same
-                    // bottom-to-top order the fills are drawn in above.
-                    for (final layer in bandPassLayers(layers, uncertainty))
-                      regionPass(layer, RegionPhase.band),
-                    // One composited region per visible layer, bottom-to-top.
-                    // Region layers apply their opacity inside the painter (so
-                    // it can push the fill all the way to fully opaque). POI
-                    // layers hold markers, not a fill, so they wrap in Opacity
-                    // to fade the markers uniformly (a no-op at 1.0).
-                    // One composited region per visible layer, bottom-to-top,
-                    // plus the marker/line painters for whatever else it
-                    // holds. A single-type layer builds exactly one of these;
-                    // a mixed layer builds the ones its content types cover,
-                    // in `kMixedContentTypes` order — regions are ground,
-                    // markers are labels on top.
-                    for (final layer in layers)
-                      if (layer.isVisible) ...[
-                        // `borders` keeps its own branch: it is the one type a
-                        // mixed layer cannot hold, and its fill takes the
-                        // layer opacity inside the painter while the outline
-                        // stays crisp (a half-visible border line is just a
-                        // worse border line).
-                        if (layerHolds(layer, kBorders))
-                          BorderAreasLayer(
-                            key: ValueKey('borders-${layer.id}'),
-                            layer: layer,
-                            shapes: ref.watch(borderShapesProvider(layer.id)),
-                            draft: reshapeDraft,
-                          )
-                        else
-                          // Region layers apply their opacity inside the
-                          // painter, so it can push the fill all the way to
-                          // opaque. Built unconditionally for any non-borders
-                          // layer: it is fed only the types the layer holds,
-                          // and an all-empty one paints nothing.
-                          regionPass(layer, RegionPhase.fill),
-                        // Markers last, so a layer's own POIs and stations stay
-                        // legible over its fills — including when it is
-                        // inverted, where the complement covers everything the
-                        // regions do not.
-                        //
-                        // Marker layers fade via an Opacity wrapper (they are
-                        // markers, not a fill — nothing to push to "opaque").
-                        // A *mixed* layer's opacity is meant for its region
-                        // composite, so its markers stay crisp rather than
-                        // being dimmed to the region default.
-                        if (layerHolds(layer, kPoi))
-                          Opacity(
-                            opacity: layer.type == kMixedType
-                                ? 1.0
-                                : layer.opacity.clamp(0.0, 1.0),
-                            child: PoiMarkersLayer(
-                              key: ValueKey('poi-${layer.id}'),
+                      // Uncertainty bands, all of them, before any solid fill.
+                      // A band marks where a region *might* reach; painting one
+                      // over a fill that is certain — the element in front of it
+                      // in the same layer, or any element in a layer below —
+                      // reads as the uncertainty being the more definite of the
+                      // two. So every band goes down here first, in the same
+                      // bottom-to-top order the fills are drawn in above.
+                      for (final layer in bandPassLayers(layers, uncertainty))
+                        regionPass(layer, RegionPhase.band),
+                      // One composited region per visible layer, bottom-to-top.
+                      // Region layers apply their opacity inside the painter (so
+                      // it can push the fill all the way to fully opaque). POI
+                      // layers hold markers, not a fill, so they wrap in Opacity
+                      // to fade the markers uniformly (a no-op at 1.0).
+                      // One composited region per visible layer, bottom-to-top,
+                      // plus the marker/line painters for whatever else it
+                      // holds. A single-type layer builds exactly one of these;
+                      // a mixed layer builds the ones its content types cover,
+                      // in `kMixedContentTypes` order — regions are ground,
+                      // markers are labels on top.
+                      for (final layer in layers)
+                        if (layer.isVisible) ...[
+                          // `borders` keeps its own branch: it is the one type a
+                          // mixed layer cannot hold, and its fill takes the
+                          // layer opacity inside the painter while the outline
+                          // stays crisp (a half-visible border line is just a
+                          // worse border line).
+                          if (layerHolds(layer, kBorders))
+                            BorderAreasLayer(
+                              key: ValueKey('borders-${layer.id}'),
                               layer: layer,
-                              sets: poiSets
-                                  .where((s) => s.layerId == layer.id)
-                                  .toList(),
-                              pointsBySet: poiPointsBySet,
-                              onClusterTap: (center) => _mapController.move(
-                                center,
-                                (_mapController.camera.zoom + 1.5).clamp(
-                                  2.0,
-                                  19.0,
-                                ),
+                              shapes: ref.watch(borderShapesProvider(layer.id)),
+                              draft: reshapeDraft,
+                            )
+                          else
+                            // Region layers apply their opacity inside the
+                            // painter, so it can push the fill all the way to
+                            // opaque. Built unconditionally for any non-borders
+                            // layer: it is fed only the types the layer holds,
+                            // and an all-empty one paints nothing.
+                            regionPass(layer, RegionPhase.fill),
+                          // Markers last, so a layer's own POIs and stations stay
+                          // legible over its fills — including when it is
+                          // inverted, where the complement covers everything the
+                          // regions do not.
+                          //
+                          // Marker layers fade via an Opacity wrapper (they are
+                          // markers, not a fill — nothing to push to "opaque").
+                          // A *mixed* layer's opacity is meant for its region
+                          // composite, so its markers stay crisp rather than
+                          // being dimmed to the region default.
+                          if (layerHolds(layer, kPoi))
+                            Opacity(
+                              opacity: layer.type == kMixedType
+                                  ? 1.0
+                                  : layer.opacity.clamp(0.0, 1.0),
+                              child: PoiMarkersLayer(
+                                key: ValueKey('poi-${layer.id}'),
+                                layer: layer,
+                                sets: poiSets
+                                    .where((s) => s.layerId == layer.id)
+                                    .toList(),
+                                pointsBySet: poiPointsBySet,
+                                onClusterTap: (tap) =>
+                                    _showClusterInfo(layer, tap),
                               ),
                             ),
-                          ),
-                      ],
-                    // Outline of the selected line's inclusion circle, so the
-                    // half-disk it splits is visible while editing.
-                    if (selectedFreeLineCircle.isNotEmpty)
-                      PolylineLayer(
-                        polylines: [
-                          Polyline(
-                            points: [
-                              ...selectedFreeLineCircle,
-                              selectedFreeLineCircle.first,
-                            ],
-                            color: Colors.black54,
-                            strokeWidth: 1.5,
-                          ),
                         ],
-                      ),
-                    // Dashed outline of the freehand object being edited, so the
-                    // drawn polyline/ring is visible while placing points.
-                    if (selectedFreeLine != null &&
-                        selectedFreeLinePoints.length >= 2)
-                      PolylineLayer(
-                        polylines: [
-                          Polyline(
-                            points: [
-                              for (final p in selectedFreeLinePoints)
-                                LatLng(p.lat, p.lng),
-                            ],
-                            color: Colors.black87,
-                            strokeWidth: 1.5,
-                          ),
-                        ],
-                      ),
-                    if (selectedFreeArea != null &&
-                        selectedFreeAreaPoints.length >= 2)
-                      PolylineLayer(
-                        polylines: [
-                          Polyline(
-                            points: [
-                              for (final p in selectedFreeAreaPoints)
-                                LatLng(p.lat, p.lng),
-                              LatLng(
-                                selectedFreeAreaPoints.first.lat,
-                                selectedFreeAreaPoints.first.lng,
-                              ),
-                            ],
-                            color: Colors.black87,
-                            strokeWidth: 1.5,
-                          ),
-                        ],
-                      ),
-                    // Outline of the selected height region's circle, so its
-                    // bounded area is visible while editing / before generating.
-                    if (selectedHeightCircle.isNotEmpty)
-                      PolylineLayer(
-                        polylines: [
-                          Polyline(
-                            points: [
-                              ...selectedHeightCircle,
-                              selectedHeightCircle.first,
-                            ],
-                            color: Colors.black87,
-                            strokeWidth: 1.5,
-                          ),
-                        ],
-                      ),
-                    // A file's geometry, before any of it is written. Drawn
-                    // over everything in a colour that is not a layer colour:
-                    // this is a question, not content.
-                    if (pendingImport != null) ...[
-                      PolylineLayer(
-                        polylines: [
-                          for (final run in pendingImport.lines)
+                      // Outline of the selected line's inclusion circle, so the
+                      // half-disk it splits is visible while editing.
+                      if (selectedFreeLineCircle.isNotEmpty)
+                        PolylineLayer(
+                          polylines: [
                             Polyline(
-                              points: run,
-                              color: Theme.of(context).colorScheme.tertiary,
-                              strokeWidth: 3,
+                              points: [
+                                ...selectedFreeLineCircle,
+                                selectedFreeLineCircle.first,
+                              ],
+                              color: Colors.black54,
+                              strokeWidth: 1.5,
                             ),
-                        ],
-                      ),
-                      PolygonLayer(
-                        polygons: [
-                          for (final c in pendingImport.circles)
+                          ],
+                        ),
+                      // Dashed outline of the freehand object being edited, so the
+                      // drawn polyline/ring is visible while placing points.
+                      if (selectedFreeLine != null &&
+                          selectedFreeLinePoints.length >= 2)
+                        PolylineLayer(
+                          polylines: [
+                            Polyline(
+                              points: [
+                                for (final p in selectedFreeLinePoints)
+                                  LatLng(p.lat, p.lng),
+                              ],
+                              color: Colors.black87,
+                              strokeWidth: 1.5,
+                            ),
+                          ],
+                        ),
+                      if (selectedFreeArea != null &&
+                          selectedFreeAreaPoints.length >= 2)
+                        PolylineLayer(
+                          polylines: [
+                            Polyline(
+                              points: [
+                                for (final p in selectedFreeAreaPoints)
+                                  LatLng(p.lat, p.lng),
+                                LatLng(
+                                  selectedFreeAreaPoints.first.lat,
+                                  selectedFreeAreaPoints.first.lng,
+                                ),
+                              ],
+                              color: Colors.black87,
+                              strokeWidth: 1.5,
+                            ),
+                          ],
+                        ),
+                      // Outline of the selected height region's circle, so its
+                      // bounded area is visible while editing / before generating.
+                      if (selectedHeightCircle.isNotEmpty)
+                        PolylineLayer(
+                          polylines: [
+                            Polyline(
+                              points: [
+                                ...selectedHeightCircle,
+                                selectedHeightCircle.first,
+                              ],
+                              color: Colors.black87,
+                              strokeWidth: 1.5,
+                            ),
+                          ],
+                        ),
+                      // A file's geometry, before any of it is written. Drawn
+                      // over everything in a colour that is not a layer colour:
+                      // this is a question, not content.
+                      if (pendingImport != null) ...[
+                        PolylineLayer(
+                          polylines: [
+                            for (final run in pendingImport.lines)
+                              Polyline(
+                                points: run,
+                                color: Theme.of(context).colorScheme.tertiary,
+                                strokeWidth: 3,
+                              ),
+                          ],
+                        ),
+                        PolygonLayer(
+                          polygons: [
+                            for (final c in pendingImport.circles)
+                              Polygon(
+                                points: geodesicCircle(
+                                  c.center,
+                                  c.radiusMeters,
+                                ),
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.tertiary.withValues(alpha: 0.15),
+                                borderColor: Theme.of(
+                                  context,
+                                ).colorScheme.tertiary,
+                                borderStrokeWidth: 3,
+                              ),
+                          ],
+                        ),
+                      ],
+                      // POI import: the circle the query is about to cover,
+                      // drawn while its sheet is open. Same geometry the fetch
+                      // uses, so what you see is what is asked for.
+                      if (_importCircleRadius != null)
+                        PolygonLayer(
+                          polygons: [
                             Polygon(
-                              points: geodesicCircle(c.center, c.radiusMeters),
+                              points: geodesicCircle(
+                                _importCircleCentre ??
+                                    _mapController.camera.center,
+                                _importCircleRadius!,
+                              ),
                               color: Theme.of(
                                 context,
-                              ).colorScheme.tertiary.withValues(alpha: 0.15),
+                              ).colorScheme.primary.withValues(alpha: 0.12),
                               borderColor: Theme.of(
                                 context,
-                              ).colorScheme.tertiary,
-                              borderStrokeWidth: 3,
+                              ).colorScheme.primary,
+                              borderStrokeWidth: 2,
                             ),
-                        ],
-                      ),
-                    ],
-                    // POI import: the circle the query is about to cover,
-                    // drawn while its sheet is open. Same geometry the fetch
-                    // uses, so what you see is what is asked for.
-                    if (_importCircleRadius != null)
-                      PolygonLayer(
-                        polygons: [
-                          Polygon(
-                            points: geodesicCircle(
-                              _importCircleCentre ??
-                                  _mapController.camera.center,
-                              _importCircleRadius!,
+                          ],
+                        ),
+                      // The box an import sheet is describing right now.
+                      if (_importBoxPreview != null)
+                        PolygonLayer(
+                          polygons: [
+                            Polygon(
+                              points: _bboxRing(
+                                _importBoxPreview!.southWest,
+                                _importBoxPreview!.northEast,
+                              ),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.primary.withValues(alpha: 0.12),
+                              borderColor: Theme.of(
+                                context,
+                              ).colorScheme.primary,
+                              borderStrokeWidth: 2,
                             ),
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.primary.withValues(alpha: 0.12),
-                            borderColor: Theme.of(context).colorScheme.primary,
-                            borderStrokeWidth: 2,
-                          ),
-                        ],
-                      ),
-                    // The box an import sheet is describing right now.
-                    if (_importBoxPreview != null)
-                      PolygonLayer(
-                        polygons: [
-                          Polygon(
-                            points: _bboxRing(
-                              _importBoxPreview!.southWest,
-                              _importBoxPreview!.northEast,
+                          ],
+                        ),
+                      // Box import (stations / borders): the rubber-band box
+                      // between the two corner taps. The live corner is the map
+                      // centre, so panning reshapes it (no hover on a phone).
+                      if (_pendingBoxA != null) ...[
+                        PolygonLayer(
+                          polygons: [
+                            Polygon(
+                              points: _bboxRing(
+                                _pendingBoxA!,
+                                _mapController.camera.center,
+                              ),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.primary.withValues(alpha: 0.12),
+                              borderColor: Theme.of(
+                                context,
+                              ).colorScheme.primary,
+                              borderStrokeWidth: 2,
                             ),
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.primary.withValues(alpha: 0.12),
-                            borderColor: Theme.of(context).colorScheme.primary,
-                            borderStrokeWidth: 2,
-                          ),
-                        ],
-                      ),
-                    // Box import (stations / borders): the rubber-band box
-                    // between the two corner taps. The live corner is the map
-                    // centre, so panning reshapes it (no hover on a phone).
-                    if (_pendingBoxA != null) ...[
-                      PolygonLayer(
-                        polygons: [
-                          Polygon(
-                            points: _bboxRing(
-                              _pendingBoxA!,
-                              _mapController.camera.center,
+                          ],
+                        ),
+                        MarkerLayer(
+                          markers: [
+                            Marker(
+                              point: _pendingBoxA!,
+                              width: 32,
+                              height: 40,
+                              alignment: Alignment.topCenter,
+                              child: Icon(
+                                Icons.place,
+                                size: 32,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
                             ),
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.primary.withValues(alpha: 0.12),
-                            borderColor: Theme.of(context).colorScheme.primary,
-                            borderStrokeWidth: 2,
-                          ),
-                        ],
-                      ),
-                      MarkerLayer(
-                        markers: [
-                          Marker(
-                            point: _pendingBoxA!,
-                            width: 32,
-                            height: 40,
-                            alignment: Alignment.topCenter,
-                            child: Icon(
-                              Icons.place,
-                              size: 32,
-                              color: Theme.of(context).colorScheme.primary,
+                            Marker(
+                              point: _mapController.camera.center,
+                              width: 24,
+                              height: 24,
+                              child: Icon(
+                                Icons.add,
+                                size: 24,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
                             ),
-                          ),
-                          Marker(
-                            point: _mapController.camera.center,
-                            width: 24,
-                            height: 24,
-                            child: Icon(
-                              Icons.add,
-                              size: 24,
-                              color: Theme.of(context).colorScheme.primary,
+                          ],
+                        ),
+                      ],
+                      if (_myPosition != null)
+                        MarkerLayer(
+                          markers: [
+                            Marker(
+                              point: _myPosition!,
+                              width: 24,
+                              height: 24,
+                              child: const Icon(
+                                Icons.my_location,
+                                color: Colors.blue,
+                                size: 24,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
-                    if (_myPosition != null)
-                      MarkerLayer(
-                        markers: [
-                          Marker(
-                            point: _myPosition!,
-                            width: 24,
-                            height: 24,
-                            child: const Icon(
-                              Icons.my_location,
-                              color: Colors.blue,
-                              size: 24,
+                          ],
+                        ),
+                      // A position someone shared. Distinct from the "you are
+                      // here" marker on purpose — it is someone else's place,
+                      // and it is not saved.
+                      if (receivedPoint != null)
+                        MarkerLayer(
+                          markers: [
+                            Marker(
+                              point: receivedPoint.latLng,
+                              width: 32,
+                              height: 32,
+                              child: const Icon(
+                                Icons.place,
+                                color: Colors.deepPurple,
+                                size: 32,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                    // A position someone shared. Distinct from the "you are
-                    // here" marker on purpose — it is someone else's place,
-                    // and it is not saved.
-                    if (receivedPoint != null)
-                      MarkerLayer(
-                        markers: [
-                          Marker(
-                            point: receivedPoint.latLng,
-                            width: 32,
-                            height: 32,
-                            child: const Icon(
-                              Icons.place,
-                              color: Colors.deepPurple,
-                              size: 32,
-                            ),
-                          ),
-                        ],
-                      ),
-                    // Elevation-probe pin + value at the measured point.
-                    if (_probePoint != null)
-                      MarkerLayer(
-                        markers: [
-                          Marker(
-                            point: _probePoint!,
-                            width: 120,
-                            height: 56,
-                            alignment: Alignment.topCenter,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.place,
-                                  color: Colors.black87,
-                                  size: 28,
-                                ),
-                                Material(
-                                  color: Colors.black87,
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                      vertical: 2,
-                                    ),
-                                    child: Text(
-                                      _probing
-                                          ? '…'
-                                          : _probeElevation != null
-                                          ? _formatElevation(_probeElevation!)
-                                          : 'n/a',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 12,
+                          ],
+                        ),
+                      // Elevation-probe pin + value at the measured point.
+                      if (_probePoint != null)
+                        MarkerLayer(
+                          markers: [
+                            Marker(
+                              point: _probePoint!,
+                              width: 120,
+                              height: 56,
+                              alignment: Alignment.topCenter,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.place,
+                                    color: Colors.black87,
+                                    size: 28,
+                                  ),
+                                  Material(
+                                    color: Colors.black87,
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
+                                      child: Text(
+                                        _probing
+                                            ? '…'
+                                            : _probeElevation != null
+                                            ? _formatElevation(_probeElevation!)
+                                            : 'n/a',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                        ),
                                       ),
                                     ),
                                   ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      // Distance probe: a line between the two endpoints plus a
+                      // pin at each.
+                      if (_distA != null && _distB != null)
+                        PolylineLayer(
+                          polylines: [
+                            Polyline(
+                              points: [_distA!, _distB!],
+                              strokeWidth: 3,
+                              color: Colors.black87,
+                            ),
+                          ],
+                        ),
+                      if (_distA != null || _distB != null)
+                        MarkerLayer(
+                          markers: [
+                            for (final p in [_distA, _distB])
+                              if (p != null)
+                                Marker(
+                                  point: p,
+                                  width: 28,
+                                  height: 28,
+                                  alignment: Alignment.topCenter,
+                                  child: const Icon(
+                                    Icons.place,
+                                    color: Colors.black87,
+                                    size: 28,
+                                  ),
                                 ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    // Distance probe: a line between the two endpoints plus a
-                    // pin at each.
-                    if (_distA != null && _distB != null)
-                      PolylineLayer(
-                        polylines: [
-                          Polyline(
-                            points: [_distA!, _distB!],
-                            strokeWidth: 3,
-                            color: Colors.black87,
-                          ),
-                        ],
-                      ),
-                    if (_distA != null || _distB != null)
-                      MarkerLayer(
-                        markers: [
-                          for (final p in [_distA, _distB])
-                            if (p != null)
-                              Marker(
-                                point: p,
-                                width: 28,
-                                height: 28,
-                                alignment: Alignment.topCenter,
-                                child: const Icon(
-                                  Icons.place,
-                                  color: Colors.black87,
-                                  size: 28,
+                          ],
+                        ),
+                      // Draggable handles for the object being edited: drag to
+                      // move a point (persisted on release), long-press for its
+                      // menu. Circle/subspace/freehand points and the
+                      // freehand-line & height bounding-circle centres.
+                      if (hasSelection)
+                        DragMarkers(
+                          markers: [
+                            if (selectedCircle != null) ...[
+                              _dragHandle(
+                                LatLng(
+                                  selectedCircle.centerLat,
+                                  selectedCircle.centerLng,
+                                ),
+                                key: ValueKey('circle-${selectedCircle.id}'),
+                                label: selectedCircle.label,
+                                onMoved: (ll) => ref
+                                    .read(repositoryProvider)
+                                    .updateCircle(
+                                      selectedCircle.id,
+                                      centerLat: ll.latitude,
+                                      centerLng: ll.longitude,
+                                    ),
+                                onMenu: (pos) =>
+                                    _showCircleMenu(selectedCircle, pos),
+                              ),
+                              _radiusHandle(
+                                LatLng(
+                                  selectedCircle.centerLat,
+                                  selectedCircle.centerLng,
+                                ),
+                                selectedCircle.radiusMeters,
+                                key: ValueKey('circle-r-${selectedCircle.id}'),
+                                onResize: (m) => ref
+                                    .read(repositoryProvider)
+                                    .updateCircle(
+                                      selectedCircle.id,
+                                      radiusMeters: m,
+                                    ),
+                              ),
+                            ],
+                            for (final p in selectedSubspacePoints)
+                              _dragHandle(
+                                LatLng(p.lat, p.lng),
+                                key: ValueKey('sub-${p.id}'),
+                                main: p.isMain,
+                                label: p.label,
+                                marked: _markedPoints.contains(p.id),
+                                onTapToggle: () => _toggleMarked(p.id),
+                                onMoved: (ll) => ref
+                                    .read(repositoryProvider)
+                                    .updateSubspacePoint(
+                                      p.id,
+                                      lat: ll.latitude,
+                                      lng: ll.longitude,
+                                    ),
+                                onMenu: (pos) => _showSubspacePointMenu(
+                                  p,
+                                  selectedSubspacePoints,
+                                  pos,
                                 ),
                               ),
+                            for (final p in selectedFreeLinePoints)
+                              _dragHandle(
+                                LatLng(p.lat, p.lng),
+                                key: ValueKey('fl-${p.id}'),
+                                marked: _markedPoints.contains(p.id),
+                                onTapToggle: () => _toggleMarked(p.id),
+                                onMoved: (ll) => ref
+                                    .read(repositoryProvider)
+                                    .updateFreeLinePoint(
+                                      p.id,
+                                      lat: ll.latitude,
+                                      lng: ll.longitude,
+                                    ),
+                                onMenu: (pos) => _showFreeVertexMenu(
+                                  pos,
+                                  title: 'Line point',
+                                  canRemove: selectedFreeLinePoints.length > 2,
+                                  onRemove: () => ref
+                                      .read(repositoryProvider)
+                                      .deleteFreeLinePoint(p.id),
+                                ),
+                              ),
+                            if (selectedFreeLineInclusion != null) ...[
+                              _dragHandle(
+                                selectedFreeLineInclusion.center,
+                                key: ValueKey(
+                                  'fl-center-${selectedFreeLine!.id}',
+                                ),
+                                core: _crosshairCore(),
+                                onMoved: (ll) => ref
+                                    .read(repositoryProvider)
+                                    .updateFreeLine(
+                                      selectedFreeLine.id,
+                                      inclusionLat: ll.latitude,
+                                      inclusionLng: ll.longitude,
+                                    ),
+                              ),
+                              _radiusHandle(
+                                selectedFreeLineInclusion.center,
+                                selectedFreeLineInclusion.radiusMeters,
+                                key: ValueKey('fl-r-${selectedFreeLine.id}'),
+                                onResize: (m) => ref
+                                    .read(repositoryProvider)
+                                    .updateFreeLine(
+                                      selectedFreeLine.id,
+                                      inclusionRadiusMeters: m,
+                                    ),
+                              ),
+                            ],
+                            ...?_reshapeHandles(reshapeDraft),
+                            ..._labelHandles(
+                              selectedBorderArea,
+                              selectedBorderLayer,
+                            ),
+                            for (final p in selectedFreeAreaPoints)
+                              _dragHandle(
+                                LatLng(p.lat, p.lng),
+                                key: ValueKey('fa-${p.id}'),
+                                marked: _markedPoints.contains(p.id),
+                                onTapToggle: () => _toggleMarked(p.id),
+                                onMoved: (ll) => ref
+                                    .read(repositoryProvider)
+                                    .updateFreeAreaPoint(
+                                      p.id,
+                                      lat: ll.latitude,
+                                      lng: ll.longitude,
+                                    ),
+                                onMenu: (pos) => _showFreeVertexMenu(
+                                  pos,
+                                  title: 'Area point',
+                                  canRemove: selectedFreeAreaPoints.length > 3,
+                                  onRemove: () => ref
+                                      .read(repositoryProvider)
+                                      .deleteFreeAreaPoint(p.id),
+                                ),
+                              ),
+                            if (selectedHeightRegion != null) ...[
+                              _dragHandle(
+                                LatLng(
+                                  selectedHeightRegion.centerLat,
+                                  selectedHeightRegion.centerLng,
+                                ),
+                                key: ValueKey(
+                                  'height-${selectedHeightRegion.id}',
+                                ),
+                                core: _crosshairCore(),
+                                onMoved: (ll) => ref
+                                    .read(repositoryProvider)
+                                    .updateHeightRegion(
+                                      selectedHeightRegion.id,
+                                      centerLat: ll.latitude,
+                                      centerLng: ll.longitude,
+                                    ),
+                              ),
+                              _radiusHandle(
+                                LatLng(
+                                  selectedHeightRegion.centerLat,
+                                  selectedHeightRegion.centerLng,
+                                ),
+                                selectedHeightRegion.radiusMeters,
+                                key: ValueKey(
+                                  'height-r-${selectedHeightRegion.id}',
+                                ),
+                                onResize: (m) => ref
+                                    .read(repositoryProvider)
+                                    .updateHeightRegion(
+                                      selectedHeightRegion.id,
+                                      radiusMeters: m,
+                                    ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      RichAttributionWidget(
+                        attributions: [
+                          TextSourceAttribution(_tiles.attribution),
                         ],
                       ),
-                    // Draggable handles for the object being edited: drag to
-                    // move a point (persisted on release), long-press for its
-                    // menu. Circle/subspace/freehand points and the
-                    // freehand-line & height bounding-circle centres.
-                    if (hasSelection)
-                      DragMarkers(
-                        markers: [
-                          if (selectedCircle != null) ...[
-                            _dragHandle(
-                              LatLng(
-                                selectedCircle.centerLat,
-                                selectedCircle.centerLng,
-                              ),
-                              key: ValueKey('circle-${selectedCircle.id}'),
-                              label: selectedCircle.label,
-                              onMoved: (ll) => ref
-                                  .read(repositoryProvider)
-                                  .updateCircle(
-                                    selectedCircle.id,
-                                    centerLat: ll.latitude,
-                                    centerLng: ll.longitude,
-                                  ),
-                              onMenu: (pos) =>
-                                  _showCircleMenu(selectedCircle, pos),
-                            ),
-                            _radiusHandle(
-                              LatLng(
-                                selectedCircle.centerLat,
-                                selectedCircle.centerLng,
-                              ),
-                              selectedCircle.radiusMeters,
-                              key: ValueKey('circle-r-${selectedCircle.id}'),
-                              onResize: (m) => ref
-                                  .read(repositoryProvider)
-                                  .updateCircle(
-                                    selectedCircle.id,
-                                    radiusMeters: m,
-                                  ),
-                            ),
-                          ],
-                          for (final p in selectedSubspacePoints)
-                            _dragHandle(
-                              LatLng(p.lat, p.lng),
-                              key: ValueKey('sub-${p.id}'),
-                              main: p.isMain,
-                              label: p.label,
-                              marked: _markedPoints.contains(p.id),
-                              onTapToggle: () => _toggleMarked(p.id),
-                              onMoved: (ll) => ref
-                                  .read(repositoryProvider)
-                                  .updateSubspacePoint(
-                                    p.id,
-                                    lat: ll.latitude,
-                                    lng: ll.longitude,
-                                  ),
-                              onMenu: (pos) => _showSubspacePointMenu(
-                                p,
-                                selectedSubspacePoints,
-                                pos,
-                              ),
-                            ),
-                          for (final p in selectedFreeLinePoints)
-                            _dragHandle(
-                              LatLng(p.lat, p.lng),
-                              key: ValueKey('fl-${p.id}'),
-                              marked: _markedPoints.contains(p.id),
-                              onTapToggle: () => _toggleMarked(p.id),
-                              onMoved: (ll) => ref
-                                  .read(repositoryProvider)
-                                  .updateFreeLinePoint(
-                                    p.id,
-                                    lat: ll.latitude,
-                                    lng: ll.longitude,
-                                  ),
-                              onMenu: (pos) => _showFreeVertexMenu(
-                                pos,
-                                title: 'Line point',
-                                canRemove: selectedFreeLinePoints.length > 2,
-                                onRemove: () => ref
-                                    .read(repositoryProvider)
-                                    .deleteFreeLinePoint(p.id),
-                              ),
-                            ),
-                          if (selectedFreeLineInclusion != null) ...[
-                            _dragHandle(
-                              selectedFreeLineInclusion.center,
-                              key: ValueKey(
-                                'fl-center-${selectedFreeLine!.id}',
-                              ),
-                              core: _crosshairCore(),
-                              onMoved: (ll) => ref
-                                  .read(repositoryProvider)
-                                  .updateFreeLine(
-                                    selectedFreeLine.id,
-                                    inclusionLat: ll.latitude,
-                                    inclusionLng: ll.longitude,
-                                  ),
-                            ),
-                            _radiusHandle(
-                              selectedFreeLineInclusion.center,
-                              selectedFreeLineInclusion.radiusMeters,
-                              key: ValueKey('fl-r-${selectedFreeLine.id}'),
-                              onResize: (m) => ref
-                                  .read(repositoryProvider)
-                                  .updateFreeLine(
-                                    selectedFreeLine.id,
-                                    inclusionRadiusMeters: m,
-                                  ),
-                            ),
-                          ],
-                          ...?_reshapeHandles(reshapeDraft),
-                          ..._labelHandles(
-                            selectedBorderArea,
-                            selectedBorderLayer,
-                          ),
-                          for (final p in selectedFreeAreaPoints)
-                            _dragHandle(
-                              LatLng(p.lat, p.lng),
-                              key: ValueKey('fa-${p.id}'),
-                              marked: _markedPoints.contains(p.id),
-                              onTapToggle: () => _toggleMarked(p.id),
-                              onMoved: (ll) => ref
-                                  .read(repositoryProvider)
-                                  .updateFreeAreaPoint(
-                                    p.id,
-                                    lat: ll.latitude,
-                                    lng: ll.longitude,
-                                  ),
-                              onMenu: (pos) => _showFreeVertexMenu(
-                                pos,
-                                title: 'Area point',
-                                canRemove: selectedFreeAreaPoints.length > 3,
-                                onRemove: () => ref
-                                    .read(repositoryProvider)
-                                    .deleteFreeAreaPoint(p.id),
-                              ),
-                            ),
-                          if (selectedHeightRegion != null) ...[
-                            _dragHandle(
-                              LatLng(
-                                selectedHeightRegion.centerLat,
-                                selectedHeightRegion.centerLng,
-                              ),
-                              key: ValueKey(
-                                'height-${selectedHeightRegion.id}',
-                              ),
-                              core: _crosshairCore(),
-                              onMoved: (ll) => ref
-                                  .read(repositoryProvider)
-                                  .updateHeightRegion(
-                                    selectedHeightRegion.id,
-                                    centerLat: ll.latitude,
-                                    centerLng: ll.longitude,
-                                  ),
-                            ),
-                            _radiusHandle(
-                              LatLng(
-                                selectedHeightRegion.centerLat,
-                                selectedHeightRegion.centerLng,
-                              ),
-                              selectedHeightRegion.radiusMeters,
-                              key: ValueKey(
-                                'height-r-${selectedHeightRegion.id}',
-                              ),
-                              onResize: (m) => ref
-                                  .read(repositoryProvider)
-                                  .updateHeightRegion(
-                                    selectedHeightRegion.id,
-                                    radiusMeters: m,
-                                  ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    RichAttributionWidget(
-                      attributions: [TextSourceAttribution(_tiles.attribution)],
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 // The stroke being drawn. Translucent so the map underneath
                 // still receives the pointers it needs for two-finger
@@ -5365,27 +5558,36 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               ),
                             ),
 
-                          if (_infoHit != null)
-                            _InfoChip(
-                              icon: typeIcon(
-                                layers
-                                        .where(
-                                          (l) => l.id == _infoHit!.ref.layerId,
-                                        )
-                                        .firstOrNull
-                                        ?.type ??
-                                    '',
+                          if (_info != null)
+                            switch (_info!) {
+                              _HitInfo(hit: final hit) => _InfoChip(
+                                icon: typeIcon(
+                                  layers
+                                          .where((l) => l.id == hit.ref.layerId)
+                                          .firstOrNull
+                                          ?.type ??
+                                      '',
+                                ),
+                                label: _infoLabel(
+                                  hit,
+                                  layers
+                                      .where((l) => l.id == hit.ref.layerId)
+                                      .firstOrNull,
+                                  activeLayer,
+                                ),
+                                actionLabel: 'Edit',
+                                onAction: () => _selectHit(hit),
+                                onDismiss: () => _showInfo(null),
                               ),
-                              label: _infoLabel(
-                                _infoHit!,
-                                layers
-                                    .where((l) => l.id == _infoHit!.ref.layerId)
-                                    .firstOrNull,
-                                activeLayer,
-                              ),
-                              onEdit: () => _selectHit(_infoHit!),
-                              onDismiss: () => _showInfo(null),
-                            ),
+                              _ClusterInfo(layer: final l, tap: final tap) =>
+                                _InfoChip(
+                                  icon: tap.icon ?? typeIcon(l.type),
+                                  label: _clusterLabel(l, tap, activeLayer),
+                                  actionLabel: 'Zoom in',
+                                  onAction: () => _zoomIntoCluster(tap),
+                                  onDismiss: () => _showInfo(null),
+                                ),
+                            },
                         ],
                       ),
                     ),
@@ -5827,19 +6029,38 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
 /// What a view-mode tap landed on: a name and an Edit button.
 ///
-/// Deliberately not a selection — see `_MapScreenState._showInfo`. The whole
-/// chip is tappable (Edit), the × just dismisses it.
+/// What the info chip is about: an element under a tap, or a cluster badge.
+sealed class _InfoTarget {
+  const _InfoTarget();
+}
+
+class _HitInfo extends _InfoTarget {
+  const _HitInfo(this.hit);
+  final HitCandidate hit;
+}
+
+class _ClusterInfo extends _InfoTarget {
+  const _ClusterInfo({required this.layer, required this.tap});
+  final Layer layer;
+  final PoiClusterTap tap;
+}
+
+/// Deliberately not a selection — see `_MapScreenState._showInfo`. The one
+/// button is the deliberate act (Edit an element, Zoom in on a cluster), the ×
+/// just dismisses it.
 class _InfoChip extends StatelessWidget {
   const _InfoChip({
     required this.icon,
     required this.label,
-    required this.onEdit,
+    required this.actionLabel,
+    required this.onAction,
     required this.onDismiss,
   });
 
   final IconData icon;
   final String label;
-  final VoidCallback onEdit;
+  final String actionLabel;
+  final VoidCallback onAction;
   final VoidCallback onDismiss;
 
   @override
@@ -5856,7 +6077,7 @@ class _InfoChip extends StatelessWidget {
             Icon(icon, size: 16),
             const SizedBox(width: 6),
             Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
-            TextButton(onPressed: onEdit, child: const Text('Edit')),
+            TextButton(onPressed: onAction, child: Text(actionLabel)),
             IconButton(
               tooltip: 'Dismiss',
               visualDensity: VisualDensity.compact,
