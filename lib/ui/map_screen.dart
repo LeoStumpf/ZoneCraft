@@ -4231,6 +4231,29 @@ class _MapScreenState extends ConsumerState<MapScreen>
         activeLayer != null &&
         (layerHolds(activeLayer, kFreeLine) ||
             layerHolds(activeLayer, kFreeArea));
+    // One type-dependent quick toggle beside Edit — the setting a layer of
+    // that type flips most often, one tap from the map: a borders layer's
+    // Colour areas, a region layer's Invert, a station layer's type filter.
+    // Everything else the layer has is two taps away in the layer sheet. The
+    // definition is the drawer's (`layerActionsFor`), so the toggle and the
+    // menu item cannot disagree on when each is offered.
+    final quickToggle = activeLayer == null
+        ? null
+        : layerActionsFor(context, ref, activeLayer, layers)
+              .where(
+                (a) =>
+                    a.id == LayerActionId.fillAreas ||
+                    a.id == LayerActionId.invert ||
+                    a.id == LayerActionId.stations,
+              )
+              .firstOrNull;
+    // How many small FABs precede the extended Add button — see its
+    // `isExtended`.
+    final smallFabs =
+        2 + // tools toggle, Edit
+        (quickToggle != null ? 1 : 0) +
+        (canImportFeature ? 1 : 0) +
+        (isCircleLayer || isSubspaceLayer || isPoiLayer ? 1 : 0);
 
     // Edit mode arms tap-to-select, and a tap reaches every *visible* layer
     // (see [_hitsAt]) — so it is meaningful when any visible layer has an
@@ -5502,6 +5525,23 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         mode == MapMode.edit ? Icons.edit : Icons.edit_outlined,
                       ),
                     ),
+                    if (quickToggle != null) ...[
+                      const SizedBox(width: 12),
+                      FloatingActionButton.small(
+                        heroTag: 'quickToggle',
+                        tooltip: quickToggle.label,
+                        // Lit while the toggle is on; a plain button for the
+                        // one that opens a sheet (the station filter).
+                        backgroundColor: quickToggle.checked ?? false
+                            ? Theme.of(context).colorScheme.primary
+                            : null,
+                        foregroundColor: quickToggle.checked ?? false
+                            ? Theme.of(context).colorScheme.onPrimary
+                            : null,
+                        onPressed: () => unawaited(quickToggle.run()),
+                        child: Icon(quickToggle.icon),
+                      ),
+                    ],
                     if (canImportFeature) ...[
                       const SizedBox(width: 12),
                       FloatingActionButton.small(
@@ -5553,6 +5593,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             ),
                       child: FloatingActionButton.extended(
                         heroTag: 'add',
+                        // The row is the toggle, Edit, the quick toggle and
+                        // up to two import buttons before this one: at a
+                        // large system font "Add subspace" beside four small
+                        // FABs runs past the screen. Collapse the label then —
+                        // the icon says the type and the tooltip keeps the
+                        // words — rather than let the row overflow.
+                        isExtended:
+                            smallFabs < 4 ||
+                            MediaQuery.textScalerOf(context).scale(1) <= 1.15,
                         tooltip:
                             'Tap the map to add · long-press for the '
                             'map centre',
