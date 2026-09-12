@@ -5125,6 +5125,49 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                 ),
                               ),
                             ),
+                          // Edit-mode banner: the one sticky mode that had no
+                          // banner. The lit ✎ FAB is its only other sign, and
+                          // the FAB column is hidden while an editor is open —
+                          // exactly when "tap another element to switch" is
+                          // the thing worth knowing.
+                          if (mode == MapMode.edit)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Material(
+                                color: Theme.of(context).colorScheme.surface,
+                                elevation: 2,
+                                borderRadius: BorderRadius.circular(8),
+                                child: Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    12,
+                                    4,
+                                    4,
+                                    4,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.edit, size: 16),
+                                      const SizedBox(width: 6),
+                                      Flexible(
+                                        child: Text(
+                                          hasSelection
+                                              ? 'Tap another element · empty '
+                                                    'map deselects'
+                                              : 'Tap an element to edit it',
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      TextButton(
+                                        onPressed: () =>
+                                            _enterMode(MapMode.view),
+                                        child: const Text('Done'),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
                           // Draw-mode banner. It earns its place twice over: it is the
                           // only thing that says one-finger pan is off for the moment.
                           if (mode == MapMode.draw && _drawLayerId != null)
@@ -5877,8 +5920,21 @@ class _ActiveLayerChip extends StatelessWidget {
                     layerChipLabel(l),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
+                    // A hidden active layer draws nothing, so everything the
+                    // map does to it is invisible — say so where its name is.
+                    style: l != null && !l.isVisible
+                        ? TextStyle(color: Theme.of(context).disabledColor)
+                        : null,
                   ),
                 ),
+                if (l != null && !l.isVisible) ...[
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.visibility_off_outlined,
+                    size: 16,
+                    color: Theme.of(context).disabledColor,
+                  ),
+                ],
                 const Icon(Icons.expand_more, size: 18),
               ],
             ),

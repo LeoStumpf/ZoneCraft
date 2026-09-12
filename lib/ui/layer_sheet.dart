@@ -155,10 +155,30 @@ class _Switcher extends ConsumerWidget {
                     border: Border.all(color: Colors.black26),
                   ),
                 ),
-                label: Text(
-                  l.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                label: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        l.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: l.isVisible
+                            ? null
+                            : TextStyle(color: Theme.of(context).disabledColor),
+                      ),
+                    ),
+                    // Hidden layers are still switchable — you may want to
+                    // add to one before showing it — but they read as such.
+                    if (!l.isVisible) ...[
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.visibility_off_outlined,
+                        size: 14,
+                        color: Theme.of(context).disabledColor,
+                      ),
+                    ],
+                  ],
                 ),
                 selected: l.id == activeId,
                 onSelected: (_) => ref
@@ -317,7 +337,9 @@ class _ActiveLayerBody extends ConsumerWidget {
         Padding(
           padding: const EdgeInsets.only(left: 12),
           child: Text(
-            '$count element${count == 1 ? '' : 's'}',
+            'Active · $count element${count == 1 ? '' : 's'}'
+            '${layer.isVisible ? '' : ' · hidden'}'
+            '${layer.isInverted ? ' · inverted' : ''}',
             style: theme.textTheme.bodySmall,
           ),
         ),

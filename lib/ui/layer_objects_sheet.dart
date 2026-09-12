@@ -246,7 +246,17 @@ class _LayerObjectsList extends ConsumerWidget {
         at >= 0;
     final canMoveBack = canStack && at > 0;
     final canMoveForward = canStack && at < sameKind.length - 1;
+    // The row of the element whose editor is open, marked as such: the list
+    // is also how you find out *what* is selected.
+    final isSelected = watchSelectedIds(ref).contains(s.ref.id);
+    final scheme = Theme.of(context).colorScheme;
     return ListTile(
+      selected: isSelected,
+      selectedTileColor: scheme.primaryContainer,
+      selectedColor: scheme.onPrimaryContainer,
+      shape: isSelected
+          ? Border(left: BorderSide(color: scheme.primary, width: 4))
+          : null,
       // The *element's* icon, not the layer's: a combined layer's rows are
       // of different kinds, and one shared icon would make the list
       // unreadable — a circle and a POI set would look identical.

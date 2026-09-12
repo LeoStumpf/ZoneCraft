@@ -68,8 +68,9 @@ class UndoRevisionNotifier extends Notifier<int> {
   void bump() => state = state + 1;
 }
 
-final undoRevisionProvider =
-    NotifierProvider<UndoRevisionNotifier, int>(UndoRevisionNotifier.new);
+final undoRevisionProvider = NotifierProvider<UndoRevisionNotifier, int>(
+  UndoRevisionNotifier.new,
+);
 
 /// Steps back (or, with [forward], returns) one action.
 ///
@@ -145,8 +146,9 @@ final heightPolygonsProvider = StreamProvider<List<HeightPolygon>>((ref) {
 
 /// Reactive list of every height-polygon ring point (across all polygons),
 /// ordered.
-final heightPolygonPointsProvider =
-    StreamProvider<List<HeightPolygonPoint>>((ref) {
+final heightPolygonPointsProvider = StreamProvider<List<HeightPolygonPoint>>((
+  ref,
+) {
   return ref.watch(repositoryProvider).watchAllHeightPolygonPoints();
 });
 
@@ -189,10 +191,7 @@ final borderAreasProvider = StreamProvider<List<BorderArea>>((ref) {
 
 /// Groups [rows] by [keyOf], preserving each group's incoming order (the
 /// queries already order by `sortOrder`, and the renderers depend on that).
-Map<String, List<T>> _groupBy<T>(
-  List<T> rows,
-  String Function(T row) keyOf,
-) {
+Map<String, List<T>> _groupBy<T>(List<T> rows, String Function(T row) keyOf) {
   final out = <String, List<T>>{};
   for (final row in rows) {
     (out[keyOf(row)] ??= <T>[]).add(row);
@@ -203,28 +202,29 @@ Map<String, List<T>> _groupBy<T>(
 /// Subspace points keyed by their subspace id.
 final subspacePointsBySubspaceProvider =
     Provider<Map<String, List<SubspacePoint>>>((ref) {
-  final rows = ref.watch(subspacePointsProvider).asData?.value ?? const [];
-  return _groupBy(rows, (p) => p.subspaceId);
-});
+      final rows = ref.watch(subspacePointsProvider).asData?.value ?? const [];
+      return _groupBy(rows, (p) => p.subspaceId);
+    });
 
 /// Freehand-line vertices keyed by their line id.
-final freeLinePointsByLineProvider =
-    Provider<Map<String, List<FreeLinePoint>>>((ref) {
-  final rows = ref.watch(freeLinePointsProvider).asData?.value ?? const [];
-  return _groupBy(rows, (p) => p.freeLineId);
-});
+final freeLinePointsByLineProvider = Provider<Map<String, List<FreeLinePoint>>>(
+  (ref) {
+    final rows = ref.watch(freeLinePointsProvider).asData?.value ?? const [];
+    return _groupBy(rows, (p) => p.freeLineId);
+  },
+);
 
 /// Freehand-area vertices keyed by their area id.
-final freeAreaPointsByAreaProvider =
-    Provider<Map<String, List<FreeAreaPoint>>>((ref) {
-  final rows = ref.watch(freeAreaPointsProvider).asData?.value ?? const [];
-  return _groupBy(rows, (p) => p.freeAreaId);
-});
+final freeAreaPointsByAreaProvider = Provider<Map<String, List<FreeAreaPoint>>>(
+  (ref) {
+    final rows = ref.watch(freeAreaPointsProvider).asData?.value ?? const [];
+    return _groupBy(rows, (p) => p.freeAreaId);
+  },
+);
 
 /// Stored POIs keyed by their set id. A city of stations is thousands of
 /// rows, so the marker painter must not scan the flat list per set per frame.
-final poiPointsBySetProvider =
-    Provider<Map<String, List<PoiPoint>>>((ref) {
+final poiPointsBySetProvider = Provider<Map<String, List<PoiPoint>>>((ref) {
   final rows = ref.watch(poiPointsProvider).asData?.value ?? const [];
   return _groupBy(rows, (p) => p.poiSetId);
 });
@@ -232,16 +232,17 @@ final poiPointsBySetProvider =
 /// Generated height polygons keyed by their height-region id.
 final heightPolygonsByRegionProvider =
     Provider<Map<String, List<HeightPolygon>>>((ref) {
-  final rows = ref.watch(heightPolygonsProvider).asData?.value ?? const [];
-  return _groupBy(rows, (p) => p.heightRegionId);
-});
+      final rows = ref.watch(heightPolygonsProvider).asData?.value ?? const [];
+      return _groupBy(rows, (p) => p.heightRegionId);
+    });
 
 /// Height-polygon ring points keyed by their polygon id.
 final heightPolygonPointsByPolygonProvider =
     Provider<Map<String, List<HeightPolygonPoint>>>((ref) {
-  final rows = ref.watch(heightPolygonPointsProvider).asData?.value ?? const [];
-  return _groupBy(rows, (p) => p.polygonId);
-});
+      final rows =
+          ref.watch(heightPolygonPointsProvider).asData?.value ?? const [];
+      return _groupBy(rows, (p) => p.polygonId);
+    });
 
 /// App-wide settings (currently the global uncertainty radius).
 final settingsProvider = StreamProvider<AppSetting>((ref) {
@@ -278,14 +279,14 @@ enum ObjectKind {
 
   /// The `Layers.type` string that holds this kind of object.
   String get layerType => switch (this) {
-        ObjectKind.circle => 'circles',
-        ObjectKind.subspace => 'subspace',
-        ObjectKind.freeLine => 'freeline',
-        ObjectKind.freeArea => 'freearea',
-        ObjectKind.heightRegion => 'height',
-        ObjectKind.poiSet || ObjectKind.poiPoint => 'poi',
-        ObjectKind.borderArea => 'borders',
-      };
+    ObjectKind.circle => 'circles',
+    ObjectKind.subspace => 'subspace',
+    ObjectKind.freeLine => 'freeline',
+    ObjectKind.freeArea => 'freearea',
+    ObjectKind.heightRegion => 'height',
+    ObjectKind.poiSet || ObjectKind.poiPoint => 'poi',
+    ObjectKind.borderArea => 'borders',
+  };
 
   /// Whether this is a layer *element* (a row of the Elements list) rather than
   /// a point inside one.
@@ -293,15 +294,15 @@ enum ObjectKind {
 
   /// The kind a layer of [layerType] holds, or null for an unknown type.
   static ObjectKind? forLayerType(String layerType) => switch (layerType) {
-        'circles' => ObjectKind.circle,
-        'subspace' => ObjectKind.subspace,
-        'freeline' => ObjectKind.freeLine,
-        'freearea' => ObjectKind.freeArea,
-        'height' => ObjectKind.heightRegion,
-        'poi' => ObjectKind.poiSet,
-        'borders' => ObjectKind.borderArea,
-        _ => null,
-      };
+    'circles' => ObjectKind.circle,
+    'subspace' => ObjectKind.subspace,
+    'freeline' => ObjectKind.freeLine,
+    'freearea' => ObjectKind.freeArea,
+    'height' => ObjectKind.heightRegion,
+    'poi' => ObjectKind.poiSet,
+    'borders' => ObjectKind.borderArea,
+    _ => null,
+  };
 }
 
 /// Sentinel [activeLayerProvider] value meaning "the user explicitly chose to
@@ -324,8 +325,9 @@ class ActiveLayerNotifier extends Notifier<String?> {
       state = isActive ? noActiveLayer : id;
 }
 
-final activeLayerProvider =
-    NotifierProvider<ActiveLayerNotifier, String?>(ActiveLayerNotifier.new);
+final activeLayerProvider = NotifierProvider<ActiveLayerNotifier, String?>(
+  ActiveLayerNotifier.new,
+);
 
 /// Id of the currently selected circle, or null. Drives the docked editor sheet
 /// and the remove button.
@@ -338,7 +340,8 @@ class SelectedCircleNotifier extends Notifier<String?> {
 
 final selectedCircleProvider =
     NotifierProvider<SelectedCircleNotifier, String?>(
-        SelectedCircleNotifier.new);
+      SelectedCircleNotifier.new,
+    );
 
 /// While a circle is selected, whether the next map tap relocates its centre.
 /// (Mirrors [heightPlacementProvider].)
@@ -349,9 +352,9 @@ class CirclePlacementNotifier extends Notifier<bool> {
   void arm({required bool on}) => state = on;
 }
 
-final circlePlacementProvider =
-    NotifierProvider<CirclePlacementNotifier, bool>(
-        CirclePlacementNotifier.new);
+final circlePlacementProvider = NotifierProvider<CirclePlacementNotifier, bool>(
+  CirclePlacementNotifier.new,
+);
 
 /// Id of the currently selected subspace, or null. Mutually exclusive with the
 /// other selections (one object of one type is selected at a time).
@@ -364,7 +367,8 @@ class SelectedSubspaceNotifier extends Notifier<String?> {
 
 final selectedSubspaceProvider =
     NotifierProvider<SelectedSubspaceNotifier, String?>(
-        SelectedSubspaceNotifier.new);
+      SelectedSubspaceNotifier.new,
+    );
 
 /// While a subspace is selected, the id of the point the next map tap relocates,
 /// or null for "no placement armed".
@@ -377,7 +381,8 @@ class SubspacePlacementNotifier extends Notifier<String?> {
 
 final subspacePlacementProvider =
     NotifierProvider<SubspacePlacementNotifier, String?>(
-        SubspacePlacementNotifier.new);
+      SubspacePlacementNotifier.new,
+    );
 
 /// Id of the currently selected freehand line, or null. Mutually exclusive with
 /// the other object selections (one object of one type is selected at a time).
@@ -390,7 +395,8 @@ class SelectedFreeLineNotifier extends Notifier<String?> {
 
 final selectedFreeLineProvider =
     NotifierProvider<SelectedFreeLineNotifier, String?>(
-        SelectedFreeLineNotifier.new);
+      SelectedFreeLineNotifier.new,
+    );
 
 /// While a freehand line is selected, the id of the point the next map tap
 /// relocates, or null for "no placement armed".
@@ -403,7 +409,8 @@ class FreeLinePlacementNotifier extends Notifier<String?> {
 
 final freeLinePlacementProvider =
     NotifierProvider<FreeLinePlacementNotifier, String?>(
-        FreeLinePlacementNotifier.new);
+      FreeLinePlacementNotifier.new,
+    );
 
 /// While a freehand line is selected, whether the next map tap relocates its
 /// inclusion-circle centre. (Mirrors [heightPlacementProvider] for the height
@@ -417,7 +424,8 @@ class FreeLineCenterPlacementNotifier extends Notifier<bool> {
 
 final freeLineCenterPlacementProvider =
     NotifierProvider<FreeLineCenterPlacementNotifier, bool>(
-        FreeLineCenterPlacementNotifier.new);
+      FreeLineCenterPlacementNotifier.new,
+    );
 
 /// Id of the currently selected freehand area, or null. Mutually exclusive with
 /// the other object selections.
@@ -430,7 +438,8 @@ class SelectedFreeAreaNotifier extends Notifier<String?> {
 
 final selectedFreeAreaProvider =
     NotifierProvider<SelectedFreeAreaNotifier, String?>(
-        SelectedFreeAreaNotifier.new);
+      SelectedFreeAreaNotifier.new,
+    );
 
 /// While a freehand area is selected, the id of the point the next map tap
 /// relocates, or null for "no placement armed".
@@ -443,7 +452,8 @@ class FreeAreaPlacementNotifier extends Notifier<String?> {
 
 final freeAreaPlacementProvider =
     NotifierProvider<FreeAreaPlacementNotifier, String?>(
-        FreeAreaPlacementNotifier.new);
+      FreeAreaPlacementNotifier.new,
+    );
 
 /// Id of the currently selected height region, or null. Mutually exclusive with
 /// the other object selections.
@@ -456,7 +466,8 @@ class SelectedHeightRegionNotifier extends Notifier<String?> {
 
 final selectedHeightRegionProvider =
     NotifierProvider<SelectedHeightRegionNotifier, String?>(
-        SelectedHeightRegionNotifier.new);
+      SelectedHeightRegionNotifier.new,
+    );
 
 /// While a height region is selected, whether the next map tap relocates its
 /// centre (true) or not (null/false).
@@ -467,8 +478,9 @@ class HeightPlacementNotifier extends Notifier<bool> {
   void arm({required bool on}) => state = on;
 }
 
-final heightPlacementProvider =
-    NotifierProvider<HeightPlacementNotifier, bool>(HeightPlacementNotifier.new);
+final heightPlacementProvider = NotifierProvider<HeightPlacementNotifier, bool>(
+  HeightPlacementNotifier.new,
+);
 
 /// Id of the selected border area, or null.
 ///
@@ -485,7 +497,8 @@ class SelectedBorderAreaNotifier extends Notifier<String?> {
 
 final selectedBorderAreaProvider =
     NotifierProvider<SelectedBorderAreaNotifier, String?>(
-        SelectedBorderAreaNotifier.new);
+      SelectedBorderAreaNotifier.new,
+    );
 
 /// While a border area is selected, whether its outline shows vertex handles.
 ///
@@ -500,8 +513,9 @@ class BorderReshapeNotifier extends Notifier<bool> {
   void arm({required bool on}) => state = on;
 }
 
-final borderReshapeProvider =
-    NotifierProvider<BorderReshapeNotifier, bool>(BorderReshapeNotifier.new);
+final borderReshapeProvider = NotifierProvider<BorderReshapeNotifier, bool>(
+  BorderReshapeNotifier.new,
+);
 
 /// Id of the selected POI import, or null.
 class SelectedPoiSetNotifier extends Notifier<String?> {
@@ -513,7 +527,8 @@ class SelectedPoiSetNotifier extends Notifier<String?> {
 
 final selectedPoiSetProvider =
     NotifierProvider<SelectedPoiSetNotifier, String?>(
-        SelectedPoiSetNotifier.new);
+      SelectedPoiSetNotifier.new,
+    );
 
 /// Id of the selected individual POI, or null — one level below a set.
 class SelectedPoiPointNotifier extends Notifier<String?> {
@@ -525,7 +540,8 @@ class SelectedPoiPointNotifier extends Notifier<String?> {
 
 final selectedPoiPointProvider =
     NotifierProvider<SelectedPoiPointNotifier, String?>(
-        SelectedPoiPointNotifier.new);
+      SelectedPoiPointNotifier.new,
+    );
 
 /// Clears every object selection and disarms every "the next map tap places
 /// this point" flag.
@@ -578,6 +594,22 @@ bool hasAnySelection(WidgetRef ref) =>
     ref.read(selectedPoiSetProvider) != null ||
     ref.read(selectedPoiPointProvider) != null ||
     ref.read(selectedBorderAreaProvider) != null;
+
+/// The ids of every selected object, *watched* — for a list that wants to
+/// mark its selected row and follow the selection as it changes.
+Set<String> watchSelectedIds(WidgetRef ref) => {
+  for (final p in [
+    selectedCircleProvider,
+    selectedSubspaceProvider,
+    selectedFreeLineProvider,
+    selectedFreeAreaProvider,
+    selectedHeightRegionProvider,
+    selectedPoiSetProvider,
+    selectedPoiPointProvider,
+    selectedBorderAreaProvider,
+  ])
+    ?ref.watch(p),
+};
 
 /// Selects exactly one object, clearing the others (and any armed placement),
 /// and leaves whatever map mode was armed — editing the object is now the job.
@@ -637,7 +669,8 @@ class PendingFocusNotifier extends Notifier<MapFocusRequest?> {
 
 final pendingFocusProvider =
     NotifierProvider<PendingFocusNotifier, MapFocusRequest?>(
-        PendingFocusNotifier.new);
+      PendingFocusNotifier.new,
+    );
 
 /// A one-shot request to re-run a POI import (radius or box) that didn't
 /// finish.
@@ -661,7 +694,8 @@ class PendingImportRetryNotifier extends Notifier<ImportRetryRequest?> {
 
 final pendingImportRetryProvider =
     NotifierProvider<PendingImportRetryNotifier, ImportRetryRequest?>(
-        PendingImportRetryNotifier.new);
+      PendingImportRetryNotifier.new,
+    );
 
 /// What a map-owning action can be asked for from somewhere that is not the
 /// map: the layers drawer, the layer sheet, an Elements list's empty state.
@@ -716,8 +750,9 @@ class MapRequestNotifier extends Notifier<MapRequest?> {
   void clear() => state = null;
 }
 
-final mapRequestProvider =
-    NotifierProvider<MapRequestNotifier, MapRequest?>(MapRequestNotifier.new);
+final mapRequestProvider = NotifierProvider<MapRequestNotifier, MapRequest?>(
+  MapRequestNotifier.new,
+);
 
 /// While a hand-placed POI is selected, whether the next map tap moves it.
 ///
@@ -733,7 +768,8 @@ class PoiPointPlacementNotifier extends Notifier<bool> {
 
 final poiPointPlacementProvider =
     NotifierProvider<PoiPointPlacementNotifier, bool>(
-        PoiPointPlacementNotifier.new);
+      PoiPointPlacementNotifier.new,
+    );
 
 /// A position that arrived from outside the app — a `zonecraft://` link, or
 /// text pasted into the "Paste coordinates" box.
@@ -753,7 +789,8 @@ class ReceivedPointNotifier extends Notifier<SharedPoint?> {
 
 final receivedPointProvider =
     NotifierProvider<ReceivedPointNotifier, SharedPoint?>(
-        ReceivedPointNotifier.new);
+      ReceivedPointNotifier.new,
+    );
 
 /// Resolves the effective active layer id given the current layer list:
 /// [noActiveLayer] ⇒ none; a still-present selection ⇒ itself; otherwise (nothing

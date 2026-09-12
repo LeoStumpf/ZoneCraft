@@ -159,6 +159,25 @@ class LayersDrawer extends ConsumerWidget {
                         ],
                       ),
                     ),
+                    // What is active, in words — and, when nothing is, that
+                    // this is a state and not an oversight, with the one
+                    // gesture that changes it.
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: Text(
+                        switch (display
+                            .where((l) => l.id == activeId)
+                            .firstOrNull) {
+                          null =>
+                            'No active layer — tap a layer to make it active',
+                          final l =>
+                            'Active: ${l.name} · tap it again for none',
+                        },
+                        style: Theme.of(context).textTheme.bodySmall,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                     const Divider(height: 1),
                     Expanded(
                       child: ReorderableListView.builder(
@@ -327,6 +346,7 @@ class _LayerTile extends ConsumerWidget {
       if (level != null) subtitle.write(' · ${level.label.toLowerCase()}');
     }
     if (layer.isInverted) subtitle.write(' · inverted');
+    if (!layer.isVisible) subtitle.write(' · hidden');
     // Show the opacity only when it isn't this type's default (region layers
     // default to a translucent fill, so the default value isn't 100%).
     final defaultOpacity = defaultLayerOpacity(layer.type);
@@ -337,8 +357,21 @@ class _LayerTile extends ConsumerWidget {
     // lands; the predicate itself lives in [layerActionsFor].
     ref.watch(poiSetsProvider);
 
+    final scheme = Theme.of(context).colorScheme;
+    final dimmed = Theme.of(context).disabledColor;
     return ListTile(
       selected: isActive,
+      // The active layer has to be visible at a glance — `selected` alone only
+      // tints the text, which is nothing next to four other rows. So: a filled
+      // tile, an accent bar on the left, a bold name and "Active" in the
+      // subtitle. A hidden layer is dimmed, since it is *not* what is shown.
+      selectedTileColor: scheme.primaryContainer,
+      selectedColor: scheme.onPrimaryContainer,
+      textColor: layer.isVisible ? null : dimmed,
+      iconColor: layer.isVisible ? null : dimmed,
+      shape: isActive
+          ? Border(left: BorderSide(color: scheme.primary, width: 4))
+          : null,
       // Three trailing controls (elements, menu, drag) leave little room for the
       // name, so claw back the default paddings and keep every control compact.
       contentPadding: const EdgeInsets.symmetric(horizontal: 4),
@@ -376,10 +409,18 @@ class _LayerTile extends ConsumerWidget {
           const SizedBox(width: 8),
           Icon(typeIcon(layer.type), size: 16),
           const SizedBox(width: 6),
-          Expanded(child: Text(layer.name, overflow: TextOverflow.ellipsis)),
+          Expanded(
+            child: Text(
+              layer.name,
+              overflow: TextOverflow.ellipsis,
+              style: isActive
+                  ? const TextStyle(fontWeight: FontWeight.bold)
+                  : null,
+            ),
+          ),
         ],
       ),
-      subtitle: Text(subtitle.toString()),
+      subtitle: Text(isActive ? 'Active · $subtitle' : subtitle.toString()),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
