@@ -24,7 +24,7 @@ import 'package:zonecraft/data/database.dart';
 import 'package:zonecraft/data/repository.dart';
 import 'package:zonecraft/state/providers.dart';
 import 'package:zonecraft/ui/circle_editor.dart';
-import 'package:zonecraft/ui/layers_panel.dart';
+import 'package:zonecraft/ui/layer_actions.dart';
 
 /// Every numeric control must be typeable, not only draggable: a slider cannot
 /// hit "exactly 500 m" on a 10 m–1000 km log scale, and 33 % is between two of

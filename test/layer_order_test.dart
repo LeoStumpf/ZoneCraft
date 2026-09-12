@@ -15,7 +15,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:zonecraft/ui/layers_panel.dart';
+import 'package:zonecraft/ui/layer_actions.dart';
 
 /// The layers drawer's explicit "move up / down / to top / to bottom".
 ///

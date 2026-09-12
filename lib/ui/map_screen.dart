@@ -1476,6 +1476,40 @@ class _MapScreenState extends ConsumerState<MapScreen>
             () => _runPoiImport(layer, at: at),
           );
 
+  /// Runs a [MapRequest] posted from outside the map (see [mapRequestProvider]).
+  ///
+  /// Every arm is the same call the map's own button makes, so a request and
+  /// a FAB press cannot drift apart. A request for a layer that no longer
+  /// exists is dropped: the asker was looking at a stale list.
+  Future<void> _runMapRequest(MapRequest req) async {
+    final repo = ref.read(repositoryProvider);
+    final layers = ref.read(layersProvider).asData?.value ?? const <Layer>[];
+    if (req.kind == MapRequestKind.importFile) {
+      await importLayerFlow(context, repo, layers, ref: ref);
+      return;
+    }
+    final layer = layers.where((l) => l.id == req.layerId).firstOrNull;
+    if (layer == null) return;
+    switch (req.kind) {
+      case MapRequestKind.importPois:
+        await _importPois(layer);
+      case MapRequestKind.importStations:
+        await _enterAddMode(layer, placeType: _kPlaceStations);
+      case MapRequestKind.importBordersVisible:
+        await _importBorders(layer, box: _mapController.camera.visibleBounds);
+      case MapRequestKind.importFeature:
+        await importFeatureFlow(context, repo, layers, into: layer);
+      case MapRequestKind.importTrack:
+        await importTrackIntoLayer(context, repo, layer);
+      case MapRequestKind.importFile:
+        return; // handled above
+      case MapRequestKind.enterAdd:
+        await _enterAddMode(layer);
+      case MapRequestKind.enterDraw:
+        _enterDrawMode(layer);
+    }
+  }
+
   /// The import FAB on a POI layer: nearby POIs of one category (a circle
   /// around the map centre), or the public-transport stations of a box you
   /// mark with two corners. One button, because both fill the same layer
@@ -2634,10 +2668,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
           ObjectRef(kind: ObjectKind.circle, id: id, layerId: layer.id),
         );
       case 'height':
+        // Not sticky, unlike a circle: a height area draws *nothing* until
+        // the editor's Generate has run, so the tap ends in that editor —
+        // the same as the long-press "New height area here" and the Add-FAB
+        // long-press already do.
         final id = await _addHeightRegionAt(latlng, layer, select: false);
         _pushAddStep(
           ObjectRef(kind: ObjectKind.heightRegion, id: id, layerId: layer.id),
         );
+        _editLastAdded();
       case 'subspace':
         final existing = (ref.read(subspacesProvider).asData?.value ?? const [])
             .where((s) => s.layerId == layerId)
@@ -3280,6 +3319,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
     items.add(
       _pointMenuItem('copyCoords', Icons.copy_all_outlined, 'Copy coordinates'),
     );
+    // The inverse of the two above, in the same place: a position someone
+    // sent you as text. (Settings offers it too; here it is two taps away.)
+    items.add(
+      _pointMenuItem(
+        'pasteCoords',
+        Icons.content_paste_go,
+        'Paste coordinates…',
+      ),
+    );
 
     final selected = await _showPointMenu(
       activeLayer?.name ?? 'This place',
@@ -3344,6 +3392,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
         await _sharePlace(latlng);
       case 'copyCoords':
         await _copyPlace(latlng);
+      case 'pasteCoords':
+        final point = await showPastePlaceDialog(context);
+        if (point == null || !mounted) return;
+        ref.read(receivedPointProvider.notifier).receive(point);
     }
   }
 
@@ -3814,6 +3866,20 @@ class _MapScreenState extends ConsumerState<MapScreen>
           .where((t) => t.id == req.setId)
           .firstOrNull;
       if (set != null) unawaited(retryImport(set));
+    });
+
+    // An action the drawer, the layer sheet or an Elements list asked the map
+    // to run — each needs the camera, the import-form slot or a mode, so none
+    // of them can run where it was asked for. Post-frame, because the asker
+    // is mid-pop: an import form pushed synchronously would sit under the
+    // sheet still on its way out.
+    ref.listen(mapRequestProvider, (_, req) {
+      if (req == null) return;
+      ref.read(mapRequestProvider.notifier).clear();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(_runMapRequest(req));
+      });
     });
 
     // A shared position moves the camera once, on arrival. Same floor as

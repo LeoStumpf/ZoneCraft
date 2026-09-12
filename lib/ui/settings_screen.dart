@@ -99,13 +99,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     ).showSnackBar(const SnackBar(content: Text('All data cleared')));
   }
 
-  void _snack(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
-  }
-
   /// Exports every layer + object to a file and opens the system share sheet.
   /// GeoJSON is the lossless round-trip format; KML is for Google Earth / Maps.
   /// Parses a pasted position and hands it to the map, which is the only
@@ -118,25 +111,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     Navigator.of(context).pop();
   }
 
-  Future<void> _export() async {
-    final data = await _repo.exportData();
-    if (!mounted) return;
-    if (data.objectCount == 0) {
-      _snack('Nothing to export yet');
-      return;
-    }
-    if (!await confirmLargeExport(context, data)) return;
-    if (!mounted) return;
-    final choice = await askExportChoice(context, title: 'Export as');
-    if (choice == null || !mounted) return;
-    await deliverExport(
-      context,
-      data,
-      choice,
-      fileStem: 'zonecraft-${exportStamp()}',
-      subject: 'ZoneCraft export',
-    );
-  }
+  Future<void> _export() => exportAllFlow(context, _repo);
 
   /// Picks a geometry file (ZoneCraft GeoJSON, generic GeoJSON, KML/KMZ or GPX)
   /// and imports it, asking whether to add new layers or merge into an existing

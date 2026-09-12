@@ -275,6 +275,33 @@ Future<void> deliverExport(
   }
 }
 
+/// Exports every layer to GeoJSON or KML, then shares or saves it.
+///
+/// One routine for the two places that offer it — Settings and the layers
+/// drawer — so the file stem, subject and size guard cannot drift apart.
+Future<void> exportAllFlow(BuildContext context, Repository repo) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final data = await repo.exportData();
+  if (!context.mounted) return;
+  if (data.objectCount == 0) {
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Nothing to export yet')),
+    );
+    return;
+  }
+  if (!await confirmLargeExport(context, data)) return;
+  if (!context.mounted) return;
+  final choice = await askExportChoice(context, title: 'Export as');
+  if (choice == null || !context.mounted) return;
+  await deliverExport(
+    context,
+    data,
+    choice,
+    fileStem: 'zonecraft-${exportStamp()}',
+    subject: 'ZoneCraft export',
+  );
+}
+
 /// Exports a single [layer] to GeoJSON or KML, then shares or saves it.
 Future<void> exportSingleLayer(
   BuildContext context,

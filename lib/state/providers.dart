@@ -76,12 +76,21 @@ final undoRevisionProvider =
 /// The order matters: drop the keyboard first so no focused field can write its
 /// stale value back, disarm anything that would commit remembered geometry over
 /// what is about to be restored, then replay.
-Future<void> applyUndo(WidgetRef ref, {bool forward = false}) async {
+Future<void> applyUndo(WidgetRef ref, {bool forward = false}) =>
+    applyUndoIn(ProviderScope.containerOf(ref.context), forward: forward);
+
+/// [applyUndo] for a caller with no live widget — a snackbar's UNDO button,
+/// which outlives the tile whose action raised it (a deleted layer's tile is
+/// gone by the time the button is pressed, and its `ref` with it).
+Future<void> applyUndoIn(
+  ProviderContainer container, {
+  bool forward = false,
+}) async {
   FocusManager.instance.primaryFocus?.unfocus();
-  clearTransientModes(ref);
-  final journal = ref.read(undoJournalProvider);
+  clearTransientModesIn(container);
+  final journal = container.read(undoJournalProvider);
   await (forward ? journal.redo() : journal.undo());
-  ref.read(undoRevisionProvider.notifier).bump();
+  container.read(undoRevisionProvider.notifier).bump();
 }
 
 /// Reactive list of layers, ordered bottom-to-top (draw order).
@@ -544,15 +553,19 @@ void clearSelection(WidgetRef ref) {
 /// gone resolves to null and closes its own sheet (and a redo re-opens it), but
 /// an armed placement or a live reshape draft would survive and write stale
 /// geometry back over what was just restored.
-void clearTransientModes(WidgetRef ref) {
-  ref.read(circlePlacementProvider.notifier).arm(on: false);
-  ref.read(subspacePlacementProvider.notifier).arm(null);
-  ref.read(freeLinePlacementProvider.notifier).arm(null);
-  ref.read(freeLineCenterPlacementProvider.notifier).arm(on: false);
-  ref.read(freeAreaPlacementProvider.notifier).arm(null);
-  ref.read(heightPlacementProvider.notifier).arm(on: false);
-  ref.read(poiPointPlacementProvider.notifier).arm(on: false);
-  ref.read(borderReshapeProvider.notifier).arm(on: false);
+void clearTransientModes(WidgetRef ref) =>
+    clearTransientModesIn(ProviderScope.containerOf(ref.context));
+
+/// [clearTransientModes] against the container itself — see [applyUndoIn].
+void clearTransientModesIn(ProviderContainer c) {
+  c.read(circlePlacementProvider.notifier).arm(on: false);
+  c.read(subspacePlacementProvider.notifier).arm(null);
+  c.read(freeLinePlacementProvider.notifier).arm(null);
+  c.read(freeLineCenterPlacementProvider.notifier).arm(on: false);
+  c.read(freeAreaPlacementProvider.notifier).arm(null);
+  c.read(heightPlacementProvider.notifier).arm(on: false);
+  c.read(poiPointPlacementProvider.notifier).arm(on: false);
+  c.read(borderReshapeProvider.notifier).arm(on: false);
 }
 
 /// Whether any object is currently selected.
@@ -649,6 +662,62 @@ class PendingImportRetryNotifier extends Notifier<ImportRetryRequest?> {
 final pendingImportRetryProvider =
     NotifierProvider<PendingImportRetryNotifier, ImportRetryRequest?>(
         PendingImportRetryNotifier.new);
+
+/// What a map-owning action can be asked for from somewhere that is not the
+/// map: the layers drawer, the layer sheet, an Elements list's empty state.
+///
+/// Each of these runs inside `map_screen`, because each needs the camera (a
+/// border import takes the visible bounds), the map's `bottomSheet` slot (an
+/// import form draws its preview live) or a mode (Add / Draw arm a banner) —
+/// none of which a popped sheet's context can reach.
+enum MapRequestKind {
+  /// One category of POIs around the map centre (`_importPois`).
+  importPois,
+
+  /// Stations in a box marked by two corner taps (Add mode armed for it).
+  importStations,
+
+  /// Administrative areas inside the visible bounds — the Add-FAB long-press.
+  importBordersVisible,
+
+  /// A named map feature via Nominatim, merged into the layer.
+  importFeature,
+
+  /// A GPX/KML/GeoJSON track file, merged into the layer.
+  importTrack,
+
+  /// A whole file as new layers or merged, with the map preview.
+  importFile,
+
+  /// Arm Add mode for the layer.
+  enterAdd,
+
+  /// Arm Draw mode for the layer (freehand types only).
+  enterDraw,
+}
+
+/// A one-shot request for the map to run [kind] on [layerId].
+///
+/// Same shape as [ImportRetryRequest] and for the same reason: the map screen
+/// listens, clears, and acts once. No `operator ==`, so asking twice re-fires.
+/// [layerId] is null only for [MapRequestKind.importFile], which makes layers
+/// rather than filling one.
+class MapRequest {
+  const MapRequest(this.kind, {this.layerId});
+  final MapRequestKind kind;
+  final String? layerId;
+}
+
+class MapRequestNotifier extends Notifier<MapRequest?> {
+  @override
+  MapRequest? build() => null;
+
+  void post(MapRequest request) => state = request;
+  void clear() => state = null;
+}
+
+final mapRequestProvider =
+    NotifierProvider<MapRequestNotifier, MapRequest?>(MapRequestNotifier.new);
 
 /// While a hand-placed POI is selected, whether the next map tap moves it.
 ///

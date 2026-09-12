@@ -17,22 +17,17 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/borders.dart';
 import '../data/database.dart';
 import '../data/layer_types.dart';
-import '../data/poi_sets.dart';
-import '../data/repository.dart';
-import '../geo/coords.dart';
 import '../state/providers.dart';
-import 'editor_sheet.dart';
 import 'import_actions.dart';
+import 'layer_actions.dart';
 import 'layer_objects_sheet.dart';
 import 'object_summary.dart';
 import 'settings_screen.dart';
-import 'transit_modes_sheet.dart';
 
 /// Left-hand drawer for managing layers: list, choose active, visibility,
 /// reorder, colour, rename, inverse, delete, and add. Replaces the old bottom
@@ -47,7 +42,8 @@ class LayersDrawer extends ConsumerWidget {
         ref.watch(poiSetsProvider).asData?.value ?? const <PoiSet>[];
     final poiPoints =
         ref.watch(poiPointsProvider).asData?.value ?? const <PoiPoint>[];
-    final circles = ref.watch(circlesProvider).asData?.value ?? const <Circle>[];
+    final circles =
+        ref.watch(circlesProvider).asData?.value ?? const <Circle>[];
     final subspaces =
         ref.watch(subspacesProvider).asData?.value ?? const <Subspace>[];
     final subspacePoints =
@@ -73,300 +69,238 @@ class LayersDrawer extends ConsumerWidget {
     final selected = ref.watch(activeLayerProvider);
     final repo = ref.read(repositoryProvider);
 
-    Future<void> addLayer(int count, String type) async {
-      // Borders is the one type with a creation-time sub-choice: a layer holds
-      // exactly one admin level, which is what makes its colouring well
-      // defined, so the level has to be settled before the layer exists.
-      String? level;
-      if (type == 'borders') {
-        final picked = await showBorderLevelPicker(context);
-        if (picked == null) return;
-        level = picked.adminLevel;
-      }
-      final id = await repo.createLayer(
-        name: 'Layer ${count + 1}',
-        colorArgb: _palette[count % _palette.length].toARGB32(),
-        type: type,
-        borderLevel: level,
-      );
-      ref.read(activeLayerProvider.notifier).select(id);
-    }
-
+    // The drawer gets its own messenger: a Scaffold draws its drawer *above*
+    // its snackbars, so "Deleted … UNDO" raised from here would otherwise be
+    // hidden behind the very drawer it was raised from.
     return Drawer(
-      child: SafeArea(
-        child: layersAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('Error: $e')),
-          data: (layers) {
-            // Display top-of-stack first (reverse of draw order).
-            final display = layers.reversed.toList();
-            final activeId = effectiveActiveLayerId(layers, selected);
+      child: ScaffoldMessenger(
+        child: Scaffold(
+          body: SafeArea(
+            child: layersAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Center(child: Text('Error: $e')),
+              data: (layers) {
+                // Display top-of-stack first (reverse of draw order).
+                final display = layers.reversed.toList();
+                final activeId = effectiveActiveLayerId(layers, selected);
 
-            return Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-                  child: Row(
-                    children: [
-                      Text('Layers',
-                          style: Theme.of(context).textTheme.titleLarge),
-                      const Spacer(),
-                      IconButton(
-                        tooltip: 'Import layer from file',
-                        icon: const Icon(Icons.file_open_outlined),
-                        onPressed: () =>
-                            importLayerFlow(context, repo, layers, ref: ref),
-                      ),
-                      // (Importing a named map feature is not here any more: it
-                      // always produces freehand geometry, so it lives on the
-                      // freehand layers themselves, next to "Import track…".)
-                      PopupMenuButton<String>(
-                        tooltip: 'Add layer',
-                        onSelected: (type) => addLayer(layers.length, type),
-                        itemBuilder: (_) => [
-                          const PopupMenuItem(
-                            value: 'circles',
-                            child: ListTile(
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              leading: Icon(Icons.circle_outlined),
-                              title: Text('Circles layer'),
+                return Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+                      child: Row(
+                        children: [
+                          Text(
+                            'Layers',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            tooltip: 'Import layer from file',
+                            icon: const Icon(Icons.file_open_outlined),
+                            onPressed: () => importLayerFlow(
+                              context,
+                              repo,
+                              layers,
+                              ref: ref,
                             ),
                           ),
-                          const PopupMenuItem(
-                            value: 'subspace',
-                            child: ListTile(
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              leading: Icon(Icons.scatter_plot_outlined),
-                              title: Text('Subspace layer'),
-                            ),
+                          // Export lives here too, not only in Settings: it is an
+                          // action on the map, and this is where the map's layers
+                          // are.
+                          IconButton(
+                            tooltip: 'Export all layers',
+                            icon: const Icon(Icons.ios_share),
+                            onPressed: () => exportAllFlow(context, repo),
                           ),
-                          const PopupMenuItem(
-                            value: 'freeline',
-                            child: ListTile(
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              leading: Icon(Icons.polyline),
-                              title: Text('Freehand line layer'),
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'freearea',
-                            child: ListTile(
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              leading: Icon(Icons.hexagon_outlined),
-                              title: Text('Freehand area layer'),
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'height',
-                            child: ListTile(
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              leading: Icon(Icons.terrain),
-                              title: Text('Height layer'),
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'poi',
-                            child: ListTile(
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              leading: Icon(Icons.travel_explore),
-                              title: Text('POI layer'),
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'borders',
-                            child: ListTile(
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              leading: Icon(Icons.public),
-                              title: Text('Borders layer'),
-                            ),
-                          ),
-                          const PopupMenuDivider(),
-                          const PopupMenuItem(
-                            value: kMixedType,
-                            child: ListTile(
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              leading: Icon(Icons.layers_outlined),
-                              title: Text('Combined layer'),
-                              subtitle: Text('Holds any mix except borders'),
+                          // (Importing a named map feature is not here any more: it
+                          // always produces freehand geometry, so it lives on the
+                          // freehand layers themselves, next to "Import track…".)
+                          PopupMenuButton<String>(
+                            tooltip: 'Add layer',
+                            onSelected: (type) =>
+                                addLayerFlow(context, ref, layers, type),
+                            itemBuilder: (_) => [
+                              for (final c in kLayerTypeChoices) ...[
+                                // The combined layer sits apart: it is not an
+                                // eighth kind of content but a way to hold the
+                                // other seven.
+                                if (c.type == kMixedType)
+                                  const PopupMenuDivider(),
+                                PopupMenuItem(
+                                  value: c.type,
+                                  child: ListTile(
+                                    dense: true,
+                                    contentPadding: EdgeInsets.zero,
+                                    leading: Icon(c.icon),
+                                    title: Text(c.label),
+                                    subtitle: c.subtitle == null
+                                        ? null
+                                        : Text(c.subtitle!),
+                                  ),
+                                ),
+                              ],
+                            ],
+                            child: const Padding(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 8,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.add),
+                                  SizedBox(width: 4),
+                                  Text('Add'),
+                                ],
+                              ),
                             ),
                           ),
                         ],
-                        child: const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [Icon(Icons.add), SizedBox(width: 4), Text('Add')],
-                          ),
-                        ),
                       ),
-                    ],
-                  ),
-                ),
-                const Divider(height: 1),
-                Expanded(
-                  child: ReorderableListView.builder(
-                    itemCount: display.length,
-                    onReorderItem: (oldIndex, newIndex) {
-                      final reordered = [...display];
-                      final moved = reordered.removeAt(oldIndex);
-                      reordered.insert(newIndex, moved);
-                      // Persist as bottom-to-top draw order.
-                      unawaited(repo.reorderLayers(
-                          reordered.reversed.map((l) => l.id).toList(),
-                        ));
-                    },
-                    itemBuilder: (context, index) {
-                      final layer = display[index];
-                      final int count;
-                      if (layer.type == kMixedType) {
-                        // A combined layer's natural unit is the *element* —
-                        // the rows the Elements list shows — because its
-                        // contents have no shared unit to count in. (Every
-                        // other branch below counts each type's own: points
-                        // for a subspace, POIs for an import.)
-                        count = ref.read(layerSummariesProvider(layer.id)).length;
-                      } else if (layer.type == 'subspace') {
-                        // A subspace layer shows its point count.
-                        final ids = subspaces
-                            .where((s) => s.layerId == layer.id)
-                            .map((s) => s.id)
-                            .toSet();
-                        count = subspacePoints
-                            .where((p) => ids.contains(p.subspaceId))
-                            .length;
-                      } else if (layer.type == 'freeline') {
-                        final ids = freeLines
-                            .where((l) => l.layerId == layer.id)
-                            .map((l) => l.id)
-                            .toSet();
-                        count = freeLinePoints
-                            .where((p) => ids.contains(p.freeLineId))
-                            .length;
-                      } else if (layer.type == 'freearea') {
-                        final ids = freeAreas
-                            .where((a) => a.layerId == layer.id)
-                            .map((a) => a.id)
-                            .toSet();
-                        count = freeAreaPoints
-                            .where((p) => ids.contains(p.freeAreaId))
-                            .length;
-                      } else if (layer.type == 'height') {
-                        count = heightRegions
-                            .where((r) => r.layerId == layer.id)
-                            .length;
-                      } else if (layer.type == 'borders') {
-                        // Areas are the unit you see, so count those rather
-                        // than imports (which would read 1).
-                        final ids = borderSets
-                            .where((s) => s.layerId == layer.id)
-                            .map((s) => s.id)
-                            .toSet();
-                        count = borderAreas
-                            .where((a) => ids.contains(a.setId))
-                            .length;
-                      } else if (layer.type == 'poi') {
-                        final ids = poiSets
-                            .where((s) => s.layerId == layer.id)
-                            .map((s) => s.id)
-                            .toSet();
-                        count = poiPoints
-                            .where((p) => ids.contains(p.poiSetId))
-                            .length;
-                      } else {
-                        count =
-                            circles.where((c) => c.layerId == layer.id).length;
-                      }
-                      return _LayerTile(
-                        key: ValueKey(layer.id),
-                        layer: layer,
-                        objectCount: count,
-                        isActive: layer.id == activeId,
-                        canCombine:
-                            display.any((l) => canCombineLayers(layer, l)),
-                      );
-                    },
-                  ),
-                ),
-                const Divider(height: 1),
-                // The base map, pinned as the bottom-most layer: hideable and
-                // opacity-adjustable like any layer, but never reorderable or
-                // deletable.
-                const _BasemapTile(),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.settings_outlined),
-                  title: const Text('Settings'),
-                  onTap: () {
-                    Navigator.pop(context); // close the drawer
-                    unawaited(Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const SettingsScreen(),
-                        ),
-                      ));
-                  },
-                ),
-              ],
-            );
-          },
+                    ),
+                    const Divider(height: 1),
+                    Expanded(
+                      child: ReorderableListView.builder(
+                        itemCount: display.length,
+                        onReorderItem: (oldIndex, newIndex) {
+                          final reordered = [...display];
+                          final moved = reordered.removeAt(oldIndex);
+                          reordered.insert(newIndex, moved);
+                          // Persist as bottom-to-top draw order.
+                          unawaited(
+                            repo.reorderLayers(
+                              reordered.reversed.map((l) => l.id).toList(),
+                            ),
+                          );
+                        },
+                        itemBuilder: (context, index) {
+                          final layer = display[index];
+                          final int count;
+                          if (layer.type == kMixedType) {
+                            // A combined layer's natural unit is the *element* —
+                            // the rows the Elements list shows — because its
+                            // contents have no shared unit to count in. (Every
+                            // other branch below counts each type's own: points
+                            // for a subspace, POIs for an import.)
+                            count = ref
+                                .read(layerSummariesProvider(layer.id))
+                                .length;
+                          } else if (layer.type == 'subspace') {
+                            // A subspace layer shows its point count.
+                            final ids = subspaces
+                                .where((s) => s.layerId == layer.id)
+                                .map((s) => s.id)
+                                .toSet();
+                            count = subspacePoints
+                                .where((p) => ids.contains(p.subspaceId))
+                                .length;
+                          } else if (layer.type == 'freeline') {
+                            final ids = freeLines
+                                .where((l) => l.layerId == layer.id)
+                                .map((l) => l.id)
+                                .toSet();
+                            count = freeLinePoints
+                                .where((p) => ids.contains(p.freeLineId))
+                                .length;
+                          } else if (layer.type == 'freearea') {
+                            final ids = freeAreas
+                                .where((a) => a.layerId == layer.id)
+                                .map((a) => a.id)
+                                .toSet();
+                            count = freeAreaPoints
+                                .where((p) => ids.contains(p.freeAreaId))
+                                .length;
+                          } else if (layer.type == 'height') {
+                            count = heightRegions
+                                .where((r) => r.layerId == layer.id)
+                                .length;
+                          } else if (layer.type == 'borders') {
+                            // Areas are the unit you see, so count those rather
+                            // than imports (which would read 1).
+                            final ids = borderSets
+                                .where((s) => s.layerId == layer.id)
+                                .map((s) => s.id)
+                                .toSet();
+                            count = borderAreas
+                                .where((a) => ids.contains(a.setId))
+                                .length;
+                          } else if (layer.type == 'poi') {
+                            final ids = poiSets
+                                .where((s) => s.layerId == layer.id)
+                                .map((s) => s.id)
+                                .toSet();
+                            count = poiPoints
+                                .where((p) => ids.contains(p.poiSetId))
+                                .length;
+                          } else {
+                            count = circles
+                                .where((c) => c.layerId == layer.id)
+                                .length;
+                          }
+                          return _LayerTile(
+                            key: ValueKey(layer.id),
+                            index: index,
+                            layer: layer,
+                            layers: layers,
+                            objectCount: count,
+                            isActive: layer.id == activeId,
+                          );
+                        },
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    // The base map, pinned as the bottom-most layer: hideable and
+                    // opacity-adjustable like any layer, but never reorderable or
+                    // deletable.
+                    const _BasemapTile(),
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.settings_outlined),
+                      title: const Text('Settings'),
+                      onTap: () {
+                        Navigator.pop(context); // close the drawer
+                        unawaited(
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const SettingsScreen(),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
         ),
       ),
     );
   }
 }
 
-/// Where a "move layer" menu item sends the layer, in map-stack terms:
-/// `toTop` is drawn last, over everything else.
-enum LayerMove { toTop, up, down, toBottom }
-
-/// [ids] — a layer stack **bottom-to-top** — with [id] moved by [move].
-///
-/// Pure, because this is the one place the feature can be wrong: the drawer
-/// renders the stack upside down (top layer first), so an ordering computed
-/// against what is on screen would be reversed. Taking and returning the
-/// bottom-to-top order — the order [Repository.watchLayers] hands out and
-/// [Repository.reorderLayers] expects back — means the reversal never enters
-/// the arithmetic at all.
-///
-/// Returns [ids] unchanged when [id] is absent or already where it is going,
-/// so a caller can use identity to decide whether a write is needed.
-List<String> movedLayerOrder(List<String> ids, String id, LayerMove move) {
-  final i = ids.indexOf(id);
-  if (i < 0) return ids;
-  final j = switch (move) {
-    LayerMove.toBottom => 0,
-    LayerMove.down => i - 1,
-    LayerMove.up => i + 1,
-    LayerMove.toTop => ids.length - 1,
-  }.clamp(0, ids.length - 1);
-  if (j == i) return ids;
-  return [...ids]
-    ..removeAt(i)
-    ..insert(j, id);
-}
-
 class _LayerTile extends ConsumerWidget {
   const _LayerTile({
     super.key,
+    required this.index,
     required this.layer,
+    required this.layers,
     required this.objectCount,
     required this.isActive,
-    required this.canCombine,
   });
 
+  /// Position in the drawer's list (top of stack first) — what the drag
+  /// handle needs.
+  final int index;
   final Layer layer;
+
+  /// The whole stack, **bottom-to-top** — the order [Repository.watchLayers]
+  /// hands out. Every stacking decision is computed against this, never
+  /// against the drawer's reversed display list.
+  final List<Layer> layers;
   final int objectCount;
   final bool isActive;
-
-  /// Whether another same-type layer exists to merge this one into.
-  final bool canCombine;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -383,8 +317,9 @@ class _LayerTile extends ConsumerWidget {
       kMixedType => 'element',
       _ => 'circle',
     };
-    final subtitle =
-        StringBuffer('$objectCount $noun${objectCount == 1 ? '' : 's'}');
+    final subtitle = StringBuffer(
+      '$objectCount $noun${objectCount == 1 ? '' : 's'}',
+    );
     // The level is what a borders layer *is* — two layers reading "12 areas"
     // are otherwise indistinguishable.
     if (layer.type == 'borders') {
@@ -398,11 +333,9 @@ class _LayerTile extends ConsumerWidget {
     if ((layer.opacity - defaultOpacity).abs() > 0.005) {
       subtitle.write(' · ${(layer.opacity * 100).round()}% opacity');
     }
-    // The "Stations…" filter is over station imports, so it is offered only
-    // once the layer holds one (see the menu below).
-    final hasStations = layerHolds(layer, kPoi) &&
-        (ref.watch(poiSetsProvider).asData?.value ?? const <PoiSet>[])
-            .any((s) => s.layerId == layer.id && s.isStationImport);
+    // Watched so the menu re-evaluates "Stations…" when a station import
+    // lands; the predicate itself lives in [layerActionsFor].
+    ref.watch(poiSetsProvider);
 
     return ListTile(
       selected: isActive,
@@ -420,16 +353,16 @@ class _LayerTile extends ConsumerWidget {
         padding: EdgeInsets.zero,
         constraints: const BoxConstraints.tightFor(width: 36, height: 36),
         tooltip: layer.isVisible ? 'Hide' : 'Show',
-        icon: Icon(layer.isVisible
-            ? Icons.visibility
-            : Icons.visibility_off_outlined),
+        icon: Icon(
+          layer.isVisible ? Icons.visibility : Icons.visibility_off_outlined,
+        ),
         onPressed: () =>
             repo.updateLayer(layer.id, isVisible: !layer.isVisible),
       ),
       title: Row(
         children: [
           GestureDetector(
-            onTap: () => _pickColor(context, ref),
+            onTap: () => pickLayerColor(context, ref, layer),
             child: Container(
               width: 20,
               height: 20,
@@ -464,198 +397,59 @@ class _LayerTile extends ConsumerWidget {
           ),
           // NB: PopupMenuButton.constraints sizes the *menu*, not the button —
           // keep the button slim with iconSize/padding only.
-          PopupMenuButton<String>(
-            iconSize: 20,
-            padding: EdgeInsets.zero,
-            onSelected: (value) async {
-              switch (value) {
-                case 'rename':
-                  await _rename(context, repo);
-                case 'color':
-                  await _pickColor(context, ref);
-                case 'opacity':
-                  await showOpacityDialog(
-                    context,
-                    title: 'Layer transparency',
-                    value: layer.opacity,
-                    onChanged: (v) => repo.updateLayer(layer.id, opacity: v),
-                  );
-                case 'inverse':
-                  await repo.updateLayer(layer.id,
-                      isInverted: !layer.isInverted);
-                case 'stations':
-                  await _openStations(context, ref);
-                case 'fillAreas':
-                  await repo.updateBorderLayerOptions(layer.id,
-                      fillAreas: !layer.borderFillAreas);
-                case 'showNames':
-                  await repo.updateBorderLayerOptions(layer.id,
-                      showNames: !layer.borderShowNames);
-                case 'importFeature':
-                  // The flow needs the full list only for its fallback picker
-                  // (a line feature asked for from an area layer, or vice
-                  // versa); normally it merges straight into this layer.
-                  await importFeatureFlow(
-                    context,
-                    repo,
-                    ref.read(layersProvider).asData?.value ?? const <Layer>[],
-                    into: layer,
-                  );
-                case 'importTrack':
-                  await importTrackIntoLayer(context, repo, layer);
-                case 'export':
-                  await exportSingleLayer(context, repo, layer);
-                case 'combine':
-                  final layers =
-                      ref.read(layersProvider).asData?.value ?? const <Layer>[];
-                  final targets =
-                      layers.where((l) => canCombineLayers(layer, l)).toList();
-                  final mergedInto =
-                      await combineLayerFlow(context, repo, layer, targets);
-                  // If the combined-away layer was active, follow to the target.
-                  if (mergedInto != null &&
-                      ref.read(activeLayerProvider) == layer.id) {
-                    ref.read(activeLayerProvider.notifier).select(mergedInto);
-                  }
-                case 'makeMixed':
-                  await repo.convertLayerToMixed(layer.id);
-                case 'toTop':
-                  await _move(ref, repo, LayerMove.toTop);
-                case 'up':
-                  await _move(ref, repo, LayerMove.up);
-                case 'down':
-                  await _move(ref, repo, LayerMove.down);
-                case 'toBottom':
-                  await _move(ref, repo, LayerMove.toBottom);
-                case 'delete':
-                  await repo.deleteLayer(layer.id);
-              }
+          //
+          // The items come from [layerActionsFor], the one definition the
+          // map's layer sheet renders too. Explicit stacking items are there
+          // because dragging a tile is fiddly on a phone and impossible to
+          // aim at "all the way to the top" with twenty layers.
+          Builder(
+            builder: (context) {
+              final actions = layerActionsFor(context, ref, layer, layers);
+              return PopupMenuButton<LayerAction>(
+                iconSize: 20,
+                padding: EdgeInsets.zero,
+                onSelected: (action) {
+                  // A map-owned action needs the drawer out of the way: the
+                  // map answers with a form, a preview or a banner, all of
+                  // which this drawer would cover.
+                  if (action.needsMap) Navigator.pop(context);
+                  unawaited(action.run());
+                },
+                itemBuilder: (_) => [
+                  for (var i = 0; i < actions.length; i++) ...[
+                    if (i > 0 &&
+                        layerActionGroup(actions[i].id) !=
+                            layerActionGroup(actions[i - 1].id))
+                      const PopupMenuDivider(),
+                    if (actions[i].checked != null)
+                      CheckedPopupMenuItem(
+                        value: actions[i],
+                        checked: actions[i].checked!,
+                        child: Text(actions[i].label),
+                      )
+                    else
+                      PopupMenuItem(
+                        value: actions[i],
+                        child: Text(actions[i].label),
+                      ),
+                  ],
+                ],
+              );
             },
-            itemBuilder: (_) => [
-              // Explicit stacking, because dragging a tile is fiddly on a
-              // phone and impossible to aim at "all the way to the top" with
-              // twenty layers. The wording names the *map* stack, which is
-              // what `sortOrder` means; the drawer showing it upside down
-              // (top layer first) is presentation.
-              if (!_isTop(ref)) ...[
-                const PopupMenuItem(value: 'toTop', child: Text('Move to top')),
-                const PopupMenuItem(value: 'up', child: Text('Move up')),
-              ],
-              if (!_isBottom(ref)) ...[
-                const PopupMenuItem(value: 'down', child: Text('Move down')),
-                const PopupMenuItem(
-                    value: 'toBottom', child: Text('Move to bottom')),
-              ],
-              if (!_isTop(ref) || !_isBottom(ref)) const PopupMenuDivider(),
-              const PopupMenuItem(value: 'rename', child: Text('Rename')),
-              const PopupMenuItem(value: 'color', child: Text('Colour')),
-              const PopupMenuItem(
-                  value: 'opacity', child: Text('Transparency…')),
-              // 'height' layers use an above/below toggle, not viewport
-              // invert; 'poi' is markers with nothing to invert; 'borders'
-              // draws many separate areas, so there is no single region to
-              // take the complement of.
-              //
-              // A combined layer offers it, and it inverts the **region half**
-              // only — there is no meaningful complement of a marker, and its
-              // own markers stay on top of the fill either way.
-              if (layer.type == kMixedType ||
-                  (layer.type != 'height' &&
-                      layer.type != 'poi' &&
-                      layer.type != 'borders'))
-                PopupMenuItem(
-                  value: 'inverse',
-                  child: Text(layer.isInverted ? 'Un-invert' : 'Invert'),
-                ),
-              // Only once a station import exists: the filter is over
-              // imported stations, and offering it on a layer of cafés would
-              // open an empty sheet.
-              if (hasStations)
-                const PopupMenuItem(
-                    value: 'stations', child: Text('Stations…')),
-              if (layer.type == 'borders') ...[
-                CheckedPopupMenuItem(
-                  value: 'fillAreas',
-                  checked: layer.borderFillAreas,
-                  child: const Text('Colour areas'),
-                ),
-                CheckedPopupMenuItem(
-                  value: 'showNames',
-                  checked: layer.borderShowNames,
-                  child: const Text('Show names'),
-                ),
-              ],
-              // "Import map feature…" fetches a *named place*, so it belongs to
-              // the freehand types.
-              if (layerHolds(layer, kFreeLine) || layerHolds(layer, kFreeArea))
-                const PopupMenuItem(
-                  value: 'importFeature',
-                  child: Text('Import map feature…'),
-                ),
-              // One entry, not one per matching type: a combined layer holds
-              // both freehand types, and the same item listed twice is a menu
-              // bug. Which of them a GPX lands in is decided once, in
-              // [importTrackIntoLayer].
-              if (layerHolds(layer, kFreeLine) || layerHolds(layer, kFreeArea))
-                const PopupMenuItem(
-                  value: 'importTrack',
-                  child: Text('Import track…'),
-                ),
-              const PopupMenuItem(value: 'export', child: Text('Export layer…')),
-              if (canCombine)
-                const PopupMenuItem(
-                    value: 'combine', child: Text('Combine…')),
-              // Converting is one-way here on purpose: going *back* is only
-              // well defined while the layer holds at most one type, and a
-              // "convert back" that silently refuses most of the time is worse
-              // than not offering it. Combine into a new single-type layer
-              // instead.
-              if (canBecomeMixed(layer.type))
-                const PopupMenuItem(
-                  value: 'makeMixed',
-                  child: Text('Make combined layer'),
-                ),
-              const PopupMenuItem(value: 'delete', child: Text('Delete')),
-            ],
           ),
-          const Padding(
-            padding: EdgeInsets.only(left: 4),
-            child: Icon(Icons.drag_handle, size: 20),
+          // A real handle, not a hint of one: dragging anywhere on the tile
+          // also reorders (after a long press), but a handle that looks like a
+          // handle should grab at once.
+          ReorderableDragStartListener(
+            index: index,
+            child: const Padding(
+              padding: EdgeInsets.only(left: 4),
+              child: Icon(Icons.drag_handle, size: 20),
+            ),
           ),
         ],
       ),
     );
-  }
-
-  /// This layer's neighbours, bottom-to-top — the order [Repository.watchLayers]
-  /// hands out and the order [Repository.reorderLayers] expects back.
-  ///
-  /// Everything about stacking is computed against *this* list, never against
-  /// the drawer's `layers.reversed` display list. Mixing the two is the one
-  /// off-by-one this feature can have, and the fix is to never hold both.
-  List<Layer> _stack(WidgetRef ref) =>
-      ref.read(layersProvider).asData?.value ?? const <Layer>[];
-
-  bool _isTop(WidgetRef ref) {
-    final stack = _stack(ref);
-    return stack.isEmpty || stack.last.id == layer.id;
-  }
-
-  bool _isBottom(WidgetRef ref) {
-    final stack = _stack(ref);
-    return stack.isEmpty || stack.first.id == layer.id;
-  }
-
-  /// Moves this layer within the stack and persists the whole new order.
-  ///
-  /// Reuses [Repository.reorderLayers] verbatim — the same batch the drag
-  /// gesture writes — so there is exactly one way a layer's `sortOrder` is
-  /// ever assigned. A move that changes nothing writes nothing.
-  Future<void> _move(WidgetRef ref, Repository repo, LayerMove move) async {
-    final ids = _stack(ref).map((l) => l.id).toList();
-    final moved = movedLayerOrder(ids, layer.id, move);
-    if (identical(moved, ids)) return;
-    await repo.reorderLayers(moved);
   }
 
   /// Opens this layer's element list and applies whatever it asks for.
@@ -688,245 +482,6 @@ class _LayerTile extends ConsumerWidget {
     ref.read(pendingFocusProvider.notifier).request(target.fitPoints);
     Navigator.pop(context); // close the drawer so the map is visible
   }
-
-  /// Opens the layer's station-type filter. Visibility is written inside the
-  /// sheet, so nothing comes back and the drawer stays open — unlike
-  /// [_openElements], which hands off to the map.
-  Future<void> _openStations(BuildContext context, WidgetRef ref) =>
-      showTransitModes(context, layer);
-
-  Future<void> _rename(BuildContext context, Repository repo) async {
-    final controller = TextEditingController(text: layer.name);
-    final name = await showDialog<String>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Rename layer'),
-        content: TextField(controller: controller, autofocus: true),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    if (name != null && name.isNotEmpty) {
-      await repo.updateLayer(layer.id, name: name);
-    }
-  }
-
-  Future<void> _pickColor(BuildContext context, WidgetRef ref) async {
-    Color picked = Color(layer.colorArgb);
-    final result = await showDialog<Color>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Layer colour'),
-        content: SingleChildScrollView(
-          child: BlockPicker(
-            pickerColor: picked,
-            onColorChanged: (c) => picked = c,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, picked),
-            child: const Text('Select'),
-          ),
-        ],
-      ),
-    );
-    if (result == null) return;
-    final repo = ref.read(repositoryProvider);
-    // Elements that follow the layer re-shade themselves the moment it changes
-    // — that is the point of deriving the shade rather than storing it. The
-    // ones that were given their own colour are the only open question, and
-    // silently overwriting them would throw away deliberate work.
-    final overridden = await repo.elementsWithColorOverride(
-      layer.id,
-      layer.type,
-    );
-    await repo.updateLayer(layer.id, colorArgb: result.toARGB32());
-    if (overridden.isEmpty || !context.mounted) return;
-    await _askAboutOverrides(context, ref, overridden);
-  }
-
-  /// After a layer recolour: what to do with the elements that carry their own
-  /// colour and therefore did *not* follow it.
-  Future<void> _askAboutOverrides(
-    BuildContext context,
-    WidgetRef ref,
-    List<String> overridden,
-  ) async {
-    final n = overridden.length;
-    final answer = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Elements with their own colour'),
-        content: Text(
-          n == 1
-              ? '1 element has a colour of its own, so it kept it. '
-                    'Everything else followed the layer.'
-              : '$n elements have colours of their own, so they kept them. '
-                    'Everything else followed the layer.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, 'keep'),
-            child: const Text('Keep them'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, 'some'),
-            child: const Text('Choose…'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, 'all'),
-            child: Text(n == 1 ? 'Reset it' : 'Reset all'),
-          ),
-        ],
-      ),
-    );
-    if (answer == null || answer == 'keep') return;
-    if (answer == 'all') {
-      await _clearOverrides(ref, overridden);
-      return;
-    }
-    if (!context.mounted) return;
-    final chosen = await _chooseOverrides(context, ref, overridden);
-    if (chosen != null && chosen.isNotEmpty) {
-      await _clearOverrides(ref, chosen);
-    }
-  }
-
-  /// Puts [ids] back on their auto shades.
-  ///
-  /// Each id's kind comes from its own summary row rather than from the
-  /// layer's type: a mixed layer's overrides span several tables, so there is
-  /// no single [ColoredElement] the whole list belongs to.
-  Future<void> _clearOverrides(WidgetRef ref, List<String> ids) async {
-    final repo = ref.read(repositoryProvider);
-    final kindById = {
-      for (final s in ref.read(layerSummariesProvider(layer.id)))
-        s.ref.id: s.ref.kind,
-    };
-    for (final id in ids) {
-      final name = kindById[id]?.name;
-      final kind =
-          name == null ? null : ColoredElement.forObjectKindName(name);
-      if (kind != null) await repo.setElementColor(kind, id, null);
-    }
-  }
-
-  /// Ticks off which of the overridden elements should go back to following the
-  /// layer. Named from the Elements-list summaries, because "3 elements" is not
-  /// something anyone can act on.
-  Future<List<String>?> _chooseOverrides(
-    BuildContext context,
-    WidgetRef ref,
-    List<String> overridden,
-  ) {
-    final ids = overridden.toSet();
-    final rows = [
-      for (final s in ref.read(layerSummariesProvider(layer.id)))
-        if (ids.contains(s.ref.id)) s,
-    ];
-    final picked = <String>{};
-    return showDialog<List<String>>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) => AlertDialog(
-          title: const Text('Follow the layer again'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: ListView(
-              shrinkWrap: true,
-              children: [
-                for (final s in rows)
-                  CheckboxListTile(
-                    dense: true,
-                    value: picked.contains(s.ref.id),
-                    secondary: Container(
-                      width: 22,
-                      height: 22,
-                      decoration: BoxDecoration(
-                        color: Color(s.colorArgb ?? layer.colorArgb),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.black26),
-                      ),
-                    ),
-                    title: Text(s.title, overflow: TextOverflow.ellipsis),
-                    onChanged: (on) => setState(() {
-                      if (on ?? false) {
-                        picked.add(s.ref.id);
-                      } else {
-                        picked.remove(s.ref.id);
-                      }
-                    }),
-                  ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, picked.toList()),
-              child: const Text('Reset'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Whether [source] may be merged into [target]: same type, different layer —
-/// and, for borders, the same admin level, since one layer holds one level.
-/// Mirrors the guard in [Repository.combineLayers], so the menu never offers a
-/// target the repository would refuse.
-/// Mirrors [Repository.combineLayers]'s guard: the target has to be able to
-/// hold everything the source does, which a combined layer does for all but
-/// `borders`.
-bool canCombineLayers(Layer source, Layer target) =>
-    target.id != source.id &&
-    layerContentTypes(source)
-        .every((t) => layerTypeHolds(target.type, t)) &&
-    (source.type != 'borders' || target.borderLevel == source.borderLevel);
-
-/// Picks the admin level for a new borders layer.
-///
-/// This is the only creation-time sub-choice any layer type has, and it is
-/// deliberate: one layer holds one level, which is what makes "no two
-/// neighbours share a colour" mean anything (levels nest, they don't tile).
-Future<BorderLevel?> showBorderLevelPicker(BuildContext context) {
-  return showDialog<BorderLevel>(
-    context: context,
-    builder: (ctx) => SimpleDialog(
-      title: const Text('Which borders?'),
-      children: [
-        for (final l in borderLevels)
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(ctx, l),
-            child: ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.public),
-              title: Text(l.label),
-              subtitle: Text(l.blurb),
-              isThreeLine: true,
-            ),
-          ),
-      ],
-    ),
-  );
 }
 
 /// The base map as a pinned bottom "layer": a hide toggle and a transparency
@@ -949,12 +504,10 @@ class _BasemapTile extends ConsumerWidget {
     return ListTile(
       leading: IconButton(
         tooltip: visible ? 'Hide' : 'Show',
-        icon: Icon(
-            visible ? Icons.visibility : Icons.visibility_off_outlined),
-        onPressed:
-            settings == null
-                ? null
-                : () => repo.updateBasemapVisible(visible: !visible),
+        icon: Icon(visible ? Icons.visibility : Icons.visibility_off_outlined),
+        onPressed: settings == null
+            ? null
+            : () => repo.updateBasemapVisible(visible: !visible),
       ),
       title: Row(
         children: const [
@@ -970,106 +523,12 @@ class _BasemapTile extends ConsumerWidget {
         onPressed: settings == null
             ? null
             : () => showOpacityDialog(
-                  context,
-                  title: 'Map transparency',
-                  value: opacity,
-                  onChanged: (v) => repo.updateBasemapOpacity(v),
-                ),
+                context,
+                title: 'Map transparency',
+                value: opacity,
+                onChanged: (v) => repo.updateBasemapOpacity(v),
+              ),
       ),
     );
   }
 }
-
-/// A modal 0–100% opacity control shared by layer tiles and the base-map tile:
-/// a slider for a quick sweep plus a per-cent field for an exact value (the
-/// slider's 5% steps cannot express 33%). [onChanged] fires **live** from
-/// either so the map updates immediately; there is no Save button — the change
-/// is already applied.
-Future<void> showOpacityDialog(
-  BuildContext context, {
-  required String title,
-  required double value,
-  required ValueChanged<double> onChanged,
-}) {
-  var current = value.clamp(0.0, 1.0);
-  final field = TextEditingController(
-    text: (current * 100).round().toString(),
-  );
-  final focus = FocusNode();
-  return showDialog<void>(
-    context: context,
-    builder: (ctx) => StatefulBuilder(
-      builder: (ctx, setState) => AlertDialog(
-        title: Text(title),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  width: scaledPx(ctx, 90),
-                  child: TextField(
-                    controller: field,
-                    focusNode: focus,
-                    decoration: const InputDecoration(
-                      labelText: 'Opaque',
-                      suffixText: '%',
-                      isDense: true,
-                    ),
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    onChanged: (s) {
-                      final n = parseDecimal(s);
-                      if (n == null || !n.isFinite) return;
-                      final v = (n / 100).clamp(0.0, 1.0);
-                      setState(() => current = v);
-                      onChanged(v);
-                    },
-                  ),
-                ),
-              ],
-            ),
-            Slider(
-              min: 0,
-              max: 1,
-              divisions: 20,
-              value: current,
-              label: '${(current * 100).round()}%',
-              onChanged: (v) {
-                setState(() => current = v);
-                // Mirrored even while the field has focus: the keyboard stays
-                // up during a drag, and a stale number there would contradict
-                // the slider.
-                final t = (v * 100).round().toString();
-                field.value = TextEditingValue(
-                  text: t,
-                  selection: TextSelection.collapsed(offset: t.length),
-                );
-                onChanged(v);
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Done'),
-          ),
-        ],
-      ),
-    ),
-  ).whenComplete(() {
-    field.dispose();
-    focus.dispose();
-  });
-}
-const _palette = <Color>[
-  Color(0xFF2196F3),
-  Color(0xFFE53935),
-  Color(0xFF43A047),
-  Color(0xFFFB8C00),
-  Color(0xFF8E24AA),
-  Color(0xFF00ACC1),
-];
