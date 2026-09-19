@@ -21,6 +21,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/repository.dart' show ColoredElement;
 import '../state/providers.dart';
 import 'element_color.dart';
+import 'theme.dart';
 
 /// What [showElementColorDialog] came back with. `argb == null` means "follow
 /// the layer" — the element goes back to its auto shade, and a later layer
@@ -122,7 +123,7 @@ Widget _swatch(Color c) => Container(
   decoration: BoxDecoration(
     color: c,
     shape: BoxShape.circle,
-    border: Border.all(color: Colors.black26),
+    border: Border.all(color: kSwatchRing),
   ),
 );
 
@@ -192,7 +193,7 @@ class ElementColorButton extends ConsumerWidget {
         decoration: BoxDecoration(
           color: current,
           shape: BoxShape.circle,
-          border: Border.all(color: Colors.black26),
+          border: Border.all(color: kSwatchRing),
         ),
       ),
     );

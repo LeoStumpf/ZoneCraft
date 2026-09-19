@@ -31,6 +31,11 @@ const kHeight = 'height';
 const kPoi = 'poi';
 const kBorders = 'borders';
 
+/// What a layer paints in when nothing says otherwise: the first entry of the
+/// new-layer palette (`ui/layer_actions.dart`). Kept here rather than there
+/// because the GeoJSON reader needs it too, and `data/` never imports `ui/`.
+const int kDefaultLayerColor = 0xFF0092DA;
+
 /// The `mixed` layer type, **retired at schema v30**. A layer holds one kind
 /// again; several are grouped with a folder instead (see `ui/layer_tree.dart`),
 /// which leaves each of them a layer rather than merging them away.

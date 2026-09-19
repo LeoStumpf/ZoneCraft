@@ -196,7 +196,7 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
             IconButton(
               tooltip: 'Delete',
               icon: const Icon(Icons.delete_outline),
-              color: Colors.red,
+              color: Theme.of(context).colorScheme.error,
               onPressed: () async {
                 await _repo.deleteCircle(widget.circle.id);
                 _close();

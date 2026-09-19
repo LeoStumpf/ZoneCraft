@@ -196,7 +196,7 @@ class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
             IconButton(
               tooltip: 'Delete area',
               icon: const Icon(Icons.delete_outline),
-              color: Colors.red,
+              color: Theme.of(context).colorScheme.error,
               onPressed: () async {
                 await _repo.deleteHeightRegion(id);
                 _close();

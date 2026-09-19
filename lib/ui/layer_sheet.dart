@@ -37,6 +37,7 @@ import 'editor_sheet.dart';
 import 'layer_actions.dart';
 import 'layer_objects_sheet.dart';
 import 'object_summary.dart';
+import 'theme.dart';
 
 /// Shows the layer sheet over the map.
 ///
@@ -152,7 +153,7 @@ class _Switcher extends ConsumerWidget {
                   decoration: BoxDecoration(
                     color: Color(l.colorArgb),
                     shape: BoxShape.circle,
-                    border: Border.all(color: Colors.black26),
+                    border: Border.all(color: kSwatchRing),
                   ),
                 ),
                 label: Row(
@@ -292,7 +293,7 @@ class _ActiveLayerBody extends ConsumerWidget {
                   decoration: BoxDecoration(
                     color: Color(layer.colorArgb),
                     shape: BoxShape.circle,
-                    border: Border.all(color: Colors.black26),
+                    border: Border.all(color: kSwatchRing),
                   ),
                 ),
               ),

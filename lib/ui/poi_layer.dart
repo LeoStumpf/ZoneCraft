@@ -24,6 +24,7 @@ import 'camera_viewport.dart';
 import 'element_color.dart';
 import 'poi_icons.dart';
 import 'screen_cluster.dart';
+import 'theme.dart';
 
 /// The marker icon for a POI category key (see `poiCategories` in
 /// `data/overpass.dart`). Unknown keys fall back to a generic place pin.
@@ -234,31 +235,13 @@ class PoiMarkersLayer extends StatelessWidget {
               // stay legible, so the tint goes on the border, not the fill.
               border: Border.all(color: color, width: 2),
             ),
-            child:
-                Icon(icon, size: 16, color: Colors.black87),
+            child: Icon(icon, size: 16, color: kMapInk),
           ),
           if (hasLabel) ...[
             const SizedBox(height: gap),
             SizedBox(
               height: labelHeight,
-              child: Center(
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.82),
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                  child: Text(
-                    name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style:
-                        const TextStyle(fontSize: 10, color: Colors.black87),
-                  ),
-                ),
-              ),
+              child: Center(child: MapLabel(name)),
             ),
           ],
         ],
@@ -286,7 +269,7 @@ class PoiMarkersLayer extends StatelessWidget {
             shape: BoxShape.circle,
             border: Border.all(color: color, width: 2.5),
             boxShadow: const [
-              BoxShadow(color: Colors.black26, blurRadius: 3),
+              BoxShadow(color: kMapShadow, blurRadius: 3),
             ],
           ),
           child: Column(
@@ -294,15 +277,14 @@ class PoiMarkersLayer extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (sharedIcon != null)
-                Icon(sharedIcon,
-                    size: 13, color: Colors.black87),
+                Icon(sharedIcon, size: 13, color: kMapInk),
               Text(
                 '$count',
                 style: TextStyle(
                   fontSize: sharedIcon != null ? 11 : 14,
                   height: 1.1,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+                  color: kMapInk,
                 ),
               ),
             ],

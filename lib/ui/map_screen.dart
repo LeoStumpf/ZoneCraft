@@ -93,6 +93,7 @@ import 'region_layer.dart';
 import 'service_policy_screen.dart';
 import 'share_place.dart';
 import 'subspace_editor.dart';
+import 'theme.dart';
 import 'transit_import_dialog.dart';
 import 'undo_buttons.dart';
 
@@ -936,11 +937,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
       // than why it will not.
       tooltip: unavailable ?? tooltip,
       // A FAB does not grey itself the way an IconButton does, so both colours
-      // are explicit — and they are Material's *faded* disabled pair rather
-      // than `disabledColor`, which is a dark grey that on this light row read
-      // as the lit state (also dark) instead of as unavailable.
+      // are explicit. Not `disabledColor` — a dark grey that on this light row
+      // read as the lit state (also dark) rather than as unavailable — and no
+      // longer Material's faded *fill* either: over the white chrome this row
+      // now uses, a translucent dark wash is a blob, not a greyed button. The
+      // unavailable fill is therefore the deepest paper tier, which keeps the
+      // button looking like chrome while the faded icon says it is off.
       backgroundColor: off
-          ? scheme.onSurface.withValues(alpha: 0.12)
+          ? scheme.surfaceContainerHighest
           : lit
           ? scheme.primary
           : null,
@@ -1284,11 +1288,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
       width: 28,
       height: 28,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: kMapDisc,
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.black87, width: 2),
+        border: Border.all(color: kMapInk, width: 2),
       ),
-      child: const Icon(Icons.add, size: 18, color: Colors.black87),
+      child: const Icon(Icons.add, size: 18, color: kMapInk),
     );
   }
 
@@ -1309,11 +1313,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
         width: 24,
         height: 24,
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: kMapDisc,
           shape: BoxShape.circle,
-          border: Border.all(color: Colors.black87, width: 2),
+          border: Border.all(color: kMapInk, width: 2),
         ),
-        child: const Icon(Icons.open_in_full, size: 13, color: Colors.black87),
+        child: const Icon(Icons.open_in_full, size: 13, color: kMapInk),
       ),
       onMoved: (ll) {
         final m = _hitTest.distance(center, ll);
@@ -1338,40 +1342,20 @@ class _MapScreenState extends ConsumerState<MapScreen>
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: main ? Colors.white : Colors.black87,
+        color: main ? kMapDisc : kMapInk,
         shape: BoxShape.circle,
         border: Border.all(
-          color: main ? Colors.black87 : Colors.white,
+          color: main ? kMapInk : kMapDisc,
           width: main ? 4 : 2.5,
         ),
       ),
     );
   }
 
-  /// The tiny name plate drawn under labelled markers — small text on a faint
-  /// white plate so it reads over any map colour.
-  Widget _markerLabel(String text) {
-    return Center(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.82),
-          borderRadius: BorderRadius.circular(3),
-        ),
-        child: Text(
-          text,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 9,
-            height: 1.0,
-            color: Colors.black87,
-          ),
-        ),
-      ),
-    );
-  }
+  /// The name drawn under labelled markers, haloed the way osm-carto haloes
+  /// its own labels so it reads over any map colour.
+  Widget _markerLabel(String text) =>
+      Center(child: MapLabel(text, fontSize: 9));
 
   /// One row in an on-map point menu.
   static PopupMenuItem<String> _pointMenuItem(
@@ -4963,7 +4947,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                 ...selectedFreeLineCircle,
                                 selectedFreeLineCircle.first,
                               ],
-                              color: Colors.black54,
+                              color: kMapInkSoft,
                               strokeWidth: 1.5,
                             ),
                           ],
@@ -4979,7 +4963,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                 for (final p in selectedFreeLinePoints)
                                   LatLng(p.lat, p.lng),
                               ],
-                              color: Colors.black87,
+                              color: kMapInk,
                               strokeWidth: 1.5,
                             ),
                           ],
@@ -4997,7 +4981,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                   selectedFreeAreaPoints.first.lng,
                                 ),
                               ],
-                              color: Colors.black87,
+                              color: kMapInk,
                               strokeWidth: 1.5,
                             ),
                           ],
@@ -5012,7 +4996,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                 ...selectedHeightCircle,
                                 selectedHeightCircle.first,
                               ],
-                              color: Colors.black87,
+                              color: kMapInk,
                               strokeWidth: 1.5,
                             ),
                           ],
@@ -5147,7 +5131,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               height: 24,
                               child: const Icon(
                                 Icons.my_location,
-                                color: Colors.blue,
+                                color: OsmPalette.transportation,
                                 size: 24,
                               ),
                             ),
@@ -5185,11 +5169,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                 children: [
                                   const Icon(
                                     Icons.place,
-                                    color: Colors.black87,
+                                    color: kMapInk,
                                     size: 28,
                                   ),
                                   Material(
-                                    color: Colors.black87,
+                                    color: kMapInk,
                                     borderRadius: BorderRadius.circular(4),
                                     child: Padding(
                                       padding: const EdgeInsets.symmetric(
@@ -5203,7 +5187,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                             ? _formatElevation(_probeElevation!)
                                             : 'n/a',
                                         style: const TextStyle(
-                                          color: Colors.white,
+                                          color: kMapDisc,
                                           fontSize: 12,
                                         ),
                                       ),
@@ -5222,7 +5206,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             Polyline(
                               points: [_distA!, _distB!],
                               strokeWidth: 3,
-                              color: Colors.black87,
+                              color: kMapInk,
                             ),
                           ],
                         ),
@@ -5238,7 +5222,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                   alignment: Alignment.topCenter,
                                   child: const Icon(
                                     Icons.place,
-                                    color: Colors.black87,
+                                    color: kMapInk,
                                     size: 28,
                                   ),
                                 ),
@@ -5444,7 +5428,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                       .where((l) => l.id == _drawLayerId)
                                       .firstOrNull
                                       ?.colorArgb ??
-                                  0xFF2196F3,
+                                  kDefaultLayerColor,
                             ),
                           ),
                         ),
@@ -5472,10 +5456,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     padding: const EdgeInsets.all(8),
                     child: Row(
                       children: [
-                        Material(
-                          color: Theme.of(context).colorScheme.surface,
-                          elevation: 2,
-                          shape: const CircleBorder(),
+                        MapChrome(
+                          circle: true,
                           clipBehavior: Clip.antiAlias,
                           child: IconButton(
                             icon: const Icon(Icons.menu),
@@ -5514,10 +5496,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         ),
                         if (_rotation != 0) ...[
                           const SizedBox(width: 8),
-                          Material(
-                            color: Theme.of(context).colorScheme.surface,
-                            elevation: 2,
-                            shape: const CircleBorder(),
+                          MapChrome(
+                            circle: true,
                             clipBehavior: Clip.antiAlias,
                             child: IconButton(
                               tooltip: 'Reset to north-up',
@@ -5528,7 +5508,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                 angle: -_rotation * math.pi / 180,
                                 child: const Icon(
                                   Icons.navigation,
-                                  color: Colors.red,
+                                  color: kCompassNeedle,
                                 ),
                               ),
                             ),
@@ -5596,10 +5576,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           if (mode == MapMode.add && _placeLayerId != null)
                             Padding(
                               padding: const EdgeInsets.only(bottom: 8),
-                              child: Material(
-                                color: Theme.of(context).colorScheme.surface,
-                                elevation: 2,
-                                borderRadius: BorderRadius.circular(8),
+                              child: MapChrome(
                                 child: Padding(
                                   padding: const EdgeInsets.fromLTRB(
                                     12,
@@ -5654,10 +5631,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           if (mode == MapMode.edit)
                             Padding(
                               padding: const EdgeInsets.only(bottom: 8),
-                              child: Material(
-                                color: Theme.of(context).colorScheme.surface,
-                                elevation: 2,
-                                borderRadius: BorderRadius.circular(8),
+                              child: MapChrome(
                                 child: Padding(
                                   padding: const EdgeInsets.fromLTRB(
                                     12,
@@ -5694,10 +5668,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           if (mode == MapMode.draw && _drawLayerId != null)
                             Padding(
                               padding: const EdgeInsets.only(bottom: 8),
-                              child: Material(
-                                color: Theme.of(context).colorScheme.surface,
-                                elevation: 2,
-                                borderRadius: BorderRadius.circular(8),
+                              child: MapChrome(
                                 child: Padding(
                                   padding: const EdgeInsets.fromLTRB(
                                     12,
@@ -5735,10 +5706,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           if (_markedPoints.isNotEmpty)
                             Padding(
                               padding: const EdgeInsets.only(bottom: 8),
-                              child: Material(
-                                color: Theme.of(context).colorScheme.surface,
-                                elevation: 2,
-                                borderRadius: BorderRadius.circular(8),
+                              child: MapChrome(
                                 child: Padding(
                                   padding: const EdgeInsets.fromLTRB(
                                     12,
@@ -5777,10 +5745,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               _distA != null)
                             Padding(
                               padding: const EdgeInsets.only(bottom: 8),
-                              child: Material(
-                                color: Theme.of(context).colorScheme.surface,
-                                elevation: 2,
-                                borderRadius: BorderRadius.circular(8),
+                              child: MapChrome(
                                 child: Padding(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 12,
@@ -6254,10 +6219,7 @@ class _InfoChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Theme.of(context).colorScheme.surface,
-      elevation: 2,
-      borderRadius: BorderRadius.circular(8),
+    return MapChrome(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
         child: Row(
@@ -6294,10 +6256,8 @@ class _ActiveLayerChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = layer;
-    return Material(
-      color: Theme.of(context).colorScheme.surface,
-      elevation: 2,
-      borderRadius: BorderRadius.circular(24),
+    return MapChrome(
+      radius: 24,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
@@ -6315,7 +6275,7 @@ class _ActiveLayerChip extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: Color(l.colorArgb),
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.black26),
+                      border: Border.all(color: kSwatchRing),
                     ),
                   ),
                   const SizedBox(width: 6),
@@ -6390,7 +6350,9 @@ class _MapAttribution extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Material(
-      color: theme.colorScheme.surface.withValues(alpha: 0.72),
+      color: theme.colorScheme.surfaceContainerLowest.withValues(
+        alpha: 0.72,
+      ),
       borderRadius: BorderRadius.circular(4),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -6524,10 +6486,9 @@ class _TileFailureBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Material(
+    return MapChrome(
       color: theme.colorScheme.errorContainer,
-      elevation: 2,
-      borderRadius: BorderRadius.circular(8),
+      borderColor: theme.colorScheme.error,
       clipBehavior: Clip.antiAlias,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),

@@ -30,6 +30,7 @@ import 'layer_objects_sheet.dart';
 import 'map_controls_screen.dart';
 import 'object_summary.dart';
 import 'settings_screen.dart';
+import 'theme.dart';
 
 /// Left-hand drawer for managing layers: list, choose active, visibility,
 /// reorder, colour, rename, inverse, delete, and add. Replaces the old bottom
@@ -654,7 +655,7 @@ class _LayerTile extends ConsumerWidget {
               decoration: BoxDecoration(
                 color: Color(layer.colorArgb),
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.black26),
+                border: Border.all(color: kSwatchRing),
               ),
             ),
           ),

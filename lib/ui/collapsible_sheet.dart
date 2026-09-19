@@ -43,6 +43,10 @@ class _CollapsibleSheetState extends State<CollapsibleSheet> {
         Material(
           elevation: 8,
           color: scheme.surface,
+          surfaceTintColor: Colors.transparent,
+          // A hairline along the top so the grip and the editor below it read
+          // as one sheet with an edge, rather than as paper meeting paper.
+          shape: Border(top: BorderSide(color: scheme.outlineVariant)),
           child: InkWell(
             onTap: () => setState(() => _expanded = !_expanded),
             child: SizedBox(

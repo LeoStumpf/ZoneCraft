@@ -218,7 +218,7 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
             IconButton(
               tooltip: 'Delete line',
               icon: const Icon(Icons.delete_outline),
-              color: Colors.red,
+              color: Theme.of(context).colorScheme.error,
               onPressed: () async {
                 await _repo.deleteFreeLine(id);
                 _close();

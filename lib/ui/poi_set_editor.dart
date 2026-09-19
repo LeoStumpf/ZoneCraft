@@ -176,7 +176,7 @@ class _PoiSetEditorSheetState extends ConsumerState<PoiSetEditorSheet> {
             IconButton(
               tooltip: s.isManual ? 'Delete category' : 'Delete import',
               icon: const Icon(Icons.delete_outline),
-              color: Colors.red,
+              color: Theme.of(context).colorScheme.error,
               onPressed: () async {
                 await _repo.deletePoiSet(s.id);
                 _close();

@@ -158,7 +158,7 @@ class _ImportedPointEditorSheetState
                   ? 'Delete this POI'
                   : 'Remove from this import',
               icon: const Icon(Icons.delete_outline),
-              color: Colors.red,
+              color: Theme.of(context).colorScheme.error,
               onPressed: _delete,
             ),
             IconButton(

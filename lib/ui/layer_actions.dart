@@ -45,6 +45,7 @@ import '../state/providers.dart';
 import 'editor_sheet.dart';
 import 'import_actions.dart';
 import 'object_summary.dart';
+import 'theme.dart';
 import 'transit_modes_sheet.dart';
 
 /// Everything a layer's menu can offer, in the order it is offered.
@@ -946,13 +947,24 @@ const kLayerTypeChoices = <LayerTypeChoice>[
   (type: kBorders, icon: Icons.public, label: 'Borders layer', subtitle: null),
 ];
 
+/// What a new layer is coloured, in creation order.
+///
+/// These are osm-carto's own **icon inks** — the saturated half of the style,
+/// where it keeps its transport blue, its health red, its leisure green. Layer
+/// colours are this app's foreground and have to stay apart from each other and
+/// from the map, so they are drawn from the style's ink and never from its land
+/// tones: muted into `#C8D7AB` territory a zone would vanish into the farmland
+/// under it. Their lightnesses spread 0.28–0.58, which keeps the per-element
+/// shade ladder (`element_color.dart`, ±0.28 L) inside its legible band.
+///
+/// Only new layers are affected: the colour is fixed as an ARGB at creation.
 const _palette = <Color>[
-  Color(0xFF2196F3),
-  Color(0xFFE53935),
-  Color(0xFF43A047),
-  Color(0xFFFB8C00),
-  Color(0xFF8E24AA),
-  Color(0xFF00ACC1),
+  Color(kDefaultLayerColor), // transport blue
+  OsmPalette.health, // #BF0000
+  OsmPalette.leisureGreen, // #0D8216
+  OsmPalette.gastronomy, // #C77400
+  OsmPalette.shop, // #AC39AC
+  OsmPalette.airTransport, // #8461C4
 ];
 
 /// What a layer of [type] is called before anyone renames it.
@@ -1214,7 +1226,7 @@ Future<List<String>?> _chooseOverrides(
                     decoration: BoxDecoration(
                       color: Color(s.colorArgb ?? layer.colorArgb),
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.black26),
+                      border: Border.all(color: kSwatchRing),
                     ),
                   ),
                   title: Text(s.title, overflow: TextOverflow.ellipsis),

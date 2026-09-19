@@ -151,7 +151,7 @@ class _BorderAreaEditorSheetState extends ConsumerState<BorderAreaEditorSheet> {
             IconButton(
               tooltip: 'Delete area',
               icon: const Icon(Icons.delete_outline),
-              color: Colors.red,
+              color: Theme.of(context).colorScheme.error,
               onPressed: () async {
                 await _repo.deleteBorderArea(a.id);
                 _close();

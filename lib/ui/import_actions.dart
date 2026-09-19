@@ -36,6 +36,7 @@ import '../geo/border_areas.dart' show outerRings;
 import '../geo/coords.dart';
 import 'feature_search_dialog.dart';
 import 'region_geometry.dart';
+import 'theme.dart';
 
 /// File-pick + parse helpers shared by the layers drawer: per-layer export,
 /// importing an external track/area into a freehand layer, and importing a
@@ -560,7 +561,9 @@ Future<void> importFeatureFlow(
   }
   final layer = ExportLayer(
     name: place.shortName,
-    colorArgb: isArea ? 0xFF43A047 : 0xFF2196F3,
+    colorArgb: isArea
+        ? OsmPalette.leisureGreen.toARGB32()
+        : kDefaultLayerColor,
     type: type,
     isInverted: false,
     objects: objects,
@@ -868,7 +871,7 @@ ExportData? _syntheticLayers(String filename, Uint8List bytes) {
     layers.add(
       ExportLayer(
         name: base.isEmpty ? 'Imported lines' : base,
-        colorArgb: 0xFF2196F3,
+        colorArgb: kDefaultLayerColor,
         type: 'freeline',
         isInverted: false,
         objects: [

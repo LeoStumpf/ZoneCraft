@@ -513,7 +513,7 @@ ExportData? importFromGeoJson(String text) {
     bucketOfFileLayer.add(layerMeta.length);
     layerMeta.add(ExportLayer(
       name: (l['name'] as String?) ?? 'Imported',
-      colorArgb: (l['colorArgb'] as num?)?.toInt() ?? 0xFF2196F3,
+      colorArgb: (l['colorArgb'] as num?)?.toInt() ?? kDefaultLayerColor,
       type: type,
       isInverted: l['isInverted'] == true,
       opacity: (l['opacity'] as num?)?.toDouble(),

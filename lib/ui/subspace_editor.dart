@@ -183,7 +183,7 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
             IconButton(
               tooltip: 'Delete subspace',
               icon: const Icon(Icons.delete_outline),
-              color: Colors.red,
+              color: Theme.of(context).colorScheme.error,
               onPressed: () async {
                 await _repo.deleteSubspace(id);
                 _close();

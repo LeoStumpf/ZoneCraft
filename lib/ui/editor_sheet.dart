@@ -58,6 +58,11 @@ class EditorSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final maxHeight = MediaQuery.sizeOf(context).height * maxHeightFraction;
     return Material(
+      // Explicit: with no colour the sheet took whatever Material happened to
+      // default to, and the M3 elevation overlay then tinted it toward the
+      // accent — mint paper, at elevation 8.
+      color: Theme.of(context).colorScheme.surface,
+      surfaceTintColor: Colors.transparent,
       elevation: 8,
       child: SafeArea(
         top: false,

@@ -22,6 +22,7 @@ import '../data/transit.dart';
 import '../geo/coords.dart';
 import 'hit_test.dart' show geoDistance;
 import 'object_summary.dart' show formatMeters;
+import 'theme.dart';
 
 /// The area to import, and which station types to fetch for it.
 ///
@@ -386,7 +387,7 @@ class _TransitImportSheetState extends State<TransitImportSheet> {
   );
 
   TextStyle? _warnStyle(ThemeData theme) =>
-      theme.textTheme.bodySmall?.copyWith(color: Colors.orange.shade800);
+      theme.textTheme.bodySmall?.copyWith(color: warningColor(context));
 
   /// The box's own state: unusable numbers, or its size. What that size *costs*
   /// depends on the ticks, so it is said under them instead ([_modesLine]).

@@ -179,7 +179,7 @@ class _FreeAreaEditorSheetState extends ConsumerState<FreeAreaEditorSheet> {
             IconButton(
               tooltip: 'Delete area',
               icon: const Icon(Icons.delete_outline),
-              color: Colors.red,
+              color: Theme.of(context).colorScheme.error,
               onPressed: () async {
                 await _repo.deleteFreeArea(id);
                 _close();

@@ -25,6 +25,7 @@ import '../state/providers.dart';
 import 'camera_viewport.dart';
 import 'screen_clip.dart';
 import 'screen_cluster.dart';
+import 'theme.dart';
 
 /// Renders a `borders` layer: its imported administrative areas, outlined in
 /// the layer colour, optionally filled from a palette that no two neighbours
@@ -45,13 +46,26 @@ import 'screen_cluster.dart';
 /// The area fill palette, indexed by [BorderArea.colorIndex]. Six entries; four
 /// suffice for a planar map, and the spares absorb exclaves and areas meeting
 /// at a point without ever needing a search.
+///
+/// These are the **Okabe–Ito** hues. The palette's job is not tonal fit with
+/// the map — it is that two areas sharing a border must never look alike — and
+/// the assignment in `geo/border_areas.dart` only guarantees that neighbours
+/// differ in *index*. The Tableau set this replaces had a green (`#59A14F`) and
+/// a red (`#E15759`) that a deuteranope cannot tell apart, so adjacency could
+/// be satisfied and the map still read wrong. Okabe–Ito is the standard
+/// colour-blind-safe six, and its warmer cast happens to sit better on beige
+/// than the cooler set did.
+///
+/// The colour is resolved **at paint time** from a stored index, so changing
+/// this list repaints areas on maps that already exist. Per-area colour
+/// overrides are stored as ARGB and are untouched.
 const List<Color> borderPalette = [
-  Color(0xFF4E79A7),
-  Color(0xFFF28E2B),
-  Color(0xFF59A14F),
-  Color(0xFFE15759),
-  Color(0xFFB07AA1),
-  Color(0xFF76B7B2),
+  Color(0xFF0072B2), // blue
+  Color(0xFFE69F00), // orange
+  Color(0xFF009E73), // bluish green
+  Color(0xFFD55E00), // vermillion
+  Color(0xFFCC79A7), // reddish purple
+  Color(0xFF56B4E9), // sky blue
 ];
 
 /// One area with its geometry decoded.
@@ -232,22 +246,7 @@ class BorderAreasLayer extends StatelessWidget {
         width: 140,
         height: 18,
         alignment: Alignment.center,
-        child: Center(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.82),
-              borderRadius: BorderRadius.circular(3),
-            ),
-            child: Text(
-              s.name!,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 11, color: Colors.black87),
-            ),
-          ),
-        ),
+        child: Center(child: MapLabel(s.name!, fontSize: 11)),
       );
 }
 

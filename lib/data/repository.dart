@@ -3048,7 +3048,7 @@ class Repository {
             ..limit(1))
           .getSingleOrNull();
       if (existing != null) return existing.id;
-      return createLayer(name: 'Circles 1', colorArgb: 0xFF2196F3);
+      return createLayer(name: 'Circles 1', colorArgb: kDefaultLayerColor);
     });
   }
 

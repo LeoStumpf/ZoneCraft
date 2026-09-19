@@ -18,6 +18,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../state/providers.dart';
+import 'theme.dart';
 
 /// The back/forward pair, as map chrome rather than as FABs.
 ///
@@ -91,10 +92,8 @@ class _Button extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final reason = unavailable;
-    return Material(
-      color: scheme.surface,
-      elevation: 2,
-      shape: const CircleBorder(),
+    return MapChrome(
+      circle: true,
       clipBehavior: Clip.antiAlias,
       child: IconButton(
         icon: Icon(icon),

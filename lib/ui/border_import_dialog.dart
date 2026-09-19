@@ -22,6 +22,7 @@ import '../data/borders.dart';
 import '../geo/coords.dart';
 import 'hit_test.dart' show geoDistance;
 import 'object_summary.dart' show formatMeters;
+import 'theme.dart';
 import 'transit_import_dialog.dart'
     show bboxDiagonalMeters, validateLat, validateLng;
 
@@ -298,7 +299,7 @@ class _BorderImportSheetState extends State<BorderImportSheet> {
   );
 
   TextStyle? _warnStyle(ThemeData theme) =>
-      theme.textTheme.bodySmall?.copyWith(color: Colors.orange.shade800);
+      theme.textTheme.bodySmall?.copyWith(color: warningColor(context));
 
   /// The box's own state: unusable numbers, or its size.
   Widget _sizeLine(ThemeData theme) {

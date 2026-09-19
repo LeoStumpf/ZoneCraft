@@ -74,25 +74,27 @@ dev_dependencies:
   flutter_native_splash: ^2.4.8
 
 # Launcher icon generation (run: dart run flutter_launcher_icons).
-# The source art is a transparent rounded-square; iOS gets a white flatten
-# (no alpha allowed) and Android an adaptive icon (white bg + padded fg).
+# The source art is a transparent rounded-square of an osm-carto tile; iOS gets
+# a flatten (no alpha allowed) and Android an adaptive icon (padded fg). The
+# background is the map's own land colour, so the ring around the adaptive
+# foreground blends into the art instead of cutting a white edge.
 flutter_launcher_icons:
   android: true
   ios: true
   image_path: "assets/icon/zonecraft.png"
-  adaptive_icon_background: "#ffffff"
+  adaptive_icon_background: "#f2efe9"
   adaptive_icon_foreground: "assets/icon/zonecraft_foreground.png"
   remove_alpha_ios: true
-  background_color_ios: "#ffffff"
+  background_color_ios: "#f2efe9"
   min_sdk_android: 21
 
 # Splash shown while the app launches (run: dart run flutter_native_splash:create).
 flutter_native_splash:
-  color: "#ffffff"
+  color: "#f2efe9"
   image: assets/icon/zonecraft.png
   android_12:
     image: assets/icon/zonecraft_foreground.png
-    color: "#ffffff"
+    color: "#f2efe9"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
