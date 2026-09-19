@@ -848,6 +848,12 @@ class _EmptyHint extends StatelessWidget {
       'borders' =>
         'No areas yet — import every boundary that crosses the '
             'part of the map in view.',
+      // The one place directions beat buttons: a combined layer makes nothing
+      // of its own, and the action that fills it lives on the *other* layer,
+      // so there is no button here to offer.
+      kMixedType =>
+        'No elements yet — a combined layer is filled by merging. Open the '
+            'layer you want to move in and choose “Combine…”.',
       _ => 'No elements yet.',
     };
     // Buttons, not directions: the hint used to name buttons that live on

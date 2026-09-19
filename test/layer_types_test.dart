@@ -118,6 +118,17 @@ void main() {
     });
   });
 
+  group('layerMakesOwnContent', () {
+    test('only the combined layer makes nothing of its own', () {
+      // It is a merge destination: Add, Draw and the imports that ask a server
+      // for a kind of thing belong to the layer that holds that kind.
+      expect(layerMakesOwnContent(kMixedType), isFalse);
+      for (final t in kAllLayerTypes.where((t) => t != kMixedType)) {
+        expect(layerMakesOwnContent(t), isTrue, reason: t);
+      }
+    });
+  });
+
   group('layerTypeForExportKind', () {
     test('every object type is reachable from some export kind', () {
       // The two vocabularies differ ('circle' vs 'circles'), so a gap here

@@ -101,3 +101,21 @@ List<String> layerContentTypesOf(String layerType) =>
 /// makes their colouring meaningful) and a layer that already is mixed.
 bool canBecomeMixed(String layerType) =>
     layerType != kMixedType && kMixedContentTypes.contains(layerType);
+
+/// Whether a layer of [layerType] offers the controls that *make* content of a
+/// chosen type — Add, Draw, and the imports that ask a server for a kind of
+/// thing.
+///
+/// False for the combined layer, and only for it. A combined layer is a
+/// destination: its content is made on the single-type layer that owns that
+/// kind and merged in afterwards ([layerContentTypes] is what the merge checks
+/// against). Gating those controls on [layerHolds] instead made a combined
+/// layer answer yes for six types at once, so it offered strictly *more* than
+/// any real layer — both import buttons on screen, four import items in its
+/// menu, a Draw that silently only ever made a line, and an Add that had to ask
+/// which of six kinds it meant before it could do anything.
+///
+/// "Import track…" is deliberately not covered by this: it reads a file the
+/// user already has, writes plain elements with no set or fetch lifecycle, and
+/// needs no type chosen for it.
+bool layerMakesOwnContent(String layerType) => layerType != kMixedType;

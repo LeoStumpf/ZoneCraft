@@ -113,6 +113,11 @@ class LayerActionContext {
 ///   freehand types; "Import track…" is one entry, not one per matching type,
 ///   because a combined layer holds both freehand types and the same item
 ///   listed twice is a menu bug.
+/// - **A combined layer makes nothing of its own** ([layerMakesOwnContent]):
+///   every import that asks a server for a kind of thing is made on the
+///   single-type layer that owns that kind and merged in afterwards. Only
+///   "Import track…" stays, because it reads a file rather than querying for a
+///   type. Without that rule a combined layer offered more than any real one.
 /// - Converting to a combined layer is one-way on purpose: going *back* is
 ///   only well defined while the layer holds at most one type.
 List<LayerActionId> visibleLayerActions(LayerActionContext c) {
@@ -128,12 +133,15 @@ List<LayerActionId> visibleLayerActions(LayerActionContext c) {
       LayerActionId.invert,
     if (c.hasStations) LayerActionId.stations,
     if (t == kBorders) ...[LayerActionId.fillAreas, LayerActionId.showNames],
-    if (layerTypeHolds(t, kPoi)) ...[
+    if (layerMakesOwnContent(t) && layerTypeHolds(t, kPoi)) ...[
       LayerActionId.importPois,
       LayerActionId.importStations,
     ],
     if (t == kBorders) LayerActionId.importBordersVisible,
-    if (freehand) ...[LayerActionId.importFeature, LayerActionId.importTrack],
+    if (freehand) ...[
+      if (layerMakesOwnContent(t)) LayerActionId.importFeature,
+      LayerActionId.importTrack,
+    ],
     LayerActionId.export,
     if (c.canCombine) LayerActionId.combine,
     if (canBecomeMixed(t)) LayerActionId.makeMixed,
@@ -173,37 +181,43 @@ typedef EmptyStateAction = ({MapRequestKind kind, IconData icon, String label});
 
 /// What an empty layer of [type] can be filled with, as the map-owned actions
 /// its Elements list offers instead of a hint naming buttons elsewhere.
+///
+/// Empty for a **combined** layer, which is filled by merging another layer
+/// into it ([layerMakesOwnContent]) — an action that lives on the *other*
+/// layer, so there is no button here to offer and its hint says so instead.
 List<EmptyStateAction> emptyStateActions(String type) => [
-  if (layerTypeHolds(type, kPoi)) ...[
-    (
-      kind: MapRequestKind.importPois,
-      icon: Icons.travel_explore,
-      label: 'Import POIs',
-    ),
-    (
-      kind: MapRequestKind.importStations,
-      icon: Icons.directions_transit,
-      label: 'Import stations',
-    ),
+  if (layerMakesOwnContent(type)) ...[
+    if (layerTypeHolds(type, kPoi)) ...[
+      (
+        kind: MapRequestKind.importPois,
+        icon: Icons.travel_explore,
+        label: 'Import POIs',
+      ),
+      (
+        kind: MapRequestKind.importStations,
+        icon: Icons.directions_transit,
+        label: 'Import stations',
+      ),
+    ],
+    if (type == kBorders)
+      (
+        kind: MapRequestKind.importBordersVisible,
+        icon: Icons.public,
+        label: 'Import borders in view',
+      ),
+    if (layerTypeHolds(type, kFreeLine) || layerTypeHolds(type, kFreeArea))
+      (
+        kind: MapRequestKind.importFeature,
+        icon: Icons.search,
+        label: 'Import map feature',
+      ),
+    if (type != kBorders)
+      (
+        kind: MapRequestKind.enterAdd,
+        icon: Icons.add,
+        label: type == kPoi ? 'Add POI' : 'Add',
+      ),
   ],
-  if (type == kBorders)
-    (
-      kind: MapRequestKind.importBordersVisible,
-      icon: Icons.public,
-      label: 'Import borders in view',
-    ),
-  if (layerTypeHolds(type, kFreeLine) || layerTypeHolds(type, kFreeArea))
-    (
-      kind: MapRequestKind.importFeature,
-      icon: Icons.search,
-      label: 'Import map feature',
-    ),
-  if (type != kBorders)
-    (
-      kind: MapRequestKind.enterAdd,
-      icon: Icons.add,
-      label: type == kPoi ? 'Add POI' : 'Add',
-    ),
 ];
 
 /// One offered action, ready to render as a menu item, a list tile or a
@@ -613,7 +627,7 @@ const kLayerTypeChoices = <LayerTypeChoice>[
     type: kMixedType,
     icon: Icons.layers_outlined,
     label: 'Combined layer',
-    subtitle: 'Holds any mix except borders',
+    subtitle: 'Any mix except borders — filled by combining layers',
   ),
 ];
 

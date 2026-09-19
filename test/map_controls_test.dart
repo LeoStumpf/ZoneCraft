@@ -15,6 +15,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:zonecraft/data/layer_types.dart';
 import 'package:zonecraft/ui/map_controls.dart';
 
 /// The guide is only worth having if it cannot fall behind the map.
@@ -137,6 +138,9 @@ void main() {
       expect(forType('freearea'), contains('area'));
       expect(forType('poi'), contains('POI'));
       expect(forType('borders'), contains('borders'));
+      // A combined layer makes nothing of its own, so its remedy is the one
+      // thing that fills it.
+      expect(forType(kMixedType), contains('merge'));
       // An unknown type must still say something usable rather than crash.
       expect(forType('something-new'), isNotNull);
     });

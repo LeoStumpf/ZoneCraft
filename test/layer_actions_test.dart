@@ -99,14 +99,11 @@ void main() {
       );
     });
 
-    test('POI imports go wherever POIs can live', () {
-      for (final t in [kPoi, kMixedType]) {
-        expect(
-          actions(t),
-          containsAll([LayerActionId.importPois, LayerActionId.importStations]),
-          reason: t,
-        );
-      }
+    test('POI imports go wherever POIs can live, except a combined layer', () {
+      expect(
+        actions(kPoi),
+        containsAll([LayerActionId.importPois, LayerActionId.importStations]),
+      );
       for (final t in [
         kCircles,
         kSubspace,
@@ -114,10 +111,16 @@ void main() {
         kFreeArea,
         kHeight,
         kBorders,
+        kMixedType,
       ]) {
         expect(
           actions(t),
           isNot(contains(LayerActionId.importPois)),
+          reason: t,
+        );
+        expect(
+          actions(t),
+          isNot(contains(LayerActionId.importStations)),
           reason: t,
         );
       }
@@ -126,7 +129,7 @@ void main() {
     test(
       'map-feature and track imports go wherever freehand geometry can live',
       () {
-        for (final t in [kFreeLine, kFreeArea, kMixedType]) {
+        for (final t in [kFreeLine, kFreeArea]) {
           expect(
             actions(t),
             containsAll([
@@ -150,6 +153,28 @@ void main() {
         }
       },
     );
+
+    test('a combined layer makes nothing of its own', () {
+      // It is a merge destination: every import that asks a server for a kind
+      // of thing belongs to the layer that holds that kind. "Import track…"
+      // stays — it reads a file, and needs no type chosen for it.
+      final a = actions(kMixedType, hasStations: true, canCombine: true);
+      for (final id in [
+        LayerActionId.importPois,
+        LayerActionId.importStations,
+        LayerActionId.importFeature,
+        LayerActionId.importBordersVisible,
+      ]) {
+        expect(a, isNot(contains(id)), reason: id.name);
+      }
+      expect(a, contains(LayerActionId.importTrack));
+      // What acts on what it already holds is untouched.
+      expect(a, containsAll([LayerActionId.invert, LayerActionId.stations]));
+      // And its empty Elements list has no button to offer, since the action
+      // that fills it lives on the other layer.
+      expect(emptyStateActions(kMixedType), isEmpty);
+      expect(emptyStateActions(kPoi), isNotEmpty);
+    });
 
     test('Make combined layer follows canBecomeMixed', () {
       for (final t in kAllLayerTypes) {

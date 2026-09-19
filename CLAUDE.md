@@ -383,10 +383,27 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   `layerHolds(layer, type)` / `layerContentTypes(layer)` are **the one predicate**, replacing
   every `layer.type == 'x'` in the painter, hit test, Elements list, exporter and drawer.
   Draw order is fixed (regions → markers); opacity governs the region composite only;
-  invert applies to the region half; Add mode asks which kind to place; auto shades are taken
+  invert applies to the region half; auto shades are taken
   across every table the layer holds. `layerHasEditor` answers true for mixed, and the colour
   path resolves `ColoredElement` from the row's kind. `combineLayers` is now exhaustive — its old `default:` arm silently
   lost every row of an unknown type to the cascade.
+- **A combined layer is a destination, not a workshop** (`layerMakesOwnContent`, the second
+  predicate in `data/layer_types.dart`). Gating the *making* controls on `layerHolds` made the
+  combined layer answer yes for six types at once, so it offered strictly more than any real
+  layer: both import FABs, four import menu items, a Draw that could not say "line or area?"
+  and so always made a line, and an Add that had to open a six-row "which kind?" sheet before
+  it could act. So **Add, Draw, the two import FABs and the POI / station / by-name imports are
+  gone on a `mixed` layer** — content is made on the single-type layer that owns that kind and
+  merged in (`Combine…`, `canCombineLayers`). Three things stay: **"Import track…"** (it reads
+  a file the user already has, writes plain elements with no set or fetch lifecycle, and needs
+  no type chosen for it), everything that acts on what the layer *already holds* (Fill outside,
+  the content-driven **Stations…** filter, colour, opacity, export, the Elements list, every
+  element's editor), and the `MapRequest` plumbing — removing the *offer* must not remove the
+  *route*, or a failed import merged in loses its retry row. The Add FAB is **hidden, not
+  greyed** (greying promises "not yet"), but stays while Add mode is armed, since the mode is
+  sticky to `_placeLayerId` and switching the chip mid-Add must not take away Done. An empty
+  combined layer's Elements list is the one place directions beat buttons: the action that
+  fills it lives on the *other* layer.
 - **Hand-placed POIs** (v25, `PoiSets.source == 'manual'` + `.iconKey`): a `poi` layer holds
   Overpass imports **and** categories you name and fill by tapping. `addManualPoiPoint` /
   `moveManualPoiPoint` **refuse an import** at the repository level — an import records what
