@@ -41,17 +41,41 @@ import 'package:latlong2/latlong.dart';
 Rect cameraViewport(MapCamera camera) => Offset.zero & camera.nonRotatedSize;
 
 /// The four corners of [cameraViewport], inflated by [inflatePx], as lat/lng in
-/// ring order — the spherical clip quad for the unbounded (plane/subspace/
-/// freeline) regions. Null when a corner unprojects to a non-finite coordinate
-/// (extreme zoom-out / near-pole), which callers treat as "don't draw".
+/// ring order — the spherical clip box for the unbounded (subspace) regions.
+///
+/// Longitudes are **continuous around the camera centre, not clamped to
+/// ±180**. flutter_map's `screenOffsetToLatLng` clamps the unprojected
+/// longitude to ±180 (`Epsg3857` replicates the world sideways, so a screen
+/// point past the antimeridian is a real place in the next world copy), which
+/// would turn a view straddling 180° into corners of 170 and −170 — a 340° box
+/// instead of a 20° one — and would silently cut a view wider than the world
+/// down to exactly one world. Web Mercator's x axis is linear in longitude
+/// (`x = (lng / 360 + 0.5) · worldWidth`), so the longitude is read straight
+/// off the same rotated pixel point the unproject uses; the latitude comes from
+/// the unproject as before. Corners of a view centred at lng 179 come out as
+/// e.g. 170…188, and a view wider than the world keeps its true extent.
+///
+/// Null when a corner is non-finite (an infinite viewport size), which callers
+/// treat as "don't draw".
 List<LatLng>? viewportCorners(MapCamera camera, {double inflatePx = 8}) {
   final r = cameraViewport(camera).inflate(inflatePx);
   final offs = <Offset>[r.topLeft, r.topRight, r.bottomRight, r.bottomLeft];
+  final worldWidth = camera.getWorldWidthAtZoom();
+  final mapCenter = camera.projectAtZoom(camera.center);
+  final halfSize = camera.nonRotatedSize.center(Offset.zero);
   final out = <LatLng>[];
   for (final o in offs) {
     final ll = camera.screenOffsetToLatLng(o);
-    if (!ll.latitude.isFinite || !ll.longitude.isFinite) return null;
-    out.add(ll);
+    var lng = ll.longitude;
+    if (worldWidth > 0) {
+      // The same pixel point `screenOffsetToLatLng` unprojects, before the
+      // CRS clamps its longitude.
+      var point = mapCenter - (halfSize - o);
+      if (camera.rotation != 0.0) point = camera.rotatePoint(mapCenter, point);
+      lng = (point.dx / worldWidth - 0.5) * 360;
+    }
+    if (!ll.latitude.isFinite || !lng.isFinite) return null;
+    out.add(LatLng(ll.latitude, lng));
   }
   return out;
 }

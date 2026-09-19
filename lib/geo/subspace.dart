@@ -27,8 +27,7 @@ import 'spherical.dart';
 ///
 /// Each bisector is the **great circle** equidistant from main and Pⱼ (a curve
 /// in Web Mercator), so the cell is built geodesically via [sphericalCell] and
-/// returned as densified lat/lng rings the painter projects — like
-/// [geodesicCircle].
+/// returned as lat/lng rings the painter projects — like [geodesicCircle].
 ///
 /// To match the engine's `band = outer − core` model, one ring is the **strict**
 /// cell (its boundary is the true divide, the one the engine outlines) and the
@@ -40,20 +39,22 @@ class SubspaceRegion {
 
   /// The cell on the band's outer edge — the strict cell grown outward by the
   /// band, or (with `bandInward`) the strict cell itself. Empty when there are
-  /// no other points or the geometry is degenerate.
-  final List<LatLng> outer;
+  /// no other points or the geometry is degenerate. Usually one ring; two when
+  /// a world-wide view cuts the cell at the antimeridian (see [sphericalCell]).
+  final List<List<LatLng>> outer;
 
   /// The cell on the band's inner edge — the strict cell ("closer to main"), or
   /// (with `bandInward`) that cell shrunk by the band. Empty only when the
   /// geometry is degenerate.
-  final List<LatLng> core;
+  final List<List<LatLng>> core;
 }
 
-/// Builds the main point's cell, clipped to [viewportCorners] (the four corner
-/// lat/lngs of the usually slightly inflated viewport, in ring order). [others]
+/// Builds the main point's cell, clipped to the lat/lng box spanned by
+/// [viewportCorners] (the four corner lat/lngs of the usually generously
+/// inflated, world-clamped view bound, with continuous longitudes). [others]
 /// are the non-main points. [bandMeters] is the uncertainty half-band on the
-/// ground (0 disables it). Returns empty rings when [others] is empty or a point
-/// coincides with [main].
+/// ground (0 disables it). Returns empty rings when [others] is empty or a
+/// point coincides with [main].
 SubspaceRegion subspaceRegion({
   required LatLng main,
   required List<LatLng> others,

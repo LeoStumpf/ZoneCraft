@@ -22,6 +22,11 @@ import 'package:meta/meta.dart';
 /// enumerate which `{z}/{x}/{y}` tiles cover a viewport. Pure and dependency-free
 /// so it's easy to unit-test. See <https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames>.
 
+/// The Web-Mercator latitude limit: the projection maps ±[mercatorMaxLat] to
+/// the top/bottom edge of the square world, and nothing beyond it is drawable.
+/// Every latitude clamp in the app uses this one value.
+const double mercatorMaxLat = 85.05112878;
+
 /// The tile column index for [lng] at integer zoom [z], clamped to `[0, 2^z-1]`.
 int tileXFor(double lng, int z) {
   final n = 1 << z;
@@ -33,7 +38,7 @@ int tileXFor(double lng, int z) {
 /// Latitudes are clamped to the Web-Mercator limit (~±85.05°) first.
 int tileYFor(double lat, int z) {
   final n = 1 << z;
-  final clampedLat = lat.clamp(-85.05112878, 85.05112878);
+  final clampedLat = lat.clamp(-mercatorMaxLat, mercatorMaxLat);
   final latRad = clampedLat * math.pi / 180.0;
   final y = ((1.0 - math.log(math.tan(latRad) + 1.0 / math.cos(latRad)) / math.pi) /
           2.0 *

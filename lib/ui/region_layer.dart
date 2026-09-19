@@ -414,6 +414,25 @@ class _RegionPainter extends CustomPainter {
           : Path.combine(PathOperation.union, coreUnion!, path);
     }
 
+    // A subspace cell's rings are disjoint (two only when a world-wide view
+    // cuts it at the antimeridian), so they go into one path as subpaths —
+    // nonzero fill unions them without a path-op.
+    void addOuterRings(List<List<LatLng>> rings) {
+      final path = _ringsToPath(rings);
+      if (path == null) return;
+      outerUnion = outerUnion == null
+          ? path
+          : Path.combine(PathOperation.union, outerUnion!, path);
+    }
+
+    void addCoreRings(List<List<LatLng>> rings) {
+      final path = _ringsToPath(rings);
+      if (path == null) return;
+      coreUnion = coreUnion == null
+          ? path
+          : Path.combine(PathOperation.union, coreUnion!, path);
+    }
+
     // Every type keeps its nominal boundary (the outline) fixed and puts the
     // uncertainty band on the **coloured** side, just inside it, so the solid
     // fill only starts a band-width past the line: normal layers shrink the
@@ -438,12 +457,13 @@ class _RegionPainter extends CustomPainter {
         );
       }
     }
-    // Subspaces clip to the viewport as a spherical quad; unproject its
-    // (slightly inflated) corners once. Null at extreme zoom / near-pole.
+    // Subspaces are clipped to a lat/lng box around the view. Its corners come
+    // back with continuous longitudes (see [viewportCorners]); null only for a
+    // non-finite viewport.
     final corners = viewportCorners(camera);
-    // Unbounded regions (subspace/freeline) are cached against a generous
-    // bound and reused while the live view still fits inside it, so a pan/zoom
-    // re-projects cached rings instead of re-clipping every frame.
+    // Unbounded regions are cached against a generous, world-clamped bound and
+    // reused while the live view still fits inside it, so a pan/zoom re-projects
+    // cached rings instead of re-clipping every frame (see [ViewBound]).
     final viewport = corners == null ? null : ViewBound.ofCorners(corners);
 
     if (subspaces.isNotEmpty && viewport != null) {
@@ -460,6 +480,10 @@ class _RegionPainter extends CustomPainter {
         final region = regionGeometryCache.boundRegion(s.id, sig, viewport, (
           bound,
         ) {
+          // The bound's longitudes are continuous (170…190 across the
+          // antimeridian, never 170…−170) and the rings come back in that
+          // frame, so a cell across the seam is one simple polygon for
+          // [_ringToPath]'s clip — never a bow-tie.
           final r = subspaceRegion(
             main: main,
             others: others,
@@ -469,8 +493,8 @@ class _RegionPainter extends CustomPainter {
           );
           return (outer: r.outer, core: r.core);
         });
-        addOuter(region.outer);
-        addCore(region.core);
+        addOuterRings(region.outer);
+        addCoreRings(region.core);
       }
     }
 
@@ -1026,17 +1050,32 @@ class _RegionPainter extends CustomPainter {
   /// building the closed path, so Skia never sees far-off-screen vertices.
   /// Returns an empty path when nothing of the ring is in view.
   Path _ringToPath(List<LatLng> ring) {
+    final path = Path();
+    _addRing(path, ring);
+    return path;
+  }
+
+  /// [_ringToPath] over several disjoint rings, as subpaths of one path; null
+  /// when none of them has three vertices to begin with.
+  Path? _ringsToPath(List<List<LatLng>> rings) {
+    if (!rings.any((r) => r.length >= 3)) return null;
+    final path = Path();
+    for (final r in rings) {
+      _addRing(path, r);
+    }
+    return path;
+  }
+
+  void _addRing(Path path, List<LatLng> ring) {
     final pts = clipRingToRect([
       for (final p in ring) camera.latLngToScreenOffset(p),
     ], _clip);
-    final path = Path();
-    if (pts.length < 3) return path;
+    if (pts.length < 3) return;
     path.moveTo(pts[0].dx, pts[0].dy);
     for (var i = 1; i < pts.length; i++) {
       path.lineTo(pts[i].dx, pts[i].dy);
     }
     path.close();
-    return path;
   }
 
   /// A projected ring with the **even-odd** fill rule, so a self-crossing cut

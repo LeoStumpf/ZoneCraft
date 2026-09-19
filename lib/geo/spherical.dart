@@ -19,7 +19,7 @@ import 'dart:math';
 import 'package:latlong2/latlong.dart';
 
 /// Spherical geometry on the unit sphere (ECEF unit vectors), used to build the
-/// plane/subspace regions geodesically: the set of points equidistant from two
+/// subspace regions geodesically: the set of points equidistant from two
 /// points is a **great circle**, not a straight screen-space line. Working in
 /// lat/lng here (then projecting to screen in the painter) mirrors how
 /// [geodesicCircle] already builds circles.
@@ -71,76 +71,6 @@ LatLng toLatLng(Vec3 v) {
   return LatLng(lat, lng);
 }
 
-/// Spherical-linear interpolation between unit vectors [a] and [b] at [t].
-Vec3 slerp(Vec3 a, Vec3 b, double t) {
-  final d = a.dot(b).clamp(-1.0, 1.0);
-  final omega = acos(d);
-  if (omega < 1e-9) return a; // coincident / antipodal-safe: just return a
-  final s = sin(omega);
-  final wa = sin((1 - t) * omega) / s;
-  final wb = sin(t * omega) / s;
-  return (a * wa + b * wb).normalized();
-}
-
-/// Densifies a closed ring of unit vectors into a LatLng ring, subdividing every
-/// edge along its great-circle arc so the projected polygon tracks the curve.
-/// [segments] sample points are emitted per edge (start inclusive, end
-/// exclusive) so the ring stays closed without duplicated vertices.
-List<LatLng> densifyRing(List<Vec3> ring, {int segments = 20}) {
-  if (ring.length < 3) return const <LatLng>[];
-  final out = <LatLng>[];
-  for (var i = 0; i < ring.length; i++) {
-    final a = ring[i];
-    final b = ring[(i + 1) % ring.length];
-    for (var s = 0; s < segments; s++) {
-      out.add(toLatLng(slerp(a, b, s / segments)));
-    }
-  }
-  return out;
-}
-
-/// Clips the convex spherical polygon [poly] (unit vectors, consistent winding)
-/// to the half-space `{ P : P·m ≥ threshold }`. With `threshold == 0`, the
-/// boundary is the great circle perpendicular to [m]; a positive/negative
-/// threshold is the small circle offset toward/away from [m] (used for the
-/// uncertainty band). Returns the clipped vertices, empty if nothing survives.
-List<Vec3> clipByPlane(List<Vec3> poly, Vec3 m, double threshold) {
-  if (poly.isEmpty) return poly;
-  double side(Vec3 q) => q.dot(m) - threshold;
-
-  final out = <Vec3>[];
-  for (var i = 0; i < poly.length; i++) {
-    final cur = poly[i];
-    final nxt = poly[(i + 1) % poly.length];
-    final dc = side(cur);
-    final dn = side(nxt);
-    if (dc >= 0) out.add(cur);
-    if ((dc >= 0) != (dn >= 0)) {
-      out.add(_planeCrossing(cur, nxt, m, threshold));
-    }
-  }
-  return out;
-}
-
-/// The point on the great-circle arc from [a] to [b] where `P·m == threshold`,
-/// found by bisection in the slerp parameter. The arc crosses the (near-great)
-/// small circle once when the endpoints straddle it.
-Vec3 _planeCrossing(Vec3 a, Vec3 b, Vec3 m, double threshold) {
-  double f(double t) => slerp(a, b, t).dot(m) - threshold;
-  var lo = 0.0, hi = 1.0;
-  final flo = f(lo);
-  for (var i = 0; i < 40; i++) {
-    final mid = (lo + hi) / 2;
-    final fmid = f(mid);
-    if ((fmid >= 0) == (flo >= 0)) {
-      lo = mid;
-    } else {
-      hi = mid;
-    }
-  }
-  return slerp(a, b, (lo + hi) / 2);
-}
-
 /// Signed band threshold for a metric half-width [bandMeters]: a point that far
 /// (along the surface) from the bisector great circle has `P·m == sin(band/R)`.
 double bandThreshold(double bandMeters) {
@@ -148,10 +78,72 @@ double bandThreshold(double bandMeters) {
   return sin(bandMeters / earthRadius);
 }
 
-/// Builds the geodesic Voronoi cell of [main] against [others], clipped to the
-/// spherical quad [viewportCorners], as densified lat/lng rings. This is the
-/// shared core of both the plane (one "other") and subspace (N "others")
-/// regions.
+/// The half-space `{ P : P·m ≥ threshold }` — with `threshold == 0` the side of
+/// the great circle perpendicular to [m] that [m] points into; a positive /
+/// negative threshold moves the boundary toward / away from [m] onto the
+/// parallel small circle (the uncertainty band).
+class _HalfSpace {
+  const _HalfSpace(this.m, this.threshold);
+  final Vec3 m;
+  final double threshold;
+
+  /// The latitudes of the meridian at [lngDeg] that lie in this half-space, as
+  /// `[lo, hi]` intervals (usually one, at most two), empty for none.
+  ///
+  /// Along a meridian `P·m = A·cos(lat) + B·sin(lat)` with `A = m.x·cos λ +
+  /// m.y·sin λ` and `B = m.z` — one sinusoid in `lat`, `R·cos(lat − φ)`. So
+  /// `P·m ≥ t` is one arc of the full circle, `|lat − φ| ≤ acos(t/R)`, and its
+  /// intersection with the meridian's `[−90, 90]` is one interval — or two,
+  /// when the arc wraps in from both ends. That happens for a bisector that is
+  /// nearly a meridian, seen from its far side, with the band grown *outward*:
+  /// both polar ends of the meridian lie within the band of the divide (the
+  /// poles are on a meridian bisector). Real, but within `band` metres of a
+  /// pole, so past the Mercator limit for any band under ~500 km.
+  List<_Interval> latIntervals(double lngDeg) {
+    final lng = lngDeg * _deg2rad;
+    final a = m.x * cos(lng) + m.y * sin(lng);
+    final b = m.z;
+    final r = sqrt(a * a + b * b);
+    if (r < 1e-12) return const []; // m is the pole itself: no crossing
+    final c = threshold / r;
+    if (c > 1) return const []; // the band pushed the boundary off the sphere
+    if (c < -1) return const [_Interval(-90, 90)]; // ...or over all of it
+    final phi = atan2(b, a) * _rad2deg; // where P·m peaks on this meridian
+    final w = acos(c) * _rad2deg; // half-width of the arc, 0…180
+    final out = <_Interval>[];
+    for (final shift in const [-360.0, 0.0, 360.0]) {
+      final lo = max(phi + shift - w, -90.0);
+      final hi = min(phi + shift + w, 90.0);
+      if (lo <= hi) out.add(_Interval(lo, hi));
+    }
+    return out;
+  }
+}
+
+/// A closed latitude interval.
+class _Interval {
+  const _Interval(this.lo, this.hi);
+  final double lo, hi;
+}
+
+/// A sampled meridian of the cell: the latitudes `[lo, hi]` of the box's
+/// column at [lng] that lie in every half-space, or `lo > hi` when none do.
+class _Column {
+  const _Column(this.lng, this.lo, this.hi);
+  final double lng, lo, hi;
+  bool get filled => lo <= hi;
+}
+
+/// Builds the geodesic Voronoi cell of [main] against [others] inside the
+/// lat/lng box spanned by [viewportCorners] — the four corners of the painter's
+/// (generous, world-clamped) view bound, with **continuous** longitudes — as
+/// lat/lng rings in that same longitude frame. This is the shared core of both
+/// the plane (one "other") and subspace (N "others") regions.
+///
+/// Each of `outer` and `core` is a **list of rings**: a cell is one piece in
+/// any view narrower than the world, but a world-wide box cuts the hemisphere
+/// closer to [main] at the antimeridian seam, and the two ends of the box then
+/// hold the two halves of one region — both are drawn.
 ///
 /// One of `outer`/`core` is always the **strict cell** (the true "closer to
 /// [main]" region, whose boundary is the equidistant divide the engine outlines)
@@ -166,25 +158,49 @@ double bandThreshold(double bandMeters) {
 /// side (inward for a normal layer, outward for an inverted one, whose fill is
 /// the complement). Returns empty rings when there are no others, a point
 /// coincides with [main], or the geometry is non-finite.
-({List<LatLng> outer, List<LatLng> core}) sphericalCell({
+///
+/// **How it is built.** A great circle (or a small circle parallel to it)
+/// crosses every meridian in one contiguous arc, so on each meridian the
+/// half-space "closer to [main] than to Pⱼ" is one latitude interval; the cell's
+/// slice of that meridian is the intersection of those intervals with the box
+/// (`max` of the lower ends, `min` of the upper). The box is sampled at
+/// longitudes [minColumns] wide, refined wherever the slice's ends jump between
+/// neighbours — a divide that is nearly a meridian is steep in this
+/// parametrisation — and wherever a slice appears or vanishes (the cell pinches
+/// off), and every maximal run of filled columns becomes one ring: along the
+/// upper ends eastward, back along the lower ends. The rings' box edges lie
+/// outside the viewport by construction (the bound is grown 75 % past it), so
+/// only the divide is ever seen.
+///
+/// This replaces Sutherland–Hodgman on the sphere. That was right while the
+/// clip box fitted in a hemisphere, but a box wider than that has no "inside":
+/// its edges crossed the divide only at the seam, and the two crossings were
+/// joined by the *short* arc — a strip across the world instead of the cell.
+/// Working in a longitude-continuous lat/lng frame has no such limit, and a
+/// cell across the antimeridian comes out as one simple polygon.
+({List<List<LatLng>> outer, List<List<LatLng>> core}) sphericalCell({
   required LatLng main,
   required List<LatLng> others,
   required double bandMeters,
   required List<LatLng> viewportCorners,
   bool bandInward = false,
-  int segments = 20,
+  int minColumns = 128,
 }) {
-  const empty = (outer: <LatLng>[], core: <LatLng>[]);
+  const empty = (outer: <List<LatLng>>[], core: <List<LatLng>>[]);
   if (others.isEmpty || viewportCorners.length < 3) return empty;
   final mainV = ecef(main);
   if (!mainV.isFinite) return empty;
 
-  final quad = <Vec3>[];
+  var minLat = double.infinity, maxLat = double.negativeInfinity;
+  var minLng = double.infinity, maxLng = double.negativeInfinity;
   for (final c in viewportCorners) {
-    final v = ecef(c);
-    if (!v.isFinite) return empty; // a non-finite corner -> bail, don't draw
-    quad.add(v);
+    if (!c.latitude.isFinite || !c.longitude.isFinite) return empty;
+    minLat = min(minLat, c.latitude);
+    maxLat = max(maxLat, c.latitude);
+    minLng = min(minLng, c.longitude);
+    maxLng = max(maxLng, c.longitude);
   }
+  if (maxLat <= minLat || maxLng <= minLng) return empty;
 
   // Bisector pole directions, one per other point.
   final mList = <Vec3>[];
@@ -205,15 +221,122 @@ double bandThreshold(double bandMeters) {
   final s = bandThreshold(bandMeters);
   final outerThresh = bandInward ? 0.0 : -s;
   final coreThresh = bandInward ? s : 0.0;
-  var outer = quad;
-  var core = quad;
-  for (final m in mList) {
-    outer = clipByPlane(outer, m, outerThresh);
-    core = clipByPlane(core, m, coreThresh);
-    if (outer.isEmpty && core.isEmpty) break;
-  }
+  final box = (minLat: minLat, maxLat: maxLat, minLng: minLng, maxLng: maxLng);
   return (
-    outer: densifyRing(outer, segments: segments),
-    core: densifyRing(core, segments: segments),
+    outer: _envelopeRings(
+      [for (final m in mList) _HalfSpace(m, outerThresh)],
+      box,
+      minColumns,
+    ),
+    core: _envelopeRings(
+      [for (final m in mList) _HalfSpace(m, coreThresh)],
+      box,
+      minColumns,
+    ),
   );
+}
+
+typedef _Box = ({double minLat, double maxLat, double minLng, double maxLng});
+
+/// The rings of `box ∩ ⋂ halfSpaces` (see [sphericalCell]).
+List<List<LatLng>> _envelopeRings(
+  List<_HalfSpace> halfSpaces,
+  _Box box,
+  int minColumns,
+) {
+  _Column column(double lng) {
+    // Intersect interval *sets*: a half-space can hand back two polar pieces
+    // (see [_HalfSpace.latIntervals]), and taking their hull would fill the
+    // whole column for a meridian divide seen from its far side, where both
+    // pieces are just the poles. The box clamp then drops what is past the
+    // Mercator limit; should two pieces survive that (a band over ~500 km),
+    // the longer one is the column.
+    var current = <_Interval>[_Interval(box.minLat, box.maxLat)];
+    for (final h in halfSpaces) {
+      final pieces = h.latIntervals(lng);
+      current = [
+        for (final a in current)
+          for (final b in pieces)
+            if (max(a.lo, b.lo) <= min(a.hi, b.hi))
+              _Interval(max(a.lo, b.lo), min(a.hi, b.hi)),
+      ];
+      if (current.isEmpty) return _Column(lng, 1, 0);
+    }
+    var best = current.first;
+    for (final iv in current.skip(1)) {
+      if (iv.hi - iv.lo > best.hi - best.lo) best = iv;
+    }
+    return _Column(lng, best.lo, best.hi);
+  }
+
+  final lngSpan = box.maxLng - box.minLng;
+  // Stop refining below this: a divide that is exactly a meridian is a step
+  // in this parametrisation, and the step is placed to within this much.
+  final minStep = lngSpan / 4096;
+  // Neighbouring columns whose ends differ by more than this get a column
+  // between them, so a steep divide is traced, not cut across.
+  final tol = (box.maxLat - box.minLat) / 256;
+
+  final columns = <_Column>[];
+  void refine(_Column a, _Column b) {
+    if (b.lng - a.lng <= minStep) return;
+    final needed =
+        a.filled != b.filled ||
+        (a.filled && ((a.lo - b.lo).abs() > tol || (a.hi - b.hi).abs() > tol));
+    if (!needed) return;
+    final mid = column((a.lng + b.lng) / 2);
+    refine(a, mid);
+    columns.add(mid);
+    refine(mid, b);
+  }
+
+  var prev = column(box.minLng);
+  columns.add(prev);
+  for (var i = 1; i <= minColumns; i++) {
+    final next = column(box.minLng + lngSpan * i / minColumns);
+    refine(prev, next);
+    columns.add(next);
+    prev = next;
+  }
+
+  // Every maximal run of filled columns is one ring: eastward along the upper
+  // ends, back westward along the lower ends. Between a filled column and an
+  // empty neighbour the cell pinches to a point (the refinement above put
+  // those two within `minStep` of each other), so the run closes there.
+  final rings = <List<LatLng>>[];
+  var start = -1;
+  for (var i = 0; i <= columns.length; i++) {
+    final filled = i < columns.length && columns[i].filled;
+    if (filled && start < 0) start = i;
+    if (!filled && start >= 0) {
+      final ring = _ring(columns.sublist(start, i));
+      if (ring.isNotEmpty) rings.add(ring);
+      start = -1;
+    }
+  }
+  return rings;
+}
+
+/// One ring from a run of filled columns, dropping the interior vertices of
+/// straight horizontal stretches (long runs along the box's top or bottom).
+List<LatLng> _ring(List<_Column> run) {
+  final out = <LatLng>[];
+  void add(double lat, double lng) {
+    if (out.length >= 2) {
+      final a = out[out.length - 2], b = out.last;
+      if (a.latitude == b.latitude && b.latitude == lat) {
+        out[out.length - 1] = LatLng(lat, lng);
+        return;
+      }
+    }
+    out.add(LatLng(lat, lng));
+  }
+
+  for (final c in run) {
+    add(c.hi, c.lng);
+  }
+  for (final c in run.reversed) {
+    add(c.lo, c.lng);
+  }
+  return out.length < 3 ? const <LatLng>[] : out;
 }

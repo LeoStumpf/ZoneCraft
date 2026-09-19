@@ -27,12 +27,12 @@ import 'package:zonecraft/ui/region_geometry.dart';
 const _widget = Size(360, 800);
 
 MapCamera _camera(double rotation) => MapCamera(
-      crs: const Epsg3857(),
-      center: const LatLng(48.104, 11.516),
-      zoom: 12,
-      rotation: rotation,
-      nonRotatedSize: _widget,
-    );
+  crs: const Epsg3857(),
+  center: const LatLng(48.104, 11.516),
+  zoom: 12,
+  rotation: rotation,
+  nonRotatedSize: _widget,
+);
 
 void main() {
   group('cameraViewport', () {
@@ -84,7 +84,10 @@ void main() {
       final camera = _camera(90);
       final bound = ViewBound.ofCorners(viewportCorners(camera)!);
       for (final probe in [
-        const Offset(180, 799), // bottom centre — the pixel that used to fall out
+        const Offset(
+          180,
+          799,
+        ), // bottom centre — the pixel that used to fall out
         const Offset(0, 799),
         const Offset(359, 799),
         const Offset(180, 0),
@@ -95,6 +98,60 @@ void main() {
           reason: 'screen point $probe must be inside the clip quad',
         );
       }
+    });
+
+    test('longitudes are continuous across the antimeridian', () {
+      // flutter_map clamps an unprojected longitude to ±180, which would make
+      // a view straddling 180° read as 170 and −170 — a 340° box.
+      final camera = MapCamera(
+        crs: const Epsg3857(),
+        center: const LatLng(0, 179),
+        zoom: 4,
+        rotation: 0,
+        nonRotatedSize: _widget,
+      );
+      final corners = viewportCorners(camera)!;
+      final lngs = corners.map((c) => c.longitude).toList();
+      expect(lngs[0], lessThan(179));
+      expect(lngs[1], greaterThan(180)); // the NE corner is in the next world
+      expect(lngs[1] - lngs[0], closeTo(376 * 360 / (256 * 16), 1e-6));
+      // ...and agrees with flutter_map wherever no clamp applies.
+      final inner = MapCamera(
+        crs: const Epsg3857(),
+        center: const LatLng(48.1, 11.5),
+        zoom: 4,
+        rotation: 30,
+        nonRotatedSize: _widget,
+      );
+      for (final c in viewportCorners(inner)!) {
+        final back = inner.latLngToScreenOffset(c);
+        final r = cameraViewport(inner).inflate(8);
+        expect(
+          [
+            r.topLeft,
+            r.topRight,
+            r.bottomRight,
+            r.bottomLeft,
+          ].any((o) => (o - back).distance < 1e-6),
+          isTrue,
+          reason: '$c must project back onto a corner',
+        );
+      }
+    });
+
+    test('a view wider than the world keeps its true extent', () {
+      final camera = MapCamera(
+        crs: const Epsg3857(),
+        center: const LatLng(0, 0),
+        zoom: 2,
+        rotation: 0,
+        nonRotatedSize: const Size(1400, 800), // world is 1024 px here
+      );
+      final corners = viewportCorners(camera)!;
+      expect(
+        corners[1].longitude - corners[0].longitude,
+        closeTo(1416 * 360 / 1024, 1e-6),
+      );
     });
 
     test('null when a corner unprojects to a non-finite coordinate', () {

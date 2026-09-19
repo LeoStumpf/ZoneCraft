@@ -21,6 +21,7 @@ import 'package:image/image.dart' as img;
 import 'package:latlong2/latlong.dart';
 
 import 'simplify.dart';
+import 'tiles.dart';
 
 /// Elevation-contour geometry for the height layer: decode Terrarium terrain
 /// tiles, sample an elevation grid over a bounded circle, trace the threshold
@@ -347,7 +348,7 @@ List<LatLng> _geoCircle(double lat, double lng, double radiusMeters,
 double _lngToTileX(double lng, int z) => (lng + 180.0) / 360.0 * (1 << z);
 
 double _latToTileY(double lat, int z) {
-  final clamped = lat.clamp(-85.05112878, 85.05112878);
+  final clamped = lat.clamp(-mercatorMaxLat, mercatorMaxLat);
   final r = clamped * math.pi / 180.0;
   return (1.0 - math.log(math.tan(r) + 1.0 / math.cos(r)) / math.pi) /
       2.0 *
