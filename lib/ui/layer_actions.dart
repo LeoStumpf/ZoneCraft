@@ -879,7 +879,32 @@ const _palette = <Color>[
   Color(0xFF00ACC1),
 ];
 
-/// Creates a layer of [type] named after its position and makes it active.
+/// What a layer of [type] is called before anyone renames it.
+///
+/// "Layer 4" said only that it was the fourth thing made, which is the one fact
+/// about it the drawer already shows — its position — and none of the fact that
+/// matters, which is what is in it. The number counts layers of **this type**,
+/// so the second height layer is "Height 2" whatever else exists. Names are not
+/// unique and are not made unique: this is a starting point, not an identity,
+/// and deleting the first "Height 1" must not renumber the second.
+String defaultLayerName(String type, List<Layer> existing) {
+  final n = existing.where((l) => l.type == type).length + 1;
+  return '${layerTypeNoun(type)} $n';
+}
+
+/// The one-word name for a layer type, as a layer is called in its own name.
+String layerTypeNoun(String type) => switch (type) {
+  kCircles => 'Circles',
+  kSubspace => 'Subspace',
+  kFreeLine => 'Lines',
+  kFreeArea => 'Areas',
+  kHeight => 'Height',
+  kPoi => 'POIs',
+  kBorders => 'Borders',
+  _ => 'Layer',
+};
+
+/// Creates a layer of [type] named after what it holds and makes it active.
 ///
 /// Borders is the one type with a creation-time sub-choice: a layer holds
 /// exactly one admin level, which is what makes its colouring well defined, so
@@ -900,7 +925,7 @@ Future<void> addLayerFlow(
   final id = await ref
       .read(repositoryProvider)
       .createLayer(
-        name: 'Layer ${count + 1}',
+        name: defaultLayerName(type, layers),
         colorArgb: _palette[count % _palette.length].toARGB32(),
         type: type,
         borderLevel: level,

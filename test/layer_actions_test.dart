@@ -41,6 +41,31 @@ void main() {
     ),
   );
 
+  group('defaultLayerName', () {
+    Layer of(String type) => _layer('x', type);
+
+    test('names a layer after what it holds, numbered within its type', () {
+      expect(defaultLayerName(kCircles, const []), 'Circles 1');
+      expect(defaultLayerName(kHeight, const []), 'Height 1');
+      expect(defaultLayerName(kFreeArea, const []), 'Areas 1');
+      expect(defaultLayerName(kFreeLine, const []), 'Lines 1');
+      expect(defaultLayerName(kPoi, const []), 'POIs 1');
+      expect(defaultLayerName(kBorders, const []), 'Borders 1');
+      expect(defaultLayerName(kSubspace, const []), 'Subspace 1');
+    });
+
+    test('counts only layers of the same type', () {
+      final existing = [of(kCircles), of(kHeight), of(kCircles)];
+      expect(defaultLayerName(kCircles, existing), 'Circles 3');
+      expect(defaultLayerName(kHeight, existing), 'Height 2');
+      expect(defaultLayerName(kFreeArea, existing), 'Areas 1');
+    });
+
+    test('an unknown type still gets a name', () {
+      expect(defaultLayerName('something-new', const []), 'Layer 1');
+    });
+  });
+
   group('layerActionUnavailable', () {
     LayerActionContext ctx(
       String type, {

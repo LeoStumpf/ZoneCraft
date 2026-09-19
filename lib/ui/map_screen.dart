@@ -1691,11 +1691,30 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// Adds a height region to [layer] at [center] (un-generated — the editor's
   /// Generate fills it). A sensible default radius scales with the current zoom.
   /// Returns its id; [select] opens its editor (off while Add mode is sticky).
+  ///
+  /// The threshold starts at **the ground under the centre**, not at 0 m. A
+  /// height region is "terrain above (or below) this line", and 0 m is a line
+  /// nowhere near the ground almost everywhere — dropped on a mountain it
+  /// selected the whole disk, and the first thing anyone had to do was find out
+  /// what the local elevation even was. Starting at the centre's own height
+  /// makes the first Generate say something about *this* place, and the number
+  /// is a fact about it rather than a guess.
   Future<String> _addHeightRegionAt(
     LatLng center,
     Layer layer, {
     bool select = true,
   }) async {
+    // One terrain tile, usually already cached, with `queryElevation`'s own
+    // timeout. A failure is not worth refusing the region over: it is created
+    // either way and the editor can be typed into, which is exactly where the
+    // user was before this default existed.
+    final ground = await queryElevation(
+      repo: ref.read(repositoryProvider),
+      client: _tileClient,
+      lat: center.latitude,
+      lng: center.longitude,
+      headers: const {'User-Agent': tileUserAgent},
+    );
     final id = await ref
         .read(repositoryProvider)
         .createHeightRegion(
@@ -1703,7 +1722,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
           centerLat: center.latitude,
           centerLng: center.longitude,
           radiusMeters: _defaultRadius().clamp(100.0, 25000.0),
+          thresholdMeters: ground?.roundToDouble() ?? 0,
         );
+    if (ground == null && mounted) {
+      _hint('No ground height here (offline?) — the threshold starts at 0 m.');
+    }
     if (select) _selectHeightRegion(id);
     return id;
   }
