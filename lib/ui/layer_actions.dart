@@ -83,6 +83,10 @@ class LayerActionContext {
     this.isBottom = false,
     this.fillAreas = false,
     this.showNames = false,
+    this.holdsAnything = true,
+    this.holdsInvertible = true,
+    this.holdsRegionFill = true,
+    this.holdsBorderAreas = true,
   });
 
   /// `Layers.type`.
@@ -100,6 +104,29 @@ class LayerActionContext {
   final bool isBottom;
   final bool fillAreas;
   final bool showNames;
+
+  // --- What the layer actually holds ----------------------------------------
+  //
+  // [visibleLayerActions] never reads these: *which* actions a layer offers is
+  // a fact about its type, and an option that came and went as rows were added
+  // would be unfindable. They answer the second question,
+  // [layerActionUnavailable] — whether the option offered can do anything yet.
+  // Each defaults to true (assume it can act), so a context built for a
+  // which-actions test is unaffected; `layerActionsFor` always passes them.
+
+  /// Whether the layer holds at least one element of any kind.
+  final bool holdsAnything;
+
+  /// Whether it holds a [kInvertibleTypes] element — what "Fill outside" needs.
+  final bool holdsInvertible;
+
+  /// Whether it holds anything drawn as a **fill**, which is all that layer
+  /// transparency acts on: the invertible types plus `height`.
+  final bool holdsRegionFill;
+
+  /// Whether a borders layer holds at least one area — a set whose import came
+  /// back empty holds none, and then there is nothing to colour or to name.
+  final bool holdsBorderAreas;
 }
 
 /// Which actions [c] gets, in menu order.
@@ -149,6 +176,125 @@ List<LayerActionId> visibleLayerActions(LayerActionContext c) {
     LayerActionId.delete,
   ];
 }
+
+/// Why [id] would do nothing on a layer with these facts, or null when it
+/// works.
+///
+/// The second half of the promise [visibleLayerActions] starts. *Which* options
+/// a layer has follows from its type, so the list is stable and learnable; that
+/// leaves the options that are offered but, right now, cannot do anything — and
+/// those used to report success and change nothing. "Fill outside" on a layer
+/// of nothing but POI markers wrote `isInverted` and left the map
+/// byte-identical, because markers have no outside.
+///
+/// The answer names a remedy rather than a fault, and it is written **once**,
+/// here: `map_screen` shows it when the quick-toggle FAB is pressed, and the
+/// layer sheet and the drawer menu — which have room — print it under the
+/// option and disable the row. A control with nowhere to put the text stays
+/// live and answers the press; a control with room says it before the press.
+String? layerActionUnavailable(LayerActionId id, LayerActionContext c) {
+  switch (id) {
+    case LayerActionId.invert:
+      // Switching a state **off** is always worth doing, whatever the layer
+      // holds: the flag is stored, and a layer left inverted with nothing to
+      // invert would fill the whole viewport the moment a shape was merged
+      // into it — with the one control that could undo that greyed out. Only
+      // turning it *on* can be pointless.
+      if (c.isInverted) return null;
+      if (!c.holdsAnything) {
+        return 'This layer is empty — ${fillLayerWith(c.type)}.';
+      }
+      if (!c.holdsInvertible) {
+        // Only a combined layer reaches this: every other type that offers
+        // invert holds nothing *but* invertible elements, so a non-empty one
+        // always has a shape. And a combined layer is filled by merging.
+        return 'Fill outside needs a shape to take the outside of — merge in '
+            'a layer of circles, lines or areas first.';
+      }
+      return null;
+
+    case LayerActionId.fillAreas:
+      if (c.fillAreas) return null; // see the note on invert above
+      if (!c.holdsBorderAreas) {
+        return 'There are no areas here yet — import some borders first.';
+      }
+      return null;
+
+    case LayerActionId.showNames:
+      if (c.showNames) return null;
+      if (!c.holdsBorderAreas) {
+        return 'There are no areas here yet — import some borders first.';
+      }
+      return null;
+
+    // Everything else acts whenever it is offered: the stacking items are
+    // hidden at the ends, "Combine…" needs a target to appear at all,
+    // "Stations…" needs a station import, and an import, a rename, a colour,
+    // an export or a delete always does something.
+    case LayerActionId.toTop:
+    case LayerActionId.up:
+    case LayerActionId.down:
+    case LayerActionId.toBottom:
+    case LayerActionId.rename:
+    case LayerActionId.color:
+    case LayerActionId.opacity:
+    case LayerActionId.stations:
+    case LayerActionId.importPois:
+    case LayerActionId.importStations:
+    case LayerActionId.importBordersVisible:
+    case LayerActionId.importFeature:
+    case LayerActionId.importTrack:
+    case LayerActionId.export:
+    case LayerActionId.combine:
+    case LayerActionId.makeMixed:
+    case LayerActionId.delete:
+      return null;
+  }
+}
+
+/// Why the transparency you set is not visible on this layer *yet*, or null.
+///
+/// Deliberately **not** part of [layerActionUnavailable]: transparency is a
+/// value, not a command. It is stored and takes effect the moment the layer has
+/// a fill, so disabling the slider would refuse a setting that is perfectly
+/// valid to make in advance — the surface shows this line beside a live
+/// control instead.
+///
+/// Only the two surprising cases are worth a line. An *empty* layer fading
+/// nothing is self-evident; a layer full of markers, or a borders layer drawn
+/// as outlines, is not.
+String? layerOpacityNote(LayerActionContext c) {
+  if (!c.holdsAnything) return null;
+  if (c.type == kBorders && !c.fillAreas) {
+    return 'Transparency fades the area fill — turn on “Colour areas” to see '
+        'it.';
+  }
+  if (c.type == kMixedType && !c.holdsRegionFill) {
+    return 'Transparency fades this layer’s shapes; its markers stay crisp.';
+  }
+  return null;
+}
+
+/// A line worth saying beside [id] even though it works, or null.
+///
+/// The counterpart to [layerActionUnavailable]: that one disables, this one
+/// only explains. Today it is transparency alone — see [layerOpacityNote].
+String? layerActionNote(LayerActionId id, LayerActionContext c) =>
+    id == LayerActionId.opacity ? layerOpacityNote(c) : null;
+
+/// The remedy for an empty layer, in its own noun: what would fill it.
+String fillLayerWith(String type) => switch (type) {
+  kCircles => 'add a circle first',
+  kSubspace => 'add a subspace first',
+  kFreeLine => 'draw or add a line first',
+  kFreeArea => 'draw or add an area first',
+  kHeight => 'add a height area first',
+  kPoi => 'import or place some POIs first',
+  kBorders => 'import some borders first',
+  // A combined layer makes nothing of its own ([layerMakesOwnContent]).
+  kMixedType => 'merge another layer into it first',
+  _ => 'add something to it first',
+};
 
 /// The menu group an action belongs to; a divider goes between groups.
 /// 0 = stacking, 1 = properties, 2 = imports, 3 = export / structure,
@@ -232,6 +378,8 @@ class LayerAction {
     required this.run,
     this.checked,
     this.needsMap = false,
+    this.unavailable,
+    this.note,
   });
 
   final LayerActionId id;
@@ -256,6 +404,30 @@ class LayerAction {
   /// dismiss itself so the map can answer (a preview, a form, a banner).
   final bool needsMap;
   final Future<void> Function() run;
+
+  /// Why pressing this would do nothing right now, or null when it works —
+  /// [layerActionUnavailable], attached centrally so no action body can forget
+  /// it. A surface with room prints it and disables the row; the map's bare
+  /// icon button stays live and says it on the press.
+  final String? unavailable;
+
+  /// Something worth saying about this action while it still works —
+  /// [layerActionNote]. Printed where the option is, never disabling it.
+  final String? note;
+
+  /// This action with its two explanations attached. Only [layerActionsFor]
+  /// calls it, which is what keeps them off the twenty action bodies.
+  LayerAction withReasons({String? unavailable, String? note}) => LayerAction(
+    id: id,
+    icon: icon,
+    label: label,
+    description: description,
+    run: run,
+    checked: checked,
+    needsMap: needsMap,
+    unavailable: unavailable,
+    note: note,
+  );
 }
 
 /// The actions [layer] gets, with their bodies.
@@ -278,6 +450,60 @@ List<LayerAction> layerActionsFor(
       (ref.read(poiSetsProvider).asData?.value ?? const <PoiSet>[]).any(
         (s) => s.layerId == layer.id && s.isStationImport,
       );
+  // What the layer holds, per content type — read once here and asked of
+  // [layerActionUnavailable], so "is this option greyed?" is decided in one
+  // pure place rather than by each surface.
+  bool holds(String type) {
+    if (!layerTypeHolds(layer.type, type)) return false;
+    bool anyIn<T>(List<T> rows, String Function(T) layerIdOf) =>
+        rows.any((r) => layerIdOf(r) == layer.id);
+    return switch (type) {
+      kCircles => anyIn(
+        ref.read(circlesProvider).asData?.value ?? const <Circle>[],
+        (c) => c.layerId,
+      ),
+      kSubspace => anyIn(
+        ref.read(subspacesProvider).asData?.value ?? const <Subspace>[],
+        (s) => s.layerId,
+      ),
+      kFreeLine => anyIn(
+        ref.read(freeLinesProvider).asData?.value ?? const <FreeLine>[],
+        (l) => l.layerId,
+      ),
+      kFreeArea => anyIn(
+        ref.read(freeAreasProvider).asData?.value ?? const <FreeArea>[],
+        (a) => a.layerId,
+      ),
+      kHeight => anyIn(
+        ref.read(heightRegionsProvider).asData?.value ?? const <HeightRegion>[],
+        (r) => r.layerId,
+      ),
+      kPoi => anyIn(
+        ref.read(poiSetsProvider).asData?.value ?? const <PoiSet>[],
+        (s) => s.layerId,
+      ),
+      kBorders => anyIn(
+        ref.read(borderSetsProvider).asData?.value ?? const <BorderSet>[],
+        (s) => s.layerId,
+      ),
+      _ => false,
+    };
+  }
+
+  // A set can exist with no areas in it — an import that came back empty — so
+  // the areas are counted rather than the sets.
+  bool holdsBorderAreas() {
+    if (!layerTypeHolds(layer.type, kBorders)) return false;
+    final sets = (ref.read(borderSetsProvider).asData?.value ?? const <BorderSet>[])
+        .where((s) => s.layerId == layer.id)
+        .map((s) => s.id)
+        .toSet();
+    if (sets.isEmpty) return false;
+    return (ref.read(borderAreasProvider).asData?.value ?? const <BorderArea>[])
+        .any((a) => sets.contains(a.setId));
+  }
+
+  final contentTypes = layerContentTypes(layer);
   final ctx = LayerActionContext(
     type: layer.type,
     isInverted: layer.isInverted,
@@ -287,6 +513,12 @@ List<LayerAction> layerActionsFor(
     isBottom: layers.isEmpty || layers.first.id == layer.id,
     fillAreas: layer.borderFillAreas,
     showNames: layer.borderShowNames,
+    holdsAnything: contentTypes.any(holds),
+    holdsInvertible: kInvertibleTypes.any(holds),
+    // The invertible types plus `height`: everything `region_layer` draws as a
+    // fill, and so everything the layer's opacity acts on.
+    holdsRegionFill: [...kInvertibleTypes, kHeight].any(holds),
+    holdsBorderAreas: holdsBorderAreas(),
   );
 
   Future<void> move(LayerMove m) async {
@@ -503,7 +735,13 @@ List<LayerAction> layerActionsFor(
     ),
   };
 
-  return [for (final id in visibleLayerActions(ctx)) build(id)];
+  return [
+    for (final id in visibleLayerActions(ctx))
+      build(id).withReasons(
+        unavailable: layerActionUnavailable(id, ctx),
+        note: layerActionNote(id, ctx),
+      ),
+  ];
 }
 
 /// Seals the step just written under [label] and offers to take it back.

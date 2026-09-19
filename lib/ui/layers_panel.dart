@@ -317,6 +317,30 @@ class LayersDrawer extends ConsumerWidget {
   }
 }
 
+/// A menu item's text: the label, and under it the one line that says why it
+/// can do nothing (or what it will not show yet). A disabled item cannot be
+/// pressed to ask, so the answer has to be on it already — the same trade the
+/// layer sheet makes, and the opposite of the map's bare icon buttons, which
+/// have nowhere to put a sentence and so stay live instead.
+Widget _itemLabel(BuildContext context, LayerAction a) {
+  final aside = a.unavailable ?? a.note;
+  if (aside == null) return Text(a.label);
+  final theme = Theme.of(context);
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Text(a.label),
+      Text(
+        aside,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      ),
+    ],
+  );
+}
+
 class _LayerTile extends ConsumerWidget {
   const _LayerTile({
     super.key,
@@ -484,12 +508,14 @@ class _LayerTile extends ConsumerWidget {
                       CheckedPopupMenuItem(
                         value: actions[i],
                         checked: actions[i].checked!,
-                        child: Text(actions[i].label),
+                        enabled: actions[i].unavailable == null,
+                        child: _itemLabel(context, actions[i]),
                       )
                     else
                       PopupMenuItem(
                         value: actions[i],
-                        child: Text(actions[i].label),
+                        enabled: actions[i].unavailable == null,
+                        child: _itemLabel(context, actions[i]),
                       ),
                   ],
                 ],

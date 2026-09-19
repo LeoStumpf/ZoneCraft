@@ -81,19 +81,35 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   (Material's faded pair, `onSurface` at 12 %/38 %, not `disabledColor`, which is a dark grey
   that read as the *lit* state on this light row). `undo_buttons._Button` takes the same
   `unavailable` parameter for the same reason.
-  **What a control can act on is asked per control, not per layer.** The quick
-  toggle is one button with three identities (`QuickToggleKind`), and its
-  availability used to read one boolean — "does the layer hold *anything*". A
-  combined layer of nothing but POI markers is far from empty and still has no
-  outside, so Fill outside lit up, wrote `isInverted` and left the map
-  byte-identical: the very failure this mechanism exists to prevent, back again
-  one layer type along. `kInvertibleTypes` (`data/layer_types.dart`) is now the
-  one list of what invert can act on — circles, subspace, freeline, freearea;
-  **not `height`**, whose painter ignores `inverted` and bands along the
-  elevation contour instead — and both `visibleLayerActions` and the greying
-  read it, so the menu item and "can it do anything?" cannot disagree.
-  Colour areas likewise needs an *area*, not just a border set, since an import
-  can come back empty.
+  **What a control can act on is asked per control, not per layer**
+  (`layerActionUnavailable` in `ui/layer_actions.dart`). The quick toggle is one
+  button with three identities, and its availability used to read one boolean —
+  "does the layer hold *anything*". A combined layer of nothing but POI markers
+  is far from empty and still has no outside, so Fill outside lit up, wrote
+  `isInverted` and left the map byte-identical: the very failure this mechanism
+  exists to prevent, back again one layer type along. `kInvertibleTypes`
+  (`data/layer_types.dart`) is the one list of what invert can act on — circles,
+  subspace, freeline, freearea; **not `height`**, whose painter ignores
+  `inverted` and bands along the elevation contour instead — and both
+  `visibleLayerActions` and the greying read it, so the menu item and "can it do
+  anything?" cannot disagree. Colour areas likewise needs an *area*, not just a
+  border set, since an import can come back empty.
+  Two rules keep it honest. **A toggle that is already on can always be turned
+  off**: the flag is stored, and a layer left inverted with nothing to invert
+  would fill the viewport the moment a shape was merged in — with the only
+  control that could undo it greyed out. And **the answer is written once**, in
+  `layerActionUnavailable`, because the same question is asked by three
+  surfaces; `unavailableReason` (`ui/map_controls.dart`) keeps only the *map's*
+  own half (is there a layer at all, is it visible) and `map_screen` falls back
+  to the action's.
+  **Where there is room, say it before the press; where there is not, answer the
+  press.** The layer sheet and the drawer menu print the reason under the option
+  and go inert — a disabled row that already explains itself needs no tap. Only
+  the map's bare icon buttons, which have nowhere to put a sentence, stay live.
+  The exception is a *value*: `layerOpacityNote` says why transparency is not
+  visible yet (a combined layer's markers stay crisp; a borders layer without
+  Colour areas draws no fill) beside a control that still works, because the
+  number is stored and applies the moment the layer has a fill.
   These answers are **never counted by `UiHints`**: a tip that teaches goes quiet after three
   showings, but "why did nothing happen?" has to come every time or the third press of a dead
   button is silent again. A control the layer *type* can never use stays **hidden** — "never"

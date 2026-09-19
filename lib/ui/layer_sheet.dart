@@ -220,6 +220,7 @@ class _ActiveLayerBody extends ConsumerWidget {
     LayerAction? byId(LayerActionId id) =>
         actions.where((a) => a.id == id).firstOrNull;
     final count = ref.watch(layerSummariesProvider(layer.id)).length;
+    final opacityNote = byId(LayerActionId.opacity)?.note;
     final theme = Theme.of(context);
 
     // Runs [action] with the sheet out of the way when it has to be: a
@@ -361,24 +362,44 @@ class _ActiveLayerBody extends ConsumerWidget {
             const SizedBox(width: 12),
           ],
         ),
+        // Left live even when it shows nothing yet: the value is real and
+        // applies the moment the layer has a fill, so refusing to set it in
+        // advance would be the wrong answer. Saying so is the right one.
+        if (opacityNote != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(38, 0, 12, 4),
+            child: Text(
+              opacityNote,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
         // Each row carries the action's own description as a subtitle: the
         // labels are short enough to be ambiguous on their own ("Invert" into
         // what?), and this sheet is where there is room to say.
+        // An option that cannot do anything says so where it stands and goes
+        // inert. The map's bare icon button has to stay live and answer the
+        // press, because a FAB has nowhere to put the sentence; here there is
+        // room, so the sentence replaces the description and the row is
+        // plainly disabled instead of quietly writing a setting nothing shows.
         for (final a in toggles)
           SwitchListTile(
             dense: true,
             secondary: Icon(a.icon),
             title: Text(a.label),
-            subtitle: Text(a.description),
+            subtitle: Text(a.unavailable ?? a.description),
             value: a.checked!,
-            onChanged: (_) => unawaited(run(a)),
+            onChanged:
+                a.unavailable != null ? null : (_) => unawaited(run(a)),
           ),
         for (final a in tiles)
           ListTile(
             dense: true,
+            enabled: a.unavailable == null,
             leading: Icon(a.icon),
             title: Text(a.label),
-            subtitle: Text(a.description),
+            subtitle: Text(a.unavailable ?? a.description),
             onTap: () => unawaited(run(a)),
           ),
         ListTile(

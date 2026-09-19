@@ -41,6 +41,198 @@ void main() {
     ),
   );
 
+  group('layerActionUnavailable', () {
+    LayerActionContext ctx(
+      String type, {
+      bool holdsAnything = true,
+      bool holdsInvertible = true,
+      bool holdsRegionFill = true,
+      bool holdsBorderAreas = true,
+      bool fillAreas = false,
+      bool showNames = false,
+    }) => LayerActionContext(
+      type: type,
+      holdsAnything: holdsAnything,
+      holdsInvertible: holdsInvertible,
+      holdsRegionFill: holdsRegionFill,
+      holdsBorderAreas: holdsBorderAreas,
+      fillAreas: fillAreas,
+      showNames: showNames,
+    );
+
+    test('an empty layer cannot be filled outside of', () {
+      // The painter returns before the viewport complement is ever taken, so
+      // this toggle wrote the database and changed nothing on screen.
+      final reason = layerActionUnavailable(
+        LayerActionId.invert,
+        ctx(kCircles, holdsAnything: false, holdsInvertible: false),
+      );
+      expect(reason, contains('empty'));
+      expect(reason, contains('circle'),
+          reason: 'the remedy names the layer\'s own noun');
+    });
+
+    test('a layer that is not empty can still have nothing to invert', () {
+      // The bug: a combined layer holding only POI markers is far from empty,
+      // so the toggle lit up — and markers have no outside.
+      final reason = layerActionUnavailable(
+        LayerActionId.invert,
+        ctx(kMixedType, holdsInvertible: false, holdsRegionFill: false),
+      );
+      expect(reason, isNotNull);
+      expect(reason, isNot(contains('empty')),
+          reason: 'it is not empty — that would be the wrong complaint');
+      expect(reason, contains('merge'));
+    });
+
+    test('a toggle that is already on can always be turned off', () {
+      // Otherwise a layer left inverted with nothing to invert would fill the
+      // whole viewport the moment a shape was merged in, with the one control
+      // that could undo it greyed out.
+      expect(
+        layerActionUnavailable(
+          LayerActionId.invert,
+          LayerActionContext(
+            type: kMixedType,
+            isInverted: true,
+            holdsInvertible: false,
+          ),
+        ),
+        isNull,
+      );
+      expect(
+        layerActionUnavailable(
+          LayerActionId.fillAreas,
+          LayerActionContext(
+            type: kBorders,
+            fillAreas: true,
+            holdsBorderAreas: false,
+          ),
+        ),
+        isNull,
+      );
+      expect(
+        layerActionUnavailable(
+          LayerActionId.showNames,
+          LayerActionContext(
+            type: kBorders,
+            showNames: true,
+            holdsBorderAreas: false,
+          ),
+        ),
+        isNull,
+      );
+    });
+
+    test('an import that came back empty has no areas to colour or name', () {
+      for (final id in [LayerActionId.fillAreas, LayerActionId.showNames]) {
+        expect(
+          layerActionUnavailable(id, ctx(kBorders, holdsBorderAreas: false)),
+          contains('borders'),
+          reason: id.name,
+        );
+        expect(
+          layerActionUnavailable(id, ctx(kBorders)),
+          isNull,
+          reason: id.name,
+        );
+      }
+    });
+
+    test('everything else acts whenever it is offered', () {
+      final full = ctx(kMixedType);
+      for (final id in LayerActionId.values) {
+        if (id == LayerActionId.invert ||
+            id == LayerActionId.fillAreas ||
+            id == LayerActionId.showNames) {
+          continue;
+        }
+        expect(layerActionUnavailable(id, full), isNull, reason: id.name);
+        // ...including on a layer holding nothing at all: a rename, an
+        // import or a delete does not need contents.
+        expect(
+          layerActionUnavailable(id, ctx(kMixedType, holdsAnything: false)),
+          isNull,
+          reason: id.name,
+        );
+      }
+    });
+
+    test('a reason is a sentence naming a remedy, not a fault', () {
+      final states = [
+        ctx(kCircles, holdsAnything: false, holdsInvertible: false),
+        ctx(kMixedType, holdsInvertible: false),
+        ctx(kBorders, holdsBorderAreas: false),
+      ];
+      for (final c in states) {
+        for (final id in LayerActionId.values) {
+          final reason = layerActionUnavailable(id, c);
+          if (reason == null) continue;
+          expect(reason, endsWith('.'), reason: id.name);
+          expect(reason.length, greaterThan(20), reason: '${id.name} terse');
+          expect(reason, contains('first'),
+              reason: '${id.name} does not say what to do about it');
+        }
+      }
+    });
+
+    test('the remedy is named in the layer\'s own noun', () {
+      expect(fillLayerWith(kFreeLine), contains('line'));
+      expect(fillLayerWith(kFreeArea), contains('area'));
+      expect(fillLayerWith(kPoi), contains('POI'));
+      expect(fillLayerWith(kBorders), contains('borders'));
+      expect(fillLayerWith(kHeight), contains('height'));
+      expect(fillLayerWith(kSubspace), contains('subspace'));
+      // A combined layer makes nothing of its own, so the one remedy is the
+      // one thing that fills it.
+      expect(fillLayerWith(kMixedType), contains('merge'));
+      expect(fillLayerWith('something-new'), isNotEmpty);
+    });
+  });
+
+  group('layerOpacityNote', () {
+    LayerActionContext ctx(
+      String type, {
+      bool holdsAnything = true,
+      bool holdsRegionFill = true,
+      bool fillAreas = true,
+    }) => LayerActionContext(
+      type: type,
+      holdsAnything: holdsAnything,
+      holdsRegionFill: holdsRegionFill,
+      fillAreas: fillAreas,
+    );
+
+    test('says so when there is nothing for transparency to fade', () {
+      // Markers on a combined layer are drawn at full strength on purpose, so
+      // the slider moves and nothing changes.
+      expect(
+        layerOpacityNote(ctx(kMixedType, holdsRegionFill: false)),
+        contains('markers'),
+      );
+      // A borders layer drawn as outlines has no fill to fade either.
+      expect(
+        layerOpacityNote(ctx(kBorders, fillAreas: false)),
+        contains('Colour areas'),
+      );
+    });
+
+    test('stays quiet when transparency works, or when it is obvious', () {
+      expect(layerOpacityNote(ctx(kCircles)), isNull);
+      expect(layerOpacityNote(ctx(kPoi)), isNull,
+          reason: 'a POI layer fades its markers through an Opacity wrapper');
+      expect(layerOpacityNote(ctx(kMixedType)), isNull);
+      expect(layerOpacityNote(ctx(kBorders)), isNull);
+      expect(
+        layerOpacityNote(
+          ctx(kMixedType, holdsAnything: false, holdsRegionFill: false),
+        ),
+        isNull,
+        reason: 'an empty layer fading nothing needs no explaining',
+      );
+    });
+  });
+
   group('visibleLayerActions', () {
     test('every type gets the common core, and delete is last', () {
       for (final t in kAllLayerTypes) {
@@ -332,10 +524,20 @@ void main() {
 
 /// Enough of the app for `layerActionsFor` to run, and no more.
 ///
-/// The POI-set stream is overridden rather than served from a real database:
-/// it is only read to decide whether a layer offers the station filter, and a
-/// live Drift stream leaves a timer pending that never lets the test finish.
+/// Every element stream is overridden rather than served from a real database:
+/// they are read to decide which options a layer offers and whether each can
+/// do anything, and a live Drift stream leaves a timer pending that never lets
+/// the test finish.
 final _overrides = [
+  circlesProvider.overrideWith((ref) => Stream.value(const <Circle>[])),
+  subspacesProvider.overrideWith((ref) => Stream.value(const <Subspace>[])),
+  freeLinesProvider.overrideWith((ref) => Stream.value(const <FreeLine>[])),
+  freeAreasProvider.overrideWith((ref) => Stream.value(const <FreeArea>[])),
+  heightRegionsProvider.overrideWith(
+    (ref) => Stream.value(const <HeightRegion>[]),
+  ),
+  borderSetsProvider.overrideWith((ref) => Stream.value(const <BorderSet>[])),
+  borderAreasProvider.overrideWith((ref) => Stream.value(const <BorderArea>[])),
   repositoryProvider.overrideWith(
     (ref) => Repository(AppDatabase.forTesting(NativeDatabase.memory())),
   ),
