@@ -5,7 +5,7 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
 
 ## At a glance (current app)
 
-- **Seven object types**, one per layer (or several at once — see **combined layers** below):
+- **Seven object types**, one per layer (several layers group into a **folder** — see below):
   `circles` (geodesic), `subspace` (closest-of-N Voronoi cell; with two points it is the
   closer-of-two half-plane — the former `planes` type, which v27 folded in), `freeline` (drawn
   polyline dividing the view), `freearea` (drawn closed polygon), `height` (terrain
@@ -84,7 +84,7 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   **What a control can act on is asked per control, not per layer**
   (`layerActionUnavailable` in `ui/layer_actions.dart`). The quick toggle is one
   button with three identities, and its availability used to read one boolean —
-  "does the layer hold *anything*". A combined layer of nothing but POI markers
+  "does the layer hold *anything*". A layer of nothing but POI markers
   is far from empty and still has no outside, so Fill outside lit up, wrote
   `isInverted` and left the map byte-identical: the very failure this mechanism
   exists to prevent, back again one layer type along. `kInvertibleTypes`
@@ -107,8 +107,8 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   and go inert — a disabled row that already explains itself needs no tap. Only
   the map's bare icon buttons, which have nowhere to put a sentence, stay live.
   The exception is a *value*: `layerOpacityNote` says why transparency is not
-  visible yet (a combined layer's markers stay crisp; a borders layer without
-  Colour areas draws no fill) beside a control that still works, because the
+  visible yet (a borders layer without Colour areas draws no fill) beside a
+  control that still works, because the
   number is stored and applies the moment the layer has a fill.
   These answers are **never counted by `UiHints`**: a tip that teaches goes quiet after three
   showings, but "why did nothing happen?" has to come every time or the third press of a dead
@@ -328,7 +328,7 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   layers (`data/geo_import.dart`). There is **one routine** for both scopes —
   `Repository.exportData({onlyLayerId})` and `importLayerFlow` — so a per-layer file and a
   whole-DB file differ only in how many layers they hold.
-- **The GeoJSON export is a fixed point** (format schema **v2**, `geoJsonSchemaVersion`):
+- **The GeoJSON export is a fixed point** (format schema **v4**, `geoJsonSchemaVersion`):
   `export → import → export` must be byte-identical, and `test/export_roundtrip_test.dart`
   asserts exactly that against real rows for all seven types, alongside a whole-DB and a
   per-layer round-trip. **Anything the DB stores and the UI shows has to survive the trip** —
@@ -337,7 +337,10 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   their `osmType`/`osmId` (dedup identity — without it a re-import draws them all twice), a
   station import keeps its box, masks and per-point modes (a box set writes **no**
   `radiusMeters` — it is derived), a border area keeps its import's `setLabel`, and a failed
-  import comes back as its retry row. Format is **v3** (`geoJsonSchemaVersion`).
+  import comes back as its retry row, and a layer in a folder comes back in it. Format is
+  **v4** (`geoJsonSchemaVersion`): a layer names its folder and the folders ride in
+  `zonecraft.folders`, both written only when there are folders — so a file from a map without
+  them is what v3 wrote.
   `serialization_test.dart` covers the pure model; it is the *repository* half where losses
   hide, because that is the half nothing used to look at. Deliberately not preserved: `createdAt`,
   a border set holding **zero** areas (the format has no representation of a set), and the
@@ -350,14 +353,15 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   placeholder an id-less imported row is stored with (`BorderAreas.osmId` is NOT NULL). Read as
   a real id it made every such area look like the same relation, so a re-import kept one and
   dropped the rest.
-- **Drift schema is at v29**; migrations are append-only `if (from < N)` blocks. (Two
+- **Drift schema is at v30**; migrations are append-only `if (from < N)` blocks. (Two
   exceptions drop tables: v19 *drops* the transit route tables, because route geometry was
   abandoned — see `data/transit.dart`'s header for the measurements behind that — and v27
   copies `planes` → `subspaces` and `transit_*` → `poi_*` then drops them, plus `tracks`.
+  **v30 splits** every `mixed` layer into one layer per kind it holds, inside a folder when
+  that is more than one, and deletes the row it split.
   Earlier blocks that once `createTable`d a dropped table no longer do; the raw `ALTER
   TABLE`s in v22/v26 keep the columns v27 copies on a database old enough to have them.)
-  v20…v29 are
-  snapshotted in `drift_schemas/` and guarded by `test/migration_test.dart`. **Any schema change must dump a
+  v20…v30 are snapshotted in `drift_schemas/` and guarded by `test/migration_test.dart`. **Any schema change must dump a
   new snapshot** (`dart run drift_dev schema dump lib/data/database.dart drift_schemas/`, then
   `... schema generate drift_schemas/ test/generated_migrations/`) — a snapshot cannot be
   reconstructed after the version ships, and the test fails until it exists.
@@ -415,33 +419,43 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   half of it — which vertices get a handle, where an inserted one belongs — is pure in
   `ui/border_reshape.dart`, because a boundary carries hundreds of vertices where a drawn
   area carries eight.
-- **Combined layers** (`data/layer_types.dart`): a `mixed` layer holds every element type
-  **except `borders`** (its `borderLevel` is per-layer, and neighbour-distinct colouring is
-  only meaningful within one admin level). **No schema change** — `Layers.type` is text.
-  `layerHolds(layer, type)` / `layerContentTypes(layer)` are **the one predicate**, replacing
-  every `layer.type == 'x'` in the painter, hit test, Elements list, exporter and drawer.
-  Draw order is fixed (regions → markers); opacity governs the region composite only;
-  invert applies to the region half; auto shades are taken
-  across every table the layer holds. `layerHasEditor` answers true for mixed, and the colour
-  path resolves `ColoredElement` from the row's kind. `combineLayers` is now exhaustive — its old `default:` arm silently
-  lost every row of an unknown type to the cascade.
-- **A combined layer is a destination, not a workshop** (`layerMakesOwnContent`, the second
-  predicate in `data/layer_types.dart`). Gating the *making* controls on `layerHolds` made the
-  combined layer answer yes for six types at once, so it offered strictly more than any real
-  layer: both import FABs, four import menu items, a Draw that could not say "line or area?"
-  and so always made a line, and an Add that had to open a six-row "which kind?" sheet before
-  it could act. So **Add, Draw, the two import FABs and the POI / station / by-name imports are
-  gone on a `mixed` layer** — content is made on the single-type layer that owns that kind and
-  merged in (`Combine…`, `canCombineLayers`). Three things stay: **"Import track…"** (it reads
-  a file the user already has, writes plain elements with no set or fetch lifecycle, and needs
-  no type chosen for it), everything that acts on what the layer *already holds* (Fill outside,
-  the content-driven **Stations…** filter, colour, opacity, export, the Elements list, every
-  element's editor), and the `MapRequest` plumbing — removing the *offer* must not remove the
-  *route*, or a failed import merged in loses its retry row. The Add FAB is **hidden, not
-  greyed** (greying promises "not yet"), but stays while Add mode is armed, since the mode is
-  sticky to `_placeLayerId` and switching the chip mid-Add must not take away Done. An empty
-  combined layer's Elements list is the one place directions beat buttons: the action that
-  fills it lives on the *other* layer.
+- **Folders group layers without destroying them** (schema v30, `Folders` +
+  `Layers.folderId`, `ui/layer_tree.dart`). They replace the `mixed` layer, which grouped by
+  *merging*: what went in lost its own colour, opacity and Fill outside and could never come
+  out again — which is why merging an inverted line layer into one made the line stop being
+  inverted. A folder leaves its members layers. It offers exactly three things: hide the group,
+  **Fill outside** the group, and collapse it so seven settled layers take one line.
+  - It **paints nothing**, so it carries no colour and no opacity. Its invert **flips each
+    member's own** rather than compositing them into one region: a member that was already
+    inverted goes back to normal, because inverting twice is the identity and that is what
+    makes the switch a switch. There is no cross-layer compositing anywhere in the app.
+  - `resolveLayers` folds a folder into its members (`isVisible && folder.isVisible`,
+    `isInverted != folder.isInverted`) and **that is the whole rendering change** — the band
+    sweep, the fill loop and the hit test read `drawLayersProvider` and go on knowing nothing
+    about folders. The drawer and the layer sheet read the **raw** rows, so their controls show
+    the layer's own settings; a member's row says `· inverted (folder)` when the two differ, or
+    the drawer and the map would appear to contradict each other.
+  - Order is two-level: a folder's `sortOrder` places it among the root items, a member's
+    places it within its folder. Everything order-shaped is pure and tested in
+    `ui/layer_tree.dart` under the rule `movedLayerOrder` already lives by — bottom-to-top
+    everywhere except `drawerRows`, which *is* the display list.
+  - **A drop changes the parent of the dropped row only.** Reading the parent off the row above
+    for every row swept every layer below the drop into the folder too, because nothing in the
+    list says where a folder's members end. A collapsed folder adopts nothing; a folder drags
+    as a block and never lands inside another (there is one level). The last member leaving
+    downwards is the case a drag cannot express, which is why **Move out of folder** stays in
+    the menu — and why this is a tested function rather than something inferred in a widget.
+  - **Deleting a folder keeps its layers** (`onDelete: setNull`): getting layers back out is
+    the thing the combined layer could never do, so deleting the group must never be a way to
+    delete its contents by accident.
+  - **`mixed` is retired, not forgotten.** `kMixedType` / `kMixedContentTypes` stay in
+    `layer_types.dart` as legacy, read by exactly two things — the v30 migration and the
+    GeoJSON reader — which do the same thing with them: split the layer into one per kind it
+    actually holds, in `kMixedContentTypes` order (the order its painter drew them), inside a
+    folder when that is more than one. A combined layer holding a single kind was a layer of
+    that kind wearing the wrong label and becomes one. `layerHolds` / `layerContentTypes`
+    survive as one-liners rather than being inlined at a hundred call sites: the day a layer
+    holds several kinds again it is one edit, not forty.
 - **Hand-placed POIs** (v25, `PoiSets.source == 'manual'` + `.iconKey`): a `poi` layer holds
   Overpass imports **and** categories you name and fill by tapping. `addManualPoiPoint` /
   `moveManualPoiPoint` **refuse an import** at the repository level — an import records what
@@ -512,7 +526,7 @@ clear-all, offline cache, import/export), opt-in locate-me (the app's only use o
 persisted camera, offline resilience (cache-first tiles; **no** prefetch on the community OSM
 servers — see `data/tile_source.dart`), and import/export
 (whole-DB + per-layer + external GeoJSON/KML/KMZ/GPX; freeline imports prompt for their
-inclusion-circle radius). Drift schema is **v29**, GeoJSON format **v3**.
+inclusion-circle radius). Drift schema is **v30**, GeoJSON format **v4**.
 
 `planning/PLAN.md` has no open roadmap items; future polish ideas are listed there.
 `planning/PRODUCTION_AUDIT.md` records the production-readiness pass (what was found, what
