@@ -252,6 +252,19 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   app's identity to them (OSMF blanket-blocked flutter_map's `com.example.app` in Aug 2025).
   It lived as four hand-kept literals that had all drifted to `1.0` at app version 1.3.0;
   `test/app_info_test.dart` now pins that they agree and carry `kAppVersion`.
+- **The app id is `io.github.leostumpf.zonecraft`, in five places nothing compares.** It is
+  the reverse of `leostumpf.github.io` — a name that is provably ours, which is the entire
+  point of a reverse-DNS id (the old `com.leostumpf.*` claimed a domain nobody owns). It moved
+  in Sep 2026, while no Play listing existed yet; after the first upload the id *is* the app and
+  a different one is a different listing, so this is final. It is written in `namespace` +
+  `applicationId`, the Kotlin `package` (and the directory that package requires), the
+  `MethodChannel` name on **both** sides of `platform_files.dart` ↔ `MainActivity.kt`,
+  `userAgentPackageName`, and `APP_ID` in the two adb scripts — plus six
+  `PRODUCT_BUNDLE_IDENTIFIER` lines on iOS. The channel pair is the dangerous one: a half-done
+  rename analyzes, compiles and launches clean and fails only when a file is shared in or saved
+  out, so `test/app_id_test.dart` reads the files and asserts they still agree. The
+  `zonecraft://` scheme is **not** derived from it — a scheme is user-facing and travels in
+  shared messages.
 - **Attribution is the app's own chrome, not flutter_map's** (`_MapAttribution` in
   `map_screen`). `RichAttributionWidget` renders among the *map's* children, which on this
   screen is underneath the FAB row and the system navigation bar — the credit was there and

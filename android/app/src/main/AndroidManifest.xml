@@ -85,7 +85,7 @@
             </intent-filter>
             <!-- Receiving a geometry file: another app's share sheet (SEND) or
                  a tap in a file manager (VIEW). Both land in importBytesFlow
-                 via the com.leostumpf.zonecraft/files channel.
+                 via the io.github.leostumpf.zonecraft/files channel.
 
                  ACTION_SEND resolves on MIME TYPE ALONE — the uri in
                  EXTRA_STREAM is invisible to the matcher, so no extension and

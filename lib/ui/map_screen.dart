@@ -4869,7 +4869,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             // cannot silently fall back to a library default,
                             // which the policy forbids and which OSMF
                             // blanket-blocked for flutter_map in Aug 2025.
-                            userAgentPackageName: 'com.leostumpf.zonecraft',
+                            userAgentPackageName: 'io.github.leostumpf.zonecraft',
                             tileProvider: _tileProvider,
                             maxZoom: 19,
                           ),

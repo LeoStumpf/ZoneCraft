@@ -1,4 +1,4 @@
-package com.leostumpf.zonecraft
+package io.github.leostumpf.zonecraft
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
@@ -46,7 +46,7 @@ import java.util.concurrent.Executors
 class MainActivity : FlutterActivity() {
 
     private companion object {
-        const val CHANNEL = "com.leostumpf.zonecraft/files"
+        const val CHANNEL = "io.github.leostumpf.zonecraft/files"
 
         /** Ours alone; the plugins in this app use small low numbers. */
         const val REQ_CREATE_DOCUMENT = 0x5A43 // "ZC"

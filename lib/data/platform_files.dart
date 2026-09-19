@@ -30,7 +30,9 @@ import 'package:flutter/services.dart';
 ///
 /// Every entry point is a no-op off Android, so tests and any future iOS build
 /// simply behave as if nothing had been shared and never offer "Save to file".
-const MethodChannel _channel = MethodChannel('com.leostumpf.zonecraft/files');
+const MethodChannel _channel = MethodChannel(
+  'io.github.leostumpf.zonecraft/files',
+);
 
 /// Whether the platform half of this file exists. Gates the "Save to file"
 /// option in the export dialog.

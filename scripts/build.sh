@@ -36,7 +36,7 @@ set -euo pipefail
 # --- config (machine-specific; safe fallbacks below) -------------------------
 FLUTTER_BIN="/home/leo/development/flutter/bin"
 DEVICE="${DEVICE:-09291JEC226042}" # Pixel 4a
-APP_ID="com.leostumpf.zonecraft"
+APP_ID="io.github.leostumpf.zonecraft"
 MAIN_ACTIVITY="$APP_ID/.MainActivity"
 
 # --- locate repo root, flutter, adb ------------------------------------------
