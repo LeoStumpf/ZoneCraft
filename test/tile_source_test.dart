@@ -35,26 +35,29 @@ import 'package:zonecraft/data/tile_source.dart';
 void main() {
   group('the shipped default', () {
     test('is the community OSM server', () {
-      expect(TileSource.current.isCommunityOsm, isTrue);
-      expect(TileSource.current.urlTemplate,
+      expect(TileSource.configured.isCommunityOsm, isTrue);
+      expect(TileSource.configured.urlTemplate,
           'https://tile.openstreetmap.org/{z}/{x}/{y}.png');
     });
 
     test('does NOT permit pre-emptive fetching', () {
       // If this fails, the app is bulk-downloading from OSM's donated
       // infrastructure. That is a policy breach, not a tuning regression.
-      expect(TileSource.current.allowsPrefetch, isFalse);
+      expect(TileSource.configured.allowsPrefetch, isFalse);
     });
 
     test('attributes OpenStreetMap', () {
-      expect(TileSource.current.attribution, contains('OpenStreetMap'));
+      expect(TileSource.configured.attribution, contains('OpenStreetMap'));
     });
   });
 
   group('a configured provider', () {
-    // The override path can't be exercised through `TileSource.current` (it is
-    // fixed at compile time), so check the invariant on the type itself:
-    // prefetch travels with the source, and is never assumed.
+    // The override path can't be exercised through `TileSource.configured` (it
+    // is fixed at compile time), so check the invariant on the type itself:
+    // prefetch travels with the source, and is never assumed. Note that
+    // redirecting the tiles is NOT what turns it on — that needs a second
+    // define, because MapTiler and Thunderforest forbid pre-downloading just as
+    // OSM does.
     test('is what turns prefetching on — it is never the default', () {
       const configured = TileSource(
         urlTemplate: 'https://example.test/{z}/{x}/{y}.png',
@@ -95,10 +98,34 @@ void main() {
     });
   });
 
-  test('the User-Agent identifies the app, as the policy requires', () {
-    // "Send a valid HTTP User-Agent that clearly identifies your application"
-    // — not a library default, not another app's.
-    expect(tileUserAgent, startsWith('ZoneCraft/'));
-    expect(tileUserAgent, contains('github.com'));
+  group('a runtime override', () {
+    // A settings field can say *where* the tiles come from. It cannot say what
+    // the app may do with them: that is a claim about somebody's terms, and
+    // nobody read any terms to type a URL into a text box.
+    test('changes the URL', () {
+      final t = TileSource.resolve('https://mine.test/{z}/{x}/{y}.png');
+      expect(t.urlTemplate, 'https://mine.test/{z}/{x}/{y}.png');
+      expect(t.isCommunityOsm, isFalse);
+    });
+
+    test('never enables pre-emptive fetching', () {
+      expect(
+        TileSource.resolve('https://mine.test/{z}/{x}/{y}.png').allowsPrefetch,
+        isFalse,
+      );
+    });
+
+    test('keeps the attribution — the credit must not go missing', () {
+      expect(
+        TileSource.resolve('https://mine.test/{z}/{x}/{y}.png').attribution,
+        TileSource.configured.attribution,
+      );
+    });
+
+    test('empty or blank means the configured source, not a blank map', () {
+      expect(TileSource.resolve(null), same(TileSource.configured));
+      expect(TileSource.resolve(''), same(TileSource.configured));
+      expect(TileSource.resolve('   '), same(TileSource.configured));
+    });
   });
 }

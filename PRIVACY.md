@@ -80,8 +80,12 @@ asked. Each of these is an independent data controller under its own policy:
   **"Locate me"**. It receives the tile covering the point being measured.
 
 The app sends nothing identifying with these requests beyond what any HTTP client sends: your
-IP address, and a `User-Agent` naming the application. No advertising ID, no device identifier,
-no cookies, no analytics.
+IP address, and a `User-Agent` naming the application and its version. No advertising ID, no
+device identifier, no cookies, no analytics.
+
+If you would rather not contact these services at all, **Settings → Data sources** points the
+map tiles, the Overpass imports and the geocoder at servers of your own. The app works with all
+three left alone; nothing here is contacted except to answer something you asked for.
 
 ## What the app can see about your device
 

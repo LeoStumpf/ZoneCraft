@@ -19,6 +19,7 @@ import 'dart:convert' show Utf8Decoder;
 
 import 'package:http/http.dart' as http;
 
+import '../app_info.dart';
 import 'request_pacer.dart';
 
 /// The shared Overpass transport: endpoint failover, transient-vs-fatal status
@@ -189,8 +190,44 @@ const List<String> overpassEndpoints = [
   'https://overpass.private.coffee/api/interpreter',
 ];
 
-const String overpassUserAgent =
-    'ZoneCraft/1.0 (https://github.com/LeoStumpf/ZoneCraft)';
+/// A user-chosen instance, tried ahead of [overpassEndpoints]. Null — the
+/// normal case — means the three above are the whole list.
+///
+/// Process-wide rather than a parameter on [overpassPost], because it is
+/// configuration and not an argument: every import wants the same answer, and
+/// the four layers between the settings row and the socket have no opinion
+/// about it. `map_screen` pushes the stored value in whenever settings change.
+///
+/// This is the one thing a heavy user can do that actually helps the donated
+/// instances: their own documentation says an app relying on the public servers
+/// as a backend is what running your own is for. A 48 MiB border import is not
+/// a small ask to make of a machine somebody else pays for.
+String? overpassEndpointOverride;
+
+/// The endpoints to try, in order, given an override and a remembered winner.
+///
+/// Pure so the ordering can be tested without a socket. The override leads
+/// because the point of setting one is not to touch the public instances at
+/// all; they stay behind it as a fallback rather than being removed, since a
+/// typo in a self-hosted URL should degrade to a slow import, not a dead app.
+List<String> overpassEndpointList({String? preferEndpoint}) {
+  final override = overpassEndpointOverride?.trim();
+  final all = <String>[
+    if (override != null && override.isNotEmpty) override,
+    for (final e in overpassEndpoints)
+      if (e != override) e,
+  ];
+  // Try the last endpoint that worked first, then the rest in order.
+  if (preferEndpoint == null || !all.contains(preferEndpoint)) return all;
+  return [
+    preferEndpoint,
+    for (final e in all)
+      if (e != preferEndpoint) e,
+  ];
+}
+
+/// One string for every service — see [zoneCraftUserAgent].
+const String overpassUserAgent = zoneCraftUserAgent;
 
 /// Statuses the public instances use for "I am overloaded", not "your query is
 /// wrong". These are retried in place, then failed over; anything else is a
@@ -242,13 +279,7 @@ Future<OverpassOutcome<T>> overpassPost<T>(
 }) async {
   final owned = client == null;
   final c = client ?? http.Client();
-  // Try the last endpoint that worked first, then the rest in order.
-  final endpoints = <String>[
-    if (preferEndpoint != null && overpassEndpoints.contains(preferEndpoint))
-      preferEndpoint,
-    for (final e in overpassEndpoints)
-      if (e != preferEndpoint) e,
-  ];
+  final endpoints = overpassEndpointList(preferEndpoint: preferEndpoint);
   var lastTransient = 'Overpass is busy — try again in a moment.';
   try {
     for (var i = 0; i < endpoints.length; i++) {

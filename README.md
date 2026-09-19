@@ -100,8 +100,10 @@ is no compliant amount of it, so on the community servers the app fetches only w
 looking at. Caching what it *did* show you is separate — the policy requires that, and it is
 always on.
 
-Point the app at a tile provider of your own and both features return; see
-[Configuring a tile provider](#configuring-a-tile-provider).
+Point the app at a tile provider of your own **and** state that its terms allow pre-fetching,
+and both features return; see [Configuring a tile provider](#configuring-a-tile-provider).
+Those are two separate switches on purpose — leaving OpenStreetMap does not by itself buy
+permission, since the commercial providers forbid pre-downloading too.
 
 ## How rendering works
 
@@ -190,9 +192,7 @@ flutter run                      # on a connected Android device
 
 ### Configuring a tile provider
 
-Setting `TILE_URL` switches the base map away from the community OSM servers and — because you
-have then chosen a provider whose terms you have read — **re-enables the viewport prefetch and
-the "download this area" button**:
+`TILE_URL` switches the base map away from the community OSM servers:
 
 ```bash
 export TILE_URL='https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=YOURKEY'
@@ -200,12 +200,28 @@ export TILE_ATTRIBUTION='© MapTiler © OpenStreetMap contributors'
 ./scripts/build.sh --release
 ```
 
-Leave them unset for a policy-compliant build against `tile.openstreetmap.org`. See
+The key belongs in your environment, never in the repo.
+
+Re-enabling the viewport prefetch and the "download this area" button is a **separate**
+statement, `TILE_ALLOWS_PREFETCH=true`, and it is separate because being off
+`tile.openstreetmap.org` proves nothing about the next provider's terms. MapTiler prohibits
+"batch or excessive bulk download of map tiles" on every plan; Thunderforest prohibits
+"bulk-downloading, scraping, pre-downloading, pre-caching or anything similar" below its Small
+Business plan. Both allow a per-user on-device cache of what was actually displayed, which is
+what the app does by default. Set the flag only when the provider you picked says in writing
+that you may — `scripts/build.sh` refuses it without a `TILE_URL`, because that combination
+would bulk-download from OpenStreetMap's donated servers.
+
+Leave all three unset for a policy-compliant build against `tile.openstreetmap.org`. See
 [`lib/data/tile_source.dart`](lib/data/tile_source.dart).
+
+At runtime, **Settings → Data sources** points the tiles, Overpass and the geocoder at servers
+of your own without rebuilding. It cannot enable pre-fetching: that stays a build-time claim
+about terms somebody read.
 
 ### Database schema
 
-The local database is at **schema v22**; migrations are append-only. Installing with `-r` (as
+The local database is at **schema v28**; migrations are append-only. Installing with `-r` (as
 the build script does) preserves existing data and exercises them.
 
 Any schema change must snapshot the new version, or `test/migration_test.dart` fails — a

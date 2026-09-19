@@ -36,9 +36,14 @@ import '../data/database.dart';
 import '../data/height_generator.dart';
 import '../data/location.dart';
 import '../data/overpass.dart';
+import '../data/place_search.dart' show nominatimHostOverride;
 import '../data/poi_sets.dart';
 import '../data/overpass_client.dart'
-    show OverpassCancel, OverpassOutcome, kOverpassPreferenceMaxElapsed;
+    show
+        OverpassCancel,
+        OverpassOutcome,
+        kOverpassPreferenceMaxElapsed,
+        overpassEndpointOverride;
 import '../data/layer_types.dart';
 import '../data/platform_files.dart';
 import '../data/repository.dart' show Repository;
@@ -54,6 +59,7 @@ import '../state/import_preview.dart';
 import '../state/providers.dart';
 import 'circle_editor.dart';
 import 'collapsible_sheet.dart';
+import 'external_link.dart';
 import 'freearea_editor.dart';
 import 'freeline_editor.dart';
 import 'border_area_editor.dart';
@@ -285,12 +291,18 @@ class _MapScreenState extends ConsumerState<MapScreen>
   MapMode get _mode => ref.read(mapModeProvider);
 
   // --- Offline tile cache ---------------------------------------------------
-  /// The tile source in force, shared by the [TileLayer]s, the attribution
-  /// control and the offline prefetcher so the four never drift apart. It also
+  /// The tile source in force, shared by the [TileLayer], the attribution
+  /// control and the offline prefetcher so the three never drift apart. It also
   /// decides whether the offline features exist at all — see
   /// `data/tile_source.dart`, which explains why they are off by default.
-  static const _tiles = TileSource.current;
-  static String get _baseTileUrl => _tiles.urlTemplate;
+  ///
+  /// Read rather than stored: a settings override can change it mid-session,
+  /// and `build` already watches `settingsProvider`, so every reader picks up
+  /// the new value on the same frame the field is edited.
+  TileSource get _tiles => TileSource.resolve(
+        ref.read(settingsProvider).asData?.value.tileUrlOverride,
+      );
+  String get _baseTileUrl => _tiles.urlTemplate;
 
   /// HTTP client owned by this screen and shared by [_tileProvider] for both
   /// browse-caching and prefetching. Closed in [dispose].
@@ -4207,6 +4219,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final settings = ref.watch(settingsProvider).asData?.value;
     final uncertainty = settings?.uncertaintyMeters ?? 0;
     final toolsExpanded = settings?.toolsExpanded ?? true;
+    // Push the stored Overpass instance into the client. It is process-wide
+    // configuration rather than an argument (see `overpassEndpointOverride`),
+    // and this is the one widget that both outlives every import and already
+    // watches the settings row, so it is where the two meet. An assignment, not
+    // a side effect worth guarding: it is idempotent and costs a pointer.
+    overpassEndpointOverride = settings?.overpassEndpointOverride;
+    nominatimHostOverride = settings?.nominatimHostOverride;
     // One region layer builds two passes: every layer's uncertainty band is
     // stacked below every layer's solid fill (see [RegionPhase]), so the two
     // differ only in this argument.
@@ -4597,9 +4616,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           opacity: basemapOpacity.clamp(0.0, 1.0),
                           child: TileLayer(
                             urlTemplate: _baseTileUrl,
-                            // Must match the real application id: the policy
-                            // requires a User-Agent that identifies the app, and
-                            // forbids relying on a library default.
+                            // A fallback that never fires today: flutter_map
+                            // applies this with putIfAbsent, and
+                            // CachedTileProvider always sets its own header
+                            // (zoneCraftUserAgent). It stays correct — the real
+                            // application id — so that swapping the provider
+                            // cannot silently fall back to a library default,
+                            // which the policy forbids and which OSMF
+                            // blanket-blocked for flutter_map in Aug 2025.
                             userAgentPackageName: 'com.leostumpf.zonecraft',
                             tileProvider: _tileProvider,
                             maxZoom: 19,
@@ -5138,11 +5162,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             ],
                           ],
                         ),
-                      RichAttributionWidget(
-                        attributions: [
-                          TextSourceAttribution(_tiles.attribution),
-                        ],
-                      ),
                     ],
                   ),
                 ),
@@ -5248,6 +5267,28 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           ),
                         ],
                       ],
+                    ),
+                  ),
+                ),
+                // The licence credit. Bottom-left and always on screen: the
+                // bottom-right corner, where flutter_map's own attribution
+                // control puts itself, is where this screen's FAB row and the
+                // system navigation bar are — so the credit rendered there was
+                // simply invisible, which is the one thing ODbL attribution
+                // cannot be. The padding clears the FAB row.
+                SafeArea(
+                  child: Align(
+                    alignment: Alignment.bottomLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.only(
+                        left: 8,
+                        right: 8,
+                        bottom: 72,
+                      ),
+                      child: _MapAttribution(
+                        text: _tiles.attribution,
+                        onTap: () => _showCredits(context),
+                      ),
                     ),
                   ),
                 ),
@@ -6162,6 +6203,145 @@ class _ActiveLayerChip extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The map's licence credit, permanently visible in the bottom-left corner.
+///
+/// Not flutter_map's `RichAttributionWidget`, for two reasons. It renders among
+/// the map's own children, which on this screen is *underneath* the FAB row and
+/// the system navigation bar — the credit was there and nobody could see it.
+/// And it starts collapsed behind an (i) button, while the ODbL attribution
+/// guideline asks that the credit be visible and permits hiding it only "after
+/// five seconds or upon user interaction". Of everything this app owes the
+/// services it uses, attribution is the one that is a licence term rather than
+/// an acceptable-use courtesy, so it is the one that stays on screen.
+///
+/// Small, low-contrast and one line: it has to sit on top of a map without
+/// becoming part of it. Tapping opens the full credits, which is the guideline's
+/// "way to access more information ... if that information is not directly in
+/// the attribution text".
+class _MapAttribution extends StatelessWidget {
+  const _MapAttribution({required this.text, required this.onTap});
+
+  /// The tile source's own line — it already carries its '©', and a keyed
+  /// provider's names two parties.
+  final String text;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.surface.withValues(alpha: 0.72),
+      borderRadius: BorderRadius.circular(4),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Everything the map is built out of, and where to read the licences.
+///
+/// The terrain credit lives here rather than on the map itself: the Terrain
+/// Tiles attribution list asks that the underlying providers be named wherever
+/// the data is shown, and naming four of them in a corner pill would crowd out
+/// the OpenStreetMap line that must not be crowded out.
+void _showCredits(BuildContext context) {
+  unawaited(showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (ctx) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Credits', style: Theme.of(ctx).textTheme.titleMedium),
+            const SizedBox(height: 16),
+            _Credit(
+              icon: Icons.map_outlined,
+              text: 'Map data and tiles © OpenStreetMap contributors, '
+                  'licensed under the Open Database License (ODbL).',
+              linkLabel: 'openstreetmap.org/copyright',
+              url: osmCopyrightUrl,
+            ),
+            const SizedBox(height: 16),
+            _Credit(
+              icon: Icons.terrain,
+              text: kTerrainAttribution,
+              linkLabel: 'Full attribution list',
+              url: terrainAttributionUrl,
+            ),
+          ],
+        ),
+      ),
+    ),
+  ));
+}
+
+/// One credit in the sheet: what it is, and where its licence lives.
+class _Credit extends StatelessWidget {
+  const _Credit({
+    required this.icon,
+    required this.text,
+    required this.linkLabel,
+    required this.url,
+  });
+
+  final IconData icon;
+  final String text;
+  final String linkLabel;
+  final Uri url;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Icon(icon, size: 20, color: theme.colorScheme.outline),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(text, style: theme.textTheme.bodyMedium),
+              const SizedBox(height: 4),
+              InkWell(
+                onTap: () =>
+                    unawaited(openExternalUrl(url, context: context)),
+                child: Text(
+                  linkLabel,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.primary,
+                    decoration: TextDecoration.underline,
+                    decorationColor: theme.colorScheme.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

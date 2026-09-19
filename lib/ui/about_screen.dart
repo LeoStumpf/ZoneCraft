@@ -21,6 +21,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../app_info.dart';
 import '../data/tile_source.dart';
+import 'external_link.dart';
 
 /// What the app is, who it talks to, and which of its behaviours are deliberate.
 ///
@@ -76,7 +77,7 @@ class _AboutScreenState extends State<AboutScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final prefetches = TileSource.current.allowsPrefetch;
+    final prefetches = TileSource.configured.allowsPrefetch;
 
     return Scaffold(
       appBar: AppBar(title: const Text('About')),
@@ -149,8 +150,10 @@ class _AboutScreenState extends State<AboutScreen> {
                 name: 'AWS Terrain Tiles',
                 urls: const ['s3.amazonaws.com/elevation-tiles-prod'],
                 body: 'Elevation for height layers and the elevation probe. '
-                    'A public open-data set aggregated from SRTM, NED and '
-                    'others.',
+                    'A public open-data set: SRTM, 3DEP and GMTED2010 courtesy '
+                    'of the U.S. Geological Survey, ETOPO1 courtesy of NOAA. '
+                    'The same credit sits on the map itself, where the data is '
+                    'actually shown.',
                 canOpen: _canOpenLinks,
               ),
             ],
@@ -212,7 +215,21 @@ class _AboutScreenState extends State<AboutScreen> {
                 'no advertising identifier. Nothing you draw or import leaves '
                 'the device unless you export it yourself. The services above '
                 'necessarily see the request you make and your IP address, '
-                'as any web request would.',
+                'as any web request would — and if you would rather they '
+                'did not, Settings → Data sources points any of the three '
+                'at a server of your own.',
+            children: [
+              _Service(
+                icon: Icons.privacy_tip_outlined,
+                name: 'Privacy policy',
+                urls: const [
+                  'github.com/LeoStumpf/ZoneCraft/blob/main/PRIVACY.md',
+                ],
+                body: 'What is stored, what is sent, and to whom — in '
+                    'full.',
+                canOpen: _canOpenLinks,
+              ),
+            ],
           ),
 
           _Section(
@@ -360,29 +377,11 @@ class _Url extends StatelessWidget {
   final String host;
   final bool canOpen;
 
-  Future<void> _open(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
-    var opened = false;
-    try {
-      opened = await launchUrl(
+  Future<void> _open(BuildContext context) => openExternalUrl(
         Uri.parse('https://$host'),
-        // A browser, not a web view inside ZoneCraft: these are other people's
-        // sites and belong in the user's own browser, with its own history,
-        // logins and blocking.
-        mode: LaunchMode.externalApplication,
+        context: context,
+        failureMessage: "Couldn't open $host",
       );
-    // A missing browser and a refusing one both mean the link did not open, and
-    // the fallback is the same either way.
-    // ignore: avoid_catches_without_on_clauses
-    } catch (_) {
-      opened = false;
-    }
-    if (!opened) {
-      messenger.showSnackBar(
-        SnackBar(content: Text("Couldn't open $host")),
-      );
-    }
-  }
 
   @override
   Widget build(BuildContext context) {

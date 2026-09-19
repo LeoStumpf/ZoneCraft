@@ -1525,6 +1525,39 @@ class $AppSettingsTable extends AppSettings
     requiredDuringInsert: false,
     defaultValue: const Constant(1.0),
   );
+  static const VerificationMeta _tileUrlOverrideMeta = const VerificationMeta(
+    'tileUrlOverride',
+  );
+  @override
+  late final GeneratedColumn<String> tileUrlOverride = GeneratedColumn<String>(
+    'tile_url_override',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _overpassEndpointOverrideMeta =
+      const VerificationMeta('overpassEndpointOverride');
+  @override
+  late final GeneratedColumn<String> overpassEndpointOverride =
+      GeneratedColumn<String>(
+        'overpass_endpoint_override',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _nominatimHostOverrideMeta =
+      const VerificationMeta('nominatimHostOverride');
+  @override
+  late final GeneratedColumn<String> nominatimHostOverride =
+      GeneratedColumn<String>(
+        'nominatim_host_override',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1539,6 +1572,9 @@ class $AppSettingsTable extends AppSettings
     toolsExpanded,
     basemapVisible,
     basemapOpacity,
+    tileUrlOverride,
+    overpassEndpointOverride,
+    nominatimHostOverride,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1645,6 +1681,33 @@ class $AppSettingsTable extends AppSettings
         ),
       );
     }
+    if (data.containsKey('tile_url_override')) {
+      context.handle(
+        _tileUrlOverrideMeta,
+        tileUrlOverride.isAcceptableOrUnknown(
+          data['tile_url_override']!,
+          _tileUrlOverrideMeta,
+        ),
+      );
+    }
+    if (data.containsKey('overpass_endpoint_override')) {
+      context.handle(
+        _overpassEndpointOverrideMeta,
+        overpassEndpointOverride.isAcceptableOrUnknown(
+          data['overpass_endpoint_override']!,
+          _overpassEndpointOverrideMeta,
+        ),
+      );
+    }
+    if (data.containsKey('nominatim_host_override')) {
+      context.handle(
+        _nominatimHostOverrideMeta,
+        nominatimHostOverride.isAcceptableOrUnknown(
+          data['nominatim_host_override']!,
+          _nominatimHostOverrideMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1702,6 +1765,18 @@ class $AppSettingsTable extends AppSettings
         DriftSqlType.double,
         data['${effectivePrefix}basemap_opacity'],
       )!,
+      tileUrlOverride: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tile_url_override'],
+      ),
+      overpassEndpointOverride: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}overpass_endpoint_override'],
+      ),
+      nominatimHostOverride: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}nominatim_host_override'],
+      ),
     );
   }
 
@@ -1750,6 +1825,26 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
   /// Opacity of the base OSM tile layer in [0, 1] — how strongly the map shows
   /// through beneath the zone layers. 1 = fully opaque (the default).
   final double basemapOpacity;
+
+  /// User-chosen replacements for the three donated services the app talks to.
+  /// Null — the normal case — means "use what the build shipped with".
+  ///
+  /// These exist because every one of those services can ask to be left alone,
+  /// and a hardcoded host can only be changed by shipping a new APK, which
+  /// reaches nobody who does not update. They are also the honest answer for
+  /// someone running their own instance: the app's load problem is Overpass,
+  /// and self-hosting is the fix its operators themselves recommend.
+  ///
+  /// A `{z}/{x}/{y}` template. Note it cannot re-enable the offline features:
+  /// `allowsPrefetch` stays a build-time claim about terms someone has read,
+  /// never something a typed-in URL can assert — see `tile_source.dart`.
+  final String? tileUrlOverride;
+
+  /// A full `/api/interpreter` URL, tried ahead of `overpassEndpoints`.
+  final String? overpassEndpointOverride;
+
+  /// A bare host, e.g. `nominatim.example.org`. The path and query are ours.
+  final String? nominatimHostOverride;
   const AppSetting({
     required this.id,
     required this.uncertaintyMeters,
@@ -1763,6 +1858,9 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     required this.toolsExpanded,
     required this.basemapVisible,
     required this.basemapOpacity,
+    this.tileUrlOverride,
+    this.overpassEndpointOverride,
+    this.nominatimHostOverride,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1787,6 +1885,17 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     map['tools_expanded'] = Variable<bool>(toolsExpanded);
     map['basemap_visible'] = Variable<bool>(basemapVisible);
     map['basemap_opacity'] = Variable<double>(basemapOpacity);
+    if (!nullToAbsent || tileUrlOverride != null) {
+      map['tile_url_override'] = Variable<String>(tileUrlOverride);
+    }
+    if (!nullToAbsent || overpassEndpointOverride != null) {
+      map['overpass_endpoint_override'] = Variable<String>(
+        overpassEndpointOverride,
+      );
+    }
+    if (!nullToAbsent || nominatimHostOverride != null) {
+      map['nominatim_host_override'] = Variable<String>(nominatimHostOverride);
+    }
     return map;
   }
 
@@ -1812,6 +1921,15 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       toolsExpanded: Value(toolsExpanded),
       basemapVisible: Value(basemapVisible),
       basemapOpacity: Value(basemapOpacity),
+      tileUrlOverride: tileUrlOverride == null && nullToAbsent
+          ? const Value.absent()
+          : Value(tileUrlOverride),
+      overpassEndpointOverride: overpassEndpointOverride == null && nullToAbsent
+          ? const Value.absent()
+          : Value(overpassEndpointOverride),
+      nominatimHostOverride: nominatimHostOverride == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nominatimHostOverride),
     );
   }
 
@@ -1833,6 +1951,13 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       toolsExpanded: serializer.fromJson<bool>(json['toolsExpanded']),
       basemapVisible: serializer.fromJson<bool>(json['basemapVisible']),
       basemapOpacity: serializer.fromJson<double>(json['basemapOpacity']),
+      tileUrlOverride: serializer.fromJson<String?>(json['tileUrlOverride']),
+      overpassEndpointOverride: serializer.fromJson<String?>(
+        json['overpassEndpointOverride'],
+      ),
+      nominatimHostOverride: serializer.fromJson<String?>(
+        json['nominatimHostOverride'],
+      ),
     );
   }
   @override
@@ -1851,6 +1976,13 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       'toolsExpanded': serializer.toJson<bool>(toolsExpanded),
       'basemapVisible': serializer.toJson<bool>(basemapVisible),
       'basemapOpacity': serializer.toJson<double>(basemapOpacity),
+      'tileUrlOverride': serializer.toJson<String?>(tileUrlOverride),
+      'overpassEndpointOverride': serializer.toJson<String?>(
+        overpassEndpointOverride,
+      ),
+      'nominatimHostOverride': serializer.toJson<String?>(
+        nominatimHostOverride,
+      ),
     };
   }
 
@@ -1867,6 +1999,9 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     bool? toolsExpanded,
     bool? basemapVisible,
     double? basemapOpacity,
+    Value<String?> tileUrlOverride = const Value.absent(),
+    Value<String?> overpassEndpointOverride = const Value.absent(),
+    Value<String?> nominatimHostOverride = const Value.absent(),
   }) => AppSetting(
     id: id ?? this.id,
     uncertaintyMeters: uncertaintyMeters ?? this.uncertaintyMeters,
@@ -1882,6 +2017,15 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     toolsExpanded: toolsExpanded ?? this.toolsExpanded,
     basemapVisible: basemapVisible ?? this.basemapVisible,
     basemapOpacity: basemapOpacity ?? this.basemapOpacity,
+    tileUrlOverride: tileUrlOverride.present
+        ? tileUrlOverride.value
+        : this.tileUrlOverride,
+    overpassEndpointOverride: overpassEndpointOverride.present
+        ? overpassEndpointOverride.value
+        : this.overpassEndpointOverride,
+    nominatimHostOverride: nominatimHostOverride.present
+        ? nominatimHostOverride.value
+        : this.nominatimHostOverride,
   );
   AppSetting copyWithCompanion(AppSettingsCompanion data) {
     return AppSetting(
@@ -1913,6 +2057,15 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       basemapOpacity: data.basemapOpacity.present
           ? data.basemapOpacity.value
           : this.basemapOpacity,
+      tileUrlOverride: data.tileUrlOverride.present
+          ? data.tileUrlOverride.value
+          : this.tileUrlOverride,
+      overpassEndpointOverride: data.overpassEndpointOverride.present
+          ? data.overpassEndpointOverride.value
+          : this.overpassEndpointOverride,
+      nominatimHostOverride: data.nominatimHostOverride.present
+          ? data.nominatimHostOverride.value
+          : this.nominatimHostOverride,
     );
   }
 
@@ -1930,7 +2083,10 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
           ..write('borderLevels: $borderLevels, ')
           ..write('toolsExpanded: $toolsExpanded, ')
           ..write('basemapVisible: $basemapVisible, ')
-          ..write('basemapOpacity: $basemapOpacity')
+          ..write('basemapOpacity: $basemapOpacity, ')
+          ..write('tileUrlOverride: $tileUrlOverride, ')
+          ..write('overpassEndpointOverride: $overpassEndpointOverride, ')
+          ..write('nominatimHostOverride: $nominatimHostOverride')
           ..write(')'))
         .toString();
   }
@@ -1949,6 +2105,9 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     toolsExpanded,
     basemapVisible,
     basemapOpacity,
+    tileUrlOverride,
+    overpassEndpointOverride,
+    nominatimHostOverride,
   );
   @override
   bool operator ==(Object other) =>
@@ -1965,7 +2124,10 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
           other.borderLevels == this.borderLevels &&
           other.toolsExpanded == this.toolsExpanded &&
           other.basemapVisible == this.basemapVisible &&
-          other.basemapOpacity == this.basemapOpacity);
+          other.basemapOpacity == this.basemapOpacity &&
+          other.tileUrlOverride == this.tileUrlOverride &&
+          other.overpassEndpointOverride == this.overpassEndpointOverride &&
+          other.nominatimHostOverride == this.nominatimHostOverride);
 }
 
 class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
@@ -1981,6 +2143,9 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
   final Value<bool> toolsExpanded;
   final Value<bool> basemapVisible;
   final Value<double> basemapOpacity;
+  final Value<String?> tileUrlOverride;
+  final Value<String?> overpassEndpointOverride;
+  final Value<String?> nominatimHostOverride;
   const AppSettingsCompanion({
     this.id = const Value.absent(),
     this.uncertaintyMeters = const Value.absent(),
@@ -1994,6 +2159,9 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     this.toolsExpanded = const Value.absent(),
     this.basemapVisible = const Value.absent(),
     this.basemapOpacity = const Value.absent(),
+    this.tileUrlOverride = const Value.absent(),
+    this.overpassEndpointOverride = const Value.absent(),
+    this.nominatimHostOverride = const Value.absent(),
   });
   AppSettingsCompanion.insert({
     this.id = const Value.absent(),
@@ -2008,6 +2176,9 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     this.toolsExpanded = const Value.absent(),
     this.basemapVisible = const Value.absent(),
     this.basemapOpacity = const Value.absent(),
+    this.tileUrlOverride = const Value.absent(),
+    this.overpassEndpointOverride = const Value.absent(),
+    this.nominatimHostOverride = const Value.absent(),
   });
   static Insertable<AppSetting> custom({
     Expression<int>? id,
@@ -2022,6 +2193,9 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     Expression<bool>? toolsExpanded,
     Expression<bool>? basemapVisible,
     Expression<double>? basemapOpacity,
+    Expression<String>? tileUrlOverride,
+    Expression<String>? overpassEndpointOverride,
+    Expression<String>? nominatimHostOverride,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -2036,6 +2210,11 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
       if (toolsExpanded != null) 'tools_expanded': toolsExpanded,
       if (basemapVisible != null) 'basemap_visible': basemapVisible,
       if (basemapOpacity != null) 'basemap_opacity': basemapOpacity,
+      if (tileUrlOverride != null) 'tile_url_override': tileUrlOverride,
+      if (overpassEndpointOverride != null)
+        'overpass_endpoint_override': overpassEndpointOverride,
+      if (nominatimHostOverride != null)
+        'nominatim_host_override': nominatimHostOverride,
     });
   }
 
@@ -2052,6 +2231,9 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     Value<bool>? toolsExpanded,
     Value<bool>? basemapVisible,
     Value<double>? basemapOpacity,
+    Value<String?>? tileUrlOverride,
+    Value<String?>? overpassEndpointOverride,
+    Value<String?>? nominatimHostOverride,
   }) {
     return AppSettingsCompanion(
       id: id ?? this.id,
@@ -2066,6 +2248,11 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
       toolsExpanded: toolsExpanded ?? this.toolsExpanded,
       basemapVisible: basemapVisible ?? this.basemapVisible,
       basemapOpacity: basemapOpacity ?? this.basemapOpacity,
+      tileUrlOverride: tileUrlOverride ?? this.tileUrlOverride,
+      overpassEndpointOverride:
+          overpassEndpointOverride ?? this.overpassEndpointOverride,
+      nominatimHostOverride:
+          nominatimHostOverride ?? this.nominatimHostOverride,
     );
   }
 
@@ -2108,6 +2295,19 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     if (basemapOpacity.present) {
       map['basemap_opacity'] = Variable<double>(basemapOpacity.value);
     }
+    if (tileUrlOverride.present) {
+      map['tile_url_override'] = Variable<String>(tileUrlOverride.value);
+    }
+    if (overpassEndpointOverride.present) {
+      map['overpass_endpoint_override'] = Variable<String>(
+        overpassEndpointOverride.value,
+      );
+    }
+    if (nominatimHostOverride.present) {
+      map['nominatim_host_override'] = Variable<String>(
+        nominatimHostOverride.value,
+      );
+    }
     return map;
   }
 
@@ -2125,7 +2325,10 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
           ..write('borderLevels: $borderLevels, ')
           ..write('toolsExpanded: $toolsExpanded, ')
           ..write('basemapVisible: $basemapVisible, ')
-          ..write('basemapOpacity: $basemapOpacity')
+          ..write('basemapOpacity: $basemapOpacity, ')
+          ..write('tileUrlOverride: $tileUrlOverride, ')
+          ..write('overpassEndpointOverride: $overpassEndpointOverride, ')
+          ..write('nominatimHostOverride: $nominatimHostOverride')
           ..write(')'))
         .toString();
   }
@@ -12770,6 +12973,9 @@ typedef $$AppSettingsTableCreateCompanionBuilder =
       Value<bool> toolsExpanded,
       Value<bool> basemapVisible,
       Value<double> basemapOpacity,
+      Value<String?> tileUrlOverride,
+      Value<String?> overpassEndpointOverride,
+      Value<String?> nominatimHostOverride,
     });
 typedef $$AppSettingsTableUpdateCompanionBuilder =
     AppSettingsCompanion Function({
@@ -12785,6 +12991,9 @@ typedef $$AppSettingsTableUpdateCompanionBuilder =
       Value<bool> toolsExpanded,
       Value<bool> basemapVisible,
       Value<double> basemapOpacity,
+      Value<String?> tileUrlOverride,
+      Value<String?> overpassEndpointOverride,
+      Value<String?> nominatimHostOverride,
     });
 
 class $$AppSettingsTableFilterComposer
@@ -12853,6 +13062,21 @@ class $$AppSettingsTableFilterComposer
 
   ColumnFilters<double> get basemapOpacity => $composableBuilder(
     column: $table.basemapOpacity,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get tileUrlOverride => $composableBuilder(
+    column: $table.tileUrlOverride,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get overpassEndpointOverride => $composableBuilder(
+    column: $table.overpassEndpointOverride,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get nominatimHostOverride => $composableBuilder(
+    column: $table.nominatimHostOverride,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -12925,6 +13149,21 @@ class $$AppSettingsTableOrderingComposer
     column: $table.basemapOpacity,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get tileUrlOverride => $composableBuilder(
+    column: $table.tileUrlOverride,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get overpassEndpointOverride => $composableBuilder(
+    column: $table.overpassEndpointOverride,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get nominatimHostOverride => $composableBuilder(
+    column: $table.nominatimHostOverride,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$AppSettingsTableAnnotationComposer
@@ -12987,6 +13226,21 @@ class $$AppSettingsTableAnnotationComposer
     column: $table.basemapOpacity,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get tileUrlOverride => $composableBuilder(
+    column: $table.tileUrlOverride,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get overpassEndpointOverride => $composableBuilder(
+    column: $table.overpassEndpointOverride,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get nominatimHostOverride => $composableBuilder(
+    column: $table.nominatimHostOverride,
+    builder: (column) => column,
+  );
 }
 
 class $$AppSettingsTableTableManager
@@ -13032,6 +13286,9 @@ class $$AppSettingsTableTableManager
                 Value<bool> toolsExpanded = const Value.absent(),
                 Value<bool> basemapVisible = const Value.absent(),
                 Value<double> basemapOpacity = const Value.absent(),
+                Value<String?> tileUrlOverride = const Value.absent(),
+                Value<String?> overpassEndpointOverride = const Value.absent(),
+                Value<String?> nominatimHostOverride = const Value.absent(),
               }) => AppSettingsCompanion(
                 id: id,
                 uncertaintyMeters: uncertaintyMeters,
@@ -13045,6 +13302,9 @@ class $$AppSettingsTableTableManager
                 toolsExpanded: toolsExpanded,
                 basemapVisible: basemapVisible,
                 basemapOpacity: basemapOpacity,
+                tileUrlOverride: tileUrlOverride,
+                overpassEndpointOverride: overpassEndpointOverride,
+                nominatimHostOverride: nominatimHostOverride,
               ),
           createCompanionCallback:
               ({
@@ -13060,6 +13320,9 @@ class $$AppSettingsTableTableManager
                 Value<bool> toolsExpanded = const Value.absent(),
                 Value<bool> basemapVisible = const Value.absent(),
                 Value<double> basemapOpacity = const Value.absent(),
+                Value<String?> tileUrlOverride = const Value.absent(),
+                Value<String?> overpassEndpointOverride = const Value.absent(),
+                Value<String?> nominatimHostOverride = const Value.absent(),
               }) => AppSettingsCompanion.insert(
                 id: id,
                 uncertaintyMeters: uncertaintyMeters,
@@ -13073,6 +13336,9 @@ class $$AppSettingsTableTableManager
                 toolsExpanded: toolsExpanded,
                 basemapVisible: basemapVisible,
                 basemapOpacity: basemapOpacity,
+                tileUrlOverride: tileUrlOverride,
+                overpassEndpointOverride: overpassEndpointOverride,
+                nominatimHostOverride: nominatimHostOverride,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))

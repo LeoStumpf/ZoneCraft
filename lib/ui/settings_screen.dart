@@ -21,6 +21,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/database.dart';
 import '../data/repository.dart';
+import '../data/service_overrides.dart';
 import '../data/tile_source.dart';
 import '../geo/coords.dart';
 import '../state/providers.dart';
@@ -213,7 +214,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            TileSource.current.allowsPrefetch
+            TileSource.configured.allowsPrefetch
                 ? 'Map tiles you view (and a ring around them) are stored on '
                       'the device so the map keeps working briefly with no '
                       "reception, and doesn't re-download areas you revisit."
@@ -294,6 +295,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           const Divider(height: 48),
+          _DataSourcesSection(
+            settings: ref.watch(settingsProvider).asData?.value,
+            onSave: (which, value) =>
+                unawaited(_repo.updateServiceOverride(which, value)),
+          ),
+          const Divider(height: 48),
           Text('Data', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 4),
           Text(
@@ -329,6 +336,163 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The three service addresses, folded away.
+///
+/// Collapsed on purpose: this is an escape hatch, not a setup step. The app
+/// works with every field empty, and an empty field is a real answer — "use
+/// what the build shipped with" — which is why each one shows the default it is
+/// standing in for rather than looking unset.
+class _DataSourcesSection extends StatelessWidget {
+  const _DataSourcesSection({required this.settings, required this.onSave});
+
+  final AppSetting? settings;
+  final void Function(ServiceOverride which, String? value) onSave;
+
+  String? _valueOf(ServiceOverride which) => switch (which) {
+        ServiceOverride.tiles => settings?.tileUrlOverride,
+        ServiceOverride.overpass => settings?.overpassEndpointOverride,
+        ServiceOverride.nominatim => settings?.nominatimHostOverride,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final set = ServiceOverride.values.where((w) => _valueOf(w) != null).length;
+    return Theme(
+      // The tile sits in a plain column of sections, not a card list.
+      data: theme.copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(bottom: 8),
+        leading: const Icon(Icons.dns_outlined),
+        title: Text('Data sources', style: theme.textTheme.titleMedium),
+        subtitle: Text(
+          set == 0
+              ? 'Point the app at your own map, import or search server'
+              : '$set of 3 changed from the default',
+          style: theme.textTheme.bodySmall,
+        ),
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+              'ZoneCraft borrows three services that other people pay to run. '
+              'Leave these empty unless you host your own — the app works as '
+              'it is, and every request it makes is one you asked for.',
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+          for (final which in ServiceOverride.values)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: _ServiceOverrideField(
+                which: which,
+                // Rebuilt from scratch when the stored value changes under it
+                // (a Clear all data, say), which a controller seeded once in
+                // initState would otherwise ignore.
+                key: ValueKey('${which.name}:${_valueOf(which)}'),
+                initialValue: _valueOf(which),
+                onSave: (v) => onSave(which, v),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One address field: validates on the way out, saves on submit or focus loss.
+class _ServiceOverrideField extends StatefulWidget {
+  const _ServiceOverrideField({
+    required this.which,
+    required this.initialValue,
+    required this.onSave,
+    super.key,
+  });
+
+  final ServiceOverride which;
+  final String? initialValue;
+  final ValueChanged<String?> onSave;
+
+  @override
+  State<_ServiceOverrideField> createState() => _ServiceOverrideFieldState();
+}
+
+class _ServiceOverrideFieldState extends State<_ServiceOverrideField> {
+  late final _controller = TextEditingController(text: widget.initialValue);
+  late final FocusNode _focus = FocusNode()..addListener(_onFocusChange);
+  String? _error;
+
+  @override
+  void dispose() {
+    _focus.removeListener(_onFocusChange);
+    _focus.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onFocusChange() {
+    if (!_focus.hasFocus) _save();
+  }
+
+  void _save() {
+    final text = _controller.text;
+    final error = widget.which.validate(text);
+    setState(() => _error = error);
+    // A rejected value is left in the field to be fixed rather than discarded,
+    // but it is never written: a half-typed host would fail every request with
+    // no sign of why.
+    if (error == null) widget.onSave(text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _controller,
+          focusNode: _focus,
+          autocorrect: false,
+          enableSuggestions: false,
+          keyboardType: TextInputType.url,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _save(),
+          // The clear button appears and the stale error clears as you type;
+          // without this the field only catches up on submit.
+          onChanged: (_) => setState(() => _error = null),
+          decoration: InputDecoration(
+            labelText: widget.which.label,
+            hintText: widget.which.hint,
+            errorText: _error,
+            isDense: true,
+            border: const OutlineInputBorder(),
+            suffixIcon: _controller.text.isEmpty
+                ? null
+                : IconButton(
+                    tooltip: 'Use the default',
+                    icon: const Icon(Icons.backspace_outlined),
+                    onPressed: () {
+                      _controller.clear();
+                      _save();
+                    },
+                  ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(widget.which.help, style: theme.textTheme.bodySmall),
+        Text(
+          'Default: ${widget.which.builtInDefault}',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
     );
   }
 }

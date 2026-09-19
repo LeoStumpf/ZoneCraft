@@ -28,6 +28,7 @@ import 'layer_types.dart';
 import 'overpass.dart' show PoiResult;
 import 'poi_sets.dart';
 import 'serialization.dart';
+import 'service_overrides.dart';
 import 'undo_journal.dart';
 
 /// What an import actually wrote, against what the layer already held.
@@ -1938,6 +1939,30 @@ class Repository {
           AppSettingsCompanion.insert(
             id: const Value(1),
             transitEndpoint: Value(endpoint),
+          ),
+        );
+  }
+
+  /// Upserts one of the three service overrides. A blank string clears it back
+  /// to the built-in default, which is what an emptied text field means.
+  ///
+  /// `Value(null)` and "leave alone" are different companion states, so each
+  /// setter names exactly the column it owns and nothing else moves.
+  Future<void> updateServiceOverride(
+    ServiceOverride which,
+    String? value,
+  ) {
+    final v = Value(
+      value == null || value.trim().isEmpty ? null : value.trim(),
+    );
+    return _db.into(_db.appSettings).insertOnConflictUpdate(
+          AppSettingsCompanion.insert(
+            id: const Value(1),
+            tileUrlOverride: which == ServiceOverride.tiles ? v : const Value.absent(),
+            overpassEndpointOverride:
+                which == ServiceOverride.overpass ? v : const Value.absent(),
+            nominatimHostOverride:
+                which == ServiceOverride.nominatim ? v : const Value.absent(),
           ),
         );
   }

@@ -16,7 +16,7 @@ All dependencies are permissive. The direct runtime dependencies:
 
 | Package | License |
 |---|---|
-| `flutter`, `flutter_map`, `flutter_map_dragmarker`, `http`, `share_plus`, `path_provider`, `file_selector` | BSD-3-Clause |
+| `flutter`, `flutter_map`, `flutter_map_dragmarker`, `http`, `share_plus`, `path_provider`, `file_selector`, `url_launcher`, `meta` | BSD-3-Clause |
 | `latlong2`, `app_links` | Apache-2.0 |
 | `drift`, `drift_flutter`, `flutter_riverpod`, `uuid`, `flutter_colorpicker`, `geolocator`, `sqlite3_flutter_libs`, `cupertino_icons`, `xml`, `archive`, `image` | MIT |
 
@@ -28,7 +28,10 @@ SQLite, which is public domain.
 
 ## Map data, tiles & services
 
-Attribution for these is also shown in-app (the attribution control on the map):
+Attribution for these is also shown in-app: OpenStreetMap and the terrain data in the map's
+own attribution control, all four on **Settings → About**. Any of the three OSM-derived
+services can be pointed elsewhere from **Settings → Data sources**, which is the answer for
+anyone running their own instance.
 
 - **OpenStreetMap** — base map tiles © OpenStreetMap contributors; map data licensed under the
   [Open Database License (ODbL)](https://www.openstreetmap.org/copyright). The public
@@ -38,9 +41,14 @@ Attribution for these is also shown in-app (the attribution control on the map):
   actively viewing" and states that "offline use is not permitted on
   `tile.openstreetmap.org`". The app therefore fetches **only the tiles being viewed** when
   using this server: the viewport prefetch and the "Download this area" button are compiled
-  out unless the build is pointed at a different tile provider
-  (`--dart-define=TILE_URL=...`). Caching already-displayed tiles, which the policy requires,
-  is always on.
+  out unless the build both points at a different tile provider (`--dart-define=TILE_URL=...`)
+  **and** separately asserts that the provider permits pre-fetching
+  (`--dart-define=TILE_ALLOWS_PREFETCH=true`). The two are deliberately separate, because
+  leaving OpenStreetMap does not by itself buy permission: MapTiler prohibits "batch or
+  excessive bulk download of map tiles" on every plan, and Thunderforest prohibits
+  "bulk-downloading, scraping, pre-downloading, pre-caching or anything similar" below its
+  Small Business plan. Caching already-displayed tiles, which every one of these policies
+  either requires or permits, is always on.
 - **Overpass API** — queried once per import for points of interest, public-transport stations
   and administrative areas; returns OpenStreetMap data (ODbL), used under its fair-use policy.
   Requests are user-initiated only (never on a timer or on map movement), size-capped, paced to
@@ -56,5 +64,8 @@ Attribution for these is also shown in-app (the attribution control on the map):
 - **AWS Terrain Tiles** (`s3.amazonaws.com/elevation-tiles-prod`) — elevation data for height
   layers and the elevation probe. Public dataset on the
   [AWS Open Data registry](https://registry.opendata.aws/terrain-tiles/), aggregated from
-  sources with their own attribution requirements (SRTM, NED, and others — see the
-  [dataset's attribution list](https://github.com/tilezen/joerd/blob/master/docs/attribution.md)).
+  sources with their own attribution requirements: SRTM, 3DEP and GMTED2010 courtesy of the
+  U.S. Geological Survey, ETOPO1 courtesy of NOAA — see the
+  [dataset's attribution list](https://github.com/tilezen/joerd/blob/master/docs/attribution.md).
+  That list asks the underlying providers be named wherever the data is displayed, so the
+  credit sits in the map's attribution control alongside OpenStreetMap's, not only here.

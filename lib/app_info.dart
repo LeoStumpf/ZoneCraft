@@ -32,3 +32,20 @@ const String kAppVersion = '1.3.0';
 const String kAppTagline =
     'Composable zone layers on OpenStreetMap — offline, no account, '
     'no tracking.';
+
+/// The contact URL folded into [zoneCraftUserAgent]. The tile policy asks for a
+/// User-Agent that "names your app and optionally includes a contact URL or
+/// email"; the repository is the address that will outlive any inbox.
+const String kAppRepositoryUrl = 'https://github.com/LeoStumpf/ZoneCraft';
+
+/// The one `User-Agent` every outbound request sends.
+///
+/// OpenStreetMap's tile, Nominatim and API policies all require a string that
+/// identifies *this* app and forbid falling back to a library default — and the
+/// operators block by exactly this string, so it is the app's identity to them.
+/// It lived as four separate literals (tiles, Overpass, Nominatim, terrain),
+/// which had already drifted: all four still said `1.0` at app version 1.3.0.
+/// Building it from [kAppVersion] means it cannot drift again, and the stable
+/// `ZoneCraft/` prefix keeps the app recognisable across releases.
+const String zoneCraftUserAgent =
+    'ZoneCraft/$kAppVersion (+$kAppRepositoryUrl)';

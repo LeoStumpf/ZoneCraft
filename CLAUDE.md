@@ -155,6 +155,39 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   does nothing. `_AboutScreenState` probes that **once** for the whole screen — all the links
   are `https`, so the answer is the same for each — and falls back to selectable text rather
   than a link that would do nothing.
+- **One `User-Agent`, built from the version** (`zoneCraftUserAgent` in `app_info.dart`).
+  Every policy the app is subject to requires a string naming *this* app and forbids a
+  library default, and all three operators **block by exactly that string** — it is the
+  app's identity to them (OSMF blanket-blocked flutter_map's `com.example.app` in Aug 2025).
+  It lived as four hand-kept literals that had all drifted to `1.0` at app version 1.3.0;
+  `test/app_info_test.dart` now pins that they agree and carry `kAppVersion`.
+- **Attribution is the app's own chrome, not flutter_map's** (`_MapAttribution` in
+  `map_screen`). `RichAttributionWidget` renders among the *map's* children, which on this
+  screen is underneath the FAB row and the system navigation bar — the credit was there and
+  invisible, and it also starts collapsed behind an (i). ODbL attribution is the one
+  obligation here that is a licence term rather than an acceptable-use courtesy, so it is a
+  permanently visible bottom-left pill (padded 72 to clear the FAB row) whose tap opens
+  `_showCredits` — OpenStreetMap plus the terrain sources Tilezen's list requires be named.
+  The pill prints the tile source's own line verbatim: it already carries its `©`, and a
+  keyed provider's names two parties.
+- **Redirecting the tiles does not grant prefetching.** `TILE_URL` and
+  `TILE_ALLOWS_PREFETCH` are separate defines because leaving `tile.openstreetmap.org` says
+  nothing about the next provider's terms — MapTiler forbids "batch or excessive bulk
+  download of map tiles" on every plan, Thunderforest forbids "pre-downloading, pre-caching
+  or anything similar" below Small Business. `scripts/build.sh` refuses the flag without a
+  `TILE_URL`. `TileSource.configured` is the build-time source; `TileSource.resolve(userUrl)`
+  applies the **runtime** override and forces `allowsPrefetch: false` — a URL typed into a
+  settings field asserts nothing about anyone's terms.
+- **The three service addresses are data** (`data/service_overrides.dart`, schema v28's
+  `tileUrlOverride` / `overpassEndpointOverride` / `nominatimHostOverride`). Nominatim's
+  policy asks that "apps must make sure that they can switch the service at our request at
+  any time", and Overpass's own docs say an app leaning on the public instances as a backend
+  is what running your own is for. `ServiceOverride` is the one definition (label, hint,
+  default, validation) and Settings → **Data sources** renders whatever it holds, collapsed.
+  The Overpass and Nominatim overrides are **process-wide** (`overpassEndpointOverride`,
+  `nominatimHostOverride`), pushed in from `map_screen`'s settings watch rather than threaded
+  through four layers that have no opinion about them; `overpassEndpointList` keeps the
+  public instances behind the override, so a typo costs a slow import, not a dead app.
 - **No telemetry, ever.** No crash reporting, no analytics, no advertising id. Sentry was
   wired in and deliberately removed: `PRIVACY.md` and the Play Data safety form can now
   answer "none", which is worth more than the diagnostics were. Anything added back has to
@@ -205,13 +238,13 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   placeholder an id-less imported row is stored with (`BorderAreas.osmId` is NOT NULL). Read as
   a real id it made every such area look like the same relation, so a re-import kept one and
   dropped the rest.
-- **Drift schema is at v27**; migrations are append-only `if (from < N)` blocks. (Two
+- **Drift schema is at v28**; migrations are append-only `if (from < N)` blocks. (Two
   exceptions drop tables: v19 *drops* the transit route tables, because route geometry was
   abandoned — see `data/transit.dart`'s header for the measurements behind that — and v27
   copies `planes` → `subspaces` and `transit_*` → `poi_*` then drops them, plus `tracks`.
   Earlier blocks that once `createTable`d a dropped table no longer do; the raw `ALTER
   TABLE`s in v22/v26 keep the columns v27 copies on a database old enough to have them.)
-  v20…v27 are
+  v20…v28 are
   snapshotted in `drift_schemas/` and guarded by `test/migration_test.dart`. **Any schema change must dump a
   new snapshot** (`dart run drift_dev schema dump lib/data/database.dart drift_schemas/`, then
   `... schema generate drift_schemas/ test/generated_migrations/`) — a snapshot cannot be
@@ -350,7 +383,7 @@ clear-all, offline cache, import/export), opt-in locate-me (the app's only use o
 persisted camera, offline resilience (cache-first tiles; **no** prefetch on the community OSM
 servers — see `data/tile_source.dart`), and import/export
 (whole-DB + per-layer + external GeoJSON/KML/KMZ/GPX; freeline imports prompt for their
-inclusion-circle radius). Drift schema is **v27**, GeoJSON format **v3**.
+inclusion-circle radius). Drift schema is **v28**, GeoJSON format **v3**.
 
 `planning/PLAN.md` has no open roadmap items; future polish ideas are listed there.
 `planning/PRODUCTION_AUDIT.md` records the production-readiness pass (what was found, what
@@ -415,7 +448,9 @@ lib/
                the only file that talks to geolocator besides map_screen;
                the Android file channel (platform_files.dart) — receiving a
                shared file and saving one through the document picker, the only
-               file that talks to MainActivity.kt
+               file that talks to MainActivity.kt;
+               the one definition of the three switchable service addresses
+               (service_overrides.dart)
   geo/         geodesicCircle(), subspace Voronoi-cell geometry (two points =
                a half-plane), freehand line/area region geometry (freeline.dart,
                freearea.dart), height contouring/marching-squares (height.dart),
@@ -436,7 +471,8 @@ lib/
                embedded in the Elements list), border_layer (area fills +
                outlines + name plates, no Path.combine), border_import_dialog,
                screen_cluster (greedy screen-space clustering), screen_clip
-               (viewport pre-clip, rings and segments)
+               (viewport pre-clip, rings and segments),
+               external_link (the one way the app opens someone else's URL)
 ```
 
 ## Plans

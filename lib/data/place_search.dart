@@ -19,6 +19,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
+import '../app_info.dart';
 import 'geo_import.dart';
 import 'request_pacer.dart';
 
@@ -74,13 +75,33 @@ class PlaceResult {
 /// Caps how many candidates Nominatim returns.
 const int placeSearchLimit = 12;
 
+/// The geocoder the app uses unless someone points it elsewhere.
+const String defaultNominatimHost = 'nominatim.openstreetmap.org';
+
+/// A user-chosen geocoder host, e.g. `nominatim.example.org`. Null — the normal
+/// case — means [defaultNominatimHost].
+///
+/// Process-wide rather than threaded through the search dialog, matching
+/// `overpassEndpointOverride`: it is configuration, and every search wants the
+/// same answer. `map_screen` pushes the stored value in when settings change.
+///
+/// The policy is the reason it can be changed at all: "apps must make sure that
+/// they can switch the service at our request at any time", and a host only a
+/// new APK can move never reaches an install that stops updating.
+String? nominatimHostOverride;
+
 /// Builds the Nominatim search URL for [query]. Public for testing.
 ///
 /// `polygon_geojson=1` asks for boundary geometry; `polygon_threshold`
 /// simplifies it (in degrees, ~0.0005° ≈ 55 m) so a city border imports as a
 /// few hundred points rather than thousands.
-Uri buildPlaceSearchUri(String query) =>
-    Uri.https('nominatim.openstreetmap.org', '/search', {
+///
+/// [host] overrides [defaultNominatimHost]. The usage policy asks that "apps
+/// must make sure that they can switch the service at our request at any time",
+/// and a host that only a new APK can change reaches nobody who does not
+/// update — so the address is data, not a literal.
+Uri buildPlaceSearchUri(String query, {String? host}) =>
+    Uri.https(_host(host), '/search', {
       'q': query,
       'format': 'jsonv2',
       'polygon_geojson': '1',
@@ -88,6 +109,15 @@ Uri buildPlaceSearchUri(String query) =>
       'limit': '$placeSearchLimit',
       'addressdetails': '0',
     });
+
+/// A blank or whitespace override means "the default", not "no host".
+String _host(String? override) {
+  for (final candidate in [override, nominatimHostOverride]) {
+    final h = candidate?.trim();
+    if (h != null && h.isNotEmpty) return h;
+  }
+  return defaultNominatimHost;
+}
 
 /// Parses a Nominatim `jsonv2` response, keeping hits that carry line or area
 /// geometry (points are dropped). Returns empty on any structural surprise
@@ -153,11 +183,15 @@ final QueryCache<List<PlaceResult>> placeSearchCache =
 Future<List<PlaceResult>?> searchPlaces(
   String query, {
   http.Client? client,
+  String? host,
 }) async {
   final q = query.trim();
   if (q.isEmpty) return const [];
 
-  final cached = placeSearchCache.get(q);
+  // Keyed by host as well as query: two instances can legitimately disagree,
+  // and a cached answer from the old one would outlive the switch.
+  final key = '${_host(host)}\u0000$q';
+  final cached = placeSearchCache.get(key);
   if (cached != null) return cached;
 
   final owned = client == null;
@@ -165,15 +199,13 @@ Future<List<PlaceResult>?> searchPlaces(
   try {
     final resp = await nominatimPacer.run(
       () => c.get(
-        buildPlaceSearchUri(q),
-        headers: const {
-          'User-Agent': 'ZoneCraft/1.0 (https://github.com/LeoStumpf/ZoneCraft)',
-        },
+        buildPlaceSearchUri(q, host: host),
+        headers: const {'User-Agent': zoneCraftUserAgent},
       ).timeout(const Duration(seconds: 30)),
     );
     if (resp.statusCode != 200) return null;
     final parsed = parsePlaceSearchResponse(resp.body);
-    placeSearchCache.put(q, parsed);
+    placeSearchCache.put(key, parsed);
     return parsed;
   // Any network failure means the search simply has no answer to give.
   // ignore: avoid_catches_without_on_clauses

@@ -35,21 +35,36 @@
 /// opposite case: the policy positively requires it.
 ///
 /// So the rule this file encodes: **pre-emptive fetching is enabled only when
-/// the tiles come from somewhere that permits it.** Point the app at a keyed
-/// provider or your own server and the offline features switch back on;
-/// leave it on the default community server and they stay off.
+/// the tiles come from somewhere that permits it** — and "somewhere else" is
+/// not the same claim as "somewhere that permits it". Leaving the community
+/// server is necessary; it is nowhere near sufficient. The commercial providers
+/// this app documents forbid the very same thing:
+///
+/// > Absolutely no bulk-downloading, scraping, pre-downloading, pre-caching or
+/// > anything similar — Thunderforest, below its Small Business plan
+///
+/// > It is prohibited to batch or excessive bulk download of map tiles
+/// > — MapTiler Cloud, on every plan
+///
+/// Both allow a per-user on-device cache of what was actually displayed, which
+/// is exactly the shape of the OSM rule. So `TILE_URL` alone must **not** turn
+/// the offline features on: prefetching is its own define, set by someone who
+/// has read that provider's terms and found permission there.
 ///
 /// Configure at build time:
 ///
 /// ```sh
 /// flutter build apk \
 ///   --dart-define=TILE_URL='https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=YOURKEY' \
-///   --dart-define=TILE_ATTRIBUTION='© MapTiler © OpenStreetMap contributors'
+///   --dart-define=TILE_ATTRIBUTION='© MapTiler © OpenStreetMap contributors' \
+///   --dart-define=TILE_ALLOWS_PREFETCH=true   # only if their terms say so
 /// ```
 ///
-/// (`scripts/build.sh` forwards `TILE_URL` / `TILE_ATTRIBUTION` from the
-/// environment, so exporting them is enough.)
+/// (`scripts/build.sh` forwards all three from the environment, so exporting
+/// them is enough. The key belongs in the environment, never in the repo.)
 library;
+
+import '../app_info.dart';
 
 /// Build-time tile URL template. Empty = the default community OSM server.
 const String _tileUrlOverride = String.fromEnvironment('TILE_URL');
@@ -57,6 +72,12 @@ const String _tileUrlOverride = String.fromEnvironment('TILE_URL');
 /// Build-time attribution line for [_tileUrlOverride].
 const String _tileAttributionOverride =
     String.fromEnvironment('TILE_ATTRIBUTION');
+
+/// Build-time opt-in to pre-emptive fetching, deliberately separate from
+/// [_tileUrlOverride]: see the library doc. Defaults to false, so a build that
+/// only redirects the tiles stays as conservative as the stock one.
+const bool _tileAllowsPrefetch =
+    bool.fromEnvironment('TILE_ALLOWS_PREFETCH');
 
 /// The base-map tile source in force for this build.
 class TileSource {
@@ -77,8 +98,10 @@ class TileSource {
   /// this area" button are available at all.
   ///
   /// False for the community OSM servers, and that is not a tuneable: see the
-  /// library doc. It is true only because *you* pointed the app at a provider
-  /// whose terms you have read.
+  /// library doc. It is true only when a build both pointed the app somewhere
+  /// else *and* asserted, via `TILE_ALLOWS_PREFETCH`, that the provider's terms
+  /// permit it — two separate statements, because being off
+  /// `tile.openstreetmap.org` says nothing about the second.
   final bool allowsPrefetch;
 
   /// True when this is the stock community server (nothing was configured).
@@ -88,9 +111,10 @@ class TileSource {
       'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
   static const String _osmAttribution = '© OpenStreetMap contributors';
 
-  /// Resolved once from the build-time defines. Compared against `''` rather
-  /// than using `.isEmpty`, which is not a const expression.
-  static const TileSource current = _tileUrlOverride == ''
+  /// What this build ships with, resolved from the build-time defines.
+  /// Compared against `''` rather than using `.isEmpty`, which is not a const
+  /// expression.
+  static const TileSource configured = _tileUrlOverride == ''
       ? TileSource(
           urlTemplate: _osmUrl,
           attribution: _osmAttribution,
@@ -100,19 +124,42 @@ class TileSource {
       : TileSource(
           urlTemplate: _tileUrlOverride,
           attribution: _tileAttributionOverride == ''
-              ? '© OpenStreetMap contributors'
+              ? _osmAttribution
               : _tileAttributionOverride,
-          allowsPrefetch: true,
+          // Not implied by the redirect: a second, deliberate statement.
+          allowsPrefetch: _tileAllowsPrefetch,
         );
+
+  /// The source to draw with, given the user's stored [userUrlTemplate].
+  ///
+  /// A runtime override changes *where* the tiles come from and nothing else.
+  /// [allowsPrefetch] is deliberately forced off: it is a claim that somebody
+  /// read a provider's terms and found permission there, which a URL typed into
+  /// a settings field cannot make on its own — and the failure mode of getting
+  /// that wrong is bulk-downloading somebody else's server.
+  static TileSource resolve(String? userUrlTemplate) {
+    final url = userUrlTemplate?.trim();
+    if (url == null || url.isEmpty) return configured;
+    return TileSource(
+      urlTemplate: url,
+      // We do not know whose tiles these are, and the ODbL credit is the one
+      // thing that must not go missing, so keep the configured line.
+      attribution: configured.attribution,
+      allowsPrefetch: false,
+    );
+  }
 }
 
-/// A descriptive `User-Agent`, required by the policy:
+/// The descriptive `User-Agent` the policy requires:
 ///
 /// > Send a valid HTTP User-Agent that clearly identifies your application.
 /// > [Do not] masquerade as another app's User-Agent, or rely on a library's
 /// > default User-Agent.
-const String tileUserAgent =
-    'ZoneCraft/1.0 (https://github.com/LeoStumpf/ZoneCraft)';
+///
+/// One string for every service (see [zoneCraftUserAgent]) — these are the
+/// same operators, and four hand-maintained copies had already drifted a
+/// version and a half behind the app.
+const String tileUserAgent = zoneCraftUserAgent;
 
 /// Substitutes `{z}`/`{x}`/`{y}` into a tile URL [template].
 String fillTileUrl(String template, int z, int x, int y) => template

@@ -15,12 +15,17 @@
 #   TILE_URL=<template>   base-map tile URL, e.g.
 #                         'https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=KEY'
 #   TILE_ATTRIBUTION=<s>  the attribution line shown for it
-#                         Setting TILE_URL also RE-ENABLES the offline features
-#                         (viewport prefetch + "download this area"), which are
-#                         off by default because OpenStreetMap's tile policy
-#                         forbids them on the community servers. Only set it for
-#                         a provider whose terms you have read.
-#                         See lib/data/tile_source.dart.
+#   TILE_ALLOWS_PREFETCH=true
+#                         RE-ENABLE the offline features (viewport prefetch +
+#                         "download this area"), which are off by default
+#                         because OpenStreetMap's tile policy forbids them on
+#                         the community servers -- and so do MapTiler and
+#                         Thunderforest on their cheaper plans. Set it only when
+#                         the provider you pointed TILE_URL at says in writing
+#                         that you may. Redirecting the tiles is NOT enough on
+#                         its own. See lib/data/tile_source.dart.
+#
+#   The key belongs in TILE_URL in your environment, never in the repo.
 #
 set -euo pipefail
 
@@ -59,10 +64,20 @@ DART_DEFINES=()
 # debug build is one export away.
 if [ -n "${TILE_URL:-}" ]; then
   DART_DEFINES+=(--dart-define=TILE_URL="$TILE_URL")
-  echo "==> tile source: $TILE_URL (prefetch + area download ENABLED)"
+  echo "==> tile source: $TILE_URL"
 fi
 if [ -n "${TILE_ATTRIBUTION:-}" ]; then
   DART_DEFINES+=(--dart-define=TILE_ATTRIBUTION="$TILE_ATTRIBUTION")
+fi
+if [ "${TILE_ALLOWS_PREFETCH:-}" = "true" ]; then
+  if [ -z "${TILE_URL:-}" ]; then
+    echo "!!! TILE_ALLOWS_PREFETCH=true without TILE_URL: refusing." >&2
+    echo "    That would bulk-download from OpenStreetMap's donated servers," >&2
+    echo "    which their tile policy forbids outright." >&2
+    exit 1
+  fi
+  DART_DEFINES+=(--dart-define=TILE_ALLOWS_PREFETCH=true)
+  echo "==> prefetch + area download ENABLED (you asserted the provider allows it)"
 fi
 
 # --- checks ------------------------------------------------------------------

@@ -763,6 +763,26 @@ class AppSettings extends Table {
   /// through beneath the zone layers. 1 = fully opaque (the default).
   RealColumn get basemapOpacity => real().withDefault(const Constant(1.0))();
 
+  /// User-chosen replacements for the three donated services the app talks to.
+  /// Null — the normal case — means "use what the build shipped with".
+  ///
+  /// These exist because every one of those services can ask to be left alone,
+  /// and a hardcoded host can only be changed by shipping a new APK, which
+  /// reaches nobody who does not update. They are also the honest answer for
+  /// someone running their own instance: the app's load problem is Overpass,
+  /// and self-hosting is the fix its operators themselves recommend.
+  ///
+  /// A `{z}/{x}/{y}` template. Note it cannot re-enable the offline features:
+  /// `allowsPrefetch` stays a build-time claim about terms someone has read,
+  /// never something a typed-in URL can assert — see `tile_source.dart`.
+  TextColumn get tileUrlOverride => text().nullable()();
+
+  /// A full `/api/interpreter` URL, tried ahead of `overpassEndpoints`.
+  TextColumn get overpassEndpointOverride => text().nullable()();
+
+  /// A bare host, e.g. `nominatim.example.org`. The path and query are ours.
+  TextColumn get nominatimHostOverride => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -818,7 +838,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 27;
+  int get schemaVersion => 28;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1230,6 +1250,16 @@ class AppDatabase extends _$AppDatabase {
               await m.dropColumn(layers, 'track_stroke_width');
               await m.dropColumn(layers, 'track_min_distance_meters');
             }
+          }
+          if (from < 28) {
+            // Somewhere to point the app when a donated service asks to be
+            // left alone, or when its user runs their own. All three are null
+            // for every existing database, which reads as "whatever this build
+            // ships with" — so nothing about an upgraded map changes.
+            await m.addColumn(appSettings, appSettings.tileUrlOverride);
+            await m.addColumn(
+                appSettings, appSettings.overpassEndpointOverride);
+            await m.addColumn(appSettings, appSettings.nominatimHostOverride);
           }
         },
         beforeOpen: (details) async {

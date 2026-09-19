@@ -21,6 +21,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
+import '../app_info.dart';
 import '../data/database.dart';
 import '../data/height_generator.dart';
 import '../data/layer_types.dart';
@@ -55,9 +56,6 @@ class HeightEditorSheet extends ConsumerStatefulWidget {
 }
 
 class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
-  static const _userAgent =
-      'ZoneCraft/1.0 (https://github.com/LeoStumpf/ZoneCraft)';
-
   late final TextEditingController _center;
   late final TextEditingController _radius;
   late final TextEditingController _threshold;
@@ -118,7 +116,7 @@ class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
         repo: _repo,
         client: client,
         region: widget.region,
-        headers: const {'User-Agent': _userAgent},
+        headers: const {'User-Agent': zoneCraftUserAgent},
       );
       _snack(
         result.polygonCount == 0
