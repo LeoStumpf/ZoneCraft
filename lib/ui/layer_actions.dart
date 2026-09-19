@@ -129,8 +129,9 @@ List<LayerActionId> visibleLayerActions(LayerActionContext c) {
     LayerActionId.rename,
     LayerActionId.color,
     LayerActionId.opacity,
-    if (t == kMixedType || (t != kHeight && t != kPoi && t != kBorders))
-      LayerActionId.invert,
+    // [kInvertibleTypes] is the same list the greying reads, so the menu item
+    // and "can it do anything?" cannot disagree about what invert needs.
+    if (t == kMixedType || kInvertibleTypes.contains(t)) LayerActionId.invert,
     if (c.hasStations) LayerActionId.stations,
     if (t == kBorders) ...[LayerActionId.fillAreas, LayerActionId.showNames],
     if (layerMakesOwnContent(t) && layerTypeHolds(t, kPoi)) ...[

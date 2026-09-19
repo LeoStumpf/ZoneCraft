@@ -249,6 +249,26 @@ const List<MapControl> mapControls = [
 MapControl mapControl(MapControlId id) =>
     mapControls.firstWhere((c) => c.id == id);
 
+/// Which switch the layer's quick toggle currently is.
+///
+/// One button with three identities, and each acts on different content — so
+/// "can it do anything?" has to be asked per identity, not as "does the layer
+/// hold anything at all". It was asked the second way, and on a combined layer
+/// holding nothing but POI markers that lit **Fill outside**: pressing it wrote
+/// `isInverted` and left the map byte-identical, which is the exact failure
+/// [unavailableReason] exists to prevent.
+enum QuickToggleKind {
+  /// Fill outside / Fill inside. Needs a [kInvertibleTypes] element.
+  invert,
+
+  /// A borders layer's Colour areas. Needs an area to colour.
+  colourAreas,
+
+  /// The station-type filter. Only offered once a station import exists, so
+  /// there is always something for it to act on.
+  stations,
+}
+
 /// What the map knows about itself when deciding whether a control can act.
 ///
 /// Deliberately small and plain: everything here is already computed in
@@ -261,6 +281,8 @@ class MapControlState {
     required this.activeLayerHolds,
     required this.activeLayerVisible,
     required this.anythingSelectable,
+    this.quickToggleKind,
+    this.quickToggleHolds = true,
   });
 
   /// False only when there are no layers, or the user chose "no layer".
@@ -278,6 +300,16 @@ class MapControlState {
   /// Whether any *visible* layer holds something a tap could select — the
   /// screen's existing `canEditByTap`.
   final bool anythingSelectable;
+
+  /// Which switch the quick toggle is right now, or null when there is none.
+  final QuickToggleKind? quickToggleKind;
+
+  /// Whether the layer holds what **that** switch acts on — a shape to take
+  /// the outside of, an area to colour. [activeLayerHolds] is not enough: a
+  /// layer can be far from empty and still hold nothing a given switch can
+  /// touch. Defaults to true so a state built without it keeps the old
+  /// behaviour; `map_screen` always passes it.
+  final bool quickToggleHolds;
 }
 
 /// Why pressing [id] would do nothing right now, or null when it works.
@@ -320,6 +352,23 @@ String? unavailableReason(MapControlId id, MapControlState s) {
       }
       if (!s.activeLayerHolds) {
         return 'This layer is empty — ${_fillItWith(s.activeLayerType)}.';
+      }
+      // The layer holds plenty — just none of what *this* switch acts on.
+      if (!s.quickToggleHolds) {
+        return switch (s.quickToggleKind) {
+          // Only a combined layer can reach this: every other type that
+          // offers invert holds nothing *but* invertible elements, so a
+          // non-empty one always has a shape. And a combined layer is filled
+          // by merging, which is why that is the whole remedy.
+          QuickToggleKind.invert =>
+            'Fill outside needs a shape to take the outside of — merge in a '
+                'layer of circles, lines or areas first.',
+          QuickToggleKind.colourAreas =>
+            'There are no areas here to colour — import some borders first.',
+          QuickToggleKind.stations || null =>
+            'This layer holds nothing this switch acts on — add or merge in '
+                'something for it first.',
+        };
       }
       return null;
 

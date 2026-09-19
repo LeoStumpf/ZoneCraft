@@ -81,6 +81,19 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   (Material's faded pair, `onSurface` at 12 %/38 %, not `disabledColor`, which is a dark grey
   that read as the *lit* state on this light row). `undo_buttons._Button` takes the same
   `unavailable` parameter for the same reason.
+  **What a control can act on is asked per control, not per layer.** The quick
+  toggle is one button with three identities (`QuickToggleKind`), and its
+  availability used to read one boolean — "does the layer hold *anything*". A
+  combined layer of nothing but POI markers is far from empty and still has no
+  outside, so Fill outside lit up, wrote `isInverted` and left the map
+  byte-identical: the very failure this mechanism exists to prevent, back again
+  one layer type along. `kInvertibleTypes` (`data/layer_types.dart`) is now the
+  one list of what invert can act on — circles, subspace, freeline, freearea;
+  **not `height`**, whose painter ignores `inverted` and bands along the
+  elevation contour instead — and both `visibleLayerActions` and the greying
+  read it, so the menu item and "can it do anything?" cannot disagree.
+  Colour areas likewise needs an *area*, not just a border set, since an import
+  can come back empty.
   These answers are **never counted by `UiHints`**: a tip that teaches goes quiet after three
   showings, but "why did nothing happen?" has to come every time or the third press of a dead
   button is silent again. A control the layer *type* can never use stays **hidden** — "never"

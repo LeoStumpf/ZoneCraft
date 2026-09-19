@@ -4542,6 +4542,32 @@ class _MapScreenState extends ConsumerState<MapScreen>
           layerHasEditor(l.type) &&
           layerContentTypes(l).any((t) => holdsSelectable(l, t)),
     );
+    // Which switch the quick toggle is, and whether the layer holds what *that*
+    // switch acts on. Asked per switch, not as "does the layer hold anything":
+    // a combined layer of nothing but POI markers is far from empty and still
+    // has no outside to fill, and the toggle used to light up and write
+    // `isInverted` for a map that did not change (see [QuickToggleKind]).
+    final quickToggleKind = switch (quickToggle?.id) {
+      LayerActionId.invert => QuickToggleKind.invert,
+      LayerActionId.fillAreas => QuickToggleKind.colourAreas,
+      LayerActionId.stations => QuickToggleKind.stations,
+      _ => null,
+    };
+    bool quickToggleActsOnSomething(Layer layer) => switch (quickToggleKind) {
+      QuickToggleKind.invert =>
+        kInvertibleTypes.any((t) => holdsSelectable(layer, t)),
+      // The set can exist with no areas in it — an import that came back
+      // empty — and then there is nothing to give a colour to.
+      QuickToggleKind.colourAreas => () {
+        final sets = borderSets
+            .where((s) => s.layerId == layer.id)
+            .map((s) => s.id)
+            .toSet();
+        return borderAreaRows.any((a) => sets.contains(a.setId));
+      }(),
+      // Only offered once a station import exists, so it always has a subject.
+      QuickToggleKind.stations || null => true,
+    };
     // What the buttons need to know about themselves. Built here because every
     // part of it is already in scope, and read by `unavailableReason` so the
     // wording lives with the catalogue rather than inside a ternary.
@@ -4554,6 +4580,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
           ),
       activeLayerVisible: activeLayer?.isVisible ?? false,
       anythingSelectable: canEditByTap,
+      quickToggleKind: quickToggleKind,
+      quickToggleHolds:
+          activeLayer == null || quickToggleActsOnSomething(activeLayer),
     );
 
     // Only the two freehand types can be drawn into — everything else is built

@@ -58,6 +58,24 @@ const kMixedContentTypes = <String>[
   kPoi,
 ];
 
+/// The types whose elements **can be inverted** — the region kinds whose
+/// painter takes the viewport complement when `Layers.isInverted` is set.
+///
+/// `height` is not one of them even though it draws a region: it renders its
+/// stored fill polygons with its own bounded band along the elevation contour
+/// and ignores `inverted` entirely (`region_layer._paintHeight`). `poi` and
+/// `borders` are markers and many separate areas — neither has a single
+/// outside. This is what "Fill outside" needs to find in a layer before it can
+/// do anything, and a combined layer may hold none of it while still holding
+/// plenty: counting *any* element lit the toggle on a layer of nothing but POI
+/// markers, and pressing it wrote `isInverted` and left the map untouched.
+const kInvertibleTypes = <String>[
+  kCircles,
+  kSubspace,
+  kFreeLine,
+  kFreeArea,
+];
+
 /// Every type a *layer* can be, including mixed. Used by the new-layer picker
 /// and by tests that want to be exhaustive.
 const kAllLayerTypes = <String>[

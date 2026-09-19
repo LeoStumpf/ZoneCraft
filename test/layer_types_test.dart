@@ -118,6 +118,24 @@ void main() {
     });
   });
 
+  group('kInvertibleTypes', () {
+    test('is exactly the region types whose painter honours invert', () {
+      // `height` draws a region but ignores `inverted` (its band follows the
+      // elevation contour), and markers and separate areas have no single
+      // outside — so offering "Fill outside" for any of them would be a
+      // toggle that writes the database and changes nothing.
+      expect(kInvertibleTypes, [kCircles, kSubspace, kFreeLine, kFreeArea]);
+      for (final t in [kHeight, kPoi, kBorders, kMixedType]) {
+        expect(kInvertibleTypes, isNot(contains(t)), reason: t);
+      }
+      // Every one of them is something a combined layer can hold, which is
+      // what makes the per-layer check worth doing.
+      for (final t in kInvertibleTypes) {
+        expect(kMixedContentTypes, contains(t), reason: t);
+      }
+    });
+  });
+
   group('layerMakesOwnContent', () {
     test('only the combined layer makes nothing of its own', () {
       // It is a merge destination: Add, Draw and the imports that ask a server

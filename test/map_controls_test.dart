@@ -123,6 +123,68 @@ void main() {
           reason: 'the remedy names the layer\'s own noun');
     });
 
+    test('a layer that is not empty can still have nothing to invert', () {
+      // The bug this covers: a combined layer holding only POI markers is far
+      // from empty, so the toggle lit up — and pressing it wrote `isInverted`
+      // for a map that could not change, because markers have no outside.
+      const markersOnly = MapControlState(
+        hasActiveLayer: true,
+        activeLayerType: kMixedType,
+        activeLayerHolds: true,
+        activeLayerVisible: true,
+        anythingSelectable: true,
+        quickToggleKind: QuickToggleKind.invert,
+        quickToggleHolds: false,
+      );
+      final reason = unavailableReason(MapControlId.quickToggle, markersOnly);
+      expect(reason, isNotNull);
+      expect(reason, isNot(contains('empty')),
+          reason: 'it is not empty — that would be the wrong complaint');
+      expect(reason, contains('first'));
+      expect(reason, endsWith('.'));
+      // Every other button is unaffected.
+      for (final id in MapControlId.values) {
+        if (id == MapControlId.quickToggle) continue;
+        expect(unavailableReason(id, markersOnly), isNull, reason: id.name);
+      }
+    });
+
+    test('an import that came back empty cannot colour its areas', () {
+      const noAreas = MapControlState(
+        hasActiveLayer: true,
+        activeLayerType: kBorders,
+        activeLayerHolds: true,
+        activeLayerVisible: true,
+        anythingSelectable: true,
+        quickToggleKind: QuickToggleKind.colourAreas,
+        quickToggleHolds: false,
+      );
+      expect(
+        unavailableReason(MapControlId.quickToggle, noAreas),
+        contains('borders'),
+      );
+    });
+
+    test('a switch with something to act on is never greyed for that', () {
+      for (final kind in QuickToggleKind.values) {
+        expect(
+          unavailableReason(
+            MapControlId.quickToggle,
+            MapControlState(
+              hasActiveLayer: true,
+              activeLayerType: kMixedType,
+              activeLayerHolds: true,
+              activeLayerVisible: true,
+              anythingSelectable: true,
+              quickToggleKind: kind,
+            ),
+          ),
+          isNull,
+          reason: kind.name,
+        );
+      }
+    });
+
     test('the remedy is named in the layer\'s own noun', () {
       String? forType(String type) => unavailableReason(
             MapControlId.quickToggle,
