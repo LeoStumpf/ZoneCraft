@@ -908,6 +908,52 @@ class _MapScreenState extends ConsumerState<MapScreen>
     }
   }
 
+  /// A map button that is painted unavailable but still answers a tap.
+  ///
+  /// A `FloatingActionButton` with `onPressed: null` registers no tap
+  /// recogniser at all — no ripple, no callback — so the one moment a user most
+  /// wants an explanation is the one moment the button cannot give one. Every
+  /// control that can become useless therefore stays live and only *looks*
+  /// disabled; pressing it says why, in words naming what to do instead.
+  ///
+  /// That answer is **not** counted by `UiHints`. A tip that teaches goes quiet
+  /// after a few showings; an answer to "why did nothing happen?" has to come
+  /// every single time, or the third press of a dead button is silent again and
+  /// we are back where we started.
+  Widget _mapFab({
+    required String heroTag,
+    required String tooltip,
+    required VoidCallback onPressed,
+    required Widget child,
+    String? unavailable,
+    bool lit = false,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    final off = unavailable != null;
+    return FloatingActionButton.small(
+      heroTag: heroTag,
+      // The reason replaces the description: what it *would* do matters less
+      // than why it will not.
+      tooltip: unavailable ?? tooltip,
+      // A FAB does not grey itself the way an IconButton does, so both colours
+      // are explicit — and they are Material's *faded* disabled pair rather
+      // than `disabledColor`, which is a dark grey that on this light row read
+      // as the lit state (also dark) instead of as unavailable.
+      backgroundColor: off
+          ? scheme.onSurface.withValues(alpha: 0.12)
+          : lit
+          ? scheme.primary
+          : null,
+      foregroundColor: off
+          ? scheme.onSurface.withValues(alpha: 0.38)
+          : lit
+          ? scheme.onPrimary
+          : null,
+      onPressed: off ? () => _hint(unavailable) : onPressed,
+      child: child,
+    );
+  }
+
   /// Runs the quick-toggle FAB and, for a toggle, says what is now true.
   ///
   /// The button is one unlabelled icon and its effect can be easy to miss —
@@ -4529,6 +4575,20 @@ class _MapScreenState extends ConsumerState<MapScreen>
           layerHasEditor(l.type) &&
           layerContentTypes(l).any((t) => holdsSelectable(l, t)),
     );
+    // What the buttons need to know about themselves. Built here because every
+    // part of it is already in scope, and read by `unavailableReason` so the
+    // wording lives with the catalogue rather than inside a ternary.
+    final controlState = MapControlState(
+      hasActiveLayer: activeLayer != null,
+      activeLayerType: activeLayer?.type,
+      activeLayerHolds: activeLayer != null &&
+          layerContentTypes(activeLayer).any(
+            (t) => holdsSelectable(activeLayer, t),
+          ),
+      activeLayerVisible: activeLayer?.isVisible ?? false,
+      anythingSelectable: canEditByTap,
+    );
+
     // Only the two freehand types can be drawn into — everything else is built
     // from points, radii or an import.
     final canDraw =
@@ -5879,40 +5939,26 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     // Edit mode: while on, a plain tap selects the object under
                     // it. Kept outside the collapsible tools group — selecting
                     // by tap must always be one press away.
-                    FloatingActionButton.small(
+                    _mapFab(
                       heroTag: 'editMode',
-                      // Disabled states say *why*, so a grey button reads as an
-                      // answer rather than as breakage.
-                      tooltip: !canEditByTap
-                          ? 'Nothing visible to edit yet — add something '
-                                'first'
-                          : mode == MapMode.edit
+                      tooltip: mode == MapMode.edit
                           ? 'Stop selecting by tap'
                           : 'Select by tapping the map',
-                      // A FAB does not grey itself when onPressed is null, so
-                      // the disabled colour is explicit — same as the Add FAB.
-                      backgroundColor: !canEditByTap
-                          ? Theme.of(context).disabledColor
-                          : mode == MapMode.edit
-                          ? Theme.of(context).colorScheme.primary
-                          : null,
-                      foregroundColor: mode == MapMode.edit
-                          ? Theme.of(context).colorScheme.onPrimary
-                          : null,
-                      onPressed: !canEditByTap
-                          ? null
-                          : () => _enterMode(
-                              mode == MapMode.edit
-                                  ? MapMode.view
-                                  : MapMode.edit,
-                            ),
+                      unavailable: unavailableReason(
+                        MapControlId.edit,
+                        controlState,
+                      ),
+                      lit: mode == MapMode.edit,
+                      onPressed: () => _enterMode(
+                        mode == MapMode.edit ? MapMode.view : MapMode.edit,
+                      ),
                       child: Icon(
                         mode == MapMode.edit ? Icons.edit : Icons.edit_outlined,
                       ),
                     ),
                     if (quickToggle != null) ...[
                       const SizedBox(width: 12),
-                      FloatingActionButton.small(
+                      _mapFab(
                         heroTag: 'quickToggle',
                         // Label *and* description: the label alone was the
                         // menu entry, ellipsis included, which on a bare icon
@@ -5921,12 +5967,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             '${quickToggle.label} — ${quickToggle.description}',
                         // Lit while the toggle is on; a plain button for the
                         // one that opens a sheet (the station filter).
-                        backgroundColor: quickToggle.checked ?? false
-                            ? Theme.of(context).colorScheme.primary
-                            : null,
-                        foregroundColor: quickToggle.checked ?? false
-                            ? Theme.of(context).colorScheme.onPrimary
-                            : null,
+                        lit: quickToggle.checked ?? false,
+                        unavailable: unavailableReason(
+                          MapControlId.quickToggle,
+                          controlState,
+                        ),
                         onPressed: () =>
                             unawaited(_runQuickToggle(quickToggle)),
                         child: Icon(quickToggle.icon),
@@ -5984,7 +6029,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               freeLines: freeLines,
                               freeAreas: freeAreas,
                             ),
-                      child: FloatingActionButton.small(
+                      child: _mapFab(
                         heroTag: 'add',
                         // The words the label used to carry live in the
                         // tooltip, and the icon still says which type a tap
@@ -5994,19 +6039,22 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             : '${_addFabLabel(activeLayer?.type)} · tap the '
                                   'map to place · long-press for the map '
                                   'centre',
-                        onPressed: activeLayer == null
-                            ? null
-                            : () => mode == MapMode.add
-                                  ? _finishAdd()
-                                  : _enterAddMode(activeLayer),
-                        backgroundColor: activeLayer == null
-                            ? Theme.of(context).disabledColor
-                            : mode == MapMode.add
-                            ? Theme.of(context).colorScheme.primary
-                            : null,
-                        foregroundColor: mode == MapMode.add
-                            ? Theme.of(context).colorScheme.onPrimary
-                            : null,
+                        lit: mode == MapMode.add,
+                        unavailable: unavailableReason(
+                          MapControlId.add,
+                          controlState,
+                        ),
+                        // `activeLayer` is non-null whenever this runs — the
+                        // unavailable branch owns the null case — but the two
+                        // facts sit a hundred lines apart, so this checks
+                        // rather than asserts.
+                        onPressed: () {
+                          if (mode == MapMode.add) {
+                            unawaited(_finishAdd());
+                          } else if (activeLayer != null) {
+                            unawaited(_enterAddMode(activeLayer));
+                          }
+                        },
                         child: Icon(
                           mode == MapMode.add
                               ? Icons.check

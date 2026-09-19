@@ -34,6 +34,8 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../data/layer_types.dart';
+
 /// Where a control sits, which is most of how someone finds it again.
 enum MapControlArea {
   /// The row across the top: the drawer, undo/redo, the active layer.
@@ -239,3 +241,107 @@ const List<MapControl> mapControls = [
 /// because the point of the list is that it cannot fall behind the map.
 MapControl mapControl(MapControlId id) =>
     mapControls.firstWhere((c) => c.id == id);
+
+/// What the map knows about itself when deciding whether a control can act.
+///
+/// Deliberately small and plain: everything here is already computed in
+/// `map_screen`'s build, and keeping it to booleans is what makes
+/// [unavailableReason] pure and testable.
+class MapControlState {
+  const MapControlState({
+    required this.hasActiveLayer,
+    required this.activeLayerType,
+    required this.activeLayerHolds,
+    required this.activeLayerVisible,
+    required this.anythingSelectable,
+  });
+
+  /// False only when there are no layers, or the user chose "no layer".
+  final bool hasActiveLayer;
+
+  /// Null when there is no active layer. Decides the noun in the remedy.
+  final String? activeLayerType;
+
+  /// Whether the active layer holds at least one element.
+  final bool activeLayerHolds;
+
+  /// Whether the active layer is drawn at all.
+  final bool activeLayerVisible;
+
+  /// Whether any *visible* layer holds something a tap could select — the
+  /// screen's existing `canEditByTap`.
+  final bool anythingSelectable;
+}
+
+/// Why pressing [id] would do nothing right now, or null when it works.
+///
+/// This exists because the buttons lie. Pressing "Fill outside" on an empty
+/// circle layer lights the button, flips the switch in the layer sheet and
+/// writes `isInverted` to the database — and the map is left byte-identical,
+/// because the painter returns before the viewport complement is ever taken
+/// (`region_layer.dart`, `if (outer == null) return`). A control that reports
+/// success and changes nothing is worse than one that is plainly unavailable.
+///
+/// The answer names a remedy rather than a fault: "add a circle first" is
+/// something to do, "invalid state" is not. A control the *layer type* can
+/// never use is not handled here — those stay hidden, because "never" is not a
+/// thing to wait for.
+String? unavailableReason(MapControlId id, MapControlState s) {
+  switch (id) {
+    case MapControlId.add:
+      if (!s.hasActiveLayer) {
+        return 'No layer is active — choose one in the layers menu.';
+      }
+      // Deliberately still available on a *hidden* layer: the element really
+      // is created, and not seeing it is a different complaint with its own
+      // fix. Only controls whose entire effect is visual are held back for it.
+      return null;
+
+    case MapControlId.edit:
+      if (!s.anythingSelectable) {
+        return 'Nothing to select yet — add or import something first.';
+      }
+      return null;
+
+    case MapControlId.quickToggle:
+      if (!s.hasActiveLayer) {
+        return 'No layer is active — choose one in the layers menu.';
+      }
+      if (!s.activeLayerVisible) {
+        return 'This layer is hidden, so nothing it does will show. '
+            'Turn it on in the layers menu.';
+      }
+      if (!s.activeLayerHolds) {
+        return 'This layer is empty — ${_fillItWith(s.activeLayerType)}.';
+      }
+      return null;
+
+    // Everything else either always works, or is hidden when it cannot.
+    case MapControlId.layers:
+    case MapControlId.undo:
+    case MapControlId.activeLayer:
+    case MapControlId.compass:
+    case MapControlId.download:
+    case MapControlId.locate:
+    case MapControlId.share:
+    case MapControlId.elevation:
+    case MapControlId.distance:
+    case MapControlId.draw:
+    case MapControlId.featureImport:
+    case MapControlId.osmImport:
+    case MapControlId.tools:
+      return null;
+  }
+}
+
+/// The remedy, in the layer's own noun: what would make it non-empty.
+String _fillItWith(String? type) => switch (type) {
+      kCircles => 'add a circle first',
+      kSubspace => 'add a subspace first',
+      kFreeLine => 'draw or add a line first',
+      kFreeArea => 'draw or add an area first',
+      kHeight => 'add a height area first',
+      kPoi => 'import or place some POIs first',
+      kBorders => 'import some borders first',
+      _ => 'add something to it first',
+    };

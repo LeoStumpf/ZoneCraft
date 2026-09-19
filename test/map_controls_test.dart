@@ -78,4 +78,136 @@ void main() {
       expect(mapControl(id).id, id);
     }
   });
+
+  group('unavailableReason', () {
+    // A fresh install: one empty circle layer, nothing drawn, nothing to select.
+    const fresh = MapControlState(
+      hasActiveLayer: true,
+      activeLayerType: 'circles',
+      activeLayerHolds: false,
+      activeLayerVisible: true,
+      anythingSelectable: false,
+    );
+    const working = MapControlState(
+      hasActiveLayer: true,
+      activeLayerType: 'circles',
+      activeLayerHolds: true,
+      activeLayerVisible: true,
+      anythingSelectable: true,
+    );
+
+    test('a fresh map greys exactly the two buttons that can do nothing', () {
+      // This is the complaint that prompted the change: a screenful of
+      // buttons, most of which quietly do nothing.
+      final greyed = [
+        for (final id in MapControlId.values)
+          if (unavailableReason(id, fresh) != null) id,
+      ];
+      expect(greyed, [MapControlId.edit, MapControlId.quickToggle]);
+    });
+
+    test('adding one element brings both back', () {
+      for (final id in MapControlId.values) {
+        expect(unavailableReason(id, working), isNull, reason: id.name);
+      }
+    });
+
+    test('an empty layer cannot be filled outside of', () {
+      // The painter returns before the viewport complement is taken, so this
+      // toggle wrote the database and changed nothing on screen.
+      final reason = unavailableReason(MapControlId.quickToggle, fresh);
+      expect(reason, isNotNull);
+      expect(reason, contains('empty'));
+      expect(reason, contains('circle'),
+          reason: 'the remedy names the layer\'s own noun');
+    });
+
+    test('the remedy is named in the layer\'s own noun', () {
+      String? forType(String type) => unavailableReason(
+            MapControlId.quickToggle,
+            MapControlState(
+              hasActiveLayer: true,
+              activeLayerType: type,
+              activeLayerHolds: false,
+              activeLayerVisible: true,
+              anythingSelectable: false,
+            ),
+          );
+      expect(forType('freeline'), contains('line'));
+      expect(forType('freearea'), contains('area'));
+      expect(forType('poi'), contains('POI'));
+      expect(forType('borders'), contains('borders'));
+      // An unknown type must still say something usable rather than crash.
+      expect(forType('something-new'), isNotNull);
+    });
+
+    test('a hidden layer greys the toggle even when it holds things', () {
+      // Its whole effect is visual, so on a hidden layer it is as inert as on
+      // an empty one — and for a reason the user cannot otherwise guess.
+      const hidden = MapControlState(
+        hasActiveLayer: true,
+        activeLayerType: 'circles',
+        activeLayerHolds: true,
+        activeLayerVisible: false,
+        anythingSelectable: true,
+      );
+      expect(
+        unavailableReason(MapControlId.quickToggle, hidden),
+        contains('hidden'),
+      );
+      // Add stays live: it really does create the element. Not seeing it is a
+      // different complaint with a different fix.
+      expect(unavailableReason(MapControlId.add, hidden), isNull);
+    });
+
+    test('with no layer at all, Add says so', () {
+      const none = MapControlState(
+        hasActiveLayer: false,
+        activeLayerType: null,
+        activeLayerHolds: false,
+        activeLayerVisible: false,
+        anythingSelectable: false,
+      );
+      expect(unavailableReason(MapControlId.add, none), contains('No layer'));
+      expect(
+        unavailableReason(MapControlId.quickToggle, none),
+        contains('No layer'),
+      );
+    });
+
+    test('the controls that always work never grey out', () {
+      // Whatever the state, these do something: they open a thing, or they
+      // act on the map rather than on a layer.
+      const always = [
+        MapControlId.layers,
+        MapControlId.tools,
+        MapControlId.osmImport,
+        MapControlId.featureImport,
+        MapControlId.locate,
+        MapControlId.elevation,
+        MapControlId.distance,
+      ];
+      for (final state in [fresh, working]) {
+        for (final id in always) {
+          expect(unavailableReason(id, state), isNull, reason: id.name);
+        }
+      }
+    });
+
+    test('a reason is a sentence naming a remedy, not a fault', () {
+      for (final id in MapControlId.values) {
+        final reason = unavailableReason(id, fresh);
+        if (reason == null) continue;
+        expect(reason, endsWith('.'), reason: id.name);
+        expect(reason.length, greaterThan(20), reason: '${id.name} too terse');
+        // "Unavailable" tells nobody anything; every one of these has to point
+        // somewhere.
+        expect(
+          RegExp(r'first|menu|Turn it on').hasMatch(reason),
+          isTrue,
+          reason: '${id.name} does not say what to do about it',
+        );
+      }
+    });
+  });
 }

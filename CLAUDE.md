@@ -69,6 +69,22 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   *inside* their own fill), so there the **fill** pass punches the strip out and the band pass
   below shows through. Dropping the old `outer − core` difference also removed the one
   `_tryCombine` in the engine — Skia path-ops' worst case, two near-parallel outlines.
+- **A control that cannot act is greyed, and says why when pressed**
+  (`unavailableReason` in `ui/map_controls.dart`, `_mapFab` in `map_screen`). The buttons used
+  to lie: "Fill outside" on an empty layer lit up, flipped the layer sheet's switch and wrote
+  `isInverted` — while the painter returned before the viewport complement was ever taken
+  (`region_layer.dart`, `if (outer == null) return`), so the map was byte-identical. A control
+  reporting success and changing nothing is worse than one plainly unavailable.
+  The load-bearing mechanic: **`onPressed: null` makes a FAB untappable** — no recogniser, no
+  ripple — so the one moment a user wants an explanation is the one moment the button cannot
+  give one. Unavailable controls therefore stay **live** and are only *painted* disabled
+  (Material's faded pair, `onSurface` at 12 %/38 %, not `disabledColor`, which is a dark grey
+  that read as the *lit* state on this light row). `undo_buttons._Button` takes the same
+  `unavailable` parameter for the same reason.
+  These answers are **never counted by `UiHints`**: a tip that teaches goes quiet after three
+  showings, but "why did nothing happen?" has to come every time or the third press of a dead
+  button is silent again. A control the layer *type* can never use stays **hidden** — "never"
+  is not a thing to wait for, and only "not yet" is worth greying.
 - **A button that cannot be labelled is explained three other ways.** The map is eleven
   same-size icon buttons, and a `tooltip:` only appears on a long press nobody thinks to try.
   So: `LayerAction.description` is the one line saying what an option *does* (rendered as the

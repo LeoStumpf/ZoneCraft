@@ -42,9 +42,8 @@ class UndoButtons extends ConsumerWidget {
           tooltip: state?.undoLabel == null
               ? 'Nothing to undo'
               : 'Undo ${_lower(state!.undoLabel!)}',
-          onPressed: state?.canUndo ?? false
-              ? () => applyUndo(ref)
-              : null,
+          unavailable: (state?.canUndo ?? false) ? null : 'Nothing to undo.',
+          onPressed: () => applyUndo(ref),
         ),
         const SizedBox(width: 8),
         _Button(
@@ -52,9 +51,8 @@ class UndoButtons extends ConsumerWidget {
           tooltip: state?.redoLabel == null
               ? 'Nothing to redo'
               : 'Redo ${_lower(state!.redoLabel!)}',
-          onPressed: state?.canRedo ?? false
-              ? () => applyUndo(ref, forward: true)
-              : null,
+          unavailable: (state?.canRedo ?? false) ? null : 'Nothing to redo.',
+          onPressed: () => applyUndo(ref, forward: true),
         ),
       ],
     );
@@ -74,23 +72,39 @@ class _Button extends StatelessWidget {
     required this.icon,
     required this.tooltip,
     required this.onPressed,
+    this.unavailable,
   });
 
   final IconData icon;
   final String tooltip;
-  final VoidCallback? onPressed;
+  final VoidCallback onPressed;
+
+  /// Why a press would do nothing, or null when it would work.
+  ///
+  /// Passed instead of a null `onPressed`, because an `IconButton` with no
+  /// callback takes no taps — so the button that most needs to explain itself
+  /// would be the one that cannot. It is greyed by hand instead and answers
+  /// the tap with the reason.
+  final String? unavailable;
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final reason = unavailable;
     return Material(
-      color: Theme.of(context).colorScheme.surface,
+      color: scheme.surface,
       elevation: 2,
       shape: const CircleBorder(),
       clipBehavior: Clip.antiAlias,
       child: IconButton(
         icon: Icon(icon),
-        tooltip: tooltip,
-        onPressed: onPressed,
+        tooltip: reason ?? tooltip,
+        color: reason == null ? null : scheme.onSurface.withValues(alpha: 0.38),
+        onPressed: reason == null
+            ? onPressed
+            : () => ScaffoldMessenger.of(context)
+              ..clearSnackBars()
+              ..showSnackBar(SnackBar(content: Text(reason))),
       ),
     );
   }
