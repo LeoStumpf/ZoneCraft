@@ -12,6 +12,10 @@
 #
 # Env overrides:
 #   DEVICE=<adb-serial>   target a specific device (default: Pixel 4a below)
+#   ZONECRAFT_ENV=<path>  file of release settings to source first
+#                         (default ~/.config/zonecraft/release.env). It lives
+#                         outside the repo because TILE_URL carries an API key.
+#                         Anything already exported wins over the file.
 #   TILE_URL=<template>   base-map tile URL, e.g.
 #                         'https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=KEY'
 #   TILE_ATTRIBUTION=<s>  the attribution line shown for it
@@ -59,12 +63,25 @@ for arg in "$@"; do
   esac
 done
 
+# Release configuration, kept OUTSIDE the repository on purpose: the tile URL
+# carries an API key, and a file that is not in the project folder cannot be
+# pushed by a broken .gitignore, a `git add -A`, or a fresh clone. Anything
+# already exported on the command line wins, so a one-off override still works.
+ZONECRAFT_ENV="${ZONECRAFT_ENV:-$HOME/.config/zonecraft/release.env}"
+if [ -f "$ZONECRAFT_ENV" ]; then
+  # shellcheck source=/dev/null
+  . "$ZONECRAFT_ENV"
+  echo "==> config: $ZONECRAFT_ENV"
+fi
+
 DART_DEFINES=()
 # Tile source. Forwarded in every mode (unlike the DSN) so an offline-capable
 # debug build is one export away.
 if [ -n "${TILE_URL:-}" ]; then
   DART_DEFINES+=(--dart-define=TILE_URL="$TILE_URL")
-  echo "==> tile source: $TILE_URL"
+  # Printed with the key masked: this line ends up in terminal scrollback, in a
+  # CI log, and in whatever the user pastes into a bug report.
+  echo "==> tile source: $(printf '%s' "$TILE_URL" | sed -E 's/(([Aa][Pp][Ii])?[Kk]ey=)[^&]*/\1***/g')"
 fi
 if [ -n "${TILE_ATTRIBUTION:-}" ]; then
   DART_DEFINES+=(--dart-define=TILE_ATTRIBUTION="$TILE_ATTRIBUTION")
