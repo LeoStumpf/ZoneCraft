@@ -6218,10 +6218,18 @@ class _ActiveLayerChip extends StatelessWidget {
 /// services it uses, attribution is the one that is a licence term rather than
 /// an acceptable-use courtesy, so it is the one that stays on screen.
 ///
-/// Small, low-contrast and one line: it has to sit on top of a map without
-/// becoming part of it. Tapping opens the full credits, which is the guideline's
-/// "way to access more information ... if that information is not directly in
-/// the attribution text".
+/// Small and low-contrast: it has to sit on top of a map without becoming part
+/// of it. Tapping opens the full credits, which is the guideline's "way to
+/// access more information ... if that information is not directly in the
+/// attribution text".
+///
+/// It **wraps** rather than ellipsising, because the line is not ours to
+/// shorten. A keyed provider's credit names three parties — Geoapify's free
+/// plan requires "© OpenStreetMap contributors · © OpenMapTiles · Powered by
+/// Geoapify", and every one of those is mandatory — and on a phone that
+/// truncated to "Powered by Ge…", i.e. to a credit that does not credit
+/// anybody. Two lines is the cap: past that the provider has written an
+/// essay, and the credits sheet is where an essay belongs.
 class _MapAttribution extends StatelessWidget {
   const _MapAttribution({required this.text, required this.onTap});
 
@@ -6243,7 +6251,7 @@ class _MapAttribution extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           child: Text(
             text,
-            maxLines: 1,
+            maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: theme.textTheme.labelSmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
