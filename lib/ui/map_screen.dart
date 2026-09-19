@@ -4468,14 +4468,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     a.id == LayerActionId.stations,
               )
               .firstOrNull;
-    // How many small FABs precede the extended Add button — see its
-    // `isExtended`.
-    final smallFabs =
-        2 + // tools toggle, Edit
-        (quickToggle != null ? 1 : 0) +
-        (canImportFeature ? 1 : 0) +
-        (isCircleLayer || isSubspaceLayer || isPoiLayer ? 1 : 0);
-
     // Edit mode arms tap-to-select, and a tap reaches every *visible* layer
     // (see [_hitsAt]) — so it is meaningful when any visible layer has an
     // editor *and* holds something to select. Left always-on it was a button
@@ -5250,10 +5242,17 @@ class _MapScreenState extends ConsumerState<MapScreen>
                 // map is rotated — a compass at the right. They are chrome
                 // rather than FABs because the FAB column is hidden while an
                 // editor sheet is open, which is precisely when an edit wants
-                // taking back, and both when the tools are collapsed and while
-                // a sheet is up — so a compass FAB was invisible in exactly
-                // the states where an accidental rotation gets noticed. One
-                // row, so the chip and the compass cannot overlap.
+                // taking back — so a compass or undo FAB was invisible in
+                // exactly the states where an accidental rotation or edit gets
+                // noticed. One row, so the chip and the compass cannot overlap.
+                //
+                // The tools toggle takes the undo pair and the chip down with
+                // the right-hand column, leaving the menu button and (when it
+                // applies) the compass: collapsing is a deliberate ask for the
+                // map and nothing else, and the way *back* must survive it.
+                // Hiding the chip costs the "which layer am I editing" answer,
+                // which is why it is a choice the user makes and undoes with
+                // one tap, never something the app does on its own.
                 SafeArea(
                   child: Padding(
                     padding: const EdgeInsets.all(8),
@@ -5271,27 +5270,32 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                 _scaffoldKey.currentState?.openDrawer(),
                           ),
                         ),
+                        if (toolsExpanded) ...[
+                          const SizedBox(width: 8),
+                          const UndoButtons(),
+                        ],
                         const SizedBox(width: 8),
-                        const UndoButtons(),
-                        const SizedBox(width: 8),
-                        // The active layer, always in view: everything the
-                        // map does — Add, ✎, the import button, the long-press
-                        // context — is about this layer, and until it was
-                        // shown here the only way to learn which one it was
-                        // was to open the drawer.
+                        // The active layer: everything the map does — Add, ✎,
+                        // the import button, the long-press context — is about
+                        // this layer, and without this the only way to learn
+                        // which one it was was to open the drawer.
                         Expanded(
-                          // Fixed height: an unbounded Align would take the
-                          // Stack's full height and drop the whole row to
+                          // Kept as an Expanded even when empty: it is what
+                          // holds the compass against the right edge, and a
+                          // fixed height because an unbounded Align would take
+                          // the Stack's full height and drop the whole row to
                           // mid-screen.
                           child: SizedBox(
                             height: 48,
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: _ActiveLayerChip(
-                                layer: activeLayer,
-                                onTap: () => showLayerSheet(context, ref),
-                              ),
-                            ),
+                            child: toolsExpanded
+                                ? Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: _ActiveLayerChip(
+                                      layer: activeLayer,
+                                      onTap: () => showLayerSheet(context, ref),
+                                    ),
+                                  )
+                                : null,
                           ),
                         ),
                         if (_rotation != 0) ...[
@@ -5830,22 +5834,19 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     const SizedBox(height: 12),
                   ],
                 ],
-                // Bottom row: the tools toggle, an optional POI-import button
-                // (circle/subspace layers only), then the primary Add button.
+                // Bottom row, left to right: Edit, the per-type quick toggle,
+                // up to two import buttons, Add, and finally the tools toggle.
+                //
+                // The toggle goes **last** because it is the one button that
+                // acts on the column above it, and that column is anchored to
+                // the right edge: sitting at the left it was the furthest thing
+                // on the row from what it opens and closes. Everything here is
+                // the same small round button showing only its icon — a label
+                // on one of them made that one the odd size out, and with a
+                // full row it ran past the edge of the screen.
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    FloatingActionButton.small(
-                      heroTag: 'fabsToggle',
-                      tooltip: toolsExpanded ? 'Hide tools' : 'Show tools',
-                      onPressed: () => ref
-                          .read(repositoryProvider)
-                          .updateToolsExpanded(expanded: !toolsExpanded),
-                      child: Icon(
-                        toolsExpanded ? Icons.unfold_less : Icons.unfold_more,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
                     // Edit mode: while on, a plain tap selects the object under
                     // it. Kept outside the collapsible tools group — selecting
                     // by tap must always be one press away.
@@ -5946,16 +5947,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               freeLines: freeLines,
                               freeAreas: freeAreas,
                             ),
-                      child: FloatingActionButton.extended(
+                      child: FloatingActionButton.small(
                         heroTag: 'add',
-                        isExtended: addFabIsExtended(
-                          smallFabs: smallFabs,
-                          textScale:
-                              MediaQuery.textScalerOf(context).scale(1),
-                        ),
-                        tooltip:
-                            'Tap the map to add · long-press for the '
-                            'map centre',
+                        // The words the label used to carry live in the
+                        // tooltip, and the icon still says which type a tap
+                        // would place.
+                        tooltip: mode == MapMode.add
+                            ? 'Done'
+                            : '${_addFabLabel(activeLayer?.type)} · tap the '
+                                  'map to place · long-press for the map '
+                                  'centre',
                         onPressed: activeLayer == null
                             ? null
                             : () => mode == MapMode.add
@@ -5969,16 +5970,23 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         foregroundColor: mode == MapMode.add
                             ? Theme.of(context).colorScheme.onPrimary
                             : null,
-                        icon: Icon(
+                        child: Icon(
                           mode == MapMode.add
                               ? Icons.check
                               : typeIcon(activeLayer?.type ?? 'circles'),
                         ),
-                        label: Text(
-                          mode == MapMode.add
-                              ? 'Done'
-                              : _addFabLabel(activeLayer?.type),
-                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Last, and beside the column it governs.
+                    FloatingActionButton.small(
+                      heroTag: 'fabsToggle',
+                      tooltip: toolsExpanded ? 'Hide tools' : 'Show tools',
+                      onPressed: () => ref
+                          .read(repositoryProvider)
+                          .updateToolsExpanded(expanded: !toolsExpanded),
+                      child: Icon(
+                        toolsExpanded ? Icons.unfold_less : Icons.unfold_more,
                       ),
                     ),
                   ],
@@ -6420,22 +6428,6 @@ class _Credit extends StatelessWidget {
 }
 
 
-/// Whether the Add button can afford to show its label.
-///
-/// The row is the tools toggle, Edit, the quick toggle and up to two import
-/// buttons before Add, so it carries up to five small FABs — and a phone is
-/// about 390 logical pixels wide. Five of them beside an extended
-/// "Add subspace" does not fit: it overflowed by 11 px on a Pixel 4a at the
-/// default font size.
-///
-/// This used to read `smallFabs < 4 || textScale <= 1.15`, which is true
-/// whenever the font is *normal* — so the label never collapsed at the default
-/// size no matter how many buttons preceded it, which is exactly the case that
-/// overflows. Both conditions have to hold: few enough buttons **and** small
-/// enough text. Collapsing loses nothing important — the icon says the type and
-/// the tooltip keeps the words.
-bool addFabIsExtended({required int smallFabs, required double textScale}) =>
-    smallFabs < 4 && textScale <= 1.15;
 
 /// The tile server said no, in one line the user can act on.
 ///

@@ -80,12 +80,26 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   with UNDO that goes through the `ProviderContainer` (`applyUndoIn`), because the tile that
   raised it is unmounted by the time the button is pressed; the drawer has its own
   `ScaffoldMessenger` since a Scaffold draws its drawer above its snackbars.
-- **The active layer is always on screen**: the chrome row ends in a chip (swatch · type ·
-  name) that opens the **layer sheet** (`ui/layer_sheet.dart`) — a switcher row plus every
-  setting of the active layer as a direct control, two taps from the map to anything the
-  drawer's ⋮ offers. The sheet is opened with the *map's* context/ref and pops itself before
-  a `needsMap`/delete action runs. Beside Edit, one **per-type quick toggle** FAB: borders →
-  Colour areas, region layers → Invert, a POI layer with stations → the type filter.
+- **The active layer is on screen unless you ask otherwise**: the chrome row carries a chip
+  (swatch · type · name) that opens the **layer sheet** (`ui/layer_sheet.dart`) — a switcher
+  row plus every setting of the active layer as a direct control, two taps from the map to
+  anything the drawer's ⋮ offers. The sheet is opened with the *map's* context/ref and pops
+  itself before a `needsMap`/delete action runs. Beside Edit, one **per-type quick toggle**
+  FAB: borders → Colour areas, region layers → Invert, a POI layer with stations → the filter.
+- **One toggle collapses the map to the map** (`AppSettings.toolsExpanded`). It takes down the
+  right-hand tool column, the undo/redo pair **and the active-layer chip**, leaving the burger
+  menu, the credit and the bottom row. The menu stays because the way *back* has to survive
+  the collapse — with gesture navigation a left-edge swipe is system back, not the drawer, so
+  a hidden ☰ would be genuinely hard to recover. Hiding the chip costs the "which layer am I
+  editing" answer, which is why it is a choice the user makes and undoes in one tap and never
+  something the app does on its own (an editor sheet hides the *FABs*, never this).
+- **Every button in the bottom row is the same small round icon button**, and the tools toggle
+  is the **last** of them — it acts on the column anchored to the right edge, so at the left it
+  was the furthest thing on the row from what it opens. Uniform size is not only cosmetic: the
+  row is Edit + quick toggle + up to two imports + Add + the toggle, and an extended Add with a
+  label ran past the screen edge on a Pixel 4a. A guard existed (`smallFabs < 4 || textScale <=
+  1.15`) but read `||`, so it never collapsed the label at the *default* font size — exactly
+  the case that overflowed. Icon-only makes the overflow impossible by construction.
 - **A View-mode tap *shows* but never *changes*.** It selects, creates and deselects nothing
   (nudging the map must never open or close an editor); what it may do is raise the transient
   **info chip** naming what was hit, whose Edit button is the deliberate act. **Hits are
