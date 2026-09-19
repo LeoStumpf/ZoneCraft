@@ -153,37 +153,6 @@ class Repository {
     );
   }
 
-  /// Turns a single-type layer into a **mixed** one, so elements of other types
-  /// can be moved into it.
-  ///
-  /// Nothing about the rows changes — they already hang off the layer by id,
-  /// and a mixed layer simply stops filtering them by type. The only care
-  /// needed is the opacity: a layer still sitting on its *old* type's default
-  /// is moved to the mixed default, while a value the user chose is kept.
-  /// Otherwise a POI layer (default 1.0) would become a mixed layer whose
-  /// region fills are opaque, which reads as a bug rather than a conversion.
-  ///
-  /// Refuses `borders`: its areas carry an admin level that a mixed layer has
-  /// nowhere to keep, and the neighbour-distinct colouring is only meaningful
-  /// within one level.
-  Future<void> convertLayerToMixed(String id) async {
-    final layer = await (_db.select(_db.layers)..where((l) => l.id.equals(id)))
-        .getSingleOrNull();
-    if (layer == null) throw ArgumentError('Layer no longer exists');
-    if (layer.type == kMixedType) return;
-    if (!canBecomeMixed(layer.type)) {
-      throw ArgumentError(
-          'A borders layer holds one admin level, which a combined layer has '
-          'nowhere to keep. Convert an area to a freehand area instead.');
-    }
-    final wasDefault = layer.opacity == defaultLayerOpacity(layer.type);
-    await updateLayer(
-      id,
-      type: kMixedType,
-      opacity: wasDefault ? defaultLayerOpacity(kMixedType) : null,
-    );
-  }
-
   Future<void> deleteLayer(String id) {
     return (_db.delete(_db.layers)..where((l) => l.id.equals(id))).go();
   }
@@ -212,9 +181,7 @@ class Repository {
     final moving = layerContentTypes(src);
     final unheld = moving.where((t) => !layerTypeHolds(tgt.type, t)).toList();
     if (unheld.isNotEmpty) {
-      throw ArgumentError(tgt.type == kMixedType
-          ? 'A combined layer cannot hold ${unheld.join(', ')}'
-          : 'Layers must be the same type');
+      throw ArgumentError('Layers must be the same type');
     }
     // One borders layer holds one admin level: the "no two neighbours share a
     // colour" rule is only meaningful within a level, since areas of different
@@ -471,7 +438,7 @@ class Repository {
     String layerId,
     String layerType,
   ) async {
-    // A mixed layer's overrides live across several tables, so this asks each
+    // The overrides live in one table per kind, so this asks each
     // of the types it holds rather than one.
     final kinds = [
       for (final type in layerContentTypesOf(layerType))
@@ -512,41 +479,16 @@ class Repository {
   /// Shade 0 is the layer colour itself, so the first element of a layer looks
   /// exactly as it did before per-element colours existed.
   ///
-  /// On a **mixed** layer the maximum is taken across *every* element table the
-  /// layer holds, not just [table]: counting per table would give the first
-  /// circle and the first subspace both shade 0, i.e. the same colour, which is
-  /// precisely what the auto shades exist to avoid. A single-type layer keeps
-  /// the one-table query exactly as it was, so no existing row is ever
-  /// re-shaded.
+  /// One layer holds one kind since v30, so one table is the whole answer —
+  /// the cross-table maximum a `mixed` layer needed went with it.
   Future<int> _nextColorShade(String table, String layerId) async {
-    final layer = await (_db.select(_db.layers)
-          ..where((l) => l.id.equals(layerId)))
-        .getSingleOrNull();
-    final tables = layer?.type == kMixedType
-        ? _shadedTablesOfMixed
-        : <String>[table];
-    var next = 0;
-    for (final t in tables) {
-      final row = await _db.customSelect(
-        'SELECT COALESCE(MAX(color_shade), -1) + 1 AS next '
-        'FROM $t WHERE layer_id = ?',
-        variables: [Variable<String>(layerId)],
-      ).getSingle();
-      final n = row.read<int>('next');
-      if (n > next) next = n;
-    }
-    return next;
+    final row = await _db.customSelect(
+      'SELECT COALESCE(MAX(color_shade), -1) + 1 AS next '
+      'FROM $table WHERE layer_id = ?',
+      variables: [Variable<String>(layerId)],
+    ).getSingle();
+    return row.read<int>('next');
   }
-
-  /// The element tables a mixed layer can hold that carry a `color_shade`.
-  /// (`border_areas` has none — it uses its neighbour-distinct `color_index` —
-  /// and a mixed layer holds no borders anyway.)
-  static final List<String> _shadedTablesOfMixed = [
-    for (final k in ColoredElement.values)
-      if (k != ColoredElement.borderArea &&
-          kMixedContentTypes.contains(k.layerType))
-        k.table,
-  ];
 
   /// Shifts [sourceId]'s elements of [type] past the top of [targetId]'s, so
   /// the two stacks concatenate when the rows are re-pointed.
@@ -575,11 +517,10 @@ class Repository {
   /// The stack slot a new element of [table] takes in [layerId]: one past the
   /// highest already used, so a new element lands **in front**.
   ///
-  /// Unlike [_nextColorShade] this never looks across a mixed layer's other
-  /// tables. The scope of a `z_order` is one layer *and one table*, because a
-  /// mixed layer draws its kinds in fixed passes (regions -> markers)
-  /// and no number stored here could make a marker go behind a circle. Sharing
-  /// the counter across tables would only invent an ordering nothing honours.
+  /// The scope of a `z_order` is one layer *and one table*: each kind is drawn
+  /// by its own painter in its own pass, so no number stored here could make a
+  /// marker go behind a circle. Sharing a counter across tables would only
+  /// invent an ordering nothing honours.
   ///
   /// Deliberately **not** gapless from zero: a delete must never restack the
   /// layer. [reorderElements] is what collapses the gaps, and only when the
@@ -2287,6 +2228,25 @@ class Repository {
       layersQuery.where((l) => l.id.equals(onlyLayerId));
     }
     final layers = await layersQuery.get();
+    // Only the folders the exported layers actually name: a per-layer export
+    // of a layer at the root carries none, and a map with no folders writes a
+    // file identical to what it wrote before folders existed.
+    final allFolders = await (_db.select(_db.folders)
+          ..orderBy([(f) => OrderingTerm(expression: f.sortOrder)]))
+        .get();
+    final namedFolders = {
+      for (final l in layers) ?l.folderId,
+    };
+    final folders = [
+      for (final f in allFolders)
+        if (namedFolders.contains(f.id))
+          ExportFolder(
+            name: f.name,
+            isVisible: f.isVisible ? null : false,
+            isInverted: f.isInverted ? true : null,
+          ),
+    ];
+    final folderNames = {for (final f in allFolders) f.id: f.name};
     final circles = await (_db.select(_db.circles)
           ..orderBy([
             (t) => OrderingTerm(expression: t.zOrder),
@@ -2372,7 +2332,7 @@ class Repository {
     final out = <ExportLayer>[];
     for (final layer in layers) {
       final objects = <ExportObject>[];
-      // A mixed layer holds several types, so each is collected in turn; a
+      // Each of the layer's types is collected in turn; a
       // single-type layer runs exactly one pass, doing what it always did.
       // The bodies already filter by `layer.id`, so nothing else changes.
       for (final type in layerContentTypes(layer)) {
@@ -2550,10 +2510,11 @@ class Repository {
             layer.type == 'borders' ? layer.borderShowNames : null,
         // Only a hidden layer writes the key; shown is the default everywhere.
         isVisible: layer.isVisible ? null : false,
+        folderName: folderNames[layer.folderId],
         objects: objects,
       ));
     }
-    return ExportData(out);
+    return ExportData(out, folders: folders);
   }
 
   /// Writes [data] into **new** layers (never merges), preserving order, colour,
@@ -2575,6 +2536,26 @@ class Repository {
 
   Future<int> _importData(ExportData data, bool simplify) async {
     var imported = 0;
+    // The folders first, so a layer can name one as it is created. Matched by
+    // name, which is all a file carries — and a name that clashes with a
+    // folder already on the map joins it rather than making a second one with
+    // the same name, which is what anyone reading the drawer would expect.
+    final existing = {
+      for (final f in await watchFolders().first) f.name: f.id,
+    };
+    final folderIds = <String, String>{};
+    for (final f in data.folders) {
+      final id = existing[f.name] ?? await createFolder(name: f.name);
+      folderIds[f.name] = id;
+      if (existing[f.name] == null &&
+          (f.isVisible == false || f.isInverted == true)) {
+        await updateFolder(
+          id,
+          isVisible: f.isVisible == false ? false : null,
+          isInverted: f.isInverted == true ? true : null,
+        );
+      }
+    }
     for (final layer in data.layers) {
       final layerId = await createLayer(
         name: layer.name,
@@ -2584,6 +2565,8 @@ class Repository {
         // known before any area is written.
         borderLevel: layer.type == 'borders' ? layer.borderLevel : null,
       );
+      final folderId = folderIds[layer.folderName];
+      if (folderId != null) await moveLayerToFolder(layerId, folderId);
       if (layer.isInverted ||
           layer.opacity != null ||
           layer.isVisible == false) {
@@ -2632,8 +2615,7 @@ class Repository {
         .getSingleOrNull();
     if (target == null) throw ArgumentError('Layer no longer exists');
     // What matters is whether the target can *hold* what the file carries, not
-    // whether the two layers are labelled the same: a mixed target accepts a
-    // circles file, and a mixed file merges into a mixed layer. Checked against
+    // whether the two layers are labelled the same. Checked against
     // the objects' own kinds rather than the file's layer type, since that is
     // what `_insertObject` will actually dispatch on.
     final kinds = <String>{
@@ -3133,7 +3115,7 @@ enum ColoredElement {
   /// The kind for an [ObjectKind] name, which is what a *row* knows about
   /// itself.
   ///
-  /// The layer-type lookup cannot answer for a mixed layer — it holds six
+  /// The layer-type lookup could not answer for the retired `mixed` type — six
   /// kinds — so anything acting on one element (the Elements-list colour menu,
   /// the editors' colour swatch) must come in this way instead. Takes the
   /// enum's `name` rather than the enum itself so `data/` need not import

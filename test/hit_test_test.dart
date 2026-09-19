@@ -23,7 +23,6 @@ import 'package:latlong2/latlong.dart';
 import 'package:zonecraft/data/database.dart';
 import 'package:zonecraft/state/providers.dart';
 import 'package:zonecraft/data/database.dart' as db;
-import 'package:zonecraft/data/layer_types.dart';
 import 'package:zonecraft/ui/hit_test.dart';
 import 'package:zonecraft/ui/object_summary.dart';
 import 'package:zonecraft/data/poi_sets.dart';
@@ -504,7 +503,7 @@ void main() {
     });
   });
 
-  group('collectCandidates on a combined layer', () {
+  group('collectCandidates scopes to the layer', () {
     final circle = db.Circle(
       id: 'c1',
       layerId: 'L',
@@ -543,24 +542,6 @@ void main() {
       ),
     ];
 
-    test('it offers every type the layer holds, from one tap', () {
-      // The painter draws all of them, so all of them have to be tappable —
-      // the same predicate on both sides. A switch on `layer.type` returned
-      // nothing at all here, which looks exactly like "empty ground".
-      final hits = collectCandidates(
-        camera: camera,
-        tap: center,
-        layer: layerOf(kMixedType),
-        circles: [circle],
-        subspaces: [sub],
-        subspacePoints: subPoints,
-      );
-      expect(hits.map((h) => h.ref.kind).toSet(), {
-        ObjectKind.circle,
-        ObjectKind.subspace,
-      });
-    });
-
     test('a single-type layer still sees only its own', () {
       final hits = collectCandidates(
         camera: camera,
@@ -573,30 +554,5 @@ void main() {
       expect(hits.map((h) => h.ref.kind).toSet(), {ObjectKind.circle});
     });
 
-    test('it never offers borders, which a combined layer cannot hold', () {
-      final hits = collectCandidates(
-        camera: camera,
-        tap: center,
-        layer: layerOf(kMixedType),
-        borderShapes: [
-          BorderShapeRef(
-            id: 'a1',
-            rings: const [
-              [
-                LatLng(48.0, 11.4),
-                LatLng(48.0, 11.6),
-                LatLng(48.2, 11.6),
-                LatLng(48.2, 11.4),
-              ],
-            ],
-            south: 48.0,
-            west: 11.4,
-            north: 48.2,
-            east: 11.6,
-          ),
-        ],
-      );
-      expect(hits, isEmpty);
-    });
   });
 }

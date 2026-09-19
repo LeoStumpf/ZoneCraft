@@ -37,7 +37,7 @@ void main() {
 
   /// The seven object types, i.e. everything except `mixed`.
   final objectTypes =
-      kAllLayerTypes.where((t) => t != kMixedType).toList();
+      kAllLayerTypes.toList();
 
   test('the catalogue is complete and has no duplicates', () {
     expect(kAllLayerTypes.toSet().length, kAllLayerTypes.length);
@@ -65,16 +65,6 @@ void main() {
       }
     });
 
-    test('a mixed layer holds everything except borders', () {
-      for (final ot in objectTypes) {
-        expect(
-          layerHolds(layer(kMixedType), ot),
-          ot != kBorders,
-          reason: 'a combined layer and a "$ot" object',
-        );
-      }
-    });
-
     test('nothing holds an unknown type', () {
       for (final lt in kAllLayerTypes) {
         expect(layerHolds(layer(lt), 'no-such-type'), isFalse);
@@ -89,11 +79,14 @@ void main() {
       }
     });
 
-    test('a mixed layer yields the mixed set, in draw order', () {
-      expect(layerContentTypes(layer(kMixedType)), kMixedContentTypes);
-      // Markers last: they are labels and have to stay legible over the fills.
-      expect(kMixedContentTypes.last, kPoi);
+    test('the retired mixed set keeps the draw order the split needs', () {
+      // Legacy, and load-bearing: the v30 migration and the v3 file reader
+      // both stack the layers they split out in this order, so an upgraded map
+      // looks like the one it replaced. Markers last — they are labels and
+      // have to stay legible over the fills.
       expect(kMixedContentTypes.first, kCircles);
+      expect(kMixedContentTypes.last, kPoi);
+      expect(kMixedContentTypes, isNot(contains(kBorders)));
     });
 
     test('it agrees with layerHolds, for every type', () {
@@ -107,17 +100,6 @@ void main() {
     });
   });
 
-  group('canBecomeMixed', () {
-    test('every mixed content type can, borders and mixed cannot', () {
-      for (final t in kMixedContentTypes) {
-        expect(canBecomeMixed(t), isTrue, reason: t);
-      }
-      expect(canBecomeMixed(kBorders), isFalse,
-          reason: 'its areas carry an admin level a mixed layer cannot keep');
-      expect(canBecomeMixed(kMixedType), isFalse, reason: 'already mixed');
-    });
-  });
-
   group('kInvertibleTypes', () {
     test('is exactly the region types whose painter honours invert', () {
       // `height` draws a region but ignores `inverted` (its band follows the
@@ -125,24 +107,8 @@ void main() {
       // outside — so offering "Fill outside" for any of them would be a
       // toggle that writes the database and changes nothing.
       expect(kInvertibleTypes, [kCircles, kSubspace, kFreeLine, kFreeArea]);
-      for (final t in [kHeight, kPoi, kBorders, kMixedType]) {
+      for (final t in [kHeight, kPoi, kBorders]) {
         expect(kInvertibleTypes, isNot(contains(t)), reason: t);
-      }
-      // Every one of them is something a combined layer can hold, which is
-      // what makes the per-layer check worth doing.
-      for (final t in kInvertibleTypes) {
-        expect(kMixedContentTypes, contains(t), reason: t);
-      }
-    });
-  });
-
-  group('layerMakesOwnContent', () {
-    test('only the combined layer makes nothing of its own', () {
-      // It is a merge destination: Add, Draw and the imports that ask a server
-      // for a kind of thing belong to the layer that holds that kind.
-      expect(layerMakesOwnContent(kMixedType), isFalse);
-      for (final t in kAllLayerTypes.where((t) => t != kMixedType)) {
-        expect(layerMakesOwnContent(t), isTrue, reason: t);
       }
     });
   });

@@ -126,7 +126,7 @@ class HitCandidate {
 /// for a small one behind it, which is exactly the failure the size rule exists
 /// to prevent. The kind ordinal sits between the two because `z` is scoped per
 /// table — a circle's z and a subspace's z are not comparable — and without it the
-/// comparator would not be a total order on a mixed layer.
+/// comparator would not be a total order.
 ///
 /// Pure, so the arbitration is unit-testable without a camera.
 List<HitCandidate> rankCandidates(
@@ -195,7 +195,7 @@ List<HitCandidate> collectCandidates({
   ObjectRef refOf(ObjectKind kind, String id) =>
       ObjectRef(kind: kind, id: id, layerId: layer.id);
 
-  // Same predicate the painter uses, driven the same way: a mixed layer
+  // Same predicate the painter uses, driven the same way: the layer
   // offers every type it holds, a single-type layer exactly its own. When
   // "what is drawn" and "what can be tapped" were decided separately the two
   // drifted apart — see `poiPointVisible`.

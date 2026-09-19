@@ -230,7 +230,7 @@ class _ActiveLayerBody extends ConsumerWidget {
     Future<void> run(LayerAction action) async {
       if (action.needsMap ||
           action.id == LayerActionId.delete ||
-          action.id == LayerActionId.makeMixed) {
+          action.id == LayerActionId.moveToFolder) {
         Navigator.pop(context);
       }
       await action.run();
@@ -241,7 +241,8 @@ class _ActiveLayerBody extends ConsumerWidget {
       LayerActionId.toBottom,
       LayerActionId.export,
       LayerActionId.combine,
-      LayerActionId.makeMixed,
+      LayerActionId.moveToFolder,
+      LayerActionId.moveOutOfFolder,
       LayerActionId.delete,
     };
     final toggles = [

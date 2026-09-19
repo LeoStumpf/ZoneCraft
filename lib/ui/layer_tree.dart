@@ -245,24 +245,28 @@ List<LayerRow> moveDrawerRows(List<LayerRow> rows, int from, int to) {
     }
   }
   rest.insertAll(at, block);
-  return _reparent(rest);
+  // A folder brings its own members and takes nobody else's; only a dropped
+  // *layer* changes hands.
+  if (moved is! LayerLineRow) return rest;
+  return [
+    for (var i = 0; i < rest.length; i++)
+      if (i != at)
+        rest[i]
+      else
+        LayerLineRow(moved.layer, folder: _parentAt(rest, at)),
+  ];
 }
 
-/// Gives every layer row the folder of the row above it, and stamps that folder
-/// onto the row. Collapsed folders adopt nothing (see [moveDrawerRows]).
-List<LayerRow> _reparent(List<LayerRow> rows) {
-  final out = <LayerRow>[];
-  Folder? current;
-  for (final row in rows) {
-    switch (row) {
-      case FolderRow():
-        current = row.folder.isCollapsed ? null : row.folder;
-        out.add(row);
-      case LayerLineRow():
-        out.add(LayerLineRow(row.layer, folder: current));
-    }
-  }
-  return out;
+/// The folder a row dropped at [at] joins: the one the row above it belongs to.
+///
+/// A **collapsed** folder adopts nothing — a row dropped under it goes to the
+/// root rather than into a group the user cannot see.
+Folder? _parentAt(List<LayerRow> rows, int at) {
+  if (at == 0) return null;
+  return switch (rows[at - 1]) {
+    FolderRow(:final folder) => folder.isCollapsed ? null : folder,
+    LayerLineRow(:final folder) => folder,
+  };
 }
 
 // --- Writing it back --------------------------------------------------------

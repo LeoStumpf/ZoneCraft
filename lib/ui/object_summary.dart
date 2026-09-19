@@ -127,7 +127,6 @@ IconData typeIcon(String layerType) => switch (layerType) {
   // identical symbols doing different things.
   'poi' => Icons.place_outlined,
       'borders' => Icons.public,
-      'mixed' => Icons.layers_outlined,
       _ => Icons.circle_outlined,
     };
 
@@ -144,7 +143,6 @@ IconData typeIcon(String layerType) => switch (layerType) {
 /// have to agree on it, and when they didn't, Edit mode armed tap-to-select
 /// against types nothing could select — a button that visibly does nothing.
 bool layerHasEditor(String layerType) =>
-    layerType == kMixedType ||
     const {
       'circles',
       'subspace',

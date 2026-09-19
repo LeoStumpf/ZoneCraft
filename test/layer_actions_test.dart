@@ -29,6 +29,7 @@ void main() {
     String type, {
     bool hasStations = false,
     bool canCombine = false,
+    bool inFolder = false,
     bool isTop = false,
     bool isBottom = false,
   }) => visibleLayerActions(
@@ -36,6 +37,7 @@ void main() {
       type: type,
       hasStations: hasStations,
       canCombine: canCombine,
+      inFolder: inFolder,
       isTop: isTop,
       isBottom: isBottom,
     ),
@@ -75,6 +77,7 @@ void main() {
       bool holdsBorderAreas = true,
       bool fillAreas = false,
       bool showNames = false,
+      bool anyFolder = false,
     }) => LayerActionContext(
       type: type,
       holdsAnything: holdsAnything,
@@ -83,6 +86,7 @@ void main() {
       holdsBorderAreas: holdsBorderAreas,
       fillAreas: fillAreas,
       showNames: showNames,
+      anyFolder: anyFolder,
     );
 
     test('an empty layer cannot be filled outside of', () {
@@ -98,16 +102,17 @@ void main() {
     });
 
     test('a layer that is not empty can still have nothing to invert', () {
-      // The bug: a combined layer holding only POI markers is far from empty,
-      // so the toggle lit up — and markers have no outside.
+      // The bug this covers: counting *any* element lit the toggle on a layer
+      // whose elements have no outside, and pressing it wrote `isInverted`
+      // for a map that could not change.
       final reason = layerActionUnavailable(
         LayerActionId.invert,
-        ctx(kMixedType, holdsInvertible: false, holdsRegionFill: false),
+        ctx(kCircles, holdsInvertible: false, holdsRegionFill: false),
       );
       expect(reason, isNotNull);
       expect(reason, isNot(contains('empty')),
           reason: 'it is not empty — that would be the wrong complaint');
-      expect(reason, contains('merge'));
+      expect(reason, contains('first'));
     });
 
     test('a toggle that is already on can always be turned off', () {
@@ -118,7 +123,7 @@ void main() {
         layerActionUnavailable(
           LayerActionId.invert,
           LayerActionContext(
-            type: kMixedType,
+            type: kCircles,
             isInverted: true,
             holdsInvertible: false,
           ),
@@ -165,18 +170,22 @@ void main() {
     });
 
     test('everything else acts whenever it is offered', () {
-      final full = ctx(kMixedType);
+      final full = ctx(kCircles, anyFolder: true);
       for (final id in LayerActionId.values) {
         if (id == LayerActionId.invert ||
             id == LayerActionId.fillAreas ||
-            id == LayerActionId.showNames) {
+            id == LayerActionId.showNames ||
+            id == LayerActionId.moveToFolder) {
           continue;
         }
         expect(layerActionUnavailable(id, full), isNull, reason: id.name);
         // ...including on a layer holding nothing at all: a rename, an
         // import or a delete does not need contents.
         expect(
-          layerActionUnavailable(id, ctx(kMixedType, holdsAnything: false)),
+          layerActionUnavailable(
+            id,
+            ctx(kCircles, holdsAnything: false, anyFolder: true),
+          ),
           isNull,
           reason: id.name,
         );
@@ -186,7 +195,7 @@ void main() {
     test('a reason is a sentence naming a remedy, not a fault', () {
       final states = [
         ctx(kCircles, holdsAnything: false, holdsInvertible: false),
-        ctx(kMixedType, holdsInvertible: false),
+        ctx(kCircles, holdsInvertible: false),
         ctx(kBorders, holdsBorderAreas: false),
       ];
       for (final c in states) {
@@ -208,9 +217,6 @@ void main() {
       expect(fillLayerWith(kBorders), contains('borders'));
       expect(fillLayerWith(kHeight), contains('height'));
       expect(fillLayerWith(kSubspace), contains('subspace'));
-      // A combined layer makes nothing of its own, so the one remedy is the
-      // one thing that fills it.
-      expect(fillLayerWith(kMixedType), contains('merge'));
       expect(fillLayerWith('something-new'), isNotEmpty);
     });
   });
@@ -232,8 +238,8 @@ void main() {
       // Markers on a combined layer are drawn at full strength on purpose, so
       // the slider moves and nothing changes.
       expect(
-        layerOpacityNote(ctx(kMixedType, holdsRegionFill: false)),
-        contains('markers'),
+        layerOpacityNote(ctx(kBorders, fillAreas: false)),
+        contains('Colour areas'),
       );
       // A borders layer drawn as outlines has no fill to fade either.
       expect(
@@ -246,11 +252,10 @@ void main() {
       expect(layerOpacityNote(ctx(kCircles)), isNull);
       expect(layerOpacityNote(ctx(kPoi)), isNull,
           reason: 'a POI layer fades its markers through an Opacity wrapper');
-      expect(layerOpacityNote(ctx(kMixedType)), isNull);
       expect(layerOpacityNote(ctx(kBorders)), isNull);
       expect(
         layerOpacityNote(
-          ctx(kMixedType, holdsAnything: false, holdsRegionFill: false),
+          ctx(kBorders, holdsAnything: false, fillAreas: false),
         ),
         isNull,
         reason: 'an empty layer fading nothing needs no explaining',
@@ -282,7 +287,7 @@ void main() {
 
     test('invert is offered for region layers and combined, never for '
         'height / poi / borders', () {
-      for (final t in [kCircles, kSubspace, kFreeLine, kFreeArea, kMixedType]) {
+      for (final t in [kCircles, kSubspace, kFreeLine, kFreeArea]) {
         expect(actions(t), contains(LayerActionId.invert), reason: t);
       }
       for (final t in [kHeight, kPoi, kBorders]) {
@@ -310,13 +315,9 @@ void main() {
         actions(kPoi, hasStations: true),
         contains(LayerActionId.stations),
       );
-      expect(
-        actions(kMixedType, hasStations: true),
-        contains(LayerActionId.stations),
-      );
     });
 
-    test('POI imports go wherever POIs can live, except a combined layer', () {
+    test('POI imports go where POIs live, and nowhere else', () {
       expect(
         actions(kPoi),
         containsAll([LayerActionId.importPois, LayerActionId.importStations]),
@@ -328,7 +329,6 @@ void main() {
         kFreeArea,
         kHeight,
         kBorders,
-        kMixedType,
       ]) {
         expect(
           actions(t),
@@ -371,36 +371,34 @@ void main() {
       },
     );
 
-    test('a combined layer makes nothing of its own', () {
-      // It is a merge destination: every import that asks a server for a kind
-      // of thing belongs to the layer that holds that kind. "Import track…"
-      // stays — it reads a file, and needs no type chosen for it.
-      final a = actions(kMixedType, hasStations: true, canCombine: true);
-      for (final id in [
-        LayerActionId.importPois,
-        LayerActionId.importStations,
-        LayerActionId.importFeature,
-        LayerActionId.importBordersVisible,
-      ]) {
-        expect(a, isNot(contains(id)), reason: id.name);
+    test('Move to folder is always offered, and says when there is none', () {
+      // A "not yet", not a "never": the remedy is one tap away in the same
+      // menu, so it is greyed with a reason rather than hidden.
+      for (final t in kAllLayerTypes) {
+        expect(actions(t), contains(LayerActionId.moveToFolder), reason: t);
       }
-      expect(a, contains(LayerActionId.importTrack));
-      // What acts on what it already holds is untouched.
-      expect(a, containsAll([LayerActionId.invert, LayerActionId.stations]));
-      // And its empty Elements list has no button to offer, since the action
-      // that fills it lives on the other layer.
-      expect(emptyStateActions(kMixedType), isEmpty);
-      expect(emptyStateActions(kPoi), isNotEmpty);
+      expect(
+        layerActionUnavailable(
+          LayerActionId.moveToFolder,
+          const LayerActionContext(type: kCircles),
+        ),
+        contains('no folders yet'),
+      );
+      expect(
+        layerActionUnavailable(
+          LayerActionId.moveToFolder,
+          const LayerActionContext(type: kCircles, anyFolder: true),
+        ),
+        isNull,
+      );
     });
 
-    test('Make combined layer follows canBecomeMixed', () {
-      for (final t in kAllLayerTypes) {
-        expect(
-          actions(t).contains(LayerActionId.makeMixed),
-          canBecomeMixed(t),
-          reason: t,
-        );
-      }
+    test('Move out of folder appears only when it is in one', () {
+      expect(actions(kCircles), isNot(contains(LayerActionId.moveOutOfFolder)));
+      expect(
+        actions(kCircles, inFolder: true),
+        contains(LayerActionId.moveOutOfFolder),
+      );
     });
 
     test('Combine… only with a target', () {
@@ -452,7 +450,10 @@ void main() {
       _layer('b', kBorders),
       _layer('c', kPoi),
       _layer('d', kFreeArea),
-      _layer('e', kMixedType),
+      // In a folder, so "Move out of folder" is reached too.
+      _layer('e', kSubspace, folderId: 'f1'),
+      // A second layer of a type already here, so "Combine…" has a target.
+      _layer('f', kCircles),
     ];
 
     late List<LayerAction> seen;
@@ -479,7 +480,7 @@ void main() {
     );
     await tester.pump(); // let the overridden POI-set stream arrive
 
-    // Between them the five layer types reach every action there is.
+    // Between them these layers reach every action there is.
     expect(
       seen.map((a) => a.id).toSet(),
       LayerActionId.values.toSet(),
@@ -554,6 +555,19 @@ void main() {
 /// do anything, and a live Drift stream leaves a timer pending that never lets
 /// the test finish.
 final _overrides = [
+  foldersProvider.overrideWith(
+    (ref) => Stream.value([
+      Folder(
+        id: 'f1',
+        name: 'Settled',
+        sortOrder: 0,
+        isVisible: true,
+        isInverted: false,
+        isCollapsed: false,
+        createdAt: DateTime(2026),
+      ),
+    ]),
+  ),
   circlesProvider.overrideWith((ref) => Stream.value(const <Circle>[])),
   subspacesProvider.overrideWith((ref) => Stream.value(const <Subspace>[])),
   freeLinesProvider.overrideWith((ref) => Stream.value(const <FreeLine>[])),
@@ -588,7 +602,9 @@ final _overrides = [
   ),
 ];
 
-Layer _layer(String id, String type, {bool isInverted = false}) => Layer(
+Layer _layer(String id, String type,
+        {bool isInverted = false, String? folderId}) =>
+    Layer(
       id: id,
       name: 'L$id',
       colorArgb: 0xFF000000,
@@ -600,4 +616,5 @@ Layer _layer(String id, String type, {bool isInverted = false}) => Layer(
       createdAt: DateTime(2026),
       borderFillAreas: false,
       borderShowNames: false,
+      folderId: folderId,
     );

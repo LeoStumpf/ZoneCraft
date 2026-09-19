@@ -21,7 +21,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 
 import 'package:zonecraft/data/database.dart';
-import 'package:zonecraft/data/layer_types.dart';
 import 'package:zonecraft/data/overpass.dart' show PoiResult;
 import 'package:zonecraft/data/poi_sets.dart';
 import 'package:zonecraft/data/repository.dart';
@@ -1633,7 +1632,7 @@ void main() {
     });
   });
 
-  group('combined layers', () {
+  group('folders', () {
     late AppDatabase db;
     late Repository repo;
 
@@ -1643,180 +1642,83 @@ void main() {
     });
     tearDown(() => db.close());
 
-    Future<String> mixedLayer() async {
-      final id = await repo.createLayer(
-          name: 'Everything', colorArgb: 0xFF00FF00, type: kMixedType);
-      return id;
-    }
+    test('a new folder goes on top of everything at the root', () async {
+      await repo.createLayer(name: 'A', colorArgb: 1);
+      await repo.createLayer(name: 'B', colorArgb: 2);
+      final f = await repo.createFolder(name: 'Settled');
+      final folder = (await repo.watchFolders().first).single;
+      expect(folder.id, f);
+      // Folders and root layers share one ordering space, so "on top" has to
+      // clear the layers too, not just the other folders.
+      final layers = await repo.watchLayers().first;
+      expect(folder.sortOrder, greaterThan(layers.last.sortOrder));
+    });
 
-    test('elements of several types can live on one layer', () async {
-      final id = await mixedLayer();
+    test('moving a layer in and out keeps it, and puts it on top', () async {
+      final a = await repo.createLayer(name: 'A', colorArgb: 1);
+      final b = await repo.createLayer(name: 'B', colorArgb: 2);
+      final f = await repo.createFolder(name: 'Settled');
+
+      await repo.moveLayerToFolder(a, f);
+      await repo.moveLayerToFolder(b, f);
+      var layers = await repo.watchLayers().first;
+      expect(layers.where((l) => l.folderId == f), hasLength(2));
+      expect(layers.firstWhere((l) => l.id == b).sortOrder,
+          greaterThan(layers.firstWhere((l) => l.id == a).sortOrder));
+
+      await repo.moveLayerToFolder(a, null);
+      layers = await repo.watchLayers().first;
+      expect(layers.firstWhere((l) => l.id == a).folderId, isNull);
+      expect(layers, hasLength(2), reason: 'nothing is lost by moving');
+    });
+
+    test('deleting a folder keeps its layers, back at the root', () async {
+      // The whole difference from the combined layer this replaced: what you
+      // put in comes out again, and deleting the group is never a way to
+      // delete its contents.
+      final a = await repo.createLayer(name: 'A', colorArgb: 1);
+      final f = await repo.createFolder(name: 'Settled');
+      await repo.moveLayerToFolder(a, f);
       await repo.createCircle(
-          layerId: id, centerLat: 48.1, centerLng: 11.5, radiusMeters: 500);
-      await repo.createSubspace(layerId: id);
-      await repo.createFreeArea(layerId: id);
+          layerId: a, centerLat: 48.1, centerLng: 11.5, radiusMeters: 500);
 
+      await repo.deleteFolder(f);
+
+      expect(await repo.watchFolders().first, isEmpty);
+      final layers = await repo.watchLayers().first;
+      expect(layers.single.id, a);
+      expect(layers.single.folderId, isNull);
       expect(await repo.watchAllCircles().first, hasLength(1));
-      expect(await repo.watchAllSubspaces().first, hasLength(1));
-      expect(await repo.watchAllFreeAreas().first, hasLength(1));
     });
 
-    test('auto shades stay distinct across types on one layer', () async {
-      // Counting per table would give the first circle and the first area
-      // both shade 0 — the same colour — which is exactly what the auto shades
-      // exist to prevent.
-      final id = await mixedLayer();
-      await repo.createCircle(
-          layerId: id, centerLat: 48.1, centerLng: 11.5, radiusMeters: 500);
-      await repo.createFreeArea(layerId: id);
-      await repo.createSubspace(layerId: id);
+    test('reorderTree writes membership and order in one go', () async {
+      final a = await repo.createLayer(name: 'A', colorArgb: 1);
+      final b = await repo.createLayer(name: 'B', colorArgb: 2);
+      final f = await repo.createFolder(name: 'Settled');
 
-      final shades = <int>[
-        (await repo.watchAllCircles().first).single.colorShade,
-        (await repo.watchAllFreeAreas().first).single.colorShade,
-        (await repo.watchAllSubspaces().first).single.colorShade,
-      ];
-      expect(shades.toSet(), hasLength(3), reason: 'shades: $shades');
+      await repo.reorderTree([
+        (id: a, isFolder: false, folderId: f, sortOrder: 0),
+        (id: f, isFolder: true, folderId: null, sortOrder: 0),
+        (id: b, isFolder: false, folderId: null, sortOrder: 1),
+      ]);
+
+      final layers = await repo.watchLayers().first;
+      expect(layers.firstWhere((l) => l.id == a).folderId, f);
+      expect(layers.firstWhere((l) => l.id == a).sortOrder, 0);
+      expect(layers.firstWhere((l) => l.id == b).folderId, isNull);
+      expect((await repo.watchFolders().first).single.sortOrder, 0);
     });
 
-    test('a single-type layer still numbers its shades from 0', () async {
-      // The mixed rule must not leak: an ordinary layer keeps the exact
-      // numbering it had, or every existing map would repaint on upgrade.
-      final id = await repo.createLayer(
-          name: 'C', colorArgb: 1, type: 'circles');
-      for (var i = 0; i < 3; i++) {
-        await repo.createCircle(
-            layerId: id, centerLat: 48.1, centerLng: 11.5, radiusMeters: 500);
-      }
-      final shades = (await repo.watchAllCircles().first)
-          .map((c) => c.colorShade)
-          .toList()
-        ..sort();
-      expect(shades, [0, 1, 2]);
-    });
-
-    test('colour overrides are found across every table it holds', () async {
-      final id = await mixedLayer();
-      final circleId = await repo.createCircle(
-          layerId: id, centerLat: 48.1, centerLng: 11.5, radiusMeters: 500);
-      final areaId = await repo.createFreeArea(layerId: id);
-      await repo.createSubspace(layerId: id); // no override
-
-      await repo.setElementColor(ColoredElement.circle, circleId, 0xFFFF0000);
-      await repo.setElementColor(ColoredElement.freeArea, areaId, 0xFF0000FF);
-
-      final overridden = await repo.elementsWithColorOverride(id, kMixedType);
-      expect(overridden.toSet(), {circleId, areaId});
-    });
-
-    group('combineLayers', () {
-      test('a single-type layer merges into a combined one', () async {
-        final target = await mixedLayer();
-        final source = await repo.createLayer(
-            name: 'C', colorArgb: 1, type: 'circles');
-        await repo.createCircle(
-            layerId: source,
-            centerLat: 48.1,
-            centerLng: 11.5,
-            radiusMeters: 500);
-
-        await repo.combineLayers(sourceId: source, targetId: target);
-
-        final circles = await repo.watchAllCircles().first;
-        expect(circles, hasLength(1), reason: 'the circle must not be lost');
-        expect(circles.single.layerId, target);
-        expect(await repo.watchLayers().first, hasLength(1));
-      });
-
-      test('a combined source keeps every one of its types', () async {
-        // This is the case the old `default:` arm silently destroyed: an
-        // unrecognised source type re-pointed nothing and then lost all its
-        // rows to the cascade when the source layer was deleted.
-        final source = await mixedLayer();
-        await repo.createCircle(
-            layerId: source,
-            centerLat: 48.1,
-            centerLng: 11.5,
-            radiusMeters: 500);
-        await repo.createSubspace(layerId: source);
-        await repo.createFreeArea(layerId: source);
-        final target = await repo.createLayer(
-            name: 'Target', colorArgb: 2, type: kMixedType);
-
-        await repo.combineLayers(sourceId: source, targetId: target);
-
-        expect((await repo.watchAllCircles().first).single.layerId, target);
-        expect((await repo.watchAllSubspaces().first).single.layerId, target);
-        expect((await repo.watchAllFreeAreas().first).single.layerId, target);
-      });
-
-      test('a combined source refuses a single-type target', () async {
-        final source = await mixedLayer();
-        final target = await repo.createLayer(
-            name: 'C', colorArgb: 1, type: 'circles');
-        await expectLater(
-          repo.combineLayers(sourceId: source, targetId: target),
-          throwsArgumentError,
-        );
-      });
-
-      test('a borders layer still refuses a combined target', () async {
-        // A combined layer has nowhere to keep the admin level.
-        final source = await repo.createLayer(
-            name: 'B', colorArgb: 1, type: 'borders', borderLevel: '8');
-        final target = await mixedLayer();
-        await expectLater(
-          repo.combineLayers(sourceId: source, targetId: target),
-          throwsArgumentError,
-        );
-      });
-    });
-
-    group('convertLayerToMixed', () {
-      test('it keeps the rows and moves an untouched opacity', () async {
-        final id = await repo.createLayer(
-            name: 'P', colorArgb: 1, type: 'poi'); // default opacity 1.0
-        await repo.createPoiSet(
-          layerId: id,
-          source: kPoiSourceRadius,
-          categoryKey: 'cafe',
-          centerLat: 48.1,
-          centerLng: 11.5,
-          radiusMeters: 800,
-        );
-
-        await repo.convertLayerToMixed(id);
-
-        final layer = (await repo.watchLayers().first).single;
-        expect(layer.type, kMixedType);
-        expect(layer.opacity, defaultLayerOpacity(kMixedType),
-            reason: 'a POI layer at 1.0 would make region fills opaque');
-        expect(await repo.watchAllPoiSets().first, hasLength(1));
-      });
-
-      test('an opacity the user chose is kept', () async {
-        final id = await repo.createLayer(
-            name: 'C', colorArgb: 1, type: 'circles');
-        await repo.updateLayer(id, opacity: 0.8);
-
-        await repo.convertLayerToMixed(id);
-
-        expect((await repo.watchLayers().first).single.opacity, 0.8);
-      });
-
-      test('a borders layer refuses', () async {
-        final id = await repo.createLayer(
-            name: 'B', colorArgb: 1, type: 'borders', borderLevel: '8');
-        await expectLater(
-            repo.convertLayerToMixed(id), throwsArgumentError);
-        expect((await repo.watchLayers().first).single.type, 'borders');
-      });
-
-      test('converting an already-combined layer is a no-op', () async {
-        final id = await mixedLayer();
-        await repo.convertLayerToMixed(id);
-        expect((await repo.watchLayers().first).single.type, kMixedType);
-      });
+    test('a folder\'s settings are its own', () async {
+      final f = await repo.createFolder(name: 'Settled');
+      await repo.updateFolder(f,
+          name: 'Certain', isVisible: false, isInverted: true,
+          isCollapsed: true);
+      final folder = (await repo.watchFolders().first).single;
+      expect(
+        (folder.name, folder.isVisible, folder.isInverted, folder.isCollapsed),
+        ('Certain', false, true, true),
+      );
     });
   });
 

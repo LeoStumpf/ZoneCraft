@@ -48,14 +48,6 @@ sealed class ListRow {
   const ListRow();
 }
 
-/// "Circles · 3" — only on a combined layer, where rows of several kinds
-/// follow each other and a divider alone would not say where one kind ends.
-class KindHeaderRow extends ListRow {
-  const KindHeaderRow(this.kind, this.count);
-  final ObjectKind kind;
-  final int count;
-}
-
 /// A collapsible heading over the POI layer's imports.
 class SectionRow extends ListRow {
   const SectionRow({
@@ -213,10 +205,7 @@ ElementRows buildElementRows({
   final kinds = [
     for (final t in layerContentTypes(layer)) ?ObjectKind.forLayerType(t),
   ];
-  final presentKinds = {for (final s in summaries) s.ref.kind};
   final poiCount = poiGroups.fold(0, (int n, g) => n + g.points.length);
-  // Kind headings only where several kinds share the list.
-  final headed = layer.type == kMixedType && presentKinds.length > 1;
 
   final rows = <ListRow>[...pending];
   for (final kind in kinds) {
@@ -226,7 +215,6 @@ ElementRows buildElementRows({
     ];
     if (kind == ObjectKind.poiSet) {
       if (mine.isEmpty && poiGroups.isEmpty) continue;
-      if (headed) rows.add(KindHeaderRow(kind, poiCount));
       // A hand-made category is not an import: its group heading is where it
       // is renamed or deleted, so it has no second row under "Imports".
       final manualSetIds = {
@@ -253,7 +241,6 @@ ElementRows buildElementRows({
         if (matches(s)) s,
     ];
     if (shown.isEmpty) continue;
-    if (headed) rows.add(KindHeaderRow(kind, shown.length));
     rows.addAll([for (final s in shown) row(s)]);
   }
 

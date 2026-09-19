@@ -180,9 +180,7 @@ const List<MapControl> mapControls = [
     name: 'Draw with your finger',
     what: 'Trace a line or an area instead of tapping point by point. '
         'One-finger panning is off while this is on.',
-    sometimes: 'Only on a layer that holds lines or areas — and not on a '
-        'combined layer, which holds both and so could not tell which you '
-        'meant.',
+    sometimes: 'Only on a layer that holds lines or areas.',
   ),
   MapControl(
     id: MapControlId.edit,
@@ -208,8 +206,7 @@ const List<MapControl> mapControls = [
     name: 'Find a place by name',
     what: 'Searches OpenStreetMap for a city, river or coastline and imports '
         'its outline.',
-    sometimes: 'Only on a layer that holds lines or areas. Not on a combined '
-        'layer: import on the layer that holds the kind, then combine.',
+    sometimes: 'Only on a layer that holds lines or areas.',
   ),
   MapControl(
     id: MapControlId.osmImport,
@@ -218,9 +215,7 @@ const List<MapControl> mapControls = [
     name: 'Import what is nearby',
     what: 'Fetches places or transit stops from OpenStreetMap into this layer '
         'and keeps them on the device.',
-    sometimes: 'Only on layers that can hold imported points. Not on a '
-        'combined layer: import on the layer that holds the kind, then '
-        'combine.',
+    sometimes: 'Only on layers that can hold imported points.',
   ),
   MapControl(
     id: MapControlId.add,
@@ -230,8 +225,6 @@ const List<MapControl> mapControls = [
     what: 'Arms the map: the next tap places a new element where you point. '
         'Its icon shows which kind. Long-press to place one at the centre '
         'instead.',
-    sometimes: 'Not on a combined layer — that one is filled by merging other '
-        'layers into it, not by making things in it.',
   ),
   MapControl(
     id: MapControlId.tools,

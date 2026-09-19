@@ -222,7 +222,6 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
 
     // The headline number: POIs on a POI layer (the tally when stations are
     // filtered, so the number is the one the map draws), elements otherwise,
-    // both on a combined layer.
     final elements = summaries.length;
     final String count;
     if (tally != null) {
@@ -372,12 +371,6 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
           expanded: row.expanded,
           onTap: () => setState(() => _importsExpanded = !_importsExpanded),
         );
-      case KindHeaderRow():
-        return _SectionHeader(
-          _kindHeading(row.kind),
-          _kindBlurb(row.kind),
-          trailing: '${row.count}',
-        );
       case NoMatchesRow():
         return Padding(
           padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
@@ -479,7 +472,7 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
           : null,
       // A POI sits under its type's heading, which already carries the icon;
       // the indent says which heading. Everything else shows the *element's*
-      // icon, not the layer's: a combined layer's rows are of different
+      // icon, not the layer's: a POI layer's rows are of different
       // kinds, and one shared icon would make the list unreadable.
       contentPadding: row.inGroup
           ? const EdgeInsets.only(left: 40, right: 16)
@@ -608,7 +601,7 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
     WidgetRef ref,
     ObjectSummary s,
   ) async {
-    // Resolved from the *row's* kind, not the layer's type: a mixed layer holds
+    // Resolved from the *row's* kind, not the layer's type: a POI layer holds
     // several kinds, so the layer can no longer answer for one element.
     final kind = ColoredElement.forObjectKindName(s.ref.kind.name);
     if (kind == null) return;
@@ -749,22 +742,6 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
 
 String _plural(int n, String noun) => '$n $noun${n == 1 ? '' : 's'}';
 
-String _kindHeading(ObjectKind kind) => switch (kind) {
-      ObjectKind.circle => 'Circles',
-      ObjectKind.subspace => 'Subspaces',
-      ObjectKind.freeLine => 'Lines',
-      ObjectKind.freeArea => 'Areas',
-      ObjectKind.heightRegion => 'Height areas',
-      ObjectKind.poiSet => 'POIs',
-      ObjectKind.borderArea => 'Border areas',
-      ObjectKind.poiPoint => 'POIs',
-    };
-
-String _kindBlurb(ObjectKind kind) => switch (kind) {
-      ObjectKind.poiSet || ObjectKind.poiPoint => 'By type, then the imports',
-      _ => 'Bottom of the map first',
-    };
-
 /// Names one part of a list that holds several, so none is read as another.
 /// With [onTap] it is a collapsible heading, and says so with a chevron.
 class _SectionHeader extends StatelessWidget {
@@ -848,12 +825,6 @@ class _EmptyHint extends StatelessWidget {
       'borders' =>
         'No areas yet — import every boundary that crosses the '
             'part of the map in view.',
-      // The one place directions beat buttons: a combined layer makes nothing
-      // of its own, and the action that fills it lives on the *other* layer,
-      // so there is no button here to offer.
-      kMixedType =>
-        'No elements yet — a combined layer is filled by merging. Open the '
-            'layer you want to move in and choose “Combine…”.',
       _ => 'No elements yet.',
     };
     // Buttons, not directions: the hint used to name buttons that live on

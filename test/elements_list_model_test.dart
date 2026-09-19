@@ -19,7 +19,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 
 import 'package:zonecraft/data/database.dart';
-import 'package:zonecraft/data/layer_types.dart';
 import 'package:zonecraft/data/transit.dart';
 import 'package:zonecraft/state/providers.dart';
 import 'package:zonecraft/ui/elements_list_model.dart';
@@ -138,18 +137,6 @@ void main() {
         importsExpanded: true,
       );
       expect(ids(r), ['y', 'x']);
-    });
-
-    test('a combined layer keeps draw order between kinds', () {
-      final r = build(
-        on: layer(kMixedType),
-        summaries: [
-          sum(ObjectKind.circle, 'c1', name: 'Zed', size: 1),
-          sum(ObjectKind.freeArea, 'a1', name: 'Alpha', size: 1),
-        ],
-        sort: ElementSort.name,
-      );
-      expect(ids(r), ['c1', 'a1']);
     });
 
     test('z-order flags come from stack order whatever the sort', () {
@@ -333,28 +320,5 @@ void main() {
       );
     });
 
-    test('a combined layer heads each kind, POIs by their point count', () {
-      final r = build(
-        on: layer(kMixedType),
-        summaries: [
-          sum(ObjectKind.circle, 'c1'),
-          sum(ObjectKind.circle, 'c2'),
-          sum(ObjectKind.poiSet, 'S'),
-        ],
-        groups: [cafes],
-      );
-      final headers = r.rows.whereType<KindHeaderRow>().toList();
-      expect(headers.map((h) => h.kind), [ObjectKind.circle, ObjectKind.poiSet]);
-      expect(headers.map((h) => h.count), [2, 1]);
-    });
-
-    test('a single-kind layer has no kind headers', () {
-      expect(build(summaries: circles).rows.whereType<KindHeaderRow>(), isEmpty);
-      final oneKind = build(
-        on: layer(kMixedType),
-        summaries: [sum(ObjectKind.circle, 'c1'), sum(ObjectKind.circle, 'c2')],
-      );
-      expect(oneKind.rows.whereType<KindHeaderRow>(), isEmpty);
-    });
   });
 }

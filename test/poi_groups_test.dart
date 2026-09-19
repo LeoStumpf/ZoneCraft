@@ -233,7 +233,7 @@ void main() {
 
   test('stations first, then categories, then hand-made', () async {
     final layerId = await repo.createLayer(
-        name: 'M', colorArgb: 0xFF123456, type: kMixedType);
+        name: 'M', colorArgb: 0xFF123456, type: kPoi);
     await repo.createPoiSet(
       layerId: layerId,
       source: kPoiSourceManual,

@@ -24,7 +24,6 @@ import 'package:zonecraft/data/overpass.dart' show PoiResult;
 import 'package:zonecraft/data/repository.dart';
 import 'package:zonecraft/data/transit.dart';
 import 'package:zonecraft/state/providers.dart';
-import 'package:zonecraft/data/layer_types.dart';
 import 'package:zonecraft/data/poi_sets.dart';
 import 'package:zonecraft/ui/object_summary.dart';
 
@@ -57,40 +56,6 @@ void main() {
     expect(formatMeters(double.nan), '—');
   });
 
-  test('a combined layer lists every type it holds, in draw order', () async {
-    // A switch on `layer.type` returned nothing at all for a combined layer,
-    // which reads as an empty layer rather than a broken one. The order is the
-    // draw order, so the list matches how the map is stacked.
-    final layerId = await repo.createLayer(
-        name: 'Everything', colorArgb: 0xFF0000FF, type: kMixedType);
-    await repo.createCircle(
-        layerId: layerId, centerLat: 48.1, centerLng: 11.5, radiusMeters: 500);
-    await repo.createSubspace(layerId: layerId);
-    await repo.createPoiSet(
-      layerId: layerId,
-      source: kPoiSourceManual,
-      categoryKey: 'pin',
-      centerLat: 48.1,
-      centerLng: 11.5,
-      radiusMeters: 0,
-    );
-
-    final rows = summariseLayer(
-      await layerById(layerId),
-      circles: await db.select(db.circles).get(),
-      subspaces: await db.select(db.subspaces).get(),
-      poiSets: await db.select(db.poiSets).get(),
-    );
-
-    expect(
-      rows.map((r) => r.ref.kind).toList(),
-      [ObjectKind.circle, ObjectKind.subspace, ObjectKind.poiSet],
-      reason: 'circles, subspaces then POI sets — kMixedContentTypes order',
-    );
-    // Each row still names its own kind, which is what lets the list show a
-    // per-element icon and resolve a per-element colour.
-    expect(rows.every((r) => r.ref.layerId == layerId), isTrue);
-  });
 
   test('formatElevationMeters groups thousands and marks negatives', () {
     expect(formatElevationMeters(2962), '2,962 m');
@@ -622,7 +587,6 @@ void main() {
     });
 
     test('a combined layer has an editor; the retired types do not', () {
-      expect(layerHasEditor(kMixedType), isTrue);
       for (final type in ['planes', 'transit', 'track']) {
         expect(layerHasEditor(type), isFalse, reason: type);
       }

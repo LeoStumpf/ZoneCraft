@@ -19,7 +19,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:zonecraft/state/map_mode.dart';
-import 'package:zonecraft/data/layer_types.dart';
 import 'package:zonecraft/data/repository.dart';
 import 'package:zonecraft/ui/object_summary.dart';
 import 'package:zonecraft/state/providers.dart';
@@ -203,14 +202,10 @@ void main() {
       expect(layerHasEditor('planes'), isFalse);
     });
 
-    test('a combined layer has an editor, and its kinds decide per element',
-        () {
-      expect(layerHasEditor(kMixedType), isTrue);
-      // …but it maps to no single kind, which is why the colour path and Edit
-      // mode both had to move down to the row's own kind.
-      expect(ObjectKind.forLayerType(kMixedType), isNull);
-      expect(ColoredElement.forLayerType(kMixedType), isNull);
-      // The per-kind lookup answers for all ten element kinds instead.
+    test('the colour path and Edit mode work from the row\'s own kind', () {
+      // Both moved down a level when a layer could hold several kinds; they
+      // stayed there, because a row knows what it is and a layer type is one
+      // lookup further away.
       for (final k in ObjectKind.values.where((k) => k.isElement)) {
         expect(ColoredElement.forObjectKindName(k.name), isNotNull,
             reason: k.name);

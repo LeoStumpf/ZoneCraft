@@ -292,31 +292,35 @@ void main() {
     await repo.updateBorderArea(munich.id, labelLat: 48.02, labelLng: 11.07);
     await repo.updateLayer(_id(ids, 'borders'), isVisible: false);
 
-    // mixed — one layer holding several types at once. Its objects say what
-    // they are, so the format needs nothing new; what has to survive is that
-    // the *layer* comes back mixed, with every one of its types still on it.
-    ids['mixed'] = await repo.createLayer(
-        name: 'Everything', colorArgb: 0xFF7E57C2, type: kMixedType);
+    // A folder with several layers in it — the shape that replaced the
+    // combined layer. What has to survive is the membership and the folder's
+    // own two settings; each member is an ordinary layer and travels as one.
+    ids['folder'] = await repo.createFolder(name: 'Everything');
+    await repo.updateFolder(_id(ids, 'folder'), isInverted: true);
+    ids['inCircles'] = await repo.createLayer(
+        name: 'Everything (Circles)', colorArgb: 0xFF7E57C2);
+    await repo.moveLayerToFolder(_id(ids, 'inCircles'), _id(ids, 'folder'));
     await repo.createCircle(
-      layerId: _id(ids, 'mixed'),
+      layerId: _id(ids, 'inCircles'),
       centerLat: 48.15,
       centerLng: 11.60,
       radiusMeters: 750,
       label: 'in the mix',
     );
-    final mixedSub = await repo.createSubspace(layerId: _id(ids, 'mixed'));
-    await repo.addSubspacePoint(
-        subspaceId: mixedSub, lat: 48.10, lng: 11.50, isMain: true);
-    await repo.addSubspacePoint(
-        subspaceId: mixedSub, lat: 48.20, lng: 11.70);
-    final mixedArea = await repo.createFreeArea(layerId: _id(ids, 'mixed'));
-    await repo.addFreeAreaPoints(mixedArea, const [
+    ids['inAreas'] = await repo.createLayer(
+        name: 'Everything (Areas)', colorArgb: 0xFF7E57C2, type: 'freearea');
+    await repo.moveLayerToFolder(_id(ids, 'inAreas'), _id(ids, 'folder'));
+    final folderArea = await repo.createFreeArea(layerId: _id(ids, 'inAreas'));
+    await repo.addFreeAreaPoints(folderArea, const [
       LatLng(48.16, 11.61),
       LatLng(48.17, 11.62),
       LatLng(48.17, 11.60),
     ]);
-    final mixedPoi = await repo.createPoiSet(
-      layerId: _id(ids, 'mixed'),
+    ids['inPois'] = await repo.createLayer(
+        name: 'Everything (POIs)', colorArgb: 0xFF7E57C2, type: 'poi');
+    await repo.moveLayerToFolder(_id(ids, 'inPois'), _id(ids, 'folder'));
+    final folderPoi = await repo.createPoiSet(
+      layerId: _id(ids, 'inPois'),
       source: kPoiSourceManual,
       categoryKey: 'star',
       centerLat: 48.15,
@@ -326,7 +330,7 @@ void main() {
       iconKey: 'star',
     );
     await repo.addManualPoiPoint(
-        poiSetId: mixedPoi, lat: 48.155, lng: 11.605, label: 'here');
+        poiSetId: folderPoi, lat: 48.155, lng: 11.605, label: 'here');
 
     return ids;
   }
@@ -345,10 +349,19 @@ void main() {
     final layers = await (db.select(db.layers)
           ..orderBy([(l) => OrderingTerm(expression: l.sortOrder)]))
         .get();
+    // By name, not by id: ids are new on the far side, and the name is what a
+    // folder *is* in the file.
+    final folders = {
+      for (final f in await db.select(db.folders).get()) f.id: f,
+    };
     final out = <Map<String, Object?>>[];
     for (final l in layers) {
+      final folder = folders[l.folderId];
       out.add({
         'name': l.name,
+        'folder': folder?.name,
+        'folderVisible': folder?.isVisible,
+        'folderInverted': folder?.isInverted,
         'colorArgb': l.colorArgb,
         'type': l.type,
         'isVisible': l.isVisible,
@@ -376,10 +389,17 @@ void main() {
     final layers = await (fresh.select(fresh.layers)
           ..orderBy([(l) => OrderingTerm(expression: l.sortOrder)]))
         .get();
+    final folders = {
+      for (final f in await fresh.select(fresh.folders).get()) f.id: f,
+    };
     final out = <Map<String, Object?>>[];
     for (final l in layers) {
+      final folder = folders[l.folderId];
       out.add({
         'name': l.name,
+        'folder': folder?.name,
+        'folderVisible': folder?.isVisible,
+        'folderInverted': folder?.isInverted,
         'colorArgb': l.colorArgb,
         'type': l.type,
         'isVisible': l.isVisible,
@@ -400,9 +420,9 @@ void main() {
   test('the whole database survives an export/import round-trip', () async {
     await seedEverything();
     final before = await snapshot();
-    expect(before, hasLength(10),
+    expect(before, hasLength(12),
         reason: 'one layer of every type, a second subspace and POI layer '
-            '(the shapes planes and transit became), plus a combined one');
+            '(the shapes planes and transit became), plus three in a folder');
 
     final after = await reimport(await repo.exportData());
     expect(after, hasLength(before.length));
@@ -419,7 +439,11 @@ void main() {
 
     final layers = await repo.watchLayers().first;
     for (final entry in ids.entries) {
-      final name = layers.firstWhere((l) => l.id == entry.value).name;
+      // `ids` also names the folder, which is not a layer and has no
+      // single-layer export of its own — its members carry it.
+      final layer = layers.where((l) => l.id == entry.value).firstOrNull;
+      if (layer == null) continue;
+      final name = layer.name;
       final mine = before.firstWhere((l) => l['name'] == name);
       final after = await reimport(await repo.exportData(onlyLayerId: entry.value));
       expect(after, hasLength(1), reason: '${entry.key}: one layer in, one out');
@@ -608,51 +632,92 @@ void main() {
     expect(points.where((p) => p.osmId == null), hasLength(6));
   });
 
-  test('a combined layer round-trips with every one of its types', () async {
-    // The format needs nothing new for this — objects already say what they
-    // are — so what is actually at risk is the *layer*: coming back as
-    // 'circles' would strand the subspace, the area and the POIs on a layer
-    // that no longer paints them.
-    final ids = await seedEverything();
-    final data = await repo.exportData(onlyLayerId: _id(ids, 'mixed'));
-    final layer = data.layers.single;
-    expect(layer.type, kMixedType);
-    expect(
-      layer.objects.map((o) => o.kind).toSet(),
-      {'circle', 'subspace', 'freearea', 'poi'},
-      reason: 'every type on the layer has to be collected, not just the first',
-    );
+  test('a folder round-trips with its members and its own settings', () async {
+    // A folder carries nothing but a name and two switches, and its members
+    // are ordinary layers — so what is at risk is the *membership*: coming
+    // back at the root would quietly undo the grouping, and coming back with
+    // the folder's invert dropped would draw every member the wrong way round.
+    await seedEverything();
+    final data = await repo.exportData();
+    expect(data.folders.map((f) => f.name), contains('Everything'));
+    final folder = data.folders.firstWhere((f) => f.name == 'Everything');
+    expect(folder.isInverted, isTrue);
+    final members =
+        data.layers.where((l) => l.folderName == 'Everything').toList();
+    expect(members.map((l) => l.type), ['circles', 'freearea', 'poi']);
 
     final after = await reimport(data);
-    expect(after.single['type'], kMixedType);
-    final objects = _objRows(after.single);
-    expect(objects, hasLength(4));
-    final circle = objects.firstWhere((o) => o['label'] == 'in the mix');
-    expect(circle['radiusMeters'], 750);
+    final folders = await repo.watchFolders().first;
+    final back = folders.firstWhere((f) => f.name == 'Everything');
+    expect(back.isInverted, isTrue);
+    final layers = await repo.watchLayers().first;
+    final inside = layers.where((l) => l.folderId == back.id).toList();
+    expect(inside.map((l) => l.type), ['circles', 'freearea', 'poi']);
+    expect(after.where((l) => l['name'] == 'Everything (Circles)'), hasLength(1));
   });
 
-  test('a file merges into a combined layer, and refuses a narrower one',
-      () async {
-    final ids = await seedEverything();
-    final circlesFile =
-        (await repo.exportData(onlyLayerId: _id(ids, 'circles'))).layers.single;
+  test('a v3 file\'s combined layer arrives split, inside a folder', () async {
+    // The one thing the fixed point does *not* cover: a file this version
+    // cannot write. A `mixed` layer becomes one layer per kind it carries, in
+    // the order its painter drew them, with the invert moved up to the folder
+    // — the same thing the v30 migration does to a database.
+    const file = '''
+{
+  "type": "FeatureCollection",
+  "zonecraft": {
+    "version": 3,
+    "layers": [
+      {"name": "Everything", "colorArgb": 42, "type": "mixed",
+       "isInverted": true, "opacity": 0.45}
+    ]
+  },
+  "features": [
+    {"type": "Feature", "properties": {"kind": "poi", "zonecraftLayer": 0,
+      "categoryKey": "star", "radiusMeters": 0, "source": "manual"},
+     "geometry": {"type": "Point", "coordinates": [11.6, 48.15]}},
+    {"type": "Feature", "properties": {"kind": "circle", "zonecraftLayer": 0,
+      "radiusMeters": 500},
+     "geometry": {"type": "Point", "coordinates": [11.5, 48.1]}}
+  ]
+}''';
+    final data = importFromGeoJson(file);
+    expect(data, isNotNull);
+    expect(data!.folders.single.name, 'Everything');
+    expect(data.folders.single.isInverted, isTrue);
+    // Draw order, not file order: the circle is ground, the POI is a label.
+    expect(data.layers.map((l) => l.type), ['circles', 'poi']);
+    expect(data.layers.map((l) => l.name),
+        ['Everything (Circles)', 'Everything (POIs)']);
+    expect(data.layers.every((l) => l.folderName == 'Everything'), isTrue);
+    expect(data.layers.every((l) => !l.isInverted), isTrue,
+        reason: 'the invert moved up to the folder, which flips them');
+    expect(data.layers.every((l) => l.colorArgb == 42), isTrue);
 
-    // A circles file into a combined layer: allowed, because the target can
-    // hold circles.
-    final before = (await repo.watchAllCircles().first).length;
-    await repo.mergeIntoLayer(_id(ids, 'mixed'), circlesFile, simplify: false);
-    expect((await repo.watchAllCircles().first).length,
-        greaterThan(before));
-
-    // A combined file into a circles layer: refused, because it carries a
-    // subspace and an area that a circles layer cannot hold.
-    final mixedFile =
-        (await repo.exportData(onlyLayerId: _id(ids, 'mixed'))).layers.single;
-    await expectLater(
-      repo.mergeIntoLayer(_id(ids, 'circles'), mixedFile, simplify: false),
-      throwsArgumentError,
-    );
+    await repo.importData(data, simplify: false);
+    final folder = (await repo.watchFolders().first).single;
+    final layers = await repo.watchLayers().first;
+    expect(layers.where((l) => l.folderId == folder.id), hasLength(2));
   });
+
+  test('a v3 combined layer holding one kind is just that layer', () async {
+    const file = '''
+{
+  "type": "FeatureCollection",
+  "zonecraft": {"version": 3, "layers": [
+    {"name": "Only POIs", "colorArgb": 9, "type": "mixed", "isInverted": false}
+  ]},
+  "features": [
+    {"type": "Feature", "properties": {"kind": "poi", "zonecraftLayer": 0,
+      "categoryKey": "bench", "radiusMeters": 300, "source": "manual"},
+     "geometry": {"type": "Point", "coordinates": [11.5, 48.1]}}
+  ]
+}''';
+    final data = importFromGeoJson(file)!;
+    expect(data.folders, isEmpty, reason: 'no folder around a single layer');
+    expect(data.layers.single.type, 'poi');
+    expect(data.layers.single.name, 'Only POIs');
+  });
+
 
   test('a hand-made POI category comes back hand-made, not as an import',
       () async {

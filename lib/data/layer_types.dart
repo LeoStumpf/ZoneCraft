@@ -16,7 +16,7 @@
 
 import 'database.dart';
 
-/// The seven object-type strings a `Layers.type` can hold, plus [kMixedType].
+/// The seven object-type strings a `Layers.type` can hold.
 ///
 /// These are the persisted format — a layer's type is stored as one of these
 /// strings — so they may be added to but never renamed. Three earlier ones
@@ -31,24 +31,20 @@ const kHeight = 'height';
 const kPoi = 'poi';
 const kBorders = 'borders';
 
-/// A layer that holds several object types at once.
+/// The `mixed` layer type, **retired at schema v30**. A layer holds one kind
+/// again; several are grouped with a folder instead (see `ui/layer_tree.dart`),
+/// which leaves each of them a layer rather than merging them away.
+///
+/// The string cannot be deleted: databases older than v30 and exported files
+/// older than format v4 still carry it. It is read by exactly two things — the
+/// v30 migration and the GeoJSON reader — and both do the same thing with it,
+/// splitting the layer into one per kind it actually holds.
 const kMixedType = 'mixed';
 
-/// What a mixed layer may hold, **in draw order** (bottom first).
-///
-/// The order is the answer to "what happens when a circle and a POI share a
-/// layer": the region composite is ground, and markers are labels that have
-/// to stay legible on top. It is deliberately
-/// fixed rather than per-element, and stays that way: the per-element `z_order`
-/// added in v26 is scoped to one layer **and one table**, because each kind is
-/// drawn by its own painter in its own pass and no number stored on a row could
-/// make a marker go behind a circle. So a POI still cannot be sent behind a
-/// circle; what z_order orders is elements *within* a kind.
-///
-/// **`borders` is excluded.** `Layers.borderLevel` is a per-layer property and
-/// "no two neighbours share a colour" is only meaningful within one admin
-/// level — areas of different levels nest rather than tile. A border area's
-/// existing "Convert to freehand area" is the way into a mixed layer.
+/// What a `mixed` layer could hold, **in the order its painter drew them**
+/// (bottom first): regions are ground, markers are labels on top. Legacy, and
+/// load-bearing for exactly that reason — the split stacks the layers it makes
+/// in this order, so an upgraded map looks like the one it replaced.
 const kMixedContentTypes = <String>[
   kCircles,
   kSubspace,
@@ -76,8 +72,8 @@ const kInvertibleTypes = <String>[
   kFreeArea,
 ];
 
-/// Every type a *layer* can be, including mixed. Used by the new-layer picker
-/// and by tests that want to be exhaustive.
+/// Every type a *layer* can be. Used by the new-layer picker and by tests that
+/// want to be exhaustive.
 const kAllLayerTypes = <String>[
   kCircles,
   kSubspace,
@@ -86,7 +82,6 @@ const kAllLayerTypes = <String>[
   kHeight,
   kPoi,
   kBorders,
-  kMixedType,
 ];
 
 /// Whether [layer] may hold objects of [type].
@@ -97,43 +92,17 @@ const kAllLayerTypes = <String>[
 /// matching what could be tapped. A painter, a hit test and an exporter that
 /// each decide for themselves which rows belong to a layer is exactly that
 /// failure waiting to happen again.
+///
+/// One line now that `mixed` is gone, and kept as a function for that reason:
+/// the day a layer holds several kinds again, it is one edit rather than forty.
 bool layerHolds(Layer layer, String type) => layerTypeHolds(layer.type, type);
 
 /// [layerHolds] on a bare type string, for callers that have no row.
-bool layerTypeHolds(String layerType, String type) => layerType == kMixedType
-    ? kMixedContentTypes.contains(type)
-    : layerType == type;
+bool layerTypeHolds(String layerType, String type) => layerType == type;
 
-/// The types [layer] may hold, in draw order. One element for a single-type
-/// layer; [kMixedContentTypes] for a mixed one.
+/// The types [layer] may hold, in draw order — one, since v30.
 List<String> layerContentTypes(Layer layer) =>
     layerContentTypesOf(layer.type);
 
 /// [layerContentTypes] on a bare type string.
-List<String> layerContentTypesOf(String layerType) =>
-    layerType == kMixedType ? kMixedContentTypes : <String>[layerType];
-
-/// Whether a layer of [layerType] can be turned into a mixed one.
-///
-/// Everything except `borders` (whose areas would lose the admin level that
-/// makes their colouring meaningful) and a layer that already is mixed.
-bool canBecomeMixed(String layerType) =>
-    layerType != kMixedType && kMixedContentTypes.contains(layerType);
-
-/// Whether a layer of [layerType] offers the controls that *make* content of a
-/// chosen type — Add, Draw, and the imports that ask a server for a kind of
-/// thing.
-///
-/// False for the combined layer, and only for it. A combined layer is a
-/// destination: its content is made on the single-type layer that owns that
-/// kind and merged in afterwards ([layerContentTypes] is what the merge checks
-/// against). Gating those controls on [layerHolds] instead made a combined
-/// layer answer yes for six types at once, so it offered strictly *more* than
-/// any real layer — both import buttons on screen, four import items in its
-/// menu, a Draw that silently only ever made a line, and an Add that had to ask
-/// which of six kinds it meant before it could do anything.
-///
-/// "Import track…" is deliberately not covered by this: it reads a file the
-/// user already has, writes plain elements with no set or fetch lifecycle, and
-/// needs no type chosen for it.
-bool layerMakesOwnContent(String layerType) => layerType != kMixedType;
+List<String> layerContentTypesOf(String layerType) => <String>[layerType];

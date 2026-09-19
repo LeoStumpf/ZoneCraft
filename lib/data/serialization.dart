@@ -20,6 +20,8 @@ import 'package:latlong2/latlong.dart';
 
 import '../geo/border_areas.dart' show groupRings;
 import '../geo/geodesic.dart';
+import 'database.dart' show layerTypeNoun;
+import 'layer_types.dart';
 
 /// Import/export of layers + objects as **GeoJSON** (lossless round-trip, our
 /// own format) and **KML** (export only, for Google Earth / Maps interop).
@@ -225,14 +227,16 @@ class ExportLayer {
     this.borderFillAreas,
     this.borderShowNames,
     this.isVisible,
+    this.folderName,
   });
 
   final String name;
   final int colorArgb;
 
-  /// circles | subspace | freeline | freearea | height | poi | borders |
-  /// mixed. (A v1/v2 file's `planes` and `transit` read as `subspace` and
-  /// `poi`; its `track` layers are dropped.)
+  /// circles | subspace | freeline | freearea | height | poi | borders.
+  /// (A v1/v2 file's `planes` and `transit` read as `subspace` and `poi`; its
+  /// `track` layers are dropped, and a v3 file's `mixed` layer is split into
+  /// one layer per kind it carries — see [importFromGeoJson].)
   final String type;
   final bool isInverted;
   final List<ExportObject> objects;
@@ -255,12 +259,40 @@ class ExportLayer {
   /// what a file written before this field carried — so only a *hidden* layer
   /// puts a key in the file.
   final bool? isVisible;
+
+  /// The folder this layer is in, **by name**, or null at the root.
+  ///
+  /// By name rather than by index because a folder carries nothing else a file
+  /// needs to identify it, and a name is what survives being read by a person.
+  /// Its own settings ride in the top-level `folders` list.
+  final String? folderName;
 }
 
-/// A whole export: the ordered layers (bottom-to-top draw order).
+/// A folder in a file: what it is called, and the two things it does.
+class ExportFolder {
+  const ExportFolder({
+    required this.name,
+    this.isVisible,
+    this.isInverted,
+  });
+
+  final String name;
+
+  /// Null = the default (shown / not inverted), so an ordinary folder adds
+  /// only its name to the file.
+  final bool? isVisible;
+  final bool? isInverted;
+}
+
+/// A whole export: the ordered layers (bottom-to-top draw order), and the
+/// folders they name.
 class ExportData {
-  const ExportData(this.layers);
+  const ExportData(this.layers, {this.folders = const []});
   final List<ExportLayer> layers;
+
+  /// Every folder any layer names, in root order. Empty in a file from a map
+  /// with no folders, which is why nothing about the format changes for one.
+  final List<ExportFolder> folders;
 
   int get objectCount =>
       layers.fold(0, (sum, l) => sum + l.objects.length);
@@ -288,7 +320,13 @@ class ExportData {
 /// reader translates a v1/v2 file's kinds and layer types on the way in
 /// ([importFromGeoJson]); `nearA`, `pointNodeCounts`, `pointRouteRefs`,
 /// `trackStrokeWidth` and `trackMinDistanceMeters` are no longer written.
-const int geoJsonSchemaVersion = 3;
+/// v4 retired the `mixed` layer type for folders: a layer names its folder in
+/// `folder`, and the folders themselves ride in `zonecraft.folders`. Both are
+/// written only when there are folders, so a file from a map without them is
+/// what v3 wrote. A v3 file's `mixed` layer is split on the way in, one layer
+/// per kind it actually carries, grouped under a folder when that is several —
+/// the same thing the v30 migration does to a database.
+const int geoJsonSchemaVersion = 4;
 
 /// Serialises [data] to a pretty-printed GeoJSON `FeatureCollection`. Each object
 /// becomes a `Feature`; layer attributes ride in a non-standard top-level
@@ -319,8 +357,20 @@ String exportToGeoJson(ExportData data) {
             // Only a hidden layer writes a key: absent means shown, which is
             // what every v1 file means too.
             if (l.isVisible == false) 'isVisible': false,
+            if (l.folderName != null) 'folder': l.folderName,
           },
       ],
+      // Absent in a file from a map with no folders, so such a file is exactly
+      // what v3 wrote apart from its version number.
+      if (data.folders.isNotEmpty)
+        'folders': [
+          for (final f in data.folders)
+            {
+              'name': f.name,
+              if (f.isVisible == false) 'isVisible': false,
+              if (f.isInverted == true) 'isInverted': true,
+            },
+        ],
     },
     'features': features,
   };
@@ -471,10 +521,20 @@ ExportData? importFromGeoJson(String text) {
       borderFillAreas: l['borderFillAreas'] as bool?,
       borderShowNames: l['borderShowNames'] as bool?,
       isVisible: l['isVisible'] as bool?,
+      folderName: l['folder'] as String?,
       objects: const [],
     ));
     buckets.add(<ExportObject>[]);
   }
+  final folders = <ExportFolder>[
+    for (final f in (zc['folders'] is List ? zc['folders'] as List : const []))
+      if (f is Map && f['name'] is String)
+        ExportFolder(
+          name: f['name'] as String,
+          isVisible: f['isVisible'] as bool?,
+          isInverted: f['isInverted'] as bool?,
+        ),
+  ];
 
   final features = root['features'];
   if (features is! List) return null;
@@ -491,7 +551,7 @@ ExportData? importFromGeoJson(String text) {
     buckets[idx].add(obj);
   }
 
-  return ExportData([
+  return _splitLegacyMixed(ExportData([
     for (var i = 0; i < layerMeta.length; i++)
       ExportLayer(
         name: layerMeta[i].name,
@@ -503,9 +563,79 @@ ExportData? importFromGeoJson(String text) {
         borderFillAreas: layerMeta[i].borderFillAreas,
         borderShowNames: layerMeta[i].borderShowNames,
         isVisible: layerMeta[i].isVisible,
+        folderName: layerMeta[i].folderName,
         objects: buckets[i],
       ),
-  ]);
+  ], folders: folders));
+}
+
+/// Splits every `mixed` layer a v3 file holds into one layer per kind it
+/// actually carries — the same thing the v30 migration does to a database, and
+/// for the same reason: a layer holds one kind again, and several are grouped
+/// with a folder that leaves them layers.
+///
+/// A folder is made only when there is more than one kind: a combined layer
+/// that ended up holding a single kind was a layer of that kind wearing the
+/// wrong label. The children are emitted in [kMixedContentTypes] order, which
+/// is the order the mixed painter drew them, so the file looks like what it
+/// looked like. The invert moves up to the folder, which means the same thing
+/// there (flip every member), and the members are therefore un-inverted.
+ExportData _splitLegacyMixed(ExportData data) {
+  if (!data.layers.any((l) => l.type == kMixedType)) return data;
+  final layers = <ExportLayer>[];
+  final folders = [...data.folders];
+  for (final l in data.layers) {
+    if (l.type != kMixedType) {
+      layers.add(l);
+      continue;
+    }
+    final byType = <String, List<ExportObject>>{};
+    for (final o in l.objects) {
+      final t = layerTypeForExportKind(o.kind);
+      if (t != null) (byType[t] ??= <ExportObject>[]).add(o);
+    }
+    final present = [
+      for (final t in kMixedContentTypes)
+        if (byType.containsKey(t)) t,
+    ];
+    if (present.length < 2) {
+      // Nothing in it becomes the default type rather than a folder holding
+      // nothing.
+      final type = present.isEmpty ? kCircles : present.single;
+      layers.add(ExportLayer(
+        name: l.name,
+        colorArgb: l.colorArgb,
+        type: type,
+        isInverted: l.isInverted,
+        opacity: l.opacity,
+        isVisible: l.isVisible,
+        folderName: l.folderName,
+        objects: byType[type] ?? const [],
+      ));
+      continue;
+    }
+    var folderName = l.name;
+    for (var n = 2; folders.any((f) => f.name == folderName); n++) {
+      folderName = '${l.name} $n';
+    }
+    folders.add(ExportFolder(
+      name: folderName,
+      isVisible: l.isVisible,
+      isInverted: l.isInverted ? true : null,
+    ));
+    for (final t in present) {
+      layers.add(ExportLayer(
+        name: '${l.name} (${layerTypeNoun(t)})',
+        colorArgb: l.colorArgb,
+        type: t,
+        isInverted: false,
+        opacity: l.opacity,
+        folderName: folderName,
+        objects: byType[t]!,
+      ));
+    }
+  }
+  return ExportData(layers, folders: folders);
 }
 
 ExportObject? _featureToObject(Map<String, dynamic> f) {

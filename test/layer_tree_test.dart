@@ -247,6 +247,27 @@ void main() {
       expect(parentOf(moved, 'root'), isNull);
     });
 
+    test('a drop takes nobody else with it', () {
+      // The bug this covers: reading the parent off the row above for *every*
+      // row swept every layer below the drop into the folder too, because
+      // nothing in the list says where a folder's members end.
+      final base = drawerRows(buildLayerTree(
+        [_folder('f', sortOrder: 2)],
+        [
+          _layer('bottom', sortOrder: 0),
+          _layer('middle', sortOrder: 1),
+          _layer('in', folderId: 'f', sortOrder: 0),
+        ],
+      ));
+      // f · in · middle · bottom  ->  drop 'middle' among the members
+      expect(base.map((r) => r.id), ['f', 'in', 'middle', 'bottom']);
+      final moved = moveDrawerRows(base, 2, 1);
+      expect(parentOf(moved, 'middle'), 'f');
+      expect(parentOf(moved, 'bottom'), isNull,
+          reason: 'a layer below the drop is not in the folder');
+      expect(parentOf(moved, 'in'), 'f');
+    });
+
     test('a move that changes nothing returns the same list', () {
       final base = rows();
       expect(identical(moveDrawerRows(base, 2, 2), base), isTrue);

@@ -67,7 +67,8 @@ enum LayerActionId {
   importTrack,
   export,
   combine,
-  makeMixed,
+  moveToFolder,
+  moveOutOfFolder,
   delete,
 }
 
@@ -79,6 +80,8 @@ class LayerActionContext {
     this.isInverted = false,
     this.hasStations = false,
     this.canCombine = false,
+    this.inFolder = false,
+    this.anyFolder = false,
     this.isTop = false,
     this.isBottom = false,
     this.fillAreas = false,
@@ -100,6 +103,13 @@ class LayerActionContext {
 
   /// Whether another layer exists that could absorb this one.
   final bool canCombine;
+
+  /// Whether this layer is in a folder — "Move out of folder" is about a fact,
+  /// not a possibility, so it is hidden rather than greyed when it is not.
+  final bool inFolder;
+
+  /// Whether any folder exists to move into.
+  final bool anyFolder;
   final bool isTop;
   final bool isBottom;
   final bool fillAreas;
@@ -134,19 +144,13 @@ class LayerActionContext {
 /// The predicates are the drawer's original ones, moved verbatim:
 /// - 'height' layers use an above/below toggle, not viewport invert; 'poi' is
 ///   markers with nothing to invert; 'borders' draws many separate areas, so
-///   there is no single region to take the complement of. A combined layer
-///   offers it and inverts the **region half** only.
+///   there is no single region to take the complement of.
 /// - "Import map feature…" fetches a *named place*, so it belongs to the
 ///   freehand types; "Import track…" is one entry, not one per matching type,
-///   because a combined layer holds both freehand types and the same item
-///   listed twice is a menu bug.
-/// - **A combined layer makes nothing of its own** ([layerMakesOwnContent]):
-///   every import that asks a server for a kind of thing is made on the
-///   single-type layer that owns that kind and merged in afterwards. Only
-///   "Import track…" stays, because it reads a file rather than querying for a
-///   type. Without that rule a combined layer offered more than any real one.
-/// - Converting to a combined layer is one-way on purpose: going *back* is
-///   only well defined while the layer holds at most one type.
+///   because the same item listed twice is a menu bug.
+/// - Moving into a folder is always offered and greyed when there are no
+///   folders; moving *out* only appears when the layer is in one, because
+///   there is no "not yet" about it.
 List<LayerActionId> visibleLayerActions(LayerActionContext c) {
   final t = c.type;
   final freehand = layerTypeHolds(t, kFreeLine) || layerTypeHolds(t, kFreeArea);
@@ -158,21 +162,22 @@ List<LayerActionId> visibleLayerActions(LayerActionContext c) {
     LayerActionId.opacity,
     // [kInvertibleTypes] is the same list the greying reads, so the menu item
     // and "can it do anything?" cannot disagree about what invert needs.
-    if (t == kMixedType || kInvertibleTypes.contains(t)) LayerActionId.invert,
+    if (kInvertibleTypes.contains(t)) LayerActionId.invert,
     if (c.hasStations) LayerActionId.stations,
     if (t == kBorders) ...[LayerActionId.fillAreas, LayerActionId.showNames],
-    if (layerMakesOwnContent(t) && layerTypeHolds(t, kPoi)) ...[
+    if (layerTypeHolds(t, kPoi)) ...[
       LayerActionId.importPois,
       LayerActionId.importStations,
     ],
     if (t == kBorders) LayerActionId.importBordersVisible,
-    if (freehand) ...[
-      if (layerMakesOwnContent(t)) LayerActionId.importFeature,
-      LayerActionId.importTrack,
-    ],
+    if (freehand) ...[LayerActionId.importFeature, LayerActionId.importTrack],
     LayerActionId.export,
     if (c.canCombine) LayerActionId.combine,
-    if (canBecomeMixed(t)) LayerActionId.makeMixed,
+    // Always offered, greyed with a reason when there is no folder yet — the
+    // remedy is one tap away in the same menu, which is what makes it a "not
+    // yet" rather than a "never".
+    LayerActionId.moveToFolder,
+    if (c.inFolder) LayerActionId.moveOutOfFolder,
     LayerActionId.delete,
   ];
 }
@@ -205,11 +210,11 @@ String? layerActionUnavailable(LayerActionId id, LayerActionContext c) {
         return 'This layer is empty — ${fillLayerWith(c.type)}.';
       }
       if (!c.holdsInvertible) {
-        // Only a combined layer reaches this: every other type that offers
-        // invert holds nothing *but* invertible elements, so a non-empty one
-        // always has a shape. And a combined layer is filled by merging.
-        return 'Fill outside needs a shape to take the outside of — merge in '
-            'a layer of circles, lines or areas first.';
+        // Unreachable while every type that offers invert holds nothing *but*
+        // invertible elements — kept because that is a fact about the type
+        // list, not about this function.
+        return 'Fill outside needs a shape to take the outside of — add a '
+            'circle, line or area first.';
       }
       return null;
 
@@ -244,9 +249,16 @@ String? layerActionUnavailable(LayerActionId id, LayerActionContext c) {
     case LayerActionId.importBordersVisible:
     case LayerActionId.importFeature:
     case LayerActionId.importTrack:
+    case LayerActionId.moveToFolder:
+      if (!c.anyFolder) {
+        return 'There are no folders yet — make one from the layers menu '
+            'first.';
+      }
+      return null;
+
     case LayerActionId.export:
     case LayerActionId.combine:
-    case LayerActionId.makeMixed:
+    case LayerActionId.moveOutOfFolder:
     case LayerActionId.delete:
       return null;
   }
@@ -269,9 +281,6 @@ String? layerOpacityNote(LayerActionContext c) {
     return 'Transparency fades the area fill — turn on “Colour areas” to see '
         'it.';
   }
-  if (c.type == kMixedType && !c.holdsRegionFill) {
-    return 'Transparency fades this layer’s shapes; its markers stay crisp.';
-  }
   return null;
 }
 
@@ -291,8 +300,6 @@ String fillLayerWith(String type) => switch (type) {
   kHeight => 'add a height area first',
   kPoi => 'import or place some POIs first',
   kBorders => 'import some borders first',
-  // A combined layer makes nothing of its own ([layerMakesOwnContent]).
-  kMixedType => 'merge another layer into it first',
   _ => 'add something to it first',
 };
 
@@ -316,7 +323,10 @@ int layerActionGroup(LayerActionId id) => switch (id) {
   LayerActionId.importBordersVisible ||
   LayerActionId.importFeature ||
   LayerActionId.importTrack => 2,
-  LayerActionId.export || LayerActionId.combine || LayerActionId.makeMixed => 3,
+  LayerActionId.export ||
+  LayerActionId.combine ||
+  LayerActionId.moveToFolder ||
+  LayerActionId.moveOutOfFolder => 3,
   LayerActionId.delete => 4,
 };
 
@@ -328,12 +338,8 @@ typedef EmptyStateAction = ({MapRequestKind kind, IconData icon, String label});
 
 /// What an empty layer of [type] can be filled with, as the map-owned actions
 /// its Elements list offers instead of a hint naming buttons elsewhere.
-///
-/// Empty for a **combined** layer, which is filled by merging another layer
-/// into it ([layerMakesOwnContent]) — an action that lives on the *other*
-/// layer, so there is no button here to offer and its hint says so instead.
 List<EmptyStateAction> emptyStateActions(String type) => [
-  if (layerMakesOwnContent(type)) ...[
+  ...[
     if (layerTypeHolds(type, kPoi)) ...[
       (
         kind: MapRequestKind.importPois,
@@ -509,6 +515,9 @@ List<LayerAction> layerActionsFor(
     isInverted: layer.isInverted,
     hasStations: hasStations,
     canCombine: layers.any((l) => canCombineLayers(layer, l)),
+    inFolder: layer.folderId != null,
+    anyFolder:
+        (ref.read(foldersProvider).asData?.value ?? const <Folder>[]).isNotEmpty,
     isTop: layers.isEmpty || layers.last.id == layer.id,
     isBottom: layers.isEmpty || layers.first.id == layer.id,
     fillAreas: layer.borderFillAreas,
@@ -699,22 +708,25 @@ List<LayerAction> layerActionsFor(
         }
       },
     ),
-    LayerActionId.makeMixed => LayerAction(
+    LayerActionId.moveToFolder => LayerAction(
       id: id,
-      icon: Icons.layers_outlined,
-      label: 'Make combined layer',
-      description: 'Let this layer hold every kind of element at once.',
+      icon: Icons.drive_file_move_outlined,
+      label: 'Move to folder…',
+      description: 'Put this layer in a folder, to hide or invert as a group.',
       run: () async {
-        final messenger = ScaffoldMessenger.maybeOf(context);
-        final container = ProviderScope.containerOf(context);
-        await repo.convertLayerToMixed(layer.id);
-        await _offerUndo(
-          container,
-          messenger,
-          label: 'Make combined layer',
-          message: '“${layer.name}” is now a combined layer',
-        );
+        final folders =
+            ref.read(foldersProvider).asData?.value ?? const <Folder>[];
+        final target = await showFolderPicker(context, folders);
+        if (target == null) return;
+        await repo.moveLayerToFolder(layer.id, target);
       },
+    ),
+    LayerActionId.moveOutOfFolder => LayerAction(
+      id: id,
+      icon: Icons.drive_file_move_outline,
+      label: 'Move out of folder',
+      description: 'Take this layer back out on its own, unchanged.',
+      run: () => repo.moveLayerToFolder(layer.id, null),
     ),
     LayerActionId.delete => LayerAction(
       id: id,
@@ -814,14 +826,84 @@ List<String> movedLayerOrder(List<String> ids, String id, LayerMove move) {
 }
 
 /// Whether [source] may be merged into [target]: a different layer that can
-/// hold everything the source does — which a combined layer does for all but
-/// `borders` — and, for borders, the same admin level, since one layer holds
+/// hold everything the source does, and — for borders — the same admin level,
+/// since one layer holds
 /// one level. Mirrors [Repository.combineLayers]'s guard, so the menu never
 /// offers a target the repository would refuse.
 bool canCombineLayers(Layer source, Layer target) =>
     target.id != source.id &&
     layerContentTypes(source).every((t) => layerTypeHolds(target.type, t)) &&
     (source.type != 'borders' || target.borderLevel == source.borderLevel);
+
+/// Which folder to put a layer in. Null when the sheet is dismissed.
+Future<String?> showFolderPicker(
+  BuildContext context,
+  List<Folder> folders,
+) {
+  return showModalBottomSheet<String>(
+    context: context,
+    builder: (ctx) => SafeArea(
+      child: ListView(
+        shrinkWrap: true,
+        children: [
+          const ListTile(title: Text('Move to folder')),
+          const Divider(height: 1),
+          for (final f in folders.reversed)
+            ListTile(
+              leading: const Icon(Icons.folder_outlined),
+              title: Text(f.name),
+              onTap: () => Navigator.pop(ctx, f.id),
+            ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// Makes a folder and leaves it where it was made — on top, empty, waiting for
+/// something to be dragged in.
+Future<void> addFolderFlow(
+  WidgetRef ref,
+  List<Folder> folders,
+) async {
+  await ref
+      .read(repositoryProvider)
+      .createFolder(name: 'Folder ${folders.length + 1}');
+}
+
+Future<void> renameFolderFlow(
+  BuildContext context,
+  Repository repo,
+  Folder folder,
+) async {
+  final name = await _askName(context, 'Rename folder', folder.name);
+  if (name == null || name.isEmpty) return;
+  await repo.updateFolder(folder.id, name: name);
+}
+
+/// Deletes the folder. **Its layers stay** — back at the root, unchanged —
+/// which is the whole difference between a folder and the combined layer it
+/// replaced, and worth saying in the snackbar rather than leaving to be
+/// discovered.
+Future<void> deleteFolderFlow(
+  BuildContext context,
+  WidgetRef ref,
+  Folder folder, {
+  required int layerCount,
+}) async {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  final container = ProviderScope.containerOf(context);
+  await ref.read(repositoryProvider).deleteFolder(folder.id);
+  await _offerUndo(
+    container,
+    messenger,
+    label: 'Delete folder',
+    message: layerCount == 0
+        ? 'Deleted “${folder.name}”'
+        : 'Deleted “${folder.name}” · its '
+            '${layerCount == 1 ? 'layer' : '$layerCount layers'} moved out',
+  );
+}
 
 // --- Creating a layer -------------------------------------------------------
 
@@ -862,12 +944,6 @@ const kLayerTypeChoices = <LayerTypeChoice>[
   (type: kHeight, icon: Icons.terrain, label: 'Height layer', subtitle: null),
   (type: kPoi, icon: Icons.travel_explore, label: 'POI layer', subtitle: null),
   (type: kBorders, icon: Icons.public, label: 'Borders layer', subtitle: null),
-  (
-    type: kMixedType,
-    icon: Icons.layers_outlined,
-    label: 'Combined layer',
-    subtitle: 'Any mix except borders — filled by combining layers',
-  ),
 ];
 
 const _palette = <Color>[
@@ -891,18 +967,6 @@ String defaultLayerName(String type, List<Layer> existing) {
   final n = existing.where((l) => l.type == type).length + 1;
   return '${layerTypeNoun(type)} $n';
 }
-
-/// The one-word name for a layer type, as a layer is called in its own name.
-String layerTypeNoun(String type) => switch (type) {
-  kCircles => 'Circles',
-  kSubspace => 'Subspace',
-  kFreeLine => 'Lines',
-  kFreeArea => 'Areas',
-  kHeight => 'Height',
-  kPoi => 'POIs',
-  kBorders => 'Borders',
-  _ => 'Layer',
-};
 
 /// Creates a layer of [type] named after what it holds and makes it active.
 ///
@@ -967,11 +1031,23 @@ Future<void> renameLayerFlow(
   Repository repo,
   Layer layer,
 ) async {
-  final controller = TextEditingController(text: layer.name);
-  final name = await showDialog<String>(
+  final name = await _askName(context, 'Rename layer', layer.name);
+  if (name != null && name.isNotEmpty) {
+    await repo.updateLayer(layer.id, name: name);
+  }
+}
+
+/// One rename dialog, for a layer and for a folder. Returns null on cancel.
+Future<String?> _askName(
+  BuildContext context,
+  String title,
+  String current,
+) {
+  final controller = TextEditingController(text: current);
+  return showDialog<String>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('Rename layer'),
+      title: Text(title),
       content: TextField(
         controller: controller,
         autofocus: true,
@@ -989,9 +1065,6 @@ Future<void> renameLayerFlow(
       ],
     ),
   );
-  if (name != null && name.isNotEmpty) {
-    await repo.updateLayer(layer.id, name: name);
-  }
 }
 
 /// Recolours [layer], then settles what to do with the elements that carry
@@ -1087,7 +1160,7 @@ Future<void> _askAboutOverrides(
 /// Puts [ids] back on their auto shades.
 ///
 /// Each id's kind comes from its own summary row rather than from the
-/// layer's type: a mixed layer's overrides span several tables, so there is
+/// layer's type: the overrides live in one table per kind, so there is
 /// no single [ColoredElement] the whole list belongs to.
 Future<void> _clearOverrides(
   WidgetRef ref,

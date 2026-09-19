@@ -111,7 +111,7 @@ void main() {
       final layers = [
         layer('a', kCircles),
         layer('b', kFreeArea),
-        layer('c', kMixedType),
+        layer('c', kSubspace),
       ];
       expect(bandPassLayers(layers, 500).map((l) => l.id), ['a', 'b', 'c']);
     });
@@ -141,10 +141,6 @@ void main() {
         layer('height', kHeight),
       ];
       expect(bandPassLayers(layers, 500).map((l) => l.id), ['height']);
-    });
-
-    test('a mixed layer bands, because it can hold region types', () {
-      expect(bandPassLayers([layer('m', kMixedType)], 500), hasLength(1));
     });
   });
 }

@@ -2544,8 +2544,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
     required List<FreeArea> freeAreas,
   }) {
     final c = _mapController.camera.center;
-    // Unreachable on a combined layer: this is the Add FAB's long-press, and
-    // that button is not there ([layerMakesOwnContent]).
     switch (layer.type) {
       case 'poi':
         unawaited(_importPois(layer));
@@ -2580,15 +2578,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// [_kPlaceStations], which is not a layer type but an Add *mode* (two
   /// corners of a box on a `poi` layer), so it cannot come from the layer.
   Future<void> _enterAddMode(Layer layer, {String? placeType}) async {
-    // A combined layer holds six kinds, so "the layer's type" says nothing
-    // about what a tap should place — which is why Add is not offered there at
-    // all ([layerMakesOwnContent]); content is made on the layer that owns the
-    // kind and merged in. Guarded rather than asserted so no future caller
-    // falls through to the `default:` arm below and quietly places a circle.
-    // [placeType] is a different matter: a retried station import arms its box
-    // mode by passing one, and that stays open on any layer holding POIs.
     final type = placeType ?? layer.type;
-    if (placeType == null && !layerMakesOwnContent(layer.type)) return;
     String? poiSetId;
     if (type == 'poi') {
       poiSetId = await _resolveManualPoiSet(layer);
@@ -2956,7 +2946,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       return;
     }
     final repo = ref.read(repositoryProvider);
-    // `_placeType`, not `layer.type`: on a mixed layer these differ, because
+    // `_placeType`, not `layer.type`: these differ, because
     // Add mode asked which type to place. On every single-type layer they are
     // equal and nothing changes.
     switch (_placeType ?? layer.type) {
@@ -4510,21 +4500,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
     // Since Add on a POI layer places *hand-made* points, the Overpass import
     // needs its own button there — it used to be what Add did.
     final isPoiLayer = activeLayer != null && layerHolds(activeLayer, kPoi);
-    // Everything that *makes* content of a chosen type — Add, Draw, the two
-    // import buttons — is off on a combined layer, which is filled by merging
-    // whole layers into it. With no layer at all this stays true, so Add keeps
-    // its greyed-but-live "no layer is active" answer instead of vanishing.
-    final makesOwnContent =
-        activeLayer == null || layerMakesOwnContent(activeLayer.type);
     // Freehand layers import *by name* (a district, a river) rather than by
     // radius. That flow was drawer-only, so a circle layer had an import
     // button on screen and a freehand one had nothing — the same action, two
-    // very different distances away. Not on a combined layer: it makes nothing
-    // of its own, and holding two freehand types made it the one layer that
-    // offered every import at once (see [layerMakesOwnContent]).
+    // very different distances away.
     final canImportFeature =
         activeLayer != null &&
-        makesOwnContent &&
         (layerHolds(activeLayer, kFreeLine) ||
             layerHolds(activeLayer, kFreeArea));
     // One type-dependent quick toggle beside Edit — the setting a layer of
@@ -4550,8 +4531,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
     // answer is a boolean and this runs on every camera tick.
     //
     // Per content type, because `layerHasEditor` answers for the layer and a
-    // mixed layer holds several kinds: Edit mode needs at least one element
-    // of *some* kind, or it is a lit button that does nothing.
+    // layer's own kind: Edit mode needs at least one element, or it is a lit
+    // button that does nothing.
     bool holdsSelectable(Layer layer, String type) {
       if (!layerHolds(layer, type)) return false;
       if (ObjectKind.forLayerType(type) == null) return false;
@@ -4588,12 +4569,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     );
 
     // Only the two freehand types can be drawn into — everything else is built
-    // from points, radii or an import. A combined layer holds *both* freehand
-    // types, so a stroke there had no honest answer to "line or area?" and
-    // silently always made a line; it is drawn on its own layer and merged in.
+    // from points, radii or an import.
     final canDraw =
         activeLayer != null &&
-        makesOwnContent &&
         (layerHolds(activeLayer, kFreeLine) ||
             layerHolds(activeLayer, kFreeArea));
     // Same reasoning as Edit below: switching to a non-freehand layer while
@@ -4935,8 +4913,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       // markers are labels on top.
                       for (final layer in drawLayers)
                         if (layer.isVisible) ...[
-                          // `borders` keeps its own branch: it is the one type a
-                          // mixed layer cannot hold, and its fill takes the
+                          // `borders` keeps its own branch: its fill takes the
                           // layer opacity inside the painter while the outline
                           // stays crisp (a half-visible border line is just a
                           // worse border line).
@@ -4961,14 +4938,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           //
                           // Marker layers fade via an Opacity wrapper (they are
                           // markers, not a fill — nothing to push to "opaque").
-                          // A *mixed* layer's opacity is meant for its region
-                          // composite, so its markers stay crisp rather than
-                          // being dimmed to the region default.
                           if (layerHolds(layer, kPoi))
                             Opacity(
-                              opacity: layer.type == kMixedType
-                                  ? 1.0
-                                  : layer.opacity.clamp(0.0, 1.0),
+                              opacity: layer.opacity.clamp(0.0, 1.0),
                               child: PoiMarkersLayer(
                                 key: ValueKey('poi-${layer.id}'),
                                 layer: layer,
@@ -6161,11 +6133,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         child: const Icon(Icons.travel_explore),
                       ),
                     ],
-                    // Not on a combined layer: an import writes rows of one
-                    // chosen kind, and that choice belongs to the layer that
-                    // holds that kind ([layerMakesOwnContent]).
-                    if (makesOwnContent &&
-                        (isCircleLayer || isSubspaceLayer || isPoiLayer)) ...[
+                    if (isCircleLayer || isSubspaceLayer || isPoiLayer) ...[
                       const SizedBox(width: 12),
                       FloatingActionButton.small(
                         heroTag: 'poiImport',
@@ -6184,57 +6152,49 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     // arms the map so a tap places the object exactly where you
                     // point. Long-press keeps the old one-shot behaviour (place
                     // at the map centre, open the editor) as a no-aim fallback.
-                    //
-                    // Gone on a combined layer — hidden, not greyed, because a
-                    // greyed control promises "not yet" and this one is never.
-                    // Kept while Add mode is armed even so: the mode is sticky
-                    // to `_placeLayerId`, so switching the chip to a combined
-                    // layer mid-Add must not take away the Done button.
-                    if (makesOwnContent || mode == MapMode.add) ...[
-                      const SizedBox(width: 12),
-                      GestureDetector(
-                        onLongPress: activeLayer == null
-                            ? null
-                            : () => _addAtMapCentre(
-                                activeLayer,
-                                subspaces: subspaces,
-                                freeLines: freeLines,
-                                freeAreas: freeAreas,
-                              ),
-                        child: _mapFab(
-                          heroTag: 'add',
-                          // The words the label used to carry live in the
-                          // tooltip, and the icon still says which type a tap
-                          // would place.
-                          tooltip: mode == MapMode.add
-                              ? 'Done'
-                              : '${_addFabLabel(activeLayer?.type)} · tap the '
-                                    'map to place · long-press for the map '
-                                    'centre',
-                          lit: mode == MapMode.add,
-                          unavailable: unavailableReason(
-                            MapControlId.add,
-                            controlState,
-                          ),
-                          // `activeLayer` is non-null whenever this runs — the
-                          // unavailable branch owns the null case — but the two
-                          // facts sit a hundred lines apart, so this checks
-                          // rather than asserts.
-                          onPressed: () {
-                            if (mode == MapMode.add) {
-                              unawaited(_finishAdd());
-                            } else if (activeLayer != null) {
-                              unawaited(_enterAddMode(activeLayer));
-                            }
-                          },
-                          child: Icon(
-                            mode == MapMode.add
-                                ? Icons.check
-                                : typeIcon(activeLayer?.type ?? 'circles'),
-                          ),
+                    const SizedBox(width: 12),
+                    GestureDetector(
+                      onLongPress: activeLayer == null
+                          ? null
+                          : () => _addAtMapCentre(
+                              activeLayer,
+                              subspaces: subspaces,
+                              freeLines: freeLines,
+                              freeAreas: freeAreas,
+                            ),
+                      child: _mapFab(
+                        heroTag: 'add',
+                        // The words the label used to carry live in the
+                        // tooltip, and the icon still says which type a tap
+                        // would place.
+                        tooltip: mode == MapMode.add
+                            ? 'Done'
+                            : '${_addFabLabel(activeLayer?.type)} · tap the '
+                                  'map to place · long-press for the map '
+                                  'centre',
+                        lit: mode == MapMode.add,
+                        unavailable: unavailableReason(
+                          MapControlId.add,
+                          controlState,
+                        ),
+                        // `activeLayer` is non-null whenever this runs — the
+                        // unavailable branch owns the null case — but the two
+                        // facts sit a hundred lines apart, so this checks
+                        // rather than asserts.
+                        onPressed: () {
+                          if (mode == MapMode.add) {
+                            unawaited(_finishAdd());
+                          } else if (activeLayer != null) {
+                            unawaited(_enterAddMode(activeLayer));
+                          }
+                        },
+                        child: Icon(
+                          mode == MapMode.add
+                              ? Icons.check
+                              : typeIcon(activeLayer?.type ?? 'circles'),
                         ),
                       ),
-                    ],
+                    ),
                     const SizedBox(width: 12),
                     // Last, and beside the column it governs.
                     FloatingActionButton.small(
