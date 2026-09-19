@@ -32,7 +32,7 @@ import 'generated_migrations/schema.dart';
 /// any of that was `scripts/build.sh --install` re-installing over the one
 /// development phone, i.e. exactly one upgrade path on exactly one database.
 ///
-/// With **ten** snapshots (v20 … v29) this now does what one snapshot could not:
+/// With **eleven** snapshots (v20 … v30) this now does what one snapshot could not:
 /// it opens a real older database, runs the app's own `onUpgrade` against it,
 /// and compares the result to the next version's independently-dumped shape. That is what
 /// catches a column added to a table class without the matching
@@ -47,7 +47,7 @@ import 'generated_migrations/schema.dart';
 /// dart run drift_dev schema generate drift_schemas/ test/generated_migrations/
 /// ```
 ///
-/// then add the v29 → v30 step below. A snapshot must be taken *before* that
+/// then add the v30 → v31 step below. A snapshot must be taken *before* that
 /// version ships; it cannot be reconstructed afterwards.
 void main() {
   late SchemaVerifier verifier;
@@ -56,10 +56,10 @@ void main() {
     verifier = SchemaVerifier(GeneratedHelper());
   });
 
-  test('the schema the table classes build matches the v29 snapshot', () async {
+  test('the schema the table classes build matches the v30 snapshot', () async {
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 29);
+    await verifier.migrateAndValidate(db, 30);
   });
 
   test('v20 → today upgrades a real database, and keeps its rows', () async {
@@ -88,7 +88,7 @@ void main() {
     // Validated against the *current* version, not v21: opening a database runs
     // the whole remaining chain, so this is the real "upgrade from an old
     // install" path rather than a snapshot-to-snapshot hop.
-    await verifier.migrateAndValidate(db, 29);
+    await verifier.migrateAndValidate(db, 30);
 
     final rows = await db.select(db.poiPoints).get();
     expect(rows, hasLength(1), reason: 'the upgrade must not drop POIs');
@@ -114,7 +114,7 @@ void main() {
 
     final db = AppDatabase.forTesting(old.newConnection());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 29);
+    await verifier.migrateAndValidate(db, 30);
 
     final circle = (await db.select(db.circles).get()).single;
     expect(circle.label, 'Home', reason: 'the upgrade must not drop circles');
@@ -148,7 +148,7 @@ void main() {
 
     final db = AppDatabase.forTesting(old.newConnection());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 29);
+    await verifier.migrateAndValidate(db, 30);
 
     final area = (await db.select(db.borderAreas).get()).single;
     expect(area.name, 'Maxvorstadt', reason: 'the upgrade must not drop areas');
@@ -169,7 +169,7 @@ void main() {
 
     final db = AppDatabase.forTesting(old.newConnection());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 29);
+    await verifier.migrateAndValidate(db, 30);
 
     final layer = (await db.select(db.layers).get()).single;
     expect(layer.name, 'Lines', reason: 'the upgrade must not drop layers');
@@ -195,7 +195,7 @@ void main() {
 
     final db = AppDatabase.forTesting(old.newConnection());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 29);
+    await verifier.migrateAndValidate(db, 30);
 
     final set = (await db.select(db.poiSets).get()).single;
     expect(set.label, 'Cafés', reason: 'the upgrade must not drop imports');
@@ -241,7 +241,7 @@ void main() {
 
     final db = AppDatabase.forTesting(old.newConnection());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 29);
+    await verifier.migrateAndValidate(db, 30);
 
     final rows = await db.select(db.circles).get();
     final z = {for (final c in rows) c.id: c.zOrder};
@@ -292,7 +292,7 @@ void main() {
 
     final db = AppDatabase.forTesting(old.newConnection());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 29);
+    await verifier.migrateAndValidate(db, 30);
 
     // planes: same id, near side is main at sort 0, layer retyped, z kept.
     final sub = (await db.select(db.subspaces).get()).single;
@@ -364,7 +364,7 @@ void main() {
 
     final db = AppDatabase.forTesting(old.newConnection());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 29);
+    await verifier.migrateAndValidate(db, 30);
 
     final settings = await db.select(db.appSettings).getSingle();
     expect(settings.uncertaintyMeters, 250, reason: 'existing rows survive');
@@ -384,7 +384,7 @@ void main() {
 
     final db = AppDatabase.forTesting(old.newConnection());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 29);
+    await verifier.migrateAndValidate(db, 30);
 
     final settings = await db.select(db.appSettings).getSingle();
     expect(settings.uncertaintyMeters, 300, reason: 'existing rows survive');
@@ -392,7 +392,85 @@ void main() {
     expect(await db.select(db.uiHints).get(), isEmpty);
   });
 
-  test('a v29 database opens, writes and reads back', () async {
+  test('v29 → v30 splits a combined layer back into the layers it swallowed',
+      () async {
+    // The `mixed` layer grouped by destroying what it grouped. Undoing that is
+    // the whole promise here: every kind it held comes back as its own layer,
+    // in the order the mixed painter drew them, inside a folder standing where
+    // the mixed layer stood — and a mixed layer that only ever held one kind
+    // was a layer of that kind wearing the wrong label, so it becomes one
+    // rather than a folder around nothing.
+    final old = await verifier.schemaAt(29);
+    final x = old.rawDatabase.execute;
+    x("INSERT INTO layers (id, name, color_argb, sort_order, type) "
+        "VALUES ('lb', 'Below', 7, 0, 'circles')");
+    x("INSERT INTO layers (id, name, color_argb, sort_order, type, "
+        "is_inverted, opacity, is_visible) "
+        "VALUES ('lm', 'Everything', 42, 1, 'mixed', 1, 0.45, 0)");
+    x("INSERT INTO circles (id, layer_id, center_lat, center_lng, "
+        "radius_meters, z_order) VALUES ('c1', 'lm', 48.0, 11.0, 500, 2)");
+    x("INSERT INTO free_areas (id, layer_id, label, z_order) "
+        "VALUES ('a1', 'lm', 'Park', 1)");
+    x("INSERT INTO poi_sets (id, layer_id, category_key, center_lat, "
+        "center_lng, radius_meters, created_at) "
+        "VALUES ('p1', 'lm', 'cafe', 48, 11, 800, 1700000000)");
+    // A combined layer holding exactly one kind, and an empty one.
+    x("INSERT INTO layers (id, name, color_argb, sort_order, type) "
+        "VALUES ('lo', 'Only POIs', 9, 2, 'mixed')");
+    x("INSERT INTO poi_sets (id, layer_id, category_key, center_lat, "
+        "center_lng, radius_meters, created_at) "
+        "VALUES ('p2', 'lo', 'bench', 48, 11, 300, 1700000000)");
+    x("INSERT INTO layers (id, name, color_argb, sort_order, type) "
+        "VALUES ('le', 'Empty', 3, 3, 'mixed')");
+
+    final db = AppDatabase.forTesting(old.newConnection());
+    addTearDown(db.close);
+    await verifier.migrateAndValidate(db, 30);
+
+    // The folder stands where the mixed layer stood, and carries what a folder
+    // can carry: its name, its visibility and its invert.
+    final folder = (await db.select(db.folders).get()).single;
+    expect(
+      (folder.name, folder.sortOrder, folder.isVisible, folder.isInverted),
+      ('Everything', 1, false, true),
+    );
+
+    final layers = await db.select(db.layers).get();
+    expect(layers.where((l) => l.type == 'mixed'), isEmpty);
+    final children = layers.where((l) => l.folderId == folder.id).toList()
+      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    // Draw order, not table order: regions below, markers on top.
+    expect(children.map((l) => l.type), ['circles', 'freearea', 'poi']);
+    expect(children.map((l) => l.name),
+        ['Everything (Circles)', 'Everything (Areas)', 'Everything (POIs)']);
+    // The colour and opacity were the mixed layer's and stay; the invert moved
+    // up to the folder, so the members are un-inverted and flipped by it.
+    expect(children.every((l) => l.colorArgb == 42), isTrue);
+    expect(children.every((l) => l.opacity == 0.45), isTrue);
+    expect(children.every((l) => !l.isInverted), isTrue);
+    expect(children.every((l) => l.isVisible), isTrue);
+
+    // Every row it held followed its kind, ids and stacking untouched.
+    final circle = (await db.select(db.circles).get()).single;
+    expect((circle.id, circle.layerId, circle.zOrder),
+        ('c1', children[0].id, 2));
+    expect((await db.select(db.freeAreas).get()).single.layerId, children[1].id);
+    final sets = await db.select(db.poiSets).get();
+    expect(sets.firstWhere((s) => s.id == 'p1').layerId, children[2].id);
+
+    // One kind: the same layer, retyped, still at the root and in place.
+    final only = layers.firstWhere((l) => l.id == 'lo');
+    expect((only.type, only.folderId, only.name, only.sortOrder),
+        ('poi', null, 'Only POIs', 2));
+    expect(sets.firstWhere((s) => s.id == 'p2').layerId, 'lo');
+    // Nothing at all: a layer of the default type, not a folder around nothing.
+    expect(layers.firstWhere((l) => l.id == 'le').type, 'circles');
+    // The layer that was already a plain layer is untouched.
+    final below = layers.firstWhere((l) => l.id == 'lb');
+    expect((below.type, below.folderId, below.sortOrder), ('circles', null, 0));
+  });
+
+  test('a v30 database opens, writes and reads back', () async {
     // `migrateAndValidate` proves the *shape*; this proves the thing opens and
     // the foreign keys the cascade deletes depend on are actually on.
     final db = AppDatabase.forTesting(NativeDatabase.memory());

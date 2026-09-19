@@ -25,6 +25,7 @@ import '../data/repository.dart';
 import '../data/tile_health.dart';
 import '../data/shared_point.dart';
 import '../data/undo_journal.dart';
+import '../ui/layer_tree.dart';
 import 'map_mode.dart';
 
 /// Single long-lived database instance.
@@ -110,6 +111,30 @@ Future<void> applyUndoIn(
 /// Reactive list of layers, ordered bottom-to-top (draw order).
 final layersProvider = StreamProvider<List<Layer>>((ref) {
   return ref.watch(repositoryProvider).watchLayers();
+});
+
+/// Reactive list of folders, ordered by their place among the root items.
+/// Grouping only — see `ui/layer_tree.dart` for what a folder means.
+final foldersProvider = StreamProvider<List<Folder>>((ref) {
+  return ref.watch(repositoryProvider).watchFolders();
+});
+
+/// The stack as a tree, bottom-to-top: folders with their members, and the
+/// layers in none. What the drawer renders and what `resolveLayers` folds for
+/// the map.
+final layerTreeProvider = Provider<List<LayerNode>>((ref) {
+  return buildLayerTree(
+    ref.watch(foldersProvider).asData?.value ?? const <Folder>[],
+    ref.watch(layersProvider).asData?.value ?? const <Layer>[],
+  );
+});
+
+/// The flat, bottom-to-top list of layers **as the map draws them**: a hidden
+/// folder's members hidden, an inverted folder's members flipped. Every
+/// consumer of layer order on the map reads this, and so goes on knowing
+/// nothing about folders.
+final drawLayersProvider = Provider<List<Layer>>((ref) {
+  return resolveLayers(ref.watch(layerTreeProvider));
 });
 
 /// Reactive list of every circle across all layers.

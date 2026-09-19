@@ -3329,7 +3329,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// un-tappable with nothing on screen saying why. Layers without an editor
   /// (an unknown type) are skipped — there would be nothing to open.
   List<HitCandidate> _hitsAt(LatLng latlng) {
-    final layers = ref.read(layersProvider).asData?.value ?? const <Layer>[];
+    // What is *drawn*, not what is stored: a layer in a hidden folder is not on
+    // screen and must not be tappable, and one in an inverted folder is drawn
+    // flipped, which is what its area contours have to be resolved against.
+    // Same predicate on both sides, the rule `poiPointVisible` exists for.
+    final layers = ref.read(drawLayersProvider);
     final freeAreaPoints =
         ref.read(freeAreaPointsProvider).asData?.value ??
         const <FreeAreaPoint>[];
@@ -4279,6 +4283,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
     });
 
     final layers = ref.watch(layersProvider).asData?.value ?? const <Layer>[];
+    // Two lists, deliberately. `layers` is what is *stored* — what the drawer,
+    // the layer sheet and every editor's "move to layer" list show, so their
+    // controls read back the layer's own settings. `drawLayers` is what is
+    // *drawn*: the same layers with their folder folded in (hidden by a hidden
+    // folder, flipped by an inverted one). Only the map reads the second.
+    final drawLayers = ref.watch(drawLayersProvider);
     final circles =
         ref.watch(circlesProvider).asData?.value ?? const <Circle>[];
     final subspaces =
@@ -4559,7 +4569,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
       };
     }
 
-    final canEditByTap = layers.any(
+    // `drawLayers`: Edit mode reaches what is on screen, and a layer inside a
+    // hidden folder is not.
+    final canEditByTap = drawLayers.any(
       (l) =>
           l.isVisible &&
           layerHasEditor(l.type) &&
@@ -4907,7 +4919,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       // reads as the uncertainty being the more definite of the
                       // two. So every band goes down here first, in the same
                       // bottom-to-top order the fills are drawn in above.
-                      for (final layer in bandPassLayers(layers, uncertainty))
+                      for (final layer
+                          in bandPassLayers(drawLayers, uncertainty))
                         regionPass(layer, RegionPhase.band),
                       // One composited region per visible layer, bottom-to-top.
                       // Region layers apply their opacity inside the painter (so
@@ -4920,7 +4933,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       // a mixed layer builds the ones its content types cover,
                       // in `kMixedContentTypes` order — regions are ground,
                       // markers are labels on top.
-                      for (final layer in layers)
+                      for (final layer in drawLayers)
                         if (layer.isVisible) ...[
                           // `borders` keeps its own branch: it is the one type a
                           // mixed layer cannot hold, and its fill takes the

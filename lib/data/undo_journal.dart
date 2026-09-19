@@ -388,6 +388,7 @@ String? undoNounFor(String table) => undoNouns[table];
 /// than in the UI because the label is derived from the log row, which is the
 /// only description of the action that exists.
 const undoNouns = <String, String>{
+  'folders': 'folder',
   'layers': 'layer',
   'circles': 'circle',
   'subspaces': 'subspace',

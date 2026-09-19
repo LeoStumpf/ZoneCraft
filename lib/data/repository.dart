@@ -15,6 +15,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:drift/drift.dart';
 import 'package:latlong2/latlong.dart'
@@ -289,6 +290,115 @@ class Repository {
       default:
         throw ArgumentError('No table is registered for layer type "$type"');
     }
+  }
+
+  // --- Folders --------------------------------------------------------------
+
+  /// All folders, ordered by their place among the root items.
+  Stream<List<Folder>> watchFolders() {
+    return (_db.select(_db.folders)
+          ..orderBy([(f) => OrderingTerm(expression: f.sortOrder)]))
+        .watch();
+  }
+
+  /// A new, empty folder on top of the stack.
+  Future<String> createFolder({required String name}) async {
+    final id = _uuid.v4();
+    // One ordering space at the root: a folder sits among the layers that are
+    // not in one, so it has to start above both.
+    final maxLayer = await _maxSortOrder();
+    final maxFolder = _db.folders.sortOrder.max();
+    final row = await (_db.selectOnly(_db.folders)..addColumns([maxFolder]))
+        .getSingleOrNull();
+    final top = math.max(maxLayer, row?.read(maxFolder) ?? -1);
+    await _db.into(_db.folders).insert(
+          FoldersCompanion.insert(id: id, name: name, sortOrder: top + 1),
+        );
+    return id;
+  }
+
+  Future<void> updateFolder(
+    String id, {
+    String? name,
+    bool? isVisible,
+    bool? isInverted,
+    bool? isCollapsed,
+  }) {
+    return (_db.update(_db.folders)..where((f) => f.id.equals(id))).write(
+      FoldersCompanion(
+        name: name == null ? const Value.absent() : Value(name),
+        isVisible:
+            isVisible == null ? const Value.absent() : Value(isVisible),
+        isInverted:
+            isInverted == null ? const Value.absent() : Value(isInverted),
+        isCollapsed:
+            isCollapsed == null ? const Value.absent() : Value(isCollapsed),
+      ),
+    );
+  }
+
+  /// Deletes the folder. **Its layers survive**, back at the root where they
+  /// were — the `folderId` FK is `setNull`. Getting layers back out again is
+  /// the thing the `mixed` layer could never do, so deleting the group must
+  /// never be a way to delete its contents by accident.
+  Future<void> deleteFolder(String id) {
+    return (_db.delete(_db.folders)..where((f) => f.id.equals(id))).go();
+  }
+
+  /// Moves [layerId] into [folderId] (null = out to the root), on top of
+  /// whatever is already there.
+  Future<void> moveLayerToFolder(String layerId, String? folderId) async {
+    final scope = folderId == null
+        ? (_db.select(_db.layers)..where((l) => l.folderId.isNull()))
+        : (_db.select(_db.layers)..where((l) => l.folderId.equals(folderId)));
+    final siblings = await scope.get();
+    var top = -1;
+    for (final s in siblings) {
+      if (s.id != layerId && s.sortOrder > top) top = s.sortOrder;
+    }
+    if (folderId == null) {
+      // At the root a layer shares its ordering with the folders.
+      final maxFolder = _db.folders.sortOrder.max();
+      final row = await (_db.selectOnly(_db.folders)..addColumns([maxFolder]))
+          .getSingleOrNull();
+      top = math.max(top, row?.read(maxFolder) ?? -1);
+    }
+    await (_db.update(_db.layers)..where((l) => l.id.equals(layerId))).write(
+      LayersCompanion(
+        folderId: Value(folderId),
+        sortOrder: Value(top + 1),
+      ),
+    );
+  }
+
+  /// Persists a whole tree's ordering and membership in one batch.
+  ///
+  /// The shape is `ui/layer_tree.dart`'s `TreeWrite`, spelled out structurally
+  /// rather than imported: records are structural in Dart, so the two agree
+  /// without the data layer depending on the UI that computes them.
+  Future<void> reorderTree(
+    List<({String id, bool isFolder, String? folderId, int sortOrder})> writes,
+  ) async {
+    await _db.batch((b) {
+      for (final w in writes) {
+        if (w.isFolder) {
+          b.update(
+            _db.folders,
+            FoldersCompanion(sortOrder: Value(w.sortOrder)),
+            where: (f) => f.id.equals(w.id),
+          );
+        } else {
+          b.update(
+            _db.layers,
+            LayersCompanion(
+              folderId: Value(w.folderId),
+              sortOrder: Value(w.sortOrder),
+            ),
+            where: (l) => l.id.equals(w.id),
+          );
+        }
+      }
+    });
   }
 
   /// Persists a new ordering. [orderedIds] is bottom-to-top draw order.

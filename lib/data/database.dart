@@ -45,6 +45,74 @@ const double kDefaultRegionLayerOpacity = 0.45;
 double defaultLayerOpacity(String type) =>
     type == 'poi' ? 1.0 : kDefaultRegionLayerOpacity;
 
+/// The one-word name for a layer type, as a layer is called in its own name
+/// ("Height 2", "Areas 1").
+///
+/// Here rather than with the UI for the same reason as [defaultLayerOpacity]:
+/// the v30 migration names the layers it splits a `mixed` one into, and those
+/// names have to read like the ones the app makes itself. The strings are
+/// spelled out rather than imported from `layer_types.dart`, which imports
+/// *this* file.
+String layerTypeNoun(String type) => switch (type) {
+  'circles' => 'Circles',
+  'subspace' => 'Subspace',
+  'freeline' => 'Lines',
+  'freearea' => 'Areas',
+  'height' => 'Height',
+  'poi' => 'POIs',
+  'borders' => 'Borders',
+  _ => 'Layer',
+};
+
+/// The tables a `mixed` layer's rows could live in, keyed by the layer type
+/// each becomes — **in the order the mixed painter drew them**, so the v30
+/// split stacks the way the layer looked. Migration-only.
+const kMixedSplitTables = <String, String>{
+  'circles': 'circles',
+  'subspace': 'subspaces',
+  'freeline': 'free_lines',
+  'freearea': 'free_areas',
+  'height': 'height_regions',
+  'poi': 'poi_sets',
+};
+
+/// A group of layers, shown in the drawer as one collapsible row.
+///
+/// A folder paints **nothing of its own** — it has no colour and no opacity,
+/// because everything it holds goes on drawing itself exactly as it did
+/// outside. It offers three things a pile of layers cannot: hide the whole
+/// group, [isInverted] the whole group (which flips each member's own
+/// [Layers.isInverted] rather than compositing them together), and
+/// [isCollapsed], so seven settled layers take one line instead of seven.
+///
+/// This replaces the `mixed` layer, which grouped by *destroying* what it
+/// grouped: the merged layers' colour, opacity and invert collapsed into the
+/// target's and there was no way back out. Here the members stay layers.
+///
+/// [sortOrder] places the folder among the **root** items (layers with no
+/// folder, and other folders); a member layer's own [Layers.sortOrder] places
+/// it within its folder.
+class Folders extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  IntColumn get sortOrder => integer()();
+  BoolColumn get isVisible => boolean().withDefault(const Constant(true))();
+
+  /// Flips every member layer's own invert, rather than compositing the folder
+  /// into one region: a folder has no colour to paint a complement in, and its
+  /// members keep theirs.
+  BoolColumn get isInverted => boolean().withDefault(const Constant(false))();
+
+  /// Drawer-only: whether the members are folded away. Persisted, unlike the
+  /// Elements list's expansion — a folder exists to put things away, and having
+  /// to put them away again on every visit would defeat it.
+  BoolColumn get isCollapsed => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 /// A map overlay layer. Layers stack on the map ordered by [sortOrder]
 /// (higher = drawn on top) and can be toggled on/off via [isVisible].
 ///
@@ -87,6 +155,14 @@ class Layers extends Table {
   /// **`borders` only.** Draw each area's name on a plate at its label anchor.
   BoolColumn get borderShowNames =>
       boolean().withDefault(const Constant(false))();
+
+  /// The [Folders] row this layer belongs to, or null when it sits at the root.
+  ///
+  /// **`setNull`, not `cascade`**: deleting a folder must not take its layers
+  /// with it. Getting layers back out again is the thing the `mixed` layer
+  /// could never do, and it is half the reason folders exist.
+  TextColumn get folderId =>
+      text().nullable().references(Folders, #id, onDelete: KeyAction.setNull)();
 
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 
@@ -816,6 +892,7 @@ class UiHints extends Table {
 
 @DriftDatabase(
   tables: [
+    Folders,
     Layers,
     Circles,
     AppSettings,
@@ -866,7 +943,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 29;
+  int get schemaVersion => 30;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1296,6 +1373,97 @@ class AppDatabase extends _$AppDatabase {
             // labelled on an old map than a new one.
             await m.createTable(uiHints);
             await m.addColumn(appSettings, appSettings.hintsEnabled);
+          }
+          if (from < 30) {
+            // The `mixed` layer is gone; folders group layers instead.
+            //
+            // It grouped by destroying what it grouped — everything merged in
+            // lost its own colour, opacity and invert, and could never be
+            // taken out again. A folder leaves them layers. So every mixed
+            // layer is split back into the layers it swallowed, one per kind
+            // it actually holds, and a folder is made only when that is more
+            // than one: a mixed layer that ended up holding a single kind was
+            // only ever a layer of that kind wearing the wrong label.
+            //
+            // The order is [kMixedContentTypes], which is the order the mixed
+            // painter drew those kinds in — so the split stacks the way the
+            // layer looked, rather than the way the tables happen to be listed.
+            await m.createTable(folders);
+            await m.addColumn(layers, layers.folderId);
+            final mixed = await customSelect(
+              'SELECT id, name, color_argb, is_visible, is_inverted, opacity, '
+              "sort_order, created_at FROM layers WHERE type = 'mixed'",
+            ).get();
+            for (final row in mixed) {
+              final id = row.read<String>('id');
+              // Which kinds it actually holds. Every one of these tables exists
+              // on any database that reaches this block: the earlier blocks in
+              // this same upgrade have already created them.
+              final present = <String>[];
+              for (final entry in kMixedSplitTables.entries) {
+                final n = await customSelect(
+                  'SELECT COUNT(*) AS n FROM ${entry.value} WHERE layer_id = ?',
+                  variables: [Variable<String>(id)],
+                ).getSingle();
+                if (n.read<int>('n') > 0) present.add(entry.key);
+              }
+              // Nothing in it, or one kind: it *is* a layer of that kind. An
+              // empty one becomes the default type rather than a folder holding
+              // nothing.
+              if (present.length < 2) {
+                await customStatement(
+                  'UPDATE layers SET type = ? WHERE id = ?',
+                  [present.isEmpty ? 'circles' : present.first, id],
+                );
+                continue;
+              }
+              // Several kinds: a folder in the mixed layer's place, carrying
+              // its name, its visibility and its invert — the flag means the
+              // same thing on a folder (flip every member), and the members are
+              // therefore created un-inverted.
+              final folderId = '$id-folder';
+              await customStatement(
+                'INSERT INTO folders (id, name, sort_order, is_visible, '
+                'is_inverted, is_collapsed, created_at) '
+                'VALUES (?, ?, ?, ?, ?, 0, ?)',
+                [
+                  folderId,
+                  row.read<String>('name'),
+                  row.read<int>('sort_order'),
+                  row.read<int>('is_visible'),
+                  row.read<int>('is_inverted'),
+                  row.read<int>('created_at'),
+                ],
+              );
+              for (var i = 0; i < present.length; i++) {
+                final type = present[i];
+                final childId = '$id-$type';
+                await customStatement(
+                  'INSERT INTO layers (id, name, color_argb, is_visible, '
+                  'sort_order, type, is_inverted, opacity, border_fill_areas, '
+                  'border_show_names, folder_id, created_at) '
+                  'VALUES (?, ?, ?, 1, ?, ?, 0, ?, 0, 0, ?, ?)',
+                  [
+                    childId,
+                    '${row.read<String>('name')} (${layerTypeNoun(type)})',
+                    row.read<int>('color_argb'),
+                    i,
+                    type,
+                    row.read<double>('opacity'),
+                    folderId,
+                    row.read<int>('created_at'),
+                  ],
+                );
+                await customStatement(
+                  'UPDATE ${kMixedSplitTables[type]} SET layer_id = ? '
+                  'WHERE layer_id = ?',
+                  [childId, id],
+                );
+              }
+              // Every row it held now hangs off a child, so this takes nothing
+              // with it — and foreign keys are off during a migration anyway.
+              await customStatement('DELETE FROM layers WHERE id = ?', [id]);
+            }
           }
         },
         beforeOpen: (details) async {

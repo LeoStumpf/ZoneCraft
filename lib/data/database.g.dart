@@ -3,6 +3,483 @@
 part of 'database.dart';
 
 // ignore_for_file: type=lint
+class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $FoldersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _isVisibleMeta = const VerificationMeta(
+    'isVisible',
+  );
+  @override
+  late final GeneratedColumn<bool> isVisible = GeneratedColumn<bool>(
+    'is_visible',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_visible" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _isInvertedMeta = const VerificationMeta(
+    'isInverted',
+  );
+  @override
+  late final GeneratedColumn<bool> isInverted = GeneratedColumn<bool>(
+    'is_inverted',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_inverted" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _isCollapsedMeta = const VerificationMeta(
+    'isCollapsed',
+  );
+  @override
+  late final GeneratedColumn<bool> isCollapsed = GeneratedColumn<bool>(
+    'is_collapsed',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_collapsed" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    sortOrder,
+    isVisible,
+    isInverted,
+    isCollapsed,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'folders';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Folder> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sortOrderMeta);
+    }
+    if (data.containsKey('is_visible')) {
+      context.handle(
+        _isVisibleMeta,
+        isVisible.isAcceptableOrUnknown(data['is_visible']!, _isVisibleMeta),
+      );
+    }
+    if (data.containsKey('is_inverted')) {
+      context.handle(
+        _isInvertedMeta,
+        isInverted.isAcceptableOrUnknown(data['is_inverted']!, _isInvertedMeta),
+      );
+    }
+    if (data.containsKey('is_collapsed')) {
+      context.handle(
+        _isCollapsedMeta,
+        isCollapsed.isAcceptableOrUnknown(
+          data['is_collapsed']!,
+          _isCollapsedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Folder map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Folder(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+      isVisible: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_visible'],
+      )!,
+      isInverted: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_inverted'],
+      )!,
+      isCollapsed: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_collapsed'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $FoldersTable createAlias(String alias) {
+    return $FoldersTable(attachedDatabase, alias);
+  }
+}
+
+class Folder extends DataClass implements Insertable<Folder> {
+  final String id;
+  final String name;
+  final int sortOrder;
+  final bool isVisible;
+
+  /// Flips every member layer's own invert, rather than compositing the folder
+  /// into one region: a folder has no colour to paint a complement in, and its
+  /// members keep theirs.
+  final bool isInverted;
+
+  /// Drawer-only: whether the members are folded away. Persisted, unlike the
+  /// Elements list's expansion — a folder exists to put things away, and having
+  /// to put them away again on every visit would defeat it.
+  final bool isCollapsed;
+  final DateTime createdAt;
+  const Folder({
+    required this.id,
+    required this.name,
+    required this.sortOrder,
+    required this.isVisible,
+    required this.isInverted,
+    required this.isCollapsed,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['sort_order'] = Variable<int>(sortOrder);
+    map['is_visible'] = Variable<bool>(isVisible);
+    map['is_inverted'] = Variable<bool>(isInverted);
+    map['is_collapsed'] = Variable<bool>(isCollapsed);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  FoldersCompanion toCompanion(bool nullToAbsent) {
+    return FoldersCompanion(
+      id: Value(id),
+      name: Value(name),
+      sortOrder: Value(sortOrder),
+      isVisible: Value(isVisible),
+      isInverted: Value(isInverted),
+      isCollapsed: Value(isCollapsed),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory Folder.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Folder(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      isVisible: serializer.fromJson<bool>(json['isVisible']),
+      isInverted: serializer.fromJson<bool>(json['isInverted']),
+      isCollapsed: serializer.fromJson<bool>(json['isCollapsed']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+      'isVisible': serializer.toJson<bool>(isVisible),
+      'isInverted': serializer.toJson<bool>(isInverted),
+      'isCollapsed': serializer.toJson<bool>(isCollapsed),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  Folder copyWith({
+    String? id,
+    String? name,
+    int? sortOrder,
+    bool? isVisible,
+    bool? isInverted,
+    bool? isCollapsed,
+    DateTime? createdAt,
+  }) => Folder(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    sortOrder: sortOrder ?? this.sortOrder,
+    isVisible: isVisible ?? this.isVisible,
+    isInverted: isInverted ?? this.isInverted,
+    isCollapsed: isCollapsed ?? this.isCollapsed,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  Folder copyWithCompanion(FoldersCompanion data) {
+    return Folder(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      isVisible: data.isVisible.present ? data.isVisible.value : this.isVisible,
+      isInverted: data.isInverted.present
+          ? data.isInverted.value
+          : this.isInverted,
+      isCollapsed: data.isCollapsed.present
+          ? data.isCollapsed.value
+          : this.isCollapsed,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Folder(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('isVisible: $isVisible, ')
+          ..write('isInverted: $isInverted, ')
+          ..write('isCollapsed: $isCollapsed, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    sortOrder,
+    isVisible,
+    isInverted,
+    isCollapsed,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Folder &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.sortOrder == this.sortOrder &&
+          other.isVisible == this.isVisible &&
+          other.isInverted == this.isInverted &&
+          other.isCollapsed == this.isCollapsed &&
+          other.createdAt == this.createdAt);
+}
+
+class FoldersCompanion extends UpdateCompanion<Folder> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<int> sortOrder;
+  final Value<bool> isVisible;
+  final Value<bool> isInverted;
+  final Value<bool> isCollapsed;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const FoldersCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.isVisible = const Value.absent(),
+    this.isInverted = const Value.absent(),
+    this.isCollapsed = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  FoldersCompanion.insert({
+    required String id,
+    required String name,
+    required int sortOrder,
+    this.isVisible = const Value.absent(),
+    this.isInverted = const Value.absent(),
+    this.isCollapsed = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       sortOrder = Value(sortOrder);
+  static Insertable<Folder> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<int>? sortOrder,
+    Expression<bool>? isVisible,
+    Expression<bool>? isInverted,
+    Expression<bool>? isCollapsed,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (isVisible != null) 'is_visible': isVisible,
+      if (isInverted != null) 'is_inverted': isInverted,
+      if (isCollapsed != null) 'is_collapsed': isCollapsed,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  FoldersCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<int>? sortOrder,
+    Value<bool>? isVisible,
+    Value<bool>? isInverted,
+    Value<bool>? isCollapsed,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return FoldersCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      sortOrder: sortOrder ?? this.sortOrder,
+      isVisible: isVisible ?? this.isVisible,
+      isInverted: isInverted ?? this.isInverted,
+      isCollapsed: isCollapsed ?? this.isCollapsed,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (isVisible.present) {
+      map['is_visible'] = Variable<bool>(isVisible.value);
+    }
+    if (isInverted.present) {
+      map['is_inverted'] = Variable<bool>(isInverted.value);
+    }
+    if (isCollapsed.present) {
+      map['is_collapsed'] = Variable<bool>(isCollapsed.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FoldersCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('isVisible: $isVisible, ')
+          ..write('isInverted: $isInverted, ')
+          ..write('isCollapsed: $isCollapsed, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $LayersTable extends Layers with TableInfo<$LayersTable, Layer> {
   @override
   final GeneratedDatabase attachedDatabase;
@@ -141,6 +618,20 @@ class $LayersTable extends Layers with TableInfo<$LayersTable, Layer> {
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _folderIdMeta = const VerificationMeta(
+    'folderId',
+  );
+  @override
+  late final GeneratedColumn<String> folderId = GeneratedColumn<String>(
+    'folder_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES folders (id) ON DELETE SET NULL',
+    ),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -166,6 +657,7 @@ class $LayersTable extends Layers with TableInfo<$LayersTable, Layer> {
     borderLevel,
     borderFillAreas,
     borderShowNames,
+    folderId,
     createdAt,
   ];
   @override
@@ -260,6 +752,12 @@ class $LayersTable extends Layers with TableInfo<$LayersTable, Layer> {
         ),
       );
     }
+    if (data.containsKey('folder_id')) {
+      context.handle(
+        _folderIdMeta,
+        folderId.isAcceptableOrUnknown(data['folder_id']!, _folderIdMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -319,6 +817,10 @@ class $LayersTable extends Layers with TableInfo<$LayersTable, Layer> {
         DriftSqlType.bool,
         data['${effectivePrefix}border_show_names'],
       )!,
+      folderId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}folder_id'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -367,6 +869,13 @@ class Layer extends DataClass implements Insertable<Layer> {
 
   /// **`borders` only.** Draw each area's name on a plate at its label anchor.
   final bool borderShowNames;
+
+  /// The [Folders] row this layer belongs to, or null when it sits at the root.
+  ///
+  /// **`setNull`, not `cascade`**: deleting a folder must not take its layers
+  /// with it. Getting layers back out again is the thing the `mixed` layer
+  /// could never do, and it is half the reason folders exist.
+  final String? folderId;
   final DateTime createdAt;
   const Layer({
     required this.id,
@@ -380,6 +889,7 @@ class Layer extends DataClass implements Insertable<Layer> {
     this.borderLevel,
     required this.borderFillAreas,
     required this.borderShowNames,
+    this.folderId,
     required this.createdAt,
   });
   @override
@@ -398,6 +908,9 @@ class Layer extends DataClass implements Insertable<Layer> {
     }
     map['border_fill_areas'] = Variable<bool>(borderFillAreas);
     map['border_show_names'] = Variable<bool>(borderShowNames);
+    if (!nullToAbsent || folderId != null) {
+      map['folder_id'] = Variable<String>(folderId);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -417,6 +930,9 @@ class Layer extends DataClass implements Insertable<Layer> {
           : Value(borderLevel),
       borderFillAreas: Value(borderFillAreas),
       borderShowNames: Value(borderShowNames),
+      folderId: folderId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(folderId),
       createdAt: Value(createdAt),
     );
   }
@@ -438,6 +954,7 @@ class Layer extends DataClass implements Insertable<Layer> {
       borderLevel: serializer.fromJson<String?>(json['borderLevel']),
       borderFillAreas: serializer.fromJson<bool>(json['borderFillAreas']),
       borderShowNames: serializer.fromJson<bool>(json['borderShowNames']),
+      folderId: serializer.fromJson<String?>(json['folderId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -456,6 +973,7 @@ class Layer extends DataClass implements Insertable<Layer> {
       'borderLevel': serializer.toJson<String?>(borderLevel),
       'borderFillAreas': serializer.toJson<bool>(borderFillAreas),
       'borderShowNames': serializer.toJson<bool>(borderShowNames),
+      'folderId': serializer.toJson<String?>(folderId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -472,6 +990,7 @@ class Layer extends DataClass implements Insertable<Layer> {
     Value<String?> borderLevel = const Value.absent(),
     bool? borderFillAreas,
     bool? borderShowNames,
+    Value<String?> folderId = const Value.absent(),
     DateTime? createdAt,
   }) => Layer(
     id: id ?? this.id,
@@ -485,6 +1004,7 @@ class Layer extends DataClass implements Insertable<Layer> {
     borderLevel: borderLevel.present ? borderLevel.value : this.borderLevel,
     borderFillAreas: borderFillAreas ?? this.borderFillAreas,
     borderShowNames: borderShowNames ?? this.borderShowNames,
+    folderId: folderId.present ? folderId.value : this.folderId,
     createdAt: createdAt ?? this.createdAt,
   );
   Layer copyWithCompanion(LayersCompanion data) {
@@ -508,6 +1028,7 @@ class Layer extends DataClass implements Insertable<Layer> {
       borderShowNames: data.borderShowNames.present
           ? data.borderShowNames.value
           : this.borderShowNames,
+      folderId: data.folderId.present ? data.folderId.value : this.folderId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -526,6 +1047,7 @@ class Layer extends DataClass implements Insertable<Layer> {
           ..write('borderLevel: $borderLevel, ')
           ..write('borderFillAreas: $borderFillAreas, ')
           ..write('borderShowNames: $borderShowNames, ')
+          ..write('folderId: $folderId, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -544,6 +1066,7 @@ class Layer extends DataClass implements Insertable<Layer> {
     borderLevel,
     borderFillAreas,
     borderShowNames,
+    folderId,
     createdAt,
   );
   @override
@@ -561,6 +1084,7 @@ class Layer extends DataClass implements Insertable<Layer> {
           other.borderLevel == this.borderLevel &&
           other.borderFillAreas == this.borderFillAreas &&
           other.borderShowNames == this.borderShowNames &&
+          other.folderId == this.folderId &&
           other.createdAt == this.createdAt);
 }
 
@@ -576,6 +1100,7 @@ class LayersCompanion extends UpdateCompanion<Layer> {
   final Value<String?> borderLevel;
   final Value<bool> borderFillAreas;
   final Value<bool> borderShowNames;
+  final Value<String?> folderId;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const LayersCompanion({
@@ -590,6 +1115,7 @@ class LayersCompanion extends UpdateCompanion<Layer> {
     this.borderLevel = const Value.absent(),
     this.borderFillAreas = const Value.absent(),
     this.borderShowNames = const Value.absent(),
+    this.folderId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -605,6 +1131,7 @@ class LayersCompanion extends UpdateCompanion<Layer> {
     this.borderLevel = const Value.absent(),
     this.borderFillAreas = const Value.absent(),
     this.borderShowNames = const Value.absent(),
+    this.folderId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -623,6 +1150,7 @@ class LayersCompanion extends UpdateCompanion<Layer> {
     Expression<String>? borderLevel,
     Expression<bool>? borderFillAreas,
     Expression<bool>? borderShowNames,
+    Expression<String>? folderId,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -638,6 +1166,7 @@ class LayersCompanion extends UpdateCompanion<Layer> {
       if (borderLevel != null) 'border_level': borderLevel,
       if (borderFillAreas != null) 'border_fill_areas': borderFillAreas,
       if (borderShowNames != null) 'border_show_names': borderShowNames,
+      if (folderId != null) 'folder_id': folderId,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -655,6 +1184,7 @@ class LayersCompanion extends UpdateCompanion<Layer> {
     Value<String?>? borderLevel,
     Value<bool>? borderFillAreas,
     Value<bool>? borderShowNames,
+    Value<String?>? folderId,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
@@ -670,6 +1200,7 @@ class LayersCompanion extends UpdateCompanion<Layer> {
       borderLevel: borderLevel ?? this.borderLevel,
       borderFillAreas: borderFillAreas ?? this.borderFillAreas,
       borderShowNames: borderShowNames ?? this.borderShowNames,
+      folderId: folderId ?? this.folderId,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -711,6 +1242,9 @@ class LayersCompanion extends UpdateCompanion<Layer> {
     if (borderShowNames.present) {
       map['border_show_names'] = Variable<bool>(borderShowNames.value);
     }
+    if (folderId.present) {
+      map['folder_id'] = Variable<String>(folderId.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -734,6 +1268,7 @@ class LayersCompanion extends UpdateCompanion<Layer> {
           ..write('borderLevel: $borderLevel, ')
           ..write('borderFillAreas: $borderFillAreas, ')
           ..write('borderShowNames: $borderShowNames, ')
+          ..write('folderId: $folderId, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -11664,6 +12199,7 @@ class OverpassCacheCompanion extends UpdateCompanion<OverpassCacheData> {
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
+  late final $FoldersTable folders = $FoldersTable(this);
   late final $LayersTable layers = $LayersTable(this);
   late final $CirclesTable circles = $CirclesTable(this);
   late final $AppSettingsTable appSettings = $AppSettingsTable(this);
@@ -11689,6 +12225,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities => [
+    folders,
     layers,
     circles,
     appSettings,
@@ -11711,6 +12248,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'folders',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('layers', kind: UpdateKind.update)],
+    ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
         'layers',
@@ -11812,6 +12356,342 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   ]);
 }
 
+typedef $$FoldersTableCreateCompanionBuilder =
+    FoldersCompanion Function({
+      required String id,
+      required String name,
+      required int sortOrder,
+      Value<bool> isVisible,
+      Value<bool> isInverted,
+      Value<bool> isCollapsed,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$FoldersTableUpdateCompanionBuilder =
+    FoldersCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<int> sortOrder,
+      Value<bool> isVisible,
+      Value<bool> isInverted,
+      Value<bool> isCollapsed,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$FoldersTableReferences
+    extends BaseReferences<_$AppDatabase, $FoldersTable, Folder> {
+  $$FoldersTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static MultiTypedResultKey<$LayersTable, List<Layer>> _layersRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.layers,
+    aliasName: $_aliasNameGenerator(db.folders.id, db.layers.folderId),
+  );
+
+  $$LayersTableProcessedTableManager get layersRefs {
+    final manager = $$LayersTableTableManager(
+      $_db,
+      $_db.layers,
+    ).filter((f) => f.folderId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_layersRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$FoldersTableFilterComposer
+    extends Composer<_$AppDatabase, $FoldersTable> {
+  $$FoldersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isVisible => $composableBuilder(
+    column: $table.isVisible,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isInverted => $composableBuilder(
+    column: $table.isInverted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isCollapsed => $composableBuilder(
+    column: $table.isCollapsed,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  Expression<bool> layersRefs(
+    Expression<bool> Function($$LayersTableFilterComposer f) f,
+  ) {
+    final $$LayersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.layers,
+      getReferencedColumn: (t) => t.folderId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LayersTableFilterComposer(
+            $db: $db,
+            $table: $db.layers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$FoldersTableOrderingComposer
+    extends Composer<_$AppDatabase, $FoldersTable> {
+  $$FoldersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isVisible => $composableBuilder(
+    column: $table.isVisible,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isInverted => $composableBuilder(
+    column: $table.isInverted,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isCollapsed => $composableBuilder(
+    column: $table.isCollapsed,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$FoldersTableAnnotationComposer
+    extends Composer<_$AppDatabase, $FoldersTable> {
+  $$FoldersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<bool> get isVisible =>
+      $composableBuilder(column: $table.isVisible, builder: (column) => column);
+
+  GeneratedColumn<bool> get isInverted => $composableBuilder(
+    column: $table.isInverted,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get isCollapsed => $composableBuilder(
+    column: $table.isCollapsed,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  Expression<T> layersRefs<T extends Object>(
+    Expression<T> Function($$LayersTableAnnotationComposer a) f,
+  ) {
+    final $$LayersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.layers,
+      getReferencedColumn: (t) => t.folderId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LayersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.layers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$FoldersTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $FoldersTable,
+          Folder,
+          $$FoldersTableFilterComposer,
+          $$FoldersTableOrderingComposer,
+          $$FoldersTableAnnotationComposer,
+          $$FoldersTableCreateCompanionBuilder,
+          $$FoldersTableUpdateCompanionBuilder,
+          (Folder, $$FoldersTableReferences),
+          Folder,
+          PrefetchHooks Function({bool layersRefs})
+        > {
+  $$FoldersTableTableManager(_$AppDatabase db, $FoldersTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$FoldersTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$FoldersTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$FoldersTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<bool> isVisible = const Value.absent(),
+                Value<bool> isInverted = const Value.absent(),
+                Value<bool> isCollapsed = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => FoldersCompanion(
+                id: id,
+                name: name,
+                sortOrder: sortOrder,
+                isVisible: isVisible,
+                isInverted: isInverted,
+                isCollapsed: isCollapsed,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                required int sortOrder,
+                Value<bool> isVisible = const Value.absent(),
+                Value<bool> isInverted = const Value.absent(),
+                Value<bool> isCollapsed = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => FoldersCompanion.insert(
+                id: id,
+                name: name,
+                sortOrder: sortOrder,
+                isVisible: isVisible,
+                isInverted: isInverted,
+                isCollapsed: isCollapsed,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$FoldersTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({layersRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [if (layersRefs) db.layers],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (layersRefs)
+                    await $_getPrefetchedData<Folder, $FoldersTable, Layer>(
+                      currentTable: table,
+                      referencedTable: $$FoldersTableReferences
+                          ._layersRefsTable(db),
+                      managerFromTypedResult: (p0) =>
+                          $$FoldersTableReferences(db, table, p0).layersRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where((e) => e.folderId == item.id),
+                      typedResults: items,
+                    ),
+                ];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$FoldersTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $FoldersTable,
+      Folder,
+      $$FoldersTableFilterComposer,
+      $$FoldersTableOrderingComposer,
+      $$FoldersTableAnnotationComposer,
+      $$FoldersTableCreateCompanionBuilder,
+      $$FoldersTableUpdateCompanionBuilder,
+      (Folder, $$FoldersTableReferences),
+      Folder,
+      PrefetchHooks Function({bool layersRefs})
+    >;
 typedef $$LayersTableCreateCompanionBuilder =
     LayersCompanion Function({
       required String id,
@@ -11825,6 +12705,7 @@ typedef $$LayersTableCreateCompanionBuilder =
       Value<String?> borderLevel,
       Value<bool> borderFillAreas,
       Value<bool> borderShowNames,
+      Value<String?> folderId,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -11841,6 +12722,7 @@ typedef $$LayersTableUpdateCompanionBuilder =
       Value<String?> borderLevel,
       Value<bool> borderFillAreas,
       Value<bool> borderShowNames,
+      Value<String?> folderId,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -11848,6 +12730,23 @@ typedef $$LayersTableUpdateCompanionBuilder =
 final class $$LayersTableReferences
     extends BaseReferences<_$AppDatabase, $LayersTable, Layer> {
   $$LayersTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $FoldersTable _folderIdTable(_$AppDatabase db) => db.folders
+      .createAlias($_aliasNameGenerator(db.layers.folderId, db.folders.id));
+
+  $$FoldersTableProcessedTableManager? get folderId {
+    final $_column = $_itemColumn<String>('folder_id');
+    if ($_column == null) return null;
+    final manager = $$FoldersTableTableManager(
+      $_db,
+      $_db.folders,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_folderIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
 
   static MultiTypedResultKey<$CirclesTable, List<Circle>> _circlesRefsTable(
     _$AppDatabase db,
@@ -12046,6 +12945,29 @@ class $$LayersTableFilterComposer
     column: $table.createdAt,
     builder: (column) => ColumnFilters(column),
   );
+
+  $$FoldersTableFilterComposer get folderId {
+    final $$FoldersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.folderId,
+      referencedTable: $db.folders,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FoldersTableFilterComposer(
+            $db: $db,
+            $table: $db.folders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 
   Expression<bool> circlesRefs(
     Expression<bool> Function($$CirclesTableFilterComposer f) f,
@@ -12291,6 +13213,29 @@ class $$LayersTableOrderingComposer
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  $$FoldersTableOrderingComposer get folderId {
+    final $$FoldersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.folderId,
+      referencedTable: $db.folders,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FoldersTableOrderingComposer(
+            $db: $db,
+            $table: $db.folders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$LayersTableAnnotationComposer
@@ -12345,6 +13290,29 @@ class $$LayersTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$FoldersTableAnnotationComposer get folderId {
+    final $$FoldersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.folderId,
+      referencedTable: $db.folders,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FoldersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.folders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 
   Expression<T> circlesRefs<T extends Object>(
     Expression<T> Function($$CirclesTableAnnotationComposer a) f,
@@ -12536,6 +13504,7 @@ class $$LayersTableTableManager
           (Layer, $$LayersTableReferences),
           Layer,
           PrefetchHooks Function({
+            bool folderId,
             bool circlesRefs,
             bool subspacesRefs,
             bool freeLinesRefs,
@@ -12569,6 +13538,7 @@ class $$LayersTableTableManager
                 Value<String?> borderLevel = const Value.absent(),
                 Value<bool> borderFillAreas = const Value.absent(),
                 Value<bool> borderShowNames = const Value.absent(),
+                Value<String?> folderId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LayersCompanion(
@@ -12583,6 +13553,7 @@ class $$LayersTableTableManager
                 borderLevel: borderLevel,
                 borderFillAreas: borderFillAreas,
                 borderShowNames: borderShowNames,
+                folderId: folderId,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -12599,6 +13570,7 @@ class $$LayersTableTableManager
                 Value<String?> borderLevel = const Value.absent(),
                 Value<bool> borderFillAreas = const Value.absent(),
                 Value<bool> borderShowNames = const Value.absent(),
+                Value<String?> folderId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LayersCompanion.insert(
@@ -12613,6 +13585,7 @@ class $$LayersTableTableManager
                 borderLevel: borderLevel,
                 borderFillAreas: borderFillAreas,
                 borderShowNames: borderShowNames,
+                folderId: folderId,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -12624,6 +13597,7 @@ class $$LayersTableTableManager
               .toList(),
           prefetchHooksCallback:
               ({
+                folderId = false,
                 circlesRefs = false,
                 subspacesRefs = false,
                 freeLinesRefs = false,
@@ -12643,7 +13617,38 @@ class $$LayersTableTableManager
                     if (poiSetsRefs) db.poiSets,
                     if (borderSetsRefs) db.borderSets,
                   ],
-                  addJoins: null,
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (folderId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.folderId,
+                                    referencedTable: $$LayersTableReferences
+                                        ._folderIdTable(db),
+                                    referencedColumn: $$LayersTableReferences
+                                        ._folderIdTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
                   getPrefetchedDataCallback: (items) async {
                     return [
                       if (circlesRefs)
@@ -12806,6 +13811,7 @@ typedef $$LayersTableProcessedTableManager =
       (Layer, $$LayersTableReferences),
       Layer,
       PrefetchHooks Function({
+        bool folderId,
         bool circlesRefs,
         bool subspacesRefs,
         bool freeLinesRefs,
@@ -20423,6 +21429,8 @@ typedef $$OverpassCacheTableProcessedTableManager =
 class $AppDatabaseManager {
   final _$AppDatabase _db;
   $AppDatabaseManager(this._db);
+  $$FoldersTableTableManager get folders =>
+      $$FoldersTableTableManager(_db, _db.folders);
   $$LayersTableTableManager get layers =>
       $$LayersTableTableManager(_db, _db.layers);
   $$CirclesTableTableManager get circles =>
