@@ -5948,15 +5948,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             ),
                       child: FloatingActionButton.extended(
                         heroTag: 'add',
-                        // The row is the toggle, Edit, the quick toggle and
-                        // up to two import buttons before this one: at a
-                        // large system font "Add subspace" beside four small
-                        // FABs runs past the screen. Collapse the label then —
-                        // the icon says the type and the tooltip keeps the
-                        // words — rather than let the row overflow.
-                        isExtended:
-                            smallFabs < 4 ||
-                            MediaQuery.textScalerOf(context).scale(1) <= 1.15,
+                        isExtended: addFabIsExtended(
+                          smallFabs: smallFabs,
+                          textScale:
+                              MediaQuery.textScalerOf(context).scale(1),
+                        ),
                         tooltip:
                             'Tap the map to add · long-press for the '
                             'map centre',
@@ -6423,6 +6419,23 @@ class _Credit extends StatelessWidget {
   }
 }
 
+
+/// Whether the Add button can afford to show its label.
+///
+/// The row is the tools toggle, Edit, the quick toggle and up to two import
+/// buttons before Add, so it carries up to five small FABs — and a phone is
+/// about 390 logical pixels wide. Five of them beside an extended
+/// "Add subspace" does not fit: it overflowed by 11 px on a Pixel 4a at the
+/// default font size.
+///
+/// This used to read `smallFabs < 4 || textScale <= 1.15`, which is true
+/// whenever the font is *normal* — so the label never collapsed at the default
+/// size no matter how many buttons preceded it, which is exactly the case that
+/// overflows. Both conditions have to hold: few enough buttons **and** small
+/// enough text. Collapsing loses nothing important — the icon says the type and
+/// the tooltip keeps the words.
+bool addFabIsExtended({required int smallFabs, required double textScale}) =>
+    smallFabs < 4 && textScale <= 1.15;
 
 /// The tile server said no, in one line the user can act on.
 ///
