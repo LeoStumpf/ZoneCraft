@@ -154,6 +154,15 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   anything the drawer's ⋮ offers. The sheet is opened with the *map's* context/ref and pops
   itself before a `needsMap`/delete action runs. Beside Edit, one **per-type quick toggle**
   FAB: borders → Colour areas, region layers → Invert, a POI layer with stations → the filter.
+- **The FABs are hidden by whatever is in the sheet slot, not by a list of it.**
+  The map's `bottomSheet` slot is shared by four things — a pending import's
+  Keep/Discard, an import's options form (`_importSheet`), a received place, and
+  the selected element's editor — and the FAB column and bottom row are drawn
+  *over* that slot. So `floatingActionButton` was `null` while a sheet was up,
+  keyed off a second list of the things that raise one; the import form was
+  added to the slot and never to that list, and its buttons landed on top of the
+  form's own corner fields and its close button. Both now read one hoisted
+  `final Widget? bottomSheet`, so a fifth kind of sheet cannot reintroduce it.
 - **One toggle collapses the map to the map** (`AppSettings.toolsExpanded`). It takes down the
   right-hand tool column, the undo/redo pair **and the active-layer chip**, leaving the burger
   menu, the credit and the bottom row. The menu stays because the way *back* has to survive

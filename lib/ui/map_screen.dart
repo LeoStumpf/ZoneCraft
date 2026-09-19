@@ -4593,6 +4593,157 @@ class _MapScreenState extends ConsumerState<MapScreen>
         savedLng.isFinite &&
         savedZoom.isFinite;
 
+    // The one sheet that owns the Scaffold's slot, whichever it is. It is
+    // worked out here so the FABs can be hidden by the *same* expression:
+    // they used to be hidden by a second list of the things that put a sheet
+    // up, and the import sheet was in one list and not the other — so its
+    // form opened under the tool column and the bottom row, which covered the
+    // corner fields it was asking for and its own close button.
+    // An import sheet outranks everything: it is a question already being
+    // asked, and it comes down as soon as it is answered.
+    final Widget? bottomSheet =
+        (pendingImport == null
+            ? null
+            : PendingImportSheet(
+                pending: pendingImport,
+                onKeep: () => pendingImport.answer(keep: true),
+                onDiscard: () => pendingImport.answer(keep: false),
+              )) ??
+        _importSheet ??
+        (!hasSelection
+            // A shared position. An arriving one clears the selection (see the
+            // listener above), so in practice these two never compete; the order
+            // here only decides what happens if something is selected *after*.
+            ? (receivedPoint == null
+                  ? null
+                  : ReceivedPlaceSheet(
+                      point: receivedPoint,
+                      onKeep: () =>
+                          unawaited(_keepSharedPlace(receivedPoint)),
+                      onDismiss: () =>
+                          ref.read(receivedPointProvider.notifier).clear(),
+                    ))
+            : CollapsibleSheet(
+                // Reset to expanded whenever the selected object changes —
+                // and rebuild from scratch on an undo. Editors mirror their
+                // row into controllers and skip re-syncing a focused field,
+                // so without the revision an undone value would still be sat
+                // in the text box, ready for the next keystroke to write it
+                // back. Discarding the subtree re-seeds every editor at once.
+                key: ValueKey(
+                  'sheet-${ref.watch(undoRevisionProvider)}-'
+                  '${selectedCircle?.id ?? selectedSubspace?.id ?? selectedFreeLine?.id ?? selectedFreeArea?.id ?? selectedHeightRegion?.id ?? selectedPoiSet?.id ?? selectedPoiPoint?.id ?? selectedBorderArea?.id}',
+                ),
+                child: selectedCircle != null
+                    ? CircleEditorSheet(
+                        key: ValueKey(selectedCircle.id),
+                        circle: selectedCircle,
+                        layers: layers,
+                      )
+                    : selectedSubspace != null
+                    ? SubspaceEditorSheet(
+                        key: ValueKey(selectedSubspace.id),
+                        subspace: selectedSubspace,
+                        points: selectedSubspacePoints,
+                        layers: layers,
+                        onAddPoint: () => _addSubspaceAt(
+                          _mapController.camera.center,
+                          layers.firstWhere(
+                            (l) => l.id == selectedSubspace.layerId,
+                          ),
+                          subspaces,
+                        ),
+                      )
+                    : selectedFreeLine != null
+                    ? FreeLineEditorSheet(
+                        key: ValueKey(selectedFreeLine.id),
+                        freeLine: selectedFreeLine,
+                        points: selectedFreeLinePoints,
+                        layers: layers,
+                        onAddPoint: () => _addFreeLineAt(
+                          _mapController.camera.center,
+                          layers.firstWhere(
+                            (l) => l.id == selectedFreeLine.layerId,
+                          ),
+                          freeLines,
+                        ),
+                      )
+                    : selectedFreeArea != null
+                    ? FreeAreaEditorSheet(
+                        key: ValueKey(selectedFreeArea.id),
+                        freeArea: selectedFreeArea,
+                        points: selectedFreeAreaPoints,
+                        layers: layers,
+                        onAddPoint: () => _addFreeAreaAt(
+                          _mapController.camera.center,
+                          layers.firstWhere(
+                            (l) => l.id == selectedFreeArea.layerId,
+                          ),
+                          freeAreas,
+                        ),
+                      )
+                    : selectedHeightRegion != null
+                    ? HeightEditorSheet(
+                        key: ValueKey(selectedHeightRegion.id),
+                        region: selectedHeightRegion,
+                        polygonCount:
+                            heightPolygons[selectedHeightRegion.id]?.length ??
+                            0,
+                        layers: layers,
+                      )
+                    : selectedPoiPoint != null
+                    ? () {
+                        // A station and a POI are the same row; the set
+                        // says which it is, and that decides the sheet's
+                        // icon, wording and whether the point may move.
+                        final set = _setOf(
+                          poiSets,
+                          selectedPoiPoint.poiSetId,
+                        );
+                        final station = set != null && set.isStationImport;
+                        return ImportedPointEditorSheet(
+                          key: ValueKey(selectedPoiPoint.id),
+                          id: selectedPoiPoint.id,
+                          name: selectedPoiPoint.name,
+                          lat: selectedPoiPoint.lat,
+                          lng: selectedPoiPoint.lng,
+                          icon: set == null
+                              ? Icons.place_outlined
+                              : poiPointIcon(selectedPoiPoint, set),
+                          title: station ? 'Edit station' : 'Edit POI',
+                          subtitle: station
+                              ? transitModeLabels(selectedPoiPoint.modeMask)
+                              : _poiCategoryLabel(
+                                  poiSets,
+                                  selectedPoiPoint.poiSetId,
+                                ),
+                          // Only a hand-placed POI can be moved; an
+                          // imported one's position is the fetched fact.
+                          movable: set?.isManual ?? false,
+                        );
+                      }()
+                    : selectedPoiSet != null
+                    ? PoiSetEditorSheet(
+                        key: ValueKey(selectedPoiSet.id),
+                        set: selectedPoiSet,
+                        pointCount: poiPoints
+                            .where((p) => p.poiSetId == selectedPoiSet.id)
+                            .length,
+                        layers: [
+                          for (final l in layers)
+                            if (layerHolds(l, kPoi)) l,
+                        ],
+                      )
+                    : selectedBorderArea != null &&
+                          selectedBorderLayer != null
+                    ? BorderAreaEditorSheet(
+                        key: ValueKey(selectedBorderArea.id),
+                        area: selectedBorderArea,
+                        layer: selectedBorderLayer,
+                      )
+                    : const SizedBox.shrink(),
+            ));
+
     return Scaffold(
       key: _scaffoldKey,
       drawer: const LayersDrawer(),
@@ -5764,12 +5915,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
                 ),
               ],
             ),
-      // While an editor sheet is open it provides its own delete/close, and the
-      // FABs would overlap it — so show them only when nothing is selected.
-      // Hidden while a sheet is up — an editor or a shared place — because the
-      // FAB column sits on top of it and buries the buttons the sheet offers.
-      floatingActionButton:
-          hasSelection || receivedPoint != null || pendingImport != null
+      // Hidden while **any** sheet is up — an editor, a shared place, an
+      // import's form — because the FAB column and the bottom row are drawn
+      // over the Scaffold's sheet slot and bury the controls the sheet offers.
+      // Read from the sheet itself rather than from a second list of the
+      // things that raise one: that list forgot the import sheet, and the
+      // buttons landed on top of the form asking for the import's corners.
+      floatingActionButton: bottomSheet != null
           ? null
           : Column(
               mainAxisSize: MainAxisSize.min,
@@ -6063,150 +6215,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                 ),
               ],
             ),
-      // An import sheet outranks everything: it is a question already being
-      // asked, and it comes down as soon as it is answered.
-      bottomSheet:
-          (pendingImport == null
-              ? null
-              : PendingImportSheet(
-                  pending: pendingImport,
-                  onKeep: () => pendingImport.answer(keep: true),
-                  onDiscard: () => pendingImport.answer(keep: false),
-                )) ??
-          _importSheet ??
-          (!hasSelection
-              // A shared position. An arriving one clears the selection (see the
-              // listener above), so in practice these two never compete; the order
-              // here only decides what happens if something is selected *after*.
-              ? (receivedPoint == null
-                    ? null
-                    : ReceivedPlaceSheet(
-                        point: receivedPoint,
-                        onKeep: () =>
-                            unawaited(_keepSharedPlace(receivedPoint)),
-                        onDismiss: () =>
-                            ref.read(receivedPointProvider.notifier).clear(),
-                      ))
-              : CollapsibleSheet(
-                  // Reset to expanded whenever the selected object changes —
-                  // and rebuild from scratch on an undo. Editors mirror their
-                  // row into controllers and skip re-syncing a focused field,
-                  // so without the revision an undone value would still be sat
-                  // in the text box, ready for the next keystroke to write it
-                  // back. Discarding the subtree re-seeds every editor at once.
-                  key: ValueKey(
-                    'sheet-${ref.watch(undoRevisionProvider)}-'
-                    '${selectedCircle?.id ?? selectedSubspace?.id ?? selectedFreeLine?.id ?? selectedFreeArea?.id ?? selectedHeightRegion?.id ?? selectedPoiSet?.id ?? selectedPoiPoint?.id ?? selectedBorderArea?.id}',
-                  ),
-                  child: selectedCircle != null
-                      ? CircleEditorSheet(
-                          key: ValueKey(selectedCircle.id),
-                          circle: selectedCircle,
-                          layers: layers,
-                        )
-                      : selectedSubspace != null
-                      ? SubspaceEditorSheet(
-                          key: ValueKey(selectedSubspace.id),
-                          subspace: selectedSubspace,
-                          points: selectedSubspacePoints,
-                          layers: layers,
-                          onAddPoint: () => _addSubspaceAt(
-                            _mapController.camera.center,
-                            layers.firstWhere(
-                              (l) => l.id == selectedSubspace.layerId,
-                            ),
-                            subspaces,
-                          ),
-                        )
-                      : selectedFreeLine != null
-                      ? FreeLineEditorSheet(
-                          key: ValueKey(selectedFreeLine.id),
-                          freeLine: selectedFreeLine,
-                          points: selectedFreeLinePoints,
-                          layers: layers,
-                          onAddPoint: () => _addFreeLineAt(
-                            _mapController.camera.center,
-                            layers.firstWhere(
-                              (l) => l.id == selectedFreeLine.layerId,
-                            ),
-                            freeLines,
-                          ),
-                        )
-                      : selectedFreeArea != null
-                      ? FreeAreaEditorSheet(
-                          key: ValueKey(selectedFreeArea.id),
-                          freeArea: selectedFreeArea,
-                          points: selectedFreeAreaPoints,
-                          layers: layers,
-                          onAddPoint: () => _addFreeAreaAt(
-                            _mapController.camera.center,
-                            layers.firstWhere(
-                              (l) => l.id == selectedFreeArea.layerId,
-                            ),
-                            freeAreas,
-                          ),
-                        )
-                      : selectedHeightRegion != null
-                      ? HeightEditorSheet(
-                          key: ValueKey(selectedHeightRegion.id),
-                          region: selectedHeightRegion,
-                          polygonCount:
-                              heightPolygons[selectedHeightRegion.id]?.length ??
-                              0,
-                          layers: layers,
-                        )
-                      : selectedPoiPoint != null
-                      ? () {
-                          // A station and a POI are the same row; the set
-                          // says which it is, and that decides the sheet's
-                          // icon, wording and whether the point may move.
-                          final set = _setOf(
-                            poiSets,
-                            selectedPoiPoint.poiSetId,
-                          );
-                          final station = set != null && set.isStationImport;
-                          return ImportedPointEditorSheet(
-                            key: ValueKey(selectedPoiPoint.id),
-                            id: selectedPoiPoint.id,
-                            name: selectedPoiPoint.name,
-                            lat: selectedPoiPoint.lat,
-                            lng: selectedPoiPoint.lng,
-                            icon: set == null
-                                ? Icons.place_outlined
-                                : poiPointIcon(selectedPoiPoint, set),
-                            title: station ? 'Edit station' : 'Edit POI',
-                            subtitle: station
-                                ? transitModeLabels(selectedPoiPoint.modeMask)
-                                : _poiCategoryLabel(
-                                    poiSets,
-                                    selectedPoiPoint.poiSetId,
-                                  ),
-                            // Only a hand-placed POI can be moved; an
-                            // imported one's position is the fetched fact.
-                            movable: set?.isManual ?? false,
-                          );
-                        }()
-                      : selectedPoiSet != null
-                      ? PoiSetEditorSheet(
-                          key: ValueKey(selectedPoiSet.id),
-                          set: selectedPoiSet,
-                          pointCount: poiPoints
-                              .where((p) => p.poiSetId == selectedPoiSet.id)
-                              .length,
-                          layers: [
-                            for (final l in layers)
-                              if (layerHolds(l, kPoi)) l,
-                          ],
-                        )
-                      : selectedBorderArea != null &&
-                            selectedBorderLayer != null
-                      ? BorderAreaEditorSheet(
-                          key: ValueKey(selectedBorderArea.id),
-                          area: selectedBorderArea,
-                          layer: selectedBorderLayer,
-                        )
-                      : const SizedBox.shrink(),
-                )),
+      bottomSheet: bottomSheet,
     );
   }
 }
