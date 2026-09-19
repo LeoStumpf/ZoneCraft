@@ -188,6 +188,27 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   `nominatimHostOverride`), pushed in from `map_screen`'s settings watch rather than threaded
   through four layers that have no opinion about them; `overpassEndpointList` keeps the
   public instances behind the override, so a typo costs a slow import, not a dead app.
+- **A refused tile is explained, not left as grey squares** (`data/tile_health.dart`).
+  A server that *answers* and says no — a spent daily quota, a refused key, a blocked client —
+  looks exactly like a broken app at an hour nobody can predict, and the visible symptom (the
+  map vanishing) reads as data loss. `TileHealth` watches every fetch and raises one banner
+  with a **Why?** dialog that says the reassuring half first. Two judgements keep it quiet:
+  **not reaching the server says nothing** (offline is the normal state the cache exists for,
+  and a banner would fire on every subway ride) and **one refusal is not news** — three
+  consecutive, since tiles go out in bursts. Any success clears it. The streak check lives in
+  the `failure` getter as well as the notify, or a listener rebuilding for its own reasons
+  shows the banner on the first refusal. The wording differs for the community OSM servers
+  (donated, may block, does not fix itself) and a keyed provider (an allowance that resets).
+- **There is a way to reach a human** (`ui/service_policy_screen.dart`, "Servers and limits",
+  linked from About and from the failure dialog). Operators identify a misbehaving client by
+  its `User-Agent` and then need somebody to write to; when they cannot find one, blocking is
+  the remedy left. So the page prints the exact UA their logs will contain next to
+  `kContactEmail` and `kIssuesUrl`, both copyable. `mailto` is declared in the manifest's
+  `<queries>` block for the same API-30 reason as `https` — without it `canLaunchUrl` reports
+  no mail app and the contact button is dead exactly when it is needed
+  (`test/android_manifest_test.dart` guards both schemes). `canLaunchExternalUrl`
+  (`ui/external_link.dart`) is the one probe: `canLaunchUrl` *throws* with no platform
+  implementation, so no screen may call it directly.
 - **No telemetry, ever.** No crash reporting, no analytics, no advertising id. Sentry was
   wired in and deliberately removed: `PRIVACY.md` and the Play Data safety form can now
   answer "none", which is worth more than the diagnostics were. Anything added back has to
@@ -450,7 +471,8 @@ lib/
                shared file and saving one through the document picker, the only
                file that talks to MainActivity.kt;
                the one definition of the three switchable service addresses
-               (service_overrides.dart)
+               (service_overrides.dart); why the tiles stopped, in words
+               (tile_health.dart)
   geo/         geodesicCircle(), subspace Voronoi-cell geometry (two points =
                a half-plane), freehand line/area region geometry (freeline.dart,
                freearea.dart), height contouring/marching-squares (height.dart),
@@ -472,7 +494,9 @@ lib/
                outlines + name plates, no Path.combine), border_import_dialog,
                screen_cluster (greedy screen-space clustering), screen_clip
                (viewport pre-clip, rings and segments),
-               external_link (the one way the app opens someone else's URL)
+               external_link (the one way the app opens someone else's URL),
+               service_policy_screen (what the app asks of other people's
+               servers, and how an operator reaches a human)
 ```
 
 ## Plans

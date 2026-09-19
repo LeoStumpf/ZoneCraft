@@ -161,5 +161,14 @@
             <action android:name="android.intent.action.VIEW"/>
             <data android:scheme="https"/>
         </intent>
+        <!-- So an operator whose service this app is troubling can reach a
+             human from inside it. Same API 30 rule as the https intent above:
+             without this, canLaunchUrl reports no mail app on every device and
+             the contact button would be dead exactly when it is needed. The
+             screen falls back to copying the address either way. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="mailto"/>
+        </intent>
     </queries>
 </manifest>

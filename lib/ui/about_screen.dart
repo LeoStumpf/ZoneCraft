@@ -17,11 +17,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../app_info.dart';
 import '../data/tile_source.dart';
 import 'external_link.dart';
+import 'service_policy_screen.dart';
 
 /// What the app is, who it talks to, and which of its behaviours are deliberate.
 ///
@@ -61,16 +61,11 @@ class _AboutScreenState extends State<AboutScreen> {
   }
 
   Future<void> _probeLinkSupport() async {
-    var can = false;
-    try {
-      can = await canLaunchUrl(Uri.parse('https://openstreetmap.org'));
-    // With no platform implementation at all (a test host, a desktop build)
-    // canLaunchUrl throws rather than answering false.
-    // ignore: avoid_catches_without_on_clauses
-    } catch (_) {
-      // No platform implementation (a test host, a desktop build): links stay
-      // plain text, which is what this screen did before they were tappable.
-    }
+    // Where there is no platform implementation the answer is "cannot", and
+    // links stay plain text — which is what this screen did before they were
+    // tappable. See [canLaunchExternalUrl].
+    final can =
+        await canLaunchExternalUrl(Uri.parse('https://openstreetmap.org'));
     if (mounted && can) setState(() => _canOpenLinks = true);
   }
 
@@ -109,10 +104,22 @@ class _AboutScreenState extends State<AboutScreen> {
 
           _Section(
             'Where the data comes from',
-            'Everything is fetched on demand, only when you ask for it. '
-                'Nothing is downloaded on a timer, on map movement, or in the '
+            'ZoneCraft has no server of its own. Everything is fetched on '
+                'demand, only when you ask for it, from services other people '
+                'run — nothing on a timer, on map movement, or in the '
                 'background.',
             children: [
+              _Action(
+                icon: Icons.dns_outlined,
+                label: 'Servers and limits',
+                detail: 'What the app asks of them, why some things are slow '
+                    'on purpose, and how to reach the author',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const ServicePolicyScreen(),
+                  ),
+                ),
+              ),
               _Service(
                 icon: Icons.map_outlined,
                 name: 'OpenStreetMap tiles',

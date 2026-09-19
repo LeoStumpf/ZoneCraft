@@ -34,6 +34,7 @@ Future<bool> openExternalUrl(
   Uri url, {
   BuildContext? context,
   String failureMessage = 'Could not open a browser.',
+  VoidCallback? onFailure,
 }) async {
   final messenger = context == null ? null : ScaffoldMessenger.of(context);
   var opened = false;
@@ -47,8 +48,26 @@ Future<bool> openExternalUrl(
   }
   if (!opened) {
     messenger?.showSnackBar(SnackBar(content: Text(failureMessage)));
+    onFailure?.call();
   }
   return opened;
+}
+
+/// Whether this device can open [url] at all.
+///
+/// Android hides other apps unless the manifest's `<queries>` block asks for
+/// them, so this answers false for a scheme ZoneCraft did not declare — and it
+/// *throws* where there is no platform implementation (a test host, a desktop
+/// build), which is why no caller should use `canLaunchUrl` directly. A screen
+/// probes once and then shows plain, copyable text instead of a dead link.
+Future<bool> canLaunchExternalUrl(Uri url) async {
+  try {
+    return await canLaunchUrl(url);
+  // No platform implementation: treat as "cannot", which is the safe answer.
+  // ignore: avoid_catches_without_on_clauses
+  } catch (_) {
+    return false;
+  }
 }
 
 /// Where the map's "© OpenStreetMap contributors" credit points.

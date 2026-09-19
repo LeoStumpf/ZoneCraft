@@ -38,6 +38,20 @@ const String kAppTagline =
 /// email"; the repository is the address that will outlive any inbox.
 const String kAppRepositoryUrl = 'https://github.com/LeoStumpf/ZoneCraft';
 
+/// Where someone who has a problem with the app reaches its author.
+///
+/// This exists for one audience above all: the people who run the donated
+/// services ZoneCraft borrows. They identify a misbehaving client by its
+/// [zoneCraftUserAgent] and then have to find a human, and "block it and move
+/// on" is what happens when they cannot. So the address is in the app, next to
+/// the User-Agent it belongs to, and not only in a repository they would have
+/// to go looking for.
+const String kContactEmail = 'leo.m.stumpf@gmail.com';
+
+/// The public issue tracker — the other half of the same answer, for anyone who
+/// would rather write in the open.
+const String kIssuesUrl = '$kAppRepositoryUrl/issues';
+
 /// The one `User-Agent` every outbound request sends.
 ///
 /// OpenStreetMap's tile, Nominatim and API policies all require a string that

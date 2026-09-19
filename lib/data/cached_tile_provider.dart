@@ -23,6 +23,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:http/http.dart' as http;
 
 import 'repository.dart';
+import 'tile_health.dart';
 
 /// A flutter_map [TileProvider] that serves tiles from the app's Drift-backed
 /// [Repository] tile cache, falling back to the network and writing freshly
@@ -36,10 +37,15 @@ class CachedTileProvider extends TileProvider {
   /// [client] is owned by the caller (the map screen) and shared across all
   /// tile layers + prefetching, so [dispose] deliberately does **not** close it
   /// — a transport-overlay layer being toggled off mustn't kill the base map.
-  CachedTileProvider(this._repo, this._client, {super.headers});
+  CachedTileProvider(this._repo, this._client, {this.health, super.headers});
 
   final Repository _repo;
   final http.Client _client;
+
+  /// Told the outcome of every fetch, so the UI can explain a hard stop — a
+  /// spent daily quota, a refused key — instead of leaving the map grey. Null
+  /// in tests and anywhere the answer is not wanted; see [TileHealth].
+  final TileHealth? health;
 
   /// Soft cap on the on-disk tile cache; once exceeded, least-recently-used
   /// tiles are evicted after a write.
@@ -58,6 +64,7 @@ class CachedTileProvider extends TileProvider {
       repo: _repo,
       client: _client,
       headers: headers,
+      health: health,
     );
   }
 
@@ -69,6 +76,7 @@ class CachedTileProvider extends TileProvider {
       final resp = await _client
           .get(Uri.parse(url), headers: headers)
           .timeout(fetchTimeout);
+      health?.report(statusCode: resp.statusCode);
       if (resp.statusCode == 200 && resp.bodyBytes.isNotEmpty) {
         await _repo.putTile(url, resp.bodyBytes);
         return true;
@@ -91,12 +99,14 @@ class _CachedTileImage extends ImageProvider<_CachedTileImage> {
     required this.repo,
     required this.client,
     required this.headers,
+    this.health,
   });
 
   final String url;
   final Repository repo;
   final http.Client client;
   final Map<String, String> headers;
+  final TileHealth? health;
 
   @override
   ImageStreamCompleter loadImage(
@@ -131,9 +141,23 @@ class _CachedTileImage extends ImageProvider<_CachedTileImage> {
     // 2. Miss (or corrupt) -> fetch, store, decode. On any failure throw so
     //    flutter_map shows its blank/error tile (only ever for never-seen
     //    tiles; already-cached areas keep working offline).
-    final resp = await client
-        .get(Uri.parse(url), headers: headers)
-        .timeout(CachedTileProvider.fetchTimeout);
+    // A failure to *reach* the server is reported as "no answer", which
+    // [TileHealth] deliberately says nothing about: being offline is the normal
+    // state this whole cache exists for. Only a server that answered and said
+    // no is worth a banner.
+    final http.Response resp;
+    try {
+      resp = await client
+          .get(Uri.parse(url), headers: headers)
+          .timeout(CachedTileProvider.fetchTimeout);
+    // Offline, timeout, socket reset: the tile is simply not available, which
+    // is what the throw below already means to flutter_map.
+    // ignore: avoid_catches_without_on_clauses
+    } catch (_) {
+      health?.report();
+      rethrow;
+    }
+    health?.report(statusCode: resp.statusCode);
     if (resp.statusCode != 200 || resp.bodyBytes.isEmpty) {
       throw NetworkImageLoadException(
         statusCode: resp.statusCode,

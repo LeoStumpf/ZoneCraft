@@ -140,4 +140,20 @@ void main() {
       expect(mimeTypes(f), isNot(contains('*/*')));
     }
   });
+
+  // The contact route on the "Servers and limits" page. Since API 30 a package
+  // is invisible unless queried for, so without this canLaunchUrl reports no
+  // mail app on every device and the button an operator would press is dead —
+  // precisely when someone is trying to tell us the app is misbehaving.
+  test('mailto is declared in <queries>, or the contact button is dead', () {
+    final intents = manifest
+        .findAllElements('queries')
+        .expand((q) => q.findAllElements('intent'));
+    final schemes = intents
+        .expand((i) => i.findAllElements('data'))
+        .map((d) => d.getAttribute('android:scheme'))
+        .whereType<String>();
+    expect(schemes, contains('mailto'));
+    expect(schemes, contains('https'), reason: 'the About screen links');
+  });
 }

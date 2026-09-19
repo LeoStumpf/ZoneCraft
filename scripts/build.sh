@@ -69,8 +69,19 @@ done
 # already exported on the command line wins, so a one-off override still works.
 ZONECRAFT_ENV="${ZONECRAFT_ENV:-$HOME/.config/zonecraft/release.env}"
 if [ -f "$ZONECRAFT_ENV" ]; then
+  # `.` overwrites whatever is already in the environment, so a one-off
+  # `TILE_URL=... scripts/build.sh` would be silently ignored in favour of the
+  # file -- and the build would claim to use a source it was not using. Keep
+  # the caller's values and put them back afterwards.
+  _pre_url="${TILE_URL-}"
+  _pre_attr="${TILE_ATTRIBUTION-}"
+  _pre_prefetch="${TILE_ALLOWS_PREFETCH-}"
   # shellcheck source=/dev/null
   . "$ZONECRAFT_ENV"
+  if [ -n "$_pre_url" ]; then TILE_URL="$_pre_url"; fi
+  if [ -n "$_pre_attr" ]; then TILE_ATTRIBUTION="$_pre_attr"; fi
+  if [ -n "$_pre_prefetch" ]; then TILE_ALLOWS_PREFETCH="$_pre_prefetch"; fi
+  unset _pre_url _pre_attr _pre_prefetch
   echo "==> config: $ZONECRAFT_ENV"
 fi
 

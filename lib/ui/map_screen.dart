@@ -48,6 +48,7 @@ import '../data/layer_types.dart';
 import '../data/platform_files.dart';
 import '../data/repository.dart' show Repository;
 import '../data/shared_point.dart';
+import '../data/tile_health.dart';
 import '../data/tile_source.dart';
 import '../data/transit.dart';
 import '../geo/border_areas.dart';
@@ -88,6 +89,7 @@ import 'border_import_dialog.dart';
 import 'border_layer.dart';
 import 'region_geometry.dart';
 import 'region_layer.dart';
+import 'service_policy_screen.dart';
 import 'share_place.dart';
 import 'subspace_editor.dart';
 import 'transit_import_dialog.dart';
@@ -304,6 +306,50 @@ class _MapScreenState extends ConsumerState<MapScreen>
       );
   String get _baseTileUrl => _tiles.urlTemplate;
 
+  /// The full explanation behind the tile-failure banner's "Why?".
+  ///
+  /// Written out rather than left to a status code because the moment it fires
+  /// is the moment the app looks broken: the map half-loads grey squares, for a
+  /// reason the user cannot guess, at an hour they cannot predict. The one
+  /// thing they need to know first is that none of their own work is involved.
+  void _showTileFailure(TileFailureKind kind) {
+    final tiles = _tiles;
+    final host = Uri.tryParse(tiles.urlTemplate)?.host ?? tiles.urlTemplate;
+    unawaited(showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(tileFailureTitle(kind)),
+        content: SingleChildScrollView(
+          child: Text(
+            tileFailureExplanation(
+              kind,
+              host: host,
+              isCommunityOsm: tiles.isCommunityOsm,
+            ),
+          ),
+        ),
+        actions: [
+          if (tileFailureIsPersistent(kind))
+            TextButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                unawaited(Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const ServicePolicyScreen(),
+                  ),
+                ));
+              },
+              child: const Text('Servers and limits'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    ));
+  }
+
   /// HTTP client owned by this screen and shared by [_tileProvider] for both
   /// browse-caching and prefetching. Closed in [dispose].
   late final http.Client _tileClient;
@@ -348,6 +394,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
       ref.read(repositoryProvider),
       _tileClient,
       headers: {'User-Agent': tileUserAgent},
+      // So a server that answers "no" — a spent daily quota, a refused key —
+      // becomes one readable sentence instead of a screen of grey squares at
+      // an hour nobody can predict.
+      health: ref.read(tileHealthProvider),
     );
     _listenForSharedLinks();
     // A file another app shared into ZoneCraft: pulled once now and again on
@@ -5305,6 +5355,25 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          // The tile server said no. First in the column: it
+                          // explains the whole map, so it outranks any banner
+                          // about one mode.
+                          ListenableBuilder(
+                            listenable: ref.read(tileHealthProvider),
+                            builder: (context, _) {
+                              final health = ref.read(tileHealthProvider);
+                              final kind = health.failure;
+                              if (kind == null) return const SizedBox.shrink();
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: _TileFailureBanner(
+                                  kind: kind,
+                                  onWhy: () => _showTileFailure(kind),
+                                  onDismiss: health.dismiss,
+                                ),
+                              );
+                            },
+                          ),
                           // Add-mode banner: what to tap, plus Undo / Edit last / Done.
                           if (mode == MapMode.add && _placeLayerId != null)
                             Padding(
@@ -6350,6 +6419,77 @@ class _Credit extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+
+/// The tile server said no, in one line the user can act on.
+///
+/// Sits at the top of the banner column because it explains the whole map, not
+/// one mode. It says the reassuring half first — your work is safe — because
+/// the visible symptom (grey squares where the map used to be) reads as data
+/// loss, and that is the fear to answer before the explanation.
+class _TileFailureBanner extends StatelessWidget {
+  const _TileFailureBanner({
+    required this.kind,
+    required this.onWhy,
+    required this.onDismiss,
+  });
+
+  final TileFailureKind kind;
+  final VoidCallback onWhy;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.errorContainer,
+      elevation: 2,
+      borderRadius: BorderRadius.circular(8),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.cloud_off_outlined,
+              size: 18,
+              color: theme.colorScheme.onErrorContainer,
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    tileFailureTitle(kind),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onErrorContainer,
+                    ),
+                  ),
+                  Text(
+                    tileFailureSummary(kind),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onErrorContainer,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            TextButton(onPressed: onWhy, child: const Text('Why?')),
+            IconButton(
+              tooltip: 'Dismiss',
+              iconSize: 18,
+              onPressed: onDismiss,
+              icon: const Icon(Icons.close),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

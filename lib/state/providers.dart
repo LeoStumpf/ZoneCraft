@@ -22,6 +22,7 @@ import 'package:latlong2/latlong.dart' hide Circle;
 
 import '../data/database.dart';
 import '../data/repository.dart';
+import '../data/tile_health.dart';
 import '../data/shared_point.dart';
 import '../data/undo_journal.dart';
 import 'map_mode.dart';
@@ -35,6 +36,18 @@ final databaseProvider = Provider<AppDatabase>((ref) {
 
 final repositoryProvider = Provider<Repository>((ref) {
   return Repository(ref.watch(databaseProvider));
+});
+
+/// Whether the tile server is answering, so the map can explain a hard stop.
+///
+/// A plain [Provider] over a [ChangeNotifier] rather than a Riverpod notifier:
+/// the writer is `CachedTileProvider`, deep inside an `ImageProvider` that
+/// Flutter constructs per tile and that has no `ref`, so the object has to be
+/// something it can simply be handed. The UI listens with a `ListenableBuilder`.
+final tileHealthProvider = Provider<TileHealth>((ref) {
+  final health = TileHealth();
+  ref.onDispose(health.dispose);
+  return health;
 });
 
 /// The undo journal, which lives on the database because its triggers do.
