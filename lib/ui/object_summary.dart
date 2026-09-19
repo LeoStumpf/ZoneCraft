@@ -122,7 +122,10 @@ IconData typeIcon(String layerType) => switch (layerType) {
       'freeline' => Icons.polyline,
       'freearea' => Icons.hexagon_outlined,
       'height' => Icons.terrain,
-      'poi' => Icons.travel_explore,
+      // Not `travel_explore`: that is the OSM *import* button, and on a POI
+  // layer the Add FAB sits right beside it wearing this icon — two
+  // identical symbols doing different things.
+  'poi' => Icons.place_outlined,
       'borders' => Icons.public,
       'mixed' => Icons.layers_outlined,
       _ => Icons.circle_outlined,

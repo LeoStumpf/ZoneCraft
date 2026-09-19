@@ -1558,6 +1558,21 @@ class $AppSettingsTable extends AppSettings
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _hintsEnabledMeta = const VerificationMeta(
+    'hintsEnabled',
+  );
+  @override
+  late final GeneratedColumn<bool> hintsEnabled = GeneratedColumn<bool>(
+    'hints_enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("hints_enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1575,6 +1590,7 @@ class $AppSettingsTable extends AppSettings
     tileUrlOverride,
     overpassEndpointOverride,
     nominatimHostOverride,
+    hintsEnabled,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1708,6 +1724,15 @@ class $AppSettingsTable extends AppSettings
         ),
       );
     }
+    if (data.containsKey('hints_enabled')) {
+      context.handle(
+        _hintsEnabledMeta,
+        hintsEnabled.isAcceptableOrUnknown(
+          data['hints_enabled']!,
+          _hintsEnabledMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1777,6 +1802,10 @@ class $AppSettingsTable extends AppSettings
         DriftSqlType.string,
         data['${effectivePrefix}nominatim_host_override'],
       ),
+      hintsEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}hints_enabled'],
+      )!,
     );
   }
 
@@ -1845,6 +1874,12 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
 
   /// A bare host, e.g. `nominatim.example.org`. The path and query are ours.
   final String? nominatimHostOverride;
+
+  /// Whether the map explains a button after you press it (see [UiHints]).
+  /// The *stop now* answer: each tip goes quiet by itself after a few showings,
+  /// but nobody should have to sit through three of something they already
+  /// understand.
+  final bool hintsEnabled;
   const AppSetting({
     required this.id,
     required this.uncertaintyMeters,
@@ -1861,6 +1896,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     this.tileUrlOverride,
     this.overpassEndpointOverride,
     this.nominatimHostOverride,
+    required this.hintsEnabled,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1896,6 +1932,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     if (!nullToAbsent || nominatimHostOverride != null) {
       map['nominatim_host_override'] = Variable<String>(nominatimHostOverride);
     }
+    map['hints_enabled'] = Variable<bool>(hintsEnabled);
     return map;
   }
 
@@ -1930,6 +1967,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       nominatimHostOverride: nominatimHostOverride == null && nullToAbsent
           ? const Value.absent()
           : Value(nominatimHostOverride),
+      hintsEnabled: Value(hintsEnabled),
     );
   }
 
@@ -1958,6 +1996,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       nominatimHostOverride: serializer.fromJson<String?>(
         json['nominatimHostOverride'],
       ),
+      hintsEnabled: serializer.fromJson<bool>(json['hintsEnabled']),
     );
   }
   @override
@@ -1983,6 +2022,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       'nominatimHostOverride': serializer.toJson<String?>(
         nominatimHostOverride,
       ),
+      'hintsEnabled': serializer.toJson<bool>(hintsEnabled),
     };
   }
 
@@ -2002,6 +2042,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     Value<String?> tileUrlOverride = const Value.absent(),
     Value<String?> overpassEndpointOverride = const Value.absent(),
     Value<String?> nominatimHostOverride = const Value.absent(),
+    bool? hintsEnabled,
   }) => AppSetting(
     id: id ?? this.id,
     uncertaintyMeters: uncertaintyMeters ?? this.uncertaintyMeters,
@@ -2026,6 +2067,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     nominatimHostOverride: nominatimHostOverride.present
         ? nominatimHostOverride.value
         : this.nominatimHostOverride,
+    hintsEnabled: hintsEnabled ?? this.hintsEnabled,
   );
   AppSetting copyWithCompanion(AppSettingsCompanion data) {
     return AppSetting(
@@ -2066,6 +2108,9 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       nominatimHostOverride: data.nominatimHostOverride.present
           ? data.nominatimHostOverride.value
           : this.nominatimHostOverride,
+      hintsEnabled: data.hintsEnabled.present
+          ? data.hintsEnabled.value
+          : this.hintsEnabled,
     );
   }
 
@@ -2086,7 +2131,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
           ..write('basemapOpacity: $basemapOpacity, ')
           ..write('tileUrlOverride: $tileUrlOverride, ')
           ..write('overpassEndpointOverride: $overpassEndpointOverride, ')
-          ..write('nominatimHostOverride: $nominatimHostOverride')
+          ..write('nominatimHostOverride: $nominatimHostOverride, ')
+          ..write('hintsEnabled: $hintsEnabled')
           ..write(')'))
         .toString();
   }
@@ -2108,6 +2154,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     tileUrlOverride,
     overpassEndpointOverride,
     nominatimHostOverride,
+    hintsEnabled,
   );
   @override
   bool operator ==(Object other) =>
@@ -2127,7 +2174,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
           other.basemapOpacity == this.basemapOpacity &&
           other.tileUrlOverride == this.tileUrlOverride &&
           other.overpassEndpointOverride == this.overpassEndpointOverride &&
-          other.nominatimHostOverride == this.nominatimHostOverride);
+          other.nominatimHostOverride == this.nominatimHostOverride &&
+          other.hintsEnabled == this.hintsEnabled);
 }
 
 class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
@@ -2146,6 +2194,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
   final Value<String?> tileUrlOverride;
   final Value<String?> overpassEndpointOverride;
   final Value<String?> nominatimHostOverride;
+  final Value<bool> hintsEnabled;
   const AppSettingsCompanion({
     this.id = const Value.absent(),
     this.uncertaintyMeters = const Value.absent(),
@@ -2162,6 +2211,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     this.tileUrlOverride = const Value.absent(),
     this.overpassEndpointOverride = const Value.absent(),
     this.nominatimHostOverride = const Value.absent(),
+    this.hintsEnabled = const Value.absent(),
   });
   AppSettingsCompanion.insert({
     this.id = const Value.absent(),
@@ -2179,6 +2229,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     this.tileUrlOverride = const Value.absent(),
     this.overpassEndpointOverride = const Value.absent(),
     this.nominatimHostOverride = const Value.absent(),
+    this.hintsEnabled = const Value.absent(),
   });
   static Insertable<AppSetting> custom({
     Expression<int>? id,
@@ -2196,6 +2247,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     Expression<String>? tileUrlOverride,
     Expression<String>? overpassEndpointOverride,
     Expression<String>? nominatimHostOverride,
+    Expression<bool>? hintsEnabled,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -2215,6 +2267,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
         'overpass_endpoint_override': overpassEndpointOverride,
       if (nominatimHostOverride != null)
         'nominatim_host_override': nominatimHostOverride,
+      if (hintsEnabled != null) 'hints_enabled': hintsEnabled,
     });
   }
 
@@ -2234,6 +2287,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     Value<String?>? tileUrlOverride,
     Value<String?>? overpassEndpointOverride,
     Value<String?>? nominatimHostOverride,
+    Value<bool>? hintsEnabled,
   }) {
     return AppSettingsCompanion(
       id: id ?? this.id,
@@ -2253,6 +2307,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
           overpassEndpointOverride ?? this.overpassEndpointOverride,
       nominatimHostOverride:
           nominatimHostOverride ?? this.nominatimHostOverride,
+      hintsEnabled: hintsEnabled ?? this.hintsEnabled,
     );
   }
 
@@ -2308,6 +2363,9 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
         nominatimHostOverride.value,
       );
     }
+    if (hintsEnabled.present) {
+      map['hints_enabled'] = Variable<bool>(hintsEnabled.value);
+    }
     return map;
   }
 
@@ -2328,7 +2386,220 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
           ..write('basemapOpacity: $basemapOpacity, ')
           ..write('tileUrlOverride: $tileUrlOverride, ')
           ..write('overpassEndpointOverride: $overpassEndpointOverride, ')
-          ..write('nominatimHostOverride: $nominatimHostOverride')
+          ..write('nominatimHostOverride: $nominatimHostOverride, ')
+          ..write('hintsEnabled: $hintsEnabled')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $UiHintsTable extends UiHints with TableInfo<$UiHintsTable, UiHint> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $UiHintsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _keyMeta = const VerificationMeta('key');
+  @override
+  late final GeneratedColumn<String> key = GeneratedColumn<String>(
+    'key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _shownCountMeta = const VerificationMeta(
+    'shownCount',
+  );
+  @override
+  late final GeneratedColumn<int> shownCount = GeneratedColumn<int>(
+    'shown_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [key, shownCount];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'ui_hints';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<UiHint> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('key')) {
+      context.handle(
+        _keyMeta,
+        key.isAcceptableOrUnknown(data['key']!, _keyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_keyMeta);
+    }
+    if (data.containsKey('shown_count')) {
+      context.handle(
+        _shownCountMeta,
+        shownCount.isAcceptableOrUnknown(data['shown_count']!, _shownCountMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {key};
+  @override
+  UiHint map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return UiHint(
+      key: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}key'],
+      )!,
+      shownCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}shown_count'],
+      )!,
+    );
+  }
+
+  @override
+  $UiHintsTable createAlias(String alias) {
+    return $UiHintsTable(attachedDatabase, alias);
+  }
+}
+
+class UiHint extends DataClass implements Insertable<UiHint> {
+  final String key;
+
+  /// Times this tip has actually been shown. Compared against a limit the
+  /// caller passes, so a tip can be made stickier without a schema change.
+  final int shownCount;
+  const UiHint({required this.key, required this.shownCount});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['key'] = Variable<String>(key);
+    map['shown_count'] = Variable<int>(shownCount);
+    return map;
+  }
+
+  UiHintsCompanion toCompanion(bool nullToAbsent) {
+    return UiHintsCompanion(key: Value(key), shownCount: Value(shownCount));
+  }
+
+  factory UiHint.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return UiHint(
+      key: serializer.fromJson<String>(json['key']),
+      shownCount: serializer.fromJson<int>(json['shownCount']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'key': serializer.toJson<String>(key),
+      'shownCount': serializer.toJson<int>(shownCount),
+    };
+  }
+
+  UiHint copyWith({String? key, int? shownCount}) =>
+      UiHint(key: key ?? this.key, shownCount: shownCount ?? this.shownCount);
+  UiHint copyWithCompanion(UiHintsCompanion data) {
+    return UiHint(
+      key: data.key.present ? data.key.value : this.key,
+      shownCount: data.shownCount.present
+          ? data.shownCount.value
+          : this.shownCount,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UiHint(')
+          ..write('key: $key, ')
+          ..write('shownCount: $shownCount')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(key, shownCount);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is UiHint &&
+          other.key == this.key &&
+          other.shownCount == this.shownCount);
+}
+
+class UiHintsCompanion extends UpdateCompanion<UiHint> {
+  final Value<String> key;
+  final Value<int> shownCount;
+  final Value<int> rowid;
+  const UiHintsCompanion({
+    this.key = const Value.absent(),
+    this.shownCount = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  UiHintsCompanion.insert({
+    required String key,
+    this.shownCount = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : key = Value(key);
+  static Insertable<UiHint> custom({
+    Expression<String>? key,
+    Expression<int>? shownCount,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (key != null) 'key': key,
+      if (shownCount != null) 'shown_count': shownCount,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  UiHintsCompanion copyWith({
+    Value<String>? key,
+    Value<int>? shownCount,
+    Value<int>? rowid,
+  }) {
+    return UiHintsCompanion(
+      key: key ?? this.key,
+      shownCount: shownCount ?? this.shownCount,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (key.present) {
+      map['key'] = Variable<String>(key.value);
+    }
+    if (shownCount.present) {
+      map['shown_count'] = Variable<int>(shownCount.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UiHintsCompanion(')
+          ..write('key: $key, ')
+          ..write('shownCount: $shownCount, ')
+          ..write('rowid: $rowid')
           ..write(')'))
         .toString();
   }
@@ -11396,6 +11667,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $LayersTable layers = $LayersTable(this);
   late final $CirclesTable circles = $CirclesTable(this);
   late final $AppSettingsTable appSettings = $AppSettingsTable(this);
+  late final $UiHintsTable uiHints = $UiHintsTable(this);
   late final $SubspacesTable subspaces = $SubspacesTable(this);
   late final $SubspacePointsTable subspacePoints = $SubspacePointsTable(this);
   late final $FreeLinesTable freeLines = $FreeLinesTable(this);
@@ -11420,6 +11692,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     layers,
     circles,
     appSettings,
+    uiHints,
     subspaces,
     subspacePoints,
     freeLines,
@@ -12976,6 +13249,7 @@ typedef $$AppSettingsTableCreateCompanionBuilder =
       Value<String?> tileUrlOverride,
       Value<String?> overpassEndpointOverride,
       Value<String?> nominatimHostOverride,
+      Value<bool> hintsEnabled,
     });
 typedef $$AppSettingsTableUpdateCompanionBuilder =
     AppSettingsCompanion Function({
@@ -12994,6 +13268,7 @@ typedef $$AppSettingsTableUpdateCompanionBuilder =
       Value<String?> tileUrlOverride,
       Value<String?> overpassEndpointOverride,
       Value<String?> nominatimHostOverride,
+      Value<bool> hintsEnabled,
     });
 
 class $$AppSettingsTableFilterComposer
@@ -13077,6 +13352,11 @@ class $$AppSettingsTableFilterComposer
 
   ColumnFilters<String> get nominatimHostOverride => $composableBuilder(
     column: $table.nominatimHostOverride,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get hintsEnabled => $composableBuilder(
+    column: $table.hintsEnabled,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -13164,6 +13444,11 @@ class $$AppSettingsTableOrderingComposer
     column: $table.nominatimHostOverride,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get hintsEnabled => $composableBuilder(
+    column: $table.hintsEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$AppSettingsTableAnnotationComposer
@@ -13241,6 +13526,11 @@ class $$AppSettingsTableAnnotationComposer
     column: $table.nominatimHostOverride,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get hintsEnabled => $composableBuilder(
+    column: $table.hintsEnabled,
+    builder: (column) => column,
+  );
 }
 
 class $$AppSettingsTableTableManager
@@ -13289,6 +13579,7 @@ class $$AppSettingsTableTableManager
                 Value<String?> tileUrlOverride = const Value.absent(),
                 Value<String?> overpassEndpointOverride = const Value.absent(),
                 Value<String?> nominatimHostOverride = const Value.absent(),
+                Value<bool> hintsEnabled = const Value.absent(),
               }) => AppSettingsCompanion(
                 id: id,
                 uncertaintyMeters: uncertaintyMeters,
@@ -13305,6 +13596,7 @@ class $$AppSettingsTableTableManager
                 tileUrlOverride: tileUrlOverride,
                 overpassEndpointOverride: overpassEndpointOverride,
                 nominatimHostOverride: nominatimHostOverride,
+                hintsEnabled: hintsEnabled,
               ),
           createCompanionCallback:
               ({
@@ -13323,6 +13615,7 @@ class $$AppSettingsTableTableManager
                 Value<String?> tileUrlOverride = const Value.absent(),
                 Value<String?> overpassEndpointOverride = const Value.absent(),
                 Value<String?> nominatimHostOverride = const Value.absent(),
+                Value<bool> hintsEnabled = const Value.absent(),
               }) => AppSettingsCompanion.insert(
                 id: id,
                 uncertaintyMeters: uncertaintyMeters,
@@ -13339,6 +13632,7 @@ class $$AppSettingsTableTableManager
                 tileUrlOverride: tileUrlOverride,
                 overpassEndpointOverride: overpassEndpointOverride,
                 nominatimHostOverride: nominatimHostOverride,
+                hintsEnabled: hintsEnabled,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -13363,6 +13657,145 @@ typedef $$AppSettingsTableProcessedTableManager =
         BaseReferences<_$AppDatabase, $AppSettingsTable, AppSetting>,
       ),
       AppSetting,
+      PrefetchHooks Function()
+    >;
+typedef $$UiHintsTableCreateCompanionBuilder =
+    UiHintsCompanion Function({
+      required String key,
+      Value<int> shownCount,
+      Value<int> rowid,
+    });
+typedef $$UiHintsTableUpdateCompanionBuilder =
+    UiHintsCompanion Function({
+      Value<String> key,
+      Value<int> shownCount,
+      Value<int> rowid,
+    });
+
+class $$UiHintsTableFilterComposer
+    extends Composer<_$AppDatabase, $UiHintsTable> {
+  $$UiHintsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get key => $composableBuilder(
+    column: $table.key,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get shownCount => $composableBuilder(
+    column: $table.shownCount,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$UiHintsTableOrderingComposer
+    extends Composer<_$AppDatabase, $UiHintsTable> {
+  $$UiHintsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get key => $composableBuilder(
+    column: $table.key,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get shownCount => $composableBuilder(
+    column: $table.shownCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$UiHintsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $UiHintsTable> {
+  $$UiHintsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get key =>
+      $composableBuilder(column: $table.key, builder: (column) => column);
+
+  GeneratedColumn<int> get shownCount => $composableBuilder(
+    column: $table.shownCount,
+    builder: (column) => column,
+  );
+}
+
+class $$UiHintsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $UiHintsTable,
+          UiHint,
+          $$UiHintsTableFilterComposer,
+          $$UiHintsTableOrderingComposer,
+          $$UiHintsTableAnnotationComposer,
+          $$UiHintsTableCreateCompanionBuilder,
+          $$UiHintsTableUpdateCompanionBuilder,
+          (UiHint, BaseReferences<_$AppDatabase, $UiHintsTable, UiHint>),
+          UiHint,
+          PrefetchHooks Function()
+        > {
+  $$UiHintsTableTableManager(_$AppDatabase db, $UiHintsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$UiHintsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$UiHintsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$UiHintsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> key = const Value.absent(),
+                Value<int> shownCount = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => UiHintsCompanion(
+                key: key,
+                shownCount: shownCount,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String key,
+                Value<int> shownCount = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => UiHintsCompanion.insert(
+                key: key,
+                shownCount: shownCount,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$UiHintsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $UiHintsTable,
+      UiHint,
+      $$UiHintsTableFilterComposer,
+      $$UiHintsTableOrderingComposer,
+      $$UiHintsTableAnnotationComposer,
+      $$UiHintsTableCreateCompanionBuilder,
+      $$UiHintsTableUpdateCompanionBuilder,
+      (UiHint, BaseReferences<_$AppDatabase, $UiHintsTable, UiHint>),
+      UiHint,
       PrefetchHooks Function()
     >;
 typedef $$SubspacesTableCreateCompanionBuilder =
@@ -19996,6 +20429,8 @@ class $AppDatabaseManager {
       $$CirclesTableTableManager(_db, _db.circles);
   $$AppSettingsTableTableManager get appSettings =>
       $$AppSettingsTableTableManager(_db, _db.appSettings);
+  $$UiHintsTableTableManager get uiHints =>
+      $$UiHintsTableTableManager(_db, _db.uiHints);
   $$SubspacesTableTableManager get subspaces =>
       $$SubspacesTableTableManager(_db, _db.subspaces);
   $$SubspacePointsTableTableManager get subspacePoints =>

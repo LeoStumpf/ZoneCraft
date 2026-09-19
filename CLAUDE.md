@@ -69,6 +69,29 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   *inside* their own fill), so there the **fill** pass punches the strip out and the band pass
   below shows through. Dropping the old `outer − core` difference also removed the one
   `_tryCombine` in the engine — Skia path-ops' worst case, two near-parallel outlines.
+- **A button that cannot be labelled is explained three other ways.** The map is eleven
+  same-size icon buttons, and a `tooltip:` only appears on a long press nobody thinks to try.
+  So: `LayerAction.description` is the one line saying what an option *does* (rendered as the
+  layer sheet's subtitle, folded into the FAB's tooltip, and spoken as the tip below);
+  `ui/map_controls.dart` is a pure catalogue of every map control that both the buttons' static
+  tooltips and the **"What the buttons do"** guide (`ui/map_controls_screen.dart`, in the
+  drawer) read, so the guide cannot fall behind the map; and the quick-toggle FAB answers a
+  press with a one-line tip saying what is now true. Toggles are named by their **result**, not
+  their operation — `invert` is "Fill outside"/"Fill inside", because "Invert" made the user
+  ask invert *what*, into what.
+- **The tips count themselves quiet** (`UiHints`, schema v29; `Repository.noteHintShown`). Each
+  key shows 3 times and then never again; `AppSettings.hintsEnabled` stops them sooner and
+  Settings → Tips / the guide's "Show all tips again" (`resetHints`) hands them all back. Two
+  rules are load-bearing: the count is spent only on a tip actually **shown**, so switching
+  them off does not silently burn them; and the read-modify-write is one transaction, or two
+  taps in a frame both read the same count. `ui_hints` is in `undoExcludedTables` — pressing a
+  button is not an edit, and an undo step for "the app explained something" is one the user
+  cannot see and would have to press past.
+- **Two map icons must not collide.** `typeIcon('poi')` and the OSM-import FAB were both
+  `Icons.travel_explore`, so on a POI layer Add and Import were the same symbol side by side;
+  POI is now `place_outlined`, the by-name search is `travel_explore` (a globe with a
+  magnifier is what it does) and the nearby import is `cloud_download_outlined`.
+  `test/map_controls_test.dart` fails if two controls in one area share an icon.
 - **Every layer action is defined once** (`ui/layer_actions.dart`): `visibleLayerActions`
   (pure, tested over every type) says *which* actions a layer gets, `layerActionsFor` attaches
   label + body, and three surfaces render the list — the drawer's ⋮ menu, the map's **layer
@@ -273,13 +296,13 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   placeholder an id-less imported row is stored with (`BorderAreas.osmId` is NOT NULL). Read as
   a real id it made every such area look like the same relation, so a re-import kept one and
   dropped the rest.
-- **Drift schema is at v28**; migrations are append-only `if (from < N)` blocks. (Two
+- **Drift schema is at v29**; migrations are append-only `if (from < N)` blocks. (Two
   exceptions drop tables: v19 *drops* the transit route tables, because route geometry was
   abandoned — see `data/transit.dart`'s header for the measurements behind that — and v27
   copies `planes` → `subspaces` and `transit_*` → `poi_*` then drops them, plus `tracks`.
   Earlier blocks that once `createTable`d a dropped table no longer do; the raw `ALTER
   TABLE`s in v22/v26 keep the columns v27 copies on a database old enough to have them.)
-  v20…v28 are
+  v20…v29 are
   snapshotted in `drift_schemas/` and guarded by `test/migration_test.dart`. **Any schema change must dump a
   new snapshot** (`dart run drift_dev schema dump lib/data/database.dart drift_schemas/`, then
   `... schema generate drift_schemas/ test/generated_migrations/`) — a snapshot cannot be
@@ -418,7 +441,7 @@ clear-all, offline cache, import/export), opt-in locate-me (the app's only use o
 persisted camera, offline resilience (cache-first tiles; **no** prefetch on the community OSM
 servers — see `data/tile_source.dart`), and import/export
 (whole-DB + per-layer + external GeoJSON/KML/KMZ/GPX; freeline imports prompt for their
-inclusion-circle radius). Drift schema is **v28**, GeoJSON format **v3**.
+inclusion-circle radius). Drift schema is **v29**, GeoJSON format **v3**.
 
 `planning/PLAN.md` has no open roadmap items; future polish ideas are listed there.
 `planning/PRODUCTION_AUDIT.md` records the production-readiness pass (what was found, what
@@ -510,7 +533,9 @@ lib/
                (viewport pre-clip, rings and segments),
                external_link (the one way the app opens someone else's URL),
                service_policy_screen (what the app asks of other people's
-               servers, and how an operator reaches a human)
+               servers, and how an operator reaches a human),
+               map_controls + map_controls_screen (every map button named and
+               explained, once, for both its tooltip and the guide)
 ```
 
 ## Plans

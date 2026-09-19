@@ -26,6 +26,7 @@ import '../state/providers.dart';
 import 'import_actions.dart';
 import 'layer_actions.dart';
 import 'layer_objects_sheet.dart';
+import 'map_controls_screen.dart';
 import 'object_summary.dart';
 import 'settings_screen.dart';
 
@@ -274,6 +275,23 @@ class LayersDrawer extends ConsumerWidget {
                     // deletable.
                     const _BasemapTile(),
                     const Divider(height: 1),
+                    // Above Settings: someone who cannot read the map's
+                    // buttons opens the drawer looking for words, and this is
+                    // the first place they land.
+                    ListTile(
+                      leading: const Icon(Icons.help_outline),
+                      title: const Text('What the buttons do'),
+                      onTap: () {
+                        Navigator.pop(context); // close the drawer
+                        unawaited(
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const MapControlsScreen(),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                     ListTile(
                       leading: const Icon(Icons.settings_outlined),
                       title: const Text('Settings'),

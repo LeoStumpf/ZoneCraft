@@ -54,6 +54,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Repository get _repo => ref.read(repositoryProvider);
 
+  /// Forgets every tip and switches them back on. The effect is invisible
+  /// until the next button press, so it says so.
+  Future<void> _resetTips() async {
+    final messenger = ScaffoldMessenger.of(context);
+    await _repo.resetHints();
+    messenger
+      ..clearSnackBars()
+      ..showSnackBar(
+        const SnackBar(content: Text('Tips will be shown again')),
+      );
+  }
+
   @override
   void dispose() {
     _field.dispose();
@@ -295,6 +307,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           const Divider(height: 48),
+          _TipsSection(
+            enabled:
+                ref.watch(settingsProvider).asData?.value.hintsEnabled ?? true,
+            onEnabled: (v) =>
+                unawaited(_repo.updateHintsEnabled(enabled: v)),
+            onReset: () => unawaited(_resetTips()),
+          ),
+          const Divider(height: 48),
           _DataSourcesSection(
             settings: ref.watch(settingsProvider).asData?.value,
             onSave: (which, value) =>
@@ -490,6 +510,59 @@ class _ServiceOverrideFieldState extends State<_ServiceOverrideField> {
           'Default: ${widget.which.builtInDefault}',
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Whether the map explains its own buttons, and a way to start over.
+///
+/// The map answers a pressed switch with a line saying what is now true, and
+/// each of those falls silent after a few showings. That is a guess about one
+/// person's patience, so both ends are here: stop them now without waiting the
+/// showings out, or hand them all back — for someone returning after a long
+/// time, or showing the app to somebody else.
+class _TipsSection extends StatelessWidget {
+  const _TipsSection({
+    required this.enabled,
+    required this.onEnabled,
+    required this.onReset,
+  });
+
+  final bool enabled;
+  final ValueChanged<bool> onEnabled;
+  final VoidCallback onReset;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Tips', style: theme.textTheme.titleMedium),
+        const SizedBox(height: 4),
+        Text(
+          'The map\u2019s buttons are icons without labels. Pressing one of the '
+          'layer switches answers with a line saying what is now true \u2014 a '
+          'few times each, then it stops. “What the buttons do” in the layers '
+          'menu explains all of them at any time.',
+          style: theme.textTheme.bodySmall,
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Explain what buttons do'),
+          subtitle: const Text('Turn off to stop the tips now'),
+          value: enabled,
+          onChanged: onEnabled,
+        ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: onReset,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Show all tips again'),
           ),
         ),
       ],

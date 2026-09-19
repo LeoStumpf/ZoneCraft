@@ -1916,6 +1916,7 @@ class Repository {
                   toolsExpanded: true,
                   basemapVisible: true,
                   basemapOpacity: 1.0,
+                  hintsEnabled: true,
                 )
               : rows.first,
         );
@@ -1965,6 +1966,54 @@ class Repository {
                 which == ServiceOverride.nominatim ? v : const Value.absent(),
           ),
         );
+  }
+
+  /// Records that the tip [key] was shown, and says whether it should be.
+  ///
+  /// Returns true at most [limit] times per key, and false for ever after. The
+  /// count is only spent on a tip that was actually *shown*: when hints are
+  /// switched off this answers false without touching it, so turning them back
+  /// on resumes where the user left off rather than finding them silently used
+  /// up by months of pressing the button.
+  ///
+  /// Read-modify-write in one transaction, because two taps in the same frame
+  /// would otherwise both read the same count and show one tip too many.
+  Future<bool> noteHintShown(String key, {int limit = 3}) {
+    return _db.transaction(() async {
+      final settings =
+          await (_db.select(_db.appSettings)..where((s) => s.id.equals(1)))
+              .getSingleOrNull();
+      // No row yet means a fresh install, which is the case tips are *for*.
+      if (settings != null && !settings.hintsEnabled) return false;
+
+      final row = await (_db.select(_db.uiHints)
+            ..where((h) => h.key.equals(key)))
+          .getSingleOrNull();
+      final shown = row?.shownCount ?? 0;
+      if (shown >= limit) return false;
+      await _db.into(_db.uiHints).insertOnConflictUpdate(
+            UiHintsCompanion.insert(key: key, shownCount: Value(shown + 1)),
+          );
+      return true;
+    });
+  }
+
+  /// Turns the button explanations on or off for good — the *stop now* answer,
+  /// for someone who does not want to wait out the remaining showings.
+  Future<void> updateHintsEnabled({required bool enabled}) {
+    return _db.into(_db.appSettings).insertOnConflictUpdate(
+          AppSettingsCompanion.insert(
+            id: const Value(1),
+            hintsEnabled: Value(enabled),
+          ),
+        );
+  }
+
+  /// Forgets every tip and switches them back on: the app teaches from scratch.
+  /// For a user coming back after a long time, or showing it to somebody else.
+  Future<void> resetHints() async {
+    await _db.delete(_db.uiHints).go();
+    await updateHintsEnabled(enabled: true);
   }
 
   /// Upserts the utility-FAB expand/collapse choice into the settings row.

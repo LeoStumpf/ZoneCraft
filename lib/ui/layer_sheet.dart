@@ -361,11 +361,15 @@ class _ActiveLayerBody extends ConsumerWidget {
             const SizedBox(width: 12),
           ],
         ),
+        // Each row carries the action's own description as a subtitle: the
+        // labels are short enough to be ambiguous on their own ("Invert" into
+        // what?), and this sheet is where there is room to say.
         for (final a in toggles)
           SwitchListTile(
             dense: true,
             secondary: Icon(a.icon),
             title: Text(a.label),
+            subtitle: Text(a.description),
             value: a.checked!,
             onChanged: (_) => unawaited(run(a)),
           ),
@@ -374,6 +378,7 @@ class _ActiveLayerBody extends ConsumerWidget {
             dense: true,
             leading: Icon(a.icon),
             title: Text(a.label),
+            subtitle: Text(a.description),
             onTap: () => unawaited(run(a)),
           ),
         ListTile(

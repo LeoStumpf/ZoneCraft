@@ -51,10 +51,14 @@ const undoCtlTable = '_undo_ctl';
 /// - `tile_cache`: `getTile` is *a read that writes* (it bumps `lastUsedAt`),
 ///   so panning the map would fill the log with statements nobody wants back.
 /// - `overpass_cache`: a documented dead table.
+/// - `ui_hints`: how often a one-line tip has been shown. Pressing a button is
+///   not an edit, and "undo" landing on the count of how many times the app
+///   explained that button would be a step the user cannot see, cannot want,
+///   and would have to press past to reach a real one.
 ///
 /// `app_settings` is not here because it is journalled — but only partly; see
 /// [undoSettingsColumns].
-const undoExcludedTables = {'tile_cache', 'overpass_cache'};
+const undoExcludedTables = {'tile_cache', 'overpass_cache', 'ui_hints'};
 
 /// The settings row is written constantly by things that are not edits:
 /// `saveCamera` on every camera change, `updateToolsExpanded`,

@@ -213,6 +213,7 @@ class LayerAction {
     required this.id,
     required this.icon,
     required this.label,
+    required this.description,
     required this.run,
     this.checked,
     this.needsMap = false,
@@ -221,6 +222,17 @@ class LayerAction {
   final LayerActionId id;
   final IconData icon;
   final String label;
+
+  /// One line saying what the option *does* — for a toggle, what is true once
+  /// it is on.
+  ///
+  /// The label alone is not enough anywhere it is read. On the map the action
+  /// is a bare icon whose tooltip was the menu label, ellipsis and all, so
+  /// "Invert" had to answer "invert what, into what?" on its own. This is the
+  /// text the layer sheet shows as a subtitle, the map says in a one-line tip
+  /// after the button is pressed, and the button guide lists — written once
+  /// here, like the label beside it.
+  final String description;
 
   /// Non-null for a toggle: render as a checked item / switch.
   final bool? checked;
@@ -278,42 +290,49 @@ List<LayerAction> layerActionsFor(
       id: id,
       icon: Icons.vertical_align_top,
       label: 'Move to top',
+      description: 'Draw this layer above every other one.',
       run: () => move(LayerMove.toTop),
     ),
     LayerActionId.up => LayerAction(
       id: id,
       icon: Icons.arrow_upward,
       label: 'Move up',
+      description: 'Draw this layer one place higher.',
       run: () => move(LayerMove.up),
     ),
     LayerActionId.down => LayerAction(
       id: id,
       icon: Icons.arrow_downward,
       label: 'Move down',
+      description: 'Draw this layer one place lower.',
       run: () => move(LayerMove.down),
     ),
     LayerActionId.toBottom => LayerAction(
       id: id,
       icon: Icons.vertical_align_bottom,
       label: 'Move to bottom',
+      description: 'Draw this layer below every other one.',
       run: () => move(LayerMove.toBottom),
     ),
     LayerActionId.rename => LayerAction(
       id: id,
       icon: Icons.edit_outlined,
       label: 'Rename',
+      description: 'Give this layer a different name.',
       run: () => renameLayerFlow(context, repo, layer),
     ),
     LayerActionId.color => LayerAction(
       id: id,
       icon: Icons.palette_outlined,
       label: 'Colour',
+      description: "Pick the colour this layer's elements are drawn in.",
       run: () => pickLayerColor(context, ref, layer),
     ),
     LayerActionId.opacity => LayerAction(
       id: id,
       icon: Icons.opacity,
       label: 'Transparency…',
+      description: 'Make the whole layer more or less see-through.',
       run: () => showOpacityDialog(
         context,
         title: 'Layer transparency',
@@ -323,8 +342,15 @@ List<LayerAction> layerActionsFor(
     ),
     LayerActionId.invert => LayerAction(
       id: id,
-      icon: Icons.flip,
-      label: layer.isInverted ? 'Un-invert' : 'Invert',
+      // Not `flip`, which reads as "mirror". This is about inside versus
+      // outside, not left versus right.
+      icon: Icons.select_all,
+      // Named by its result, not its operation: "Invert" made the user ask
+      // invert *what*, into what.
+      label: layer.isInverted ? 'Fill inside' : 'Fill outside',
+      description: layer.isInverted
+          ? 'Colour this layer’s shapes, rather than everything around them.'
+          : 'Colour everything except this layer’s shapes.',
       checked: layer.isInverted,
       run: () => repo.updateLayer(layer.id, isInverted: !layer.isInverted),
     ),
@@ -332,12 +358,15 @@ List<LayerAction> layerActionsFor(
       id: id,
       icon: Icons.directions_transit,
       label: 'Stations…',
+      description: 'Choose which kinds of station are shown on the map.',
       run: () => showTransitModes(context, layer),
     ),
     LayerActionId.fillAreas => LayerAction(
       id: id,
       icon: Icons.format_color_fill,
       label: 'Colour areas',
+      description:
+          'Give each area a colour, chosen so no two neighbours match.',
       checked: layer.borderFillAreas,
       run: () => repo.updateBorderLayerOptions(
         layer.id,
@@ -348,6 +377,7 @@ List<LayerAction> layerActionsFor(
       id: id,
       icon: Icons.label_outline,
       label: 'Show names',
+      description: "Print each area's name across it.",
       checked: layer.borderShowNames,
       run: () => repo.updateBorderLayerOptions(
         layer.id,
@@ -358,6 +388,7 @@ List<LayerAction> layerActionsFor(
       id: id,
       icon: Icons.travel_explore,
       label: 'Import nearby POIs…',
+      description: 'Fetch places of one kind — cafés, benches — around a point.',
       needsMap: true,
       run: () async => request(MapRequestKind.importPois),
     ),
@@ -365,6 +396,7 @@ List<LayerAction> layerActionsFor(
       id: id,
       icon: Icons.directions_transit,
       label: 'Import transit stations…',
+      description: 'Fetch public-transport stops inside a box you draw.',
       needsMap: true,
       run: () async => request(MapRequestKind.importStations),
     ),
@@ -372,6 +404,7 @@ List<LayerAction> layerActionsFor(
       id: id,
       icon: Icons.public,
       label: 'Import borders in view…',
+      description: 'Fetch administrative areas covering the current view.',
       needsMap: true,
       run: () async => request(MapRequestKind.importBordersVisible),
     ),
@@ -379,6 +412,7 @@ List<LayerAction> layerActionsFor(
       id: id,
       icon: Icons.search,
       label: 'Import map feature…',
+      description: 'Search OpenStreetMap by name and import the shape it finds.',
       needsMap: true,
       run: () async => request(MapRequestKind.importFeature),
     ),
@@ -386,6 +420,7 @@ List<LayerAction> layerActionsFor(
       id: id,
       icon: Icons.route_outlined,
       label: 'Import track…',
+      description: 'Read a GPX, KML or GeoJSON file into this layer.',
       needsMap: true,
       run: () async => request(MapRequestKind.importTrack),
     ),
@@ -393,12 +428,14 @@ List<LayerAction> layerActionsFor(
       id: id,
       icon: Icons.ios_share,
       label: 'Export layer…',
+      description: 'Save this one layer to a file, or share it.',
       run: () => exportSingleLayer(context, repo, layer),
     ),
     LayerActionId.combine => LayerAction(
       id: id,
       icon: Icons.merge,
       label: 'Combine…',
+      description: 'Move everything from this layer into another one.',
       run: () async {
         final targets = layers
             .where((l) => canCombineLayers(layer, l))
@@ -419,6 +456,7 @@ List<LayerAction> layerActionsFor(
       id: id,
       icon: Icons.layers_outlined,
       label: 'Make combined layer',
+      description: 'Let this layer hold every kind of element at once.',
       run: () async {
         final messenger = ScaffoldMessenger.maybeOf(context);
         final container = ProviderScope.containerOf(context);
@@ -435,6 +473,7 @@ List<LayerAction> layerActionsFor(
       id: id,
       icon: Icons.delete_outline,
       label: 'Delete',
+      description: 'Remove the layer and everything on it.',
       run: () async {
         final messenger = ScaffoldMessenger.maybeOf(context);
         final container = ProviderScope.containerOf(context);

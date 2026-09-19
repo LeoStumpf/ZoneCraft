@@ -783,8 +783,35 @@ class AppSettings extends Table {
   /// A bare host, e.g. `nominatim.example.org`. The path and query are ours.
   TextColumn get nominatimHostOverride => text().nullable()();
 
+  /// Whether the map explains a button after you press it (see [UiHints]).
+  /// The *stop now* answer: each tip goes quiet by itself after a few showings,
+  /// but nobody should have to sit through three of something they already
+  /// understand.
+  BoolColumn get hintsEnabled => boolean().withDefault(const Constant(true))();
+
   @override
   Set<Column> get primaryKey => {id};
+}
+
+/// How often each one-line tip has been shown.
+///
+/// The map is eleven icon buttons with no labels, so pressing one is answered
+/// with a sentence saying what is now true. That is a teaching aid, and a
+/// teaching aid that never stops is nagging — so each tip is counted and falls
+/// silent once it has done its job.
+///
+/// A key-value table rather than a column per tip: the next tip then costs a
+/// row, not a migration. Keys are code-owned strings (`hint.invert.on`), never
+/// anything a user typed.
+class UiHints extends Table {
+  TextColumn get key => text()();
+
+  /// Times this tip has actually been shown. Compared against a limit the
+  /// caller passes, so a tip can be made stickier without a schema change.
+  IntColumn get shownCount => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {key};
 }
 
 @DriftDatabase(
@@ -792,6 +819,7 @@ class AppSettings extends Table {
     Layers,
     Circles,
     AppSettings,
+    UiHints,
     Subspaces,
     SubspacePoints,
     FreeLines,
@@ -838,7 +866,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 28;
+  int get schemaVersion => 29;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1260,6 +1288,14 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(
                 appSettings, appSettings.overpassEndpointOverride);
             await m.addColumn(appSettings, appSettings.nominatimHostOverride);
+          }
+          if (from < 29) {
+            // The map started explaining its own buttons. An upgraded database
+            // has shown no tips, so the table starts empty and every tip is
+            // owed its full run — which is right: the buttons are no more
+            // labelled on an old map than a new one.
+            await m.createTable(uiHints);
+            await m.addColumn(appSettings, appSettings.hintsEnabled);
           }
         },
         beforeOpen: (details) async {

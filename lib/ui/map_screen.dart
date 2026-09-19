@@ -74,6 +74,7 @@ import 'import_actions.dart';
 import 'import_progress.dart';
 import 'layer_actions.dart';
 import 'layer_sheet.dart';
+import 'map_controls.dart';
 import 'layers_panel.dart';
 import 'object_summary.dart';
 import 'pending_import_sheet.dart';
@@ -905,6 +906,34 @@ class _MapScreenState extends ConsumerState<MapScreen>
       _hint('Could not get your location.');
       return null;
     }
+  }
+
+  /// Runs the quick-toggle FAB and, for a toggle, says what is now true.
+  ///
+  /// The button is one unlabelled icon and its effect can be easy to miss —
+  /// "Fill outside" on an empty layer changes nothing visible at all — so the
+  /// map answers in a sentence. Only *toggles* get one: the station filter
+  /// opens a sheet that explains itself, and a tip on top of it would be noise.
+  ///
+  /// The description is written for the state being switched **to**, and the
+  /// action object still describes the state it is in, so this is read before
+  /// `run` and the wording comes out the right way round.
+  Future<void> _runQuickToggle(LayerAction action) async {
+    final checked = action.checked;
+    if (checked == null) {
+      await action.run();
+      return;
+    }
+    // Read before `run`: the action describes the state it is *in*, so its
+    // wording is already the one for the state being switched to.
+    final message = '${action.label} — ${action.description}';
+    // One tip per toggle and direction, not per layer — turning it on is a
+    // different sentence from turning it off, and each earns its own showings.
+    final key = 'hint.quickToggle.${action.id.name}.${!checked}';
+    await action.run();
+    if (!mounted) return;
+    final show = await ref.read(repositoryProvider).noteHintShown(key);
+    if (show && mounted) _hint(message);
   }
 
   void _hint(String message) {
@@ -5265,7 +5294,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           clipBehavior: Clip.antiAlias,
                           child: IconButton(
                             icon: const Icon(Icons.menu),
-                            tooltip: 'Layers',
+                            tooltip: mapControl(MapControlId.layers).name,
                             onPressed: () =>
                                 _scaffoldKey.currentState?.openDrawer(),
                           ),
@@ -5727,7 +5756,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   if (_tiles.allowsPrefetch) ...[
                     FloatingActionButton.small(
                       heroTag: 'download',
-                      tooltip: 'Download this area for offline use',
+                      tooltip: mapControl(MapControlId.download).name,
                       onPressed: _downloading ? null : _downloadArea,
                       child: _downloading
                           ? const SizedBox(
@@ -5777,7 +5806,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   // *other* place is shared by long-pressing it.
                   FloatingActionButton.small(
                     heroTag: 'share',
-                    tooltip: 'Share my location',
+                    tooltip: mapControl(MapControlId.share).name,
                     onPressed: _sharing ? null : _shareMyLocation,
                     child: _sharing
                         ? const SizedBox(
@@ -5790,7 +5819,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   const SizedBox(height: 12),
                   FloatingActionButton.small(
                     heroTag: 'probe',
-                    tooltip: 'Measure elevation',
+                    tooltip: mapControl(MapControlId.elevation).name,
                     backgroundColor: mode == MapMode.elevation
                         ? Theme.of(context).colorScheme.primary
                         : null,
@@ -5803,7 +5832,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   const SizedBox(height: 12),
                   FloatingActionButton.small(
                     heroTag: 'distance',
-                    tooltip: 'Measure distance',
+                    tooltip: mapControl(MapControlId.distance).name,
                     backgroundColor: mode == MapMode.distance
                         ? Theme.of(context).colorScheme.primary
                         : null,
@@ -5819,7 +5848,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   if (canDraw) ...[
                     FloatingActionButton.small(
                       heroTag: 'draw',
-                      tooltip: 'Draw with your finger',
+                      tooltip: mapControl(MapControlId.draw).name,
                       backgroundColor: mode == MapMode.draw
                           ? Theme.of(context).colorScheme.primary
                           : null,
@@ -5885,7 +5914,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       const SizedBox(width: 12),
                       FloatingActionButton.small(
                         heroTag: 'quickToggle',
-                        tooltip: quickToggle.label,
+                        // Label *and* description: the label alone was the
+                        // menu entry, ellipsis included, which on a bare icon
+                        // answered nothing.
+                        tooltip:
+                            '${quickToggle.label} — ${quickToggle.description}',
                         // Lit while the toggle is on; a plain button for the
                         // one that opens a sheet (the station filter).
                         backgroundColor: quickToggle.checked ?? false
@@ -5894,7 +5927,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         foregroundColor: quickToggle.checked ?? false
                             ? Theme.of(context).colorScheme.onPrimary
                             : null,
-                        onPressed: () => unawaited(quickToggle.run()),
+                        onPressed: () =>
+                            unawaited(_runQuickToggle(quickToggle)),
                         child: Icon(quickToggle.icon),
                       ),
                     ],
@@ -5902,7 +5936,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       const SizedBox(width: 12),
                       FloatingActionButton.small(
                         heroTag: 'featureImport',
-                        tooltip: 'Import a map feature by name',
+                        tooltip: mapControl(MapControlId.featureImport).name,
                         // Same flow the layers drawer offers, same arguments:
                         // this adds a route to it, it does not fork it. The
                         // full layer list is only for the fallback picker (a
@@ -5915,14 +5949,17 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             into: activeLayer,
                           ),
                         ),
-                        child: const Icon(Icons.search),
+                        // A globe with a magnifier: this one searches the
+                        // whole world by name. Its neighbour downloads what is
+                        // nearby, and a plain magnifier beside it said neither.
+                        child: const Icon(Icons.travel_explore),
                       ),
                     ],
                     if (isCircleLayer || isSubspaceLayer || isPoiLayer) ...[
                       const SizedBox(width: 12),
                       FloatingActionButton.small(
                         heroTag: 'poiImport',
-                        tooltip: 'Import from OpenStreetMap',
+                        tooltip: mapControl(MapControlId.osmImport).name,
                         // Reached only when the layer holds one of the three
                         // types above, which already implies it is non-null.
                         // A POI layer has two imports to choose from; the
@@ -5930,7 +5967,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         onPressed: () => isPoiLayer
                             ? _pickPoiImport(activeLayer)
                             : _importPois(activeLayer),
-                        child: const Icon(Icons.travel_explore),
+                        child: const Icon(Icons.cloud_download_outlined),
                       ),
                     ],
                     const SizedBox(width: 12),
