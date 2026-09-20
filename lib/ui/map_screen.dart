@@ -363,6 +363,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
   /// HTTP client owned by this screen and shared by [_tileProvider] for both
   /// browse-caching and prefetching. Closed in [dispose].
+  /// The repository, held so `dispose()` can still save the camera without
+  /// reading `ref` after the widget has been deactivated.
+  late final Repository _repoForDispose;
+
   late final http.Client _tileClient;
   late final CachedTileProvider _tileProvider;
 
@@ -410,6 +414,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
       // an hour nobody can predict.
       health: ref.read(tileHealthProvider),
     );
+    // Captured here, not read in `dispose()`. Riverpod forbids touching `ref`
+    // once a widget is unmounting — and `dispose()` is exactly where the last
+    // camera save happens. In debug that assert fired on every teardown; in
+    // release the assert is compiled out, so it went unnoticed.
+    _repoForDispose = ref.read(repositoryProvider);
     _listenForSharedLinks();
     // A file another app shared into ZoneCraft: pulled once now and again on
     // every resume. The platform side hands it over exactly once (see
@@ -845,11 +854,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (!c.latitude.isFinite || !c.longitude.isFinite || !cam.zoom.isFinite) {
       return;
     }
-    unawaited(
-      ref
-          .read(repositoryProvider)
-          .saveCamera(c.latitude, c.longitude, cam.zoom),
-    );
+    unawaited(_repoForDispose.saveCamera(c.latitude, c.longitude, cam.zoom));
   }
 
   /// Opt-in location. Only ever runs on an explicit button tap. Requests
