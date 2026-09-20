@@ -162,4 +162,48 @@ void main() {
   // the painter as a buffer of `boundaries` (grow/shrink the filled side), which
   // never self-intersects into a spurious island at a tight bend. So the cut
   // geometry above stays simple regardless of any offset.
+
+  // The projection divides by `cos(latitude)`. At a pole that is about
+  // 6.1e-17, so every longitude came back ±Infinity and the region was
+  // silently non-finite — not distorted, which would be expected this far
+  // north, but unusable. `height.dart` floors the same projection; these pin
+  // that the two now agree.
+  group('near the poles the region is still finite', () {
+    void expectFinite(FreeLineRegion r, String where) {
+      for (final ring in [...r.fillRings, ...r.boundaries]) {
+        for (final p in ring) {
+          expect(p.latitude.isFinite, isTrue, reason: 'lat at $where');
+          expect(p.longitude.isFinite, isTrue, reason: 'lng at $where');
+        }
+      }
+    }
+
+    test('exactly at the north pole', () {
+      final r = freeLineDiskRegion(
+        points: const [LatLng(89.999, -30), LatLng(89.999, 30)],
+        center: const LatLng(90, 0),
+        radiusMeters: 5000,
+      );
+      expectFinite(r, 'the north pole');
+    });
+
+    test('exactly at the south pole', () {
+      final r = freeLineDiskRegion(
+        points: const [LatLng(-89.999, -30), LatLng(-89.999, 30)],
+        center: const LatLng(-90, 0),
+        radiusMeters: 5000,
+      );
+      expectFinite(r, 'the south pole');
+    });
+
+    test('a normal latitude is unchanged by the floor', () {
+      final r = freeLineDiskRegion(
+        points: const [LatLng(48.10, 11.50), LatLng(48.20, 11.70)],
+        center: const LatLng(48.15, 11.60),
+        radiusMeters: 5000,
+      );
+      expectFinite(r, 'Munich');
+      expect(r.fillRings, isNotEmpty);
+    });
+  });
 }

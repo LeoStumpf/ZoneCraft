@@ -315,7 +315,7 @@ final layerSummariesProvider = Provider.family<List<ObjectSummary>, String>((
     borderSets: ref.watch(borderSetsProvider).asData?.value ?? const [],
     borderAreas: ref.watch(borderAreasProvider).asData?.value ?? const [],
   );
-});
+}, isAutoDispose: true);
 
 /// Every object in [layer], as display rows in stable order.
 ///

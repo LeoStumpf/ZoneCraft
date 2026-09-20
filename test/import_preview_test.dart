@@ -16,10 +16,12 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart' show LatLngBounds;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart' show LatLng;
 
 import 'package:zonecraft/data/borders.dart' show borderLevels;
+import 'package:zonecraft/state/import_preview.dart';
 import 'package:zonecraft/ui/border_import_dialog.dart';
 import 'package:zonecraft/ui/poi_import_dialog.dart';
 import 'package:zonecraft/ui/transit_import_dialog.dart';
@@ -193,6 +195,68 @@ void main() {
       await t.tap(cancel);
       await t.pump();
       expect(answers, [null]);
+    });
+  });
+
+  // Two overlapping imports are reachable: a picked file previews (the drawer
+  // path passes a `ref`) while a file shared in from another app arrives on
+  // resume. Replacing the state without answering the displaced offer left its
+  // `decision` future hanging for ever — so that import never ran *and* never
+  // cleaned up, because its `finally { clear() }` was unreachable.
+  group('a displaced import is answered, not abandoned', () {
+    PendingImport make(String summary) => PendingImport(
+      summary: summary,
+      lines: const [],
+      circles: const [],
+      bounds: LatLngBounds(const LatLng(0, 0), const LatLng(1, 1)),
+    );
+
+    test('offering a second import answers the first', () async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final notifier = container.read(pendingImportProvider.notifier);
+
+      final first = make('first');
+      notifier.offer(first);
+      final second = make('second');
+      notifier.offer(second);
+
+      // Would hang for ever without the fix.
+      expect(
+        await first.decision.timeout(const Duration(seconds: 1)),
+        isFalse,
+        reason: 'the user is looking at the new offer, not this one',
+      );
+      expect(container.read(pendingImportProvider)?.summary, 'second');
+    });
+
+    test('clearing an unanswered import answers it too', () async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final notifier = container.read(pendingImportProvider.notifier);
+
+      final only = make('only');
+      notifier.offer(only);
+      notifier.clear();
+
+      expect(await only.decision.timeout(const Duration(seconds: 1)), isFalse);
+    });
+
+    test('an answered import keeps its answer', () async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final notifier = container.read(pendingImportProvider.notifier);
+
+      final keep = make('keep me');
+      notifier.offer(keep);
+      keep.answer(keep: true);
+      notifier.clear();
+
+      expect(
+        await keep.decision.timeout(const Duration(seconds: 1)),
+        isTrue,
+        reason: 'clear() must not overwrite a decision already made',
+      );
     });
   });
 }

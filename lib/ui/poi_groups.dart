@@ -251,4 +251,4 @@ final poiTypeGroupsProvider = Provider.family<List<PoiTypeGroup>, String>((
     sets: ref.watch(poiSetsProvider).asData?.value ?? const [],
     pointsBySet: ref.watch(poiPointsBySetProvider),
   );
-});
+}, isAutoDispose: true);

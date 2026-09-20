@@ -100,8 +100,15 @@ FreeLineRegion freeLineDiskRegion({
   }
 
   // Local equirectangular plane around the circle centre.
+  //
+  // The cosine is floored. At a pole `cos(90°)` is about 6.1e-17, and
+  // `toLatLng` divides by this — so every longitude came back ±Infinity and
+  // the region was silently non-finite rather than merely distorted. The
+  // guard is `height.dart`'s, which floors the same projection for the same
+  // reason; the two now agree.
   const mPerDegLat = 111320.0;
-  final mPerDegLng = 111320.0 * cos(center.latitude * pi / 180);
+  final cosLat = cos(center.latitude * pi / 180).abs();
+  final mPerDegLng = 111320.0 * (cosLat < 1e-6 ? 1e-6 : cosLat);
   _V toPlane(LatLng p) => _V(
     (p.longitude - center.longitude) * mPerDegLng,
     (p.latitude - center.latitude) * mPerDegLat,

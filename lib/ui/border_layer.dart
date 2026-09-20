@@ -106,6 +106,15 @@ class BorderShape {
 }
 
 /// The decoded areas of one borders layer, rebuilt only when the rows change.
+///
+/// **`isAutoDispose` is load-bearing here.** Riverpod 3 did not flip the
+/// default, and a family element that loses its last listener only *pauses*:
+/// it stops recomputing but keeps its last value for the life of the
+/// container. That value is every ring of every area in the layer, already
+/// decoded from JSON — a state-sized import is 119 238 points. Without this,
+/// deleting the layer left all of it resident for the rest of the session,
+/// because a paused provider never recomputes to the empty list that would
+/// have replaced it.
 final borderShapesProvider = Provider.family<List<BorderShape>, String>((
   ref,
   layerId,
@@ -133,7 +142,7 @@ final borderShapesProvider = Provider.family<List<BorderShape>, String>((
           rings: decodeRings(a.rings),
         ),
   ];
-});
+}, isAutoDispose: true);
 
 /// The areas of one borders layer.
 /// [shapes] with [draft] standing in for the stored version of the same area.

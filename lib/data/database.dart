@@ -831,8 +831,13 @@ class AppSettings extends Table {
   RealColumn get lastLng => real().nullable()();
   RealColumn get lastZoom => real().nullable()();
 
-  /// When true, transparent public-transport tile overlays (ÖPNVKarte +
-  /// OpenRailwayMap) are drawn above the base map.
+  /// **Dead column.** Once drove transparent public-transport tile overlays
+  /// (ÖPNVKarte + OpenRailwayMap) above the base map. Those were removed at
+  /// v20 and superseded by `poi` station imports; nothing reads this.
+  ///
+  /// Kept because migrations are append-only and dropping a column means a
+  /// table rebuild for no benefit — see `repository.dart`'s "Overpass overlay
+  /// cache" note, which is the one place that records the whole set of these.
   BoolColumn get transportOverlay =>
       boolean().withDefault(const Constant(false))();
 
@@ -841,12 +846,14 @@ class AppSettings extends Table {
   /// `transitEndpoints`.
   TextColumn get transitEndpoint => text().nullable()();
 
-  /// Packed bitmask of enabled map-POI categories (see `poiCategories` in
-  /// `overpass.dart`). 0 = none shown.
+  /// **Dead column.** Once the packed bitmask of enabled map-POI categories,
+  /// when POIs were a global overlay rather than the `poi` layer type. Nothing
+  /// reads it; see [transportOverlay] for why it stays.
   IntColumn get poiCategories => integer().withDefault(const Constant(0))();
 
-  /// Packed bitmask of enabled administrative-border levels (see `borderLevels`
-  /// in `borders.dart`). 0 = none shown.
+  /// **Dead column.** Once the packed bitmask of enabled administrative-border
+  /// levels, when borders were a global overlay rather than the `borders`
+  /// layer type. Nothing reads it; see [transportOverlay] for why it stays.
   IntColumn get borderLevels => integer().withDefault(const Constant(0))();
 
   /// Whether the right-side utility FABs are shown (vs. collapsed behind the

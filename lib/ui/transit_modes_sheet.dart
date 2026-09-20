@@ -291,6 +291,7 @@ final transitTallyProvider = Provider.family<TransitTally, String>(
     sets: ref.watch(poiSetsProvider).asData?.value ?? const [],
     allStations: ref.watch(poiPointsProvider).asData?.value ?? const [],
   ),
+  isAutoDispose: true,
 );
 
 /// How many of [stations] a mask would show. Pure, so the header count and the

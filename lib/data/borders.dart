@@ -166,23 +166,6 @@ const int borderMaxResponseBytes = 48 * 1024 * 1024;
 const Duration borderQueryTimeout = Duration(seconds: 120);
 const Duration borderRequestTimeout = Duration(seconds: 150);
 
-const Distance _distance = Distance(calculator: Haversine());
-
-/// The diagonal of a box in metres (NaN when it isn't a usable box).
-double borderBoxDiagonalMeters(
-  double south,
-  double west,
-  double north,
-  double east,
-) {
-  final d = _distance.as(
-    LengthUnit.Meter,
-    LatLng(south, west),
-    LatLng(north, east),
-  );
-  return d.isFinite ? d : double.nan;
-}
-
 // --- Query ------------------------------------------------------------------
 
 /// Every administrative relation of [adminLevel] overlapping the bbox, **with

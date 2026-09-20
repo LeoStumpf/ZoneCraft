@@ -216,9 +216,48 @@ class UndoJournal {
     _emit();
   }
 
-  Future<void> undo() => _apply(from: _undo, to: _redo);
+  Future<void> undo() => _enqueue(() => _apply(from: _undo, to: _redo));
 
-  Future<void> redo() => _apply(from: _redo, to: _undo);
+  Future<void> redo() => _enqueue(() => _apply(from: _redo, to: _undo));
+
+  /// The tail of the replay queue. Always a resolved-or-resolving future;
+  /// failures are routed to the caller, never into the chain, or one bad
+  /// replay would wedge every later one — the same shape `RequestPacer` uses.
+  Future<void> _queue = Future<void>.value();
+
+  /// Runs [action] once every replay before it has finished.
+  ///
+  /// [_apply] yields four times — `sealStep`, the log query, the replay
+  /// transaction, the max-seq read — and two taps on Undo inside one database
+  /// round-trip used to interleave across all of them. What that cost is worth
+  /// stating precisely, because it is subtler than it looks: both calls **did**
+  /// consume a step, and the database ended up at the right state, so the
+  /// obvious assertions all passed. What was lost was *history*. Measured on
+  /// three edits, two concurrent undos went back two steps and left **one**
+  /// redo instead of two: the intermediate state was gone for good, because the
+  /// second replay ran after the first had already cleared `_replaying`, so its
+  /// writes were journalled as a fresh edit rather than as an inverse.
+  ///
+  /// Serialised rather than coalesced, which is the opposite of the choice
+  /// `Repository.evictTilesDownTo` makes. A second eviction is redundant work
+  /// and joining it loses nothing; a second tap on Undo is a second thing the
+  /// user asked for, and swallowing it would be a different bug. Two taps here
+  /// mean two undos and two redos — just one at a time.
+  Future<void> _enqueue(Future<void> Function() action) {
+    final completer = Completer<void>();
+    _queue = _queue.then((_) async {
+      try {
+        await action();
+        completer.complete();
+        // Whatever a replay throws belongs to its caller; letting it into the
+        // chain would stop every later undo in the session.
+        // ignore: avoid_catches_without_on_clauses
+      } catch (e, s) {
+        completer.completeError(e, s);
+      }
+    });
+    return completer.future;
+  }
 
   Future<void> clear() async {
     _idle?.cancel();

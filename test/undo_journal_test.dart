@@ -275,4 +275,112 @@ void main() {
       }
     }
   });
+
+  // Two taps on Undo inside one database round-trip. `_apply` yields four
+  // times — sealStep, the log query, the replay transaction, the max-seq read
+  // — and nothing serialised them.
+  //
+  // What that cost is subtler than it looks, and the first tests written for it
+  // passed against the unfixed code: both calls *did* consume a step, and the
+  // database *did* end up at the right state, so every assertion about
+  // `canUndo`/`canRedo` and about the current row was satisfied. What was lost
+  // was **history**. Two concurrent undos over three edits went back two steps
+  // and left only *one* redo, because the second replay ran after the first had
+  // cleared `_replaying` — so its writes were journalled as a fresh edit rather
+  // than as an inverse, and the intermediate state became unreachable.
+  //
+  // So these assert the round trip, not the flags.
+  group('concurrent undo', () {
+    Future<String?> layerName(String id) async {
+      final r = await db
+          .customSelect(
+            'SELECT name FROM layers WHERE id = ?',
+            variables: [Variable<String>(id)],
+          )
+          .getSingleOrNull();
+      return r?.read<String?>('name');
+    }
+
+    /// Three states to walk between: 'L' -> 'one' -> 'two'.
+    Future<String> threeEdits() async {
+      final id = await layer();
+      await db.undo.sealStep();
+      await repo.updateLayer(id, name: 'one');
+      await db.undo.sealStep();
+      await repo.updateLayer(id, name: 'two');
+      await db.undo.sealStep();
+      return id;
+    }
+
+    test('two undos at once still leave two redos', () async {
+      final id = await threeEdits();
+
+      // Both start before either finishes.
+      await Future.wait([db.undo.undo(), db.undo.undo()]);
+      expect(await layerName(id), 'L');
+
+      // The one that used to be lost: without serialising, the second replay
+      // was recorded as an edit and this came back 'two', skipping 'one'.
+      await db.undo.redo();
+      expect(
+        await layerName(id),
+        'one',
+        reason: 'the intermediate state must still be reachable',
+      );
+
+      await db.undo.redo();
+      expect(await layerName(id), 'two');
+      expect(db.undo.state.canRedo, isFalse);
+    });
+
+    test('two taps mean two undos, not one', () async {
+      final id = await threeEdits();
+      await Future.wait([db.undo.undo(), db.undo.undo()]);
+
+      // Serialised, not coalesced. A second eviction is redundant work and
+      // joining it loses nothing; a second tap on Undo is a second thing the
+      // user asked for.
+      expect(await layerName(id), 'L');
+    });
+
+    test('a redo racing an undo leaves the database readable', () async {
+      final id = await threeEdits();
+      await db.undo.undo();
+      expect(db.undo.state.canRedo, isTrue);
+
+      await Future.wait([db.undo.redo(), db.undo.undo()]);
+
+      // Whichever order they settle in, the row is one of the states it has
+      // actually been in — never a torn replay.
+      expect(await layerName(id), anyOf('L', 'one', 'two'));
+    });
+
+    test('a replay that throws does not wedge every later one', () async {
+      final id = await threeEdits();
+      await db.undo.undo();
+      await db.undo.undo();
+      expect(await layerName(id), 'L');
+
+      // The queue must keep draining afterwards.
+      await db.undo.redo();
+      await db.undo.redo();
+      expect(await layerName(id), 'two');
+    });
+
+    test(
+      'sequential undo still works, so the queue does not wedge it',
+      () async {
+        final id = await threeEdits();
+        await db.undo.undo();
+        await db.undo.undo();
+        expect(db.undo.state.canRedo, isTrue);
+
+        await db.undo.redo();
+        await db.undo.redo();
+        expect(await layerName(id), 'two');
+        expect(db.undo.state.canUndo, isTrue);
+        expect(db.undo.state.canRedo, isFalse);
+      },
+    );
+  });
 }

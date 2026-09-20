@@ -72,8 +72,26 @@ class PendingImportNotifier extends Notifier<PendingImport?> {
   @override
   PendingImport? build() => null;
 
-  void offer(PendingImport p) => state = p;
-  void clear() => state = null;
+  /// Puts an offer up, answering any outstanding one first.
+  ///
+  /// Whoever is waiting on the displaced offer is waiting on its `decision`
+  /// future, and replacing the state without completing it left that future
+  /// hanging for ever — so the earlier import never ran and never cleaned up
+  /// after itself either, because its `finally { clear() }` could not be
+  /// reached. Two overlapping imports are reachable: a picked file previews
+  /// while a file shared in from another app arrives on resume.
+  ///
+  /// The displaced offer is answered **false**. The user is looking at the new
+  /// one; silently writing the old one would be the worse surprise.
+  void offer(PendingImport p) {
+    state?.answer(keep: false);
+    state = p;
+  }
+
+  void clear() {
+    state?.answer(keep: false);
+    state = null;
+  }
 }
 
 final pendingImportProvider =

@@ -2179,21 +2179,6 @@ class Repository {
     return area == null ? const [] : decodeRings(area.rings);
   }
 
-  /// Renames an import (or moves it to another `borders` layer). The imported
-  /// area and level are immutable — a different area means a new import.
-  Future<void> updateBorderSet(
-    String id, {
-    String? layerId,
-    Value<String?> label = const Value.absent(),
-  }) async {
-    await (_db.update(_db.borderSets)..where((s) => s.id.equals(id))).write(
-      BorderSetsCompanion(
-        layerId: layerId == null ? const Value.absent() : Value(layerId),
-        label: label,
-      ),
-    );
-  }
-
   /// Deletes an import and recolours what is left: removing a set removes
   /// adjacency constraints, and leaving the old colours would keep an
   /// unnecessary clash on screen.
