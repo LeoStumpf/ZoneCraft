@@ -1,10 +1,12 @@
 # ZoneCraft — Privacy Policy
 
-_Last updated: 2026-08-27_
+_Last updated: 2026-09-20_
 
 ZoneCraft is an offline-first map tool. It has **no account system**, shows **no advertising**,
-and does **not** sell, rent or share your personal data. There is no ZoneCraft server: nothing
-you create is uploaded anywhere.
+and does **not** sell, rent or share your personal data. There is no ZoneCraft server. Nothing
+you create is uploaded anywhere — with exactly one exception, which never happens by itself: if
+you write a correction to OpenStreetMap and press Send, that correction goes to OpenStreetMap.
+It is described in full under *Sending a correction to OpenStreetMap* below.
 
 This policy explains the limited data the app handles, and is written to be read — not to be
 skimmed past.
@@ -20,14 +22,17 @@ skimmed past.
 | Data collected about you | None |
 | Data sold or shared for advertising | Never |
 | Where your content lives | On your device only |
+| Anything sent off the device | Only a correction you write and press Send on |
 | Advertising ID / device identifier | Not used |
 | Analytics, crash reporting or usage tracking | None |
 
 ## Data stored on your device
 
 Everything you create — layers, circles, subspaces, freehand lines and areas, height regions,
-imported points of interest and transit stations, administrative areas, your settings and
-your last map position — is stored **only on your device** in a local database. It is never uploaded to us, and we have no server that could receive it.
+imported points of interest and transit stations, administrative areas, any corrections you
+have written for OpenStreetMap, your settings and your last map position — is stored **only on
+your device** in a local database. It is never uploaded to us, and we have no server that could
+receive it.
 
 Cached map tiles are stored alongside it. These are not personal data — they are pictures of
 the map — but they do imply which areas you have looked at, so they are worth naming.
@@ -78,10 +83,45 @@ asked. Each of these is an independent data controller under its own policy:
 - **AWS Terrain Tiles** (`s3.amazonaws.com/elevation-tiles-prod`) — public elevation data, used
   by **height layers**, the **"Measure elevation"** probe, and the elevation readout after
   **"Locate me"**. It receives the tile covering the point being measured.
+- **The OpenStreetMap API** (`api.openstreetmap.org`) — the **one service this app writes to**,
+  and the only one that ever receives something you wrote. See the section below.
 
 The app sends nothing identifying with these requests beyond what any HTTP client sends: your
 IP address, and a `User-Agent` naming the application and its version. No advertising ID, no
 device identifier, no cookies, no analytics.
+
+## Sending a correction to OpenStreetMap
+
+Everything else in this policy describes the app *reading* from someone else's server. This is
+the exception, and it is worth reading before you use it.
+
+If you correct an imported point — move a bench that is in the wrong place, fix a name, mark
+something as gone — the app offers to pass the correction on to OpenStreetMap as a **note**: a
+public message to the volunteers who maintain the map. It is entirely optional, and the app
+does nothing of the kind unless you ask it to.
+
+**What is sent, when you press Send:** the text you wrote, the coordinates the note is about,
+and the same `User-Agent` every other request carries. Nothing else — no name, no email
+address, no account, no device identifier.
+
+**It is public and it is permanent.** A note appears on openstreetmap.org for anyone to read,
+and it stays in the project's history even after it is closed. This is a contribution to a
+shared public map, not a private message. Please don't put anything in one you would not put
+on a public web page: the app says so on the form, every time, for that reason.
+
+**It is anonymous.** ZoneCraft has no account system and does not create one for this. The note
+is not linked to you — which also means nobody can write back to you about it, so the app keeps
+a link to each note you send under **OpenStreetMap outbox** in the menu, for you to follow.
+
+**Nothing is ever sent by itself.** There is no timer, no sending when a connection returns, no
+sending at launch. A note leaves your device when you press Send and at no other moment. If you
+would rather not send anything from the app at all, you can keep your reports in the outbox and
+**export them as a file** to file yourself under your own OpenStreetMap account — or simply
+never open the form.
+
+Reports live on your device until you delete them, and **"Clear all data"** removes them.
+Deleting a report you already sent removes this device's copy; the note itself is on
+OpenStreetMap's servers and stays there.
 
 If you would rather not contact these services at all, **Settings → Data sources** points the
 map tiles, the Overpass imports and the geocoder at servers of your own. The app works with all

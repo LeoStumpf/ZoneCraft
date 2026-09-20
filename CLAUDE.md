@@ -12,7 +12,9 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   above/below an elevation, bounded to a circle; generated from terrain tiles via marching
   squares, stored as fill polygons; any generated region can be **converted to a freehand
   area** — outer contours only, holes dropped, the same contract as the border conversion),
-  `poi` (markers, in three kinds of **set** told apart by `PoiSets.source` — see **POI
+  `poi` (markers — since v31 an imported one can be **corrected by hand**, which flags the
+  row as a fork and offers to pass the correction to OSM as a note; in three kinds of **set**
+  told apart by `PoiSets.source` — see **POI
   sets** below: a `radius` category import, a `box` **station** import (the former `transit`
   type, folded in at v27) and a `manual` hand-made category; rendered as icon markers that
   collapse into count-badge clusters when they'd overlap — no region compositing; the import
@@ -313,10 +315,48 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   (`test/android_manifest_test.dart` guards both schemes). `canLaunchExternalUrl`
   (`ui/external_link.dart`) is the one probe: `canLaunchUrl` *throws* with no platform
   implementation, so no screen may call it directly.
+- **The app gives back, once per press** (`data/osm_notes.dart`, `data/osm_report.dart`,
+  `ui/osm_report_sheet.dart`, `ui/osm_reports_screen.dart`). ZoneCraft consumes OSM heavily and
+  used to return nothing, and an imported POI you could see was wrong was read-only. Both
+  halves changed together, and neither works without the other:
+  - **A correction is allowed because it is now recorded.** `movePoiPoint` / `updatePoiPoint`
+    capture what the import returned (`PoiPoints.origLat/origLng/origName`) and stamp
+    `editedAt` on the *first* edit only — the `BorderAreas.editedAt` contract, one layer type
+    along, and load-bearing for the same reason: the row keeps its `osmId`, so a fork nothing
+    records lets one person's guess beat whatever OSM says next, invisibly. Unlike a boundary
+    the original **is** kept (a POI is three scalars, not a 119 238-point ring), which buys
+    both `revertPoiPoint` and a note that can state what changed. A move that changes nothing
+    is not a fork.
+  - **Notes, not edits, and that is not a stopgap.** `parseOverpassResponse` keeps no tag map
+    and no element `version`, and uses `out center`, so a `PUT` would strip tags off live OSM
+    objects. A note is the only report this data model can make honestly — and it is the
+    sanctioned one: OSM's developer guidance says outright that third-party apps may use the
+    Notes API, provided a report carries enough detail for a mapper to act on.
+  - **Three of OSM's rules are structure here, not comments.** *"Create no automated notes"* →
+    the draft `composeOsmReportText` builds is editable and Send is off until it says
+    something, the outbox has **no timer, no flush-on-reconnect, no send-at-launch**, and
+    `submitOsmNote` **never retries and never fails over** (a POST that timed out may well
+    have been applied, and there is only one OpenStreetMap). *"Tell users this is for map data,
+    not feedback about your app"* → the sheet's warning is unconditional and is **never
+    counted by `UiHints`**, because a warning that goes quiet after three showings stops
+    warning exactly the people comfortable enough to be careless. And the app holds itself to
+    osm.org's own anonymous-note numbers — warn at 5 a day, stop offering Send at 10 — since
+    a block lands on the `User-Agent`, i.e. on every install at once.
+  - **Two ways out, because not everyone wants to file anonymously.** Send now, or keep it in
+    the `OsmReports` outbox and **export the lot as GeoJSON** to work through in JOSM under
+    your own account. The outbox is in `undoExcludedTables`: writing a report is not a map
+    edit, and for one already sent an undo would be a lie.
+  - `OSM_API_URL` is a **dart-define**, not a `ServiceOverride` — the OSM database is not a
+    service you swap, and a typed-in URL would send somebody's contribution to a stranger's
+    server. Point it at `https://master.apis.dev.openstreetmap.org` for every test; a note
+    filed against the live database to see whether a button works is one a volunteer then has
+    to read and close by hand.
 - **No telemetry, ever.** No crash reporting, no analytics, no advertising id. Sentry was
   wired in and deliberately removed: `PRIVACY.md` and the Play Data safety form can now
   answer "none", which is worth more than the diagnostics were. Anything added back has to
-  be reflected in both.
+  be reflected in both. An OSM note is not an exception to this — it carries nothing the user
+  did not type, goes nowhere but OpenStreetMap, and only on a press — but it *is* the one
+  thing that leaves the device, so PRIVACY.md names it in full.
 - **Every outbound HTTP call is timed out.** `package:http` has no default timeout, so each
   call site sets one explicitly (`kTerrainTileTimeout`, `CachedTileProvider.fetchTimeout`,
   the Overpass per-request budgets), plus `kHeightGenBudget` as an overall deadline on a
@@ -341,7 +381,7 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   layers (`data/geo_import.dart`). There is **one routine** for both scopes —
   `Repository.exportData({onlyLayerId})` and `importLayerFlow` — so a per-layer file and a
   whole-DB file differ only in how many layers they hold.
-- **The GeoJSON export is a fixed point** (format schema **v4**, `geoJsonSchemaVersion`):
+- **The GeoJSON export is a fixed point** (format schema **v5**, `geoJsonSchemaVersion`):
   `export → import → export` must be byte-identical, and `test/export_roundtrip_test.dart`
   asserts exactly that against real rows for all seven types, alongside a whole-DB and a
   per-layer round-trip. **Anything the DB stores and the UI shows has to survive the trip** —
@@ -351,9 +391,14 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   station import keeps its box, masks and per-point modes (a box set writes **no**
   `radiusMeters` — it is derived), a border area keeps its import's `setLabel`, and a failed
   import comes back as its retry row, and a layer in a folder comes back in it. Format is
-  **v4** (`geoJsonSchemaVersion`): a layer names its folder and the folders ride in
+  **v5** (`geoJsonSchemaVersion`): a layer names its folder and the folders ride in
   `zonecraft.folders`, both written only when there are folders — so a file from a map without
-  them is what v3 wrote.
+  them is what v3 wrote. **v5** adds `pointOrigLat`/`pointOrigLng`/`pointOrigNames`: what OSM
+  returned for a POI somebody has since corrected by hand, written only when a set holds one,
+  so an untouched import still exports exactly what v4 wrote. The *flag* travels, not the
+  timestamp — and it has to, because the row keeps its `osmId`, so a file whose corrections
+  arrived silently would launder one person's guess into "what OSM says" on the next device
+  and re-import dedup would then keep it.
   `serialization_test.dart` covers the pure model; it is the *repository* half where losses
   hide, because that is the half nothing used to look at. Deliberately not preserved: `createdAt`,
   a border set holding **zero** areas (the format has no representation of a set), and the
@@ -366,15 +411,17 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   placeholder an id-less imported row is stored with (`BorderAreas.osmId` is NOT NULL). Read as
   a real id it made every such area look like the same relation, so a re-import kept one and
   dropped the rest.
-- **Drift schema is at v30**; migrations are append-only `if (from < N)` blocks. (Two
+- **Drift schema is at v31**; migrations are append-only `if (from < N)` blocks. (Two
   exceptions drop tables: v19 *drops* the transit route tables, because route geometry was
   abandoned — see `data/transit.dart`'s header for the measurements behind that — and v27
   copies `planes` → `subspaces` and `transit_*` → `poi_*` then drops them, plus `tracks`.
   **v30 splits** every `mixed` layer into one layer per kind it holds, inside a folder when
   that is more than one, and deletes the row it split.
   Earlier blocks that once `createTable`d a dropped table no longer do; the raw `ALTER
-  TABLE`s in v22/v26 keep the columns v27 copies on a database old enough to have them.)
-  v20…v30 are snapshotted in `drift_schemas/` and guarded by `test/migration_test.dart`. **Any schema change must dump a
+  TABLE`s in v22/v26 keep the columns v27 copies on a database old enough to have them.
+  **v31** adds the four `poi_points` fork columns and the `osm_reports` outbox, and is purely
+  additive — every existing row reads as untouched, which it is.)
+  v20…v31 are snapshotted in `drift_schemas/` and guarded by `test/migration_test.dart`. **Any schema change must dump a
   new snapshot** (`dart run drift_dev schema dump lib/data/database.dart drift_schemas/`, then
   `... schema generate drift_schemas/ test/generated_migrations/`) — a snapshot cannot be
   reconstructed after the version ships, and the test fails until it exists.
@@ -400,9 +447,9 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   imports' editors are scoped to what a snapshot can honestly offer: `poi_set_editor`
   (label, layer; a station import's *shown* types — never its box, radius or fetched types,
   which describe a query that already ran; a hand-made category's icon; a pending import's
-  error and a Try again), `imported_point_editor` (one POI or station — the same row:
-  **rename and delete only** — a position is the fetched fact, and no column would say one
-  had been moved), and `border_area_editor`. Individual POIs/stations are [ObjectKind]s
+  error and a Try again), `imported_point_editor` (one POI or station — the same row;
+  since v31 **name and position are both editable**, because there is now a column that says
+  one was changed — see the OSM contribution bullet), and `border_area_editor`. Individual POIs/stations are [ObjectKind]s
   (`poiPoint`) but **not elements** (`isElement`): `layerSummariesProvider` — what the
   drawer, the layer sheet and the recolour picker *count* — still yields one row per set.
 - **The Elements list lists everything, and POIs by type** (`ui/layer_objects_sheet.dart`).
@@ -532,14 +579,16 @@ and is bounded, so it bands along the elevation contour only and skips invert, a
 to freehand areas), plus two import types with their own painters:
 `poi` (offline sets — radius category imports, box station imports with per-type
 visibility and retryable failed imports, hand-made categories — with screen-space
-clustering) and `borders` (offline area imports per admin level, neighbour-distinct
+clustering, per-point hand corrections that are flagged as forks and revertible, and a
+**"Tell OpenStreetMap"** route that files the correction as an anonymous note or keeps it in
+an exportable outbox) and `borders` (offline area imports per admin level, neighbour-distinct
 colouring, name plates, per-area convert-to-freehand, hand-reshapeable outlines that are
 flagged as forks) — the layers drawer + an editor for every type, settings (uncertainty,
 clear-all, offline cache, import/export), opt-in locate-me (the app's only use of location),
 persisted camera, offline resilience (cache-first tiles; **no** prefetch on the community OSM
 servers — see `data/tile_source.dart`), and import/export
 (whole-DB + per-layer + external GeoJSON/KML/KMZ/GPX; freeline imports prompt for their
-inclusion-circle radius). Drift schema is **v30**, GeoJSON format **v4**.
+inclusion-circle radius). Drift schema is **v31**, GeoJSON format **v5**.
 
 `planning/PLAN.md` has no open roadmap items; future polish ideas are listed there.
 `planning/PRODUCTION_AUDIT.md` records the production-readiness pass (what was found, what
@@ -591,7 +640,7 @@ lib/
                HeightRegions, HeightPolygons, HeightPolygonPoints,
                PoiSets, PoiPoints,
                BorderSets, BorderAreas,
-               TileCache, OverpassCache, AppSettings)
+               TileCache, OverpassCache, AppSettings, UiHints, OsmReports)
                + repository; shared Overpass transport with endpoint failover
                (overpass_client.dart); Overpass POI client (overpass.dart);
                offline tile cache (cached_tile_provider.dart); GeoJSON/KML
@@ -607,7 +656,9 @@ lib/
                file that talks to MainActivity.kt;
                the one definition of the three switchable service addresses
                (service_overrides.dart); why the tiles stopped, in words
-               (tile_health.dart)
+               (tile_health.dart); the one outbound *write* — one OSM note per
+               press, never retried, never batched (osm_notes.dart) — and what
+               it says, purely (osm_report.dart)
   geo/         geodesicCircle(), subspace Voronoi-cell geometry (two points =
                a half-plane), freehand line/area region geometry (freeline.dart,
                freearea.dart), height contouring/marching-squares (height.dart),
@@ -623,6 +674,8 @@ lib/
                import_actions, settings_screen, region_layer, poi_layer
                (clustered POI + station markers, one painter),
                poi_set_editor / imported_point_editor,
+               osm_report_sheet (write a correction: send, keep or copy) +
+               osm_reports_screen (the outbox, and its GeoJSON export),
                transit_import_dialog, transit_modes_sheet
                (the station-type tick boxes + the pure `transitTally`,
                embedded in the Elements list), border_layer (area fills +

@@ -1791,40 +1791,128 @@ void main() {
       expect(await repo.watchAllPoiPoints().first, isEmpty);
     });
 
-    test('a hand-placed point can be moved', () async {
+    test('a hand-placed point can be moved, and is never a fork', () async {
+      // It has no upstream, so there is nothing to fork from and nothing the
+      // edit columns could honestly say.
       final layerId =
           await repo.createLayer(name: 'P', colorArgb: 1, type: 'poi');
       final setId = await manualSetOn(layerId);
       final id =
           await repo.addManualPoiPoint(poiSetId: setId, lat: 48.1, lng: 11.5);
-      await repo.moveManualPoiPoint(id: id, lat: 49.0, lng: 12.0);
+      await repo.movePoiPoint(id: id, lat: 49.0, lng: 12.0);
 
       final p = (await repo.watchAllPoiPoints().first).single;
       expect(p.lat, 49.0);
       expect(p.lng, 12.0);
+      expect(p.editedAt, isNull);
+      expect(p.origLat, isNull);
     });
 
-    test('an imported POI cannot be moved', () async {
-      // Its position is the fetched fact the layer exists to record.
-      final layerId =
-          await repo.createLayer(name: 'P', colorArgb: 1, type: 'poi');
+    Future<String> importedPointOn(String layerId) async {
       final setId = await importedSetOn(layerId);
       await repo.fillPoiSet(setId, const [
         PoiResult(
             lat: 48.1,
             lng: 11.5,
             categoryKey: 'cafe',
+            name: 'Kranz',
             osmType: 'node',
             osmId: 7),
       ]);
-      final id = (await repo.watchAllPoiPoints().first).single.id;
+      return (await repo.watchAllPoiPoints().first).single.id;
+    }
 
-      await expectLater(
-        repo.moveManualPoiPoint(id: id, lat: 49.0, lng: 12.0),
-        throwsArgumentError,
-      );
+    test('moving an imported POI records what OSM said', () async {
+      // The move is allowed now, but never silently: the row keeps its osmId,
+      // so a fork nothing recorded would let one person's correction win over
+      // whatever OSM says next, invisibly.
+      final layerId =
+          await repo.createLayer(name: 'P', colorArgb: 1, type: 'poi');
+      final id = await importedPointOn(layerId);
+
+      await repo.movePoiPoint(id: id, lat: 49.0, lng: 12.0);
+
       final p = (await repo.watchAllPoiPoints().first).single;
-      expect(p.lat, 48.1, reason: 'the position must be untouched');
+      expect((p.lat, p.lng), (49.0, 12.0));
+      expect(p.editedAt, isNotNull);
+      expect((p.origLat, p.origLng, p.origName), (48.1, 11.5, 'Kranz'));
+      expect(p.osmId, 7, reason: 'the upstream identity is kept');
+    });
+
+    test('a second move does not overwrite what OSM said', () async {
+      // Capture happens once, or Revert would only ever walk back one step
+      // and the report would misstate where OSM has it.
+      final layerId =
+          await repo.createLayer(name: 'P', colorArgb: 1, type: 'poi');
+      final id = await importedPointOn(layerId);
+
+      await repo.movePoiPoint(id: id, lat: 49.0, lng: 12.0);
+      final first = (await repo.watchAllPoiPoints().first).single.editedAt;
+      await repo.movePoiPoint(id: id, lat: 50.0, lng: 13.0);
+
+      final p = (await repo.watchAllPoiPoints().first).single;
+      expect((p.lat, p.lng), (50.0, 13.0));
+      expect((p.origLat, p.origLng), (48.1, 11.5));
+      expect(p.editedAt, first, reason: 'the fork happened once');
+    });
+
+    test('a move that changes nothing is not a fork', () async {
+      // The same guard reshapeBorderArea lives by: a drag that ends where it
+      // started is not an edit.
+      final layerId =
+          await repo.createLayer(name: 'P', colorArgb: 1, type: 'poi');
+      final id = await importedPointOn(layerId);
+
+      await repo.movePoiPoint(id: id, lat: 48.1, lng: 11.5);
+
+      expect((await repo.watchAllPoiPoints().first).single.editedAt, isNull);
+    });
+
+    test('renaming an imported POI is a fork too', () async {
+      // It was always possible and was simply never recorded — the case this
+      // closes. A rename that changes nothing still is not one.
+      final layerId =
+          await repo.createLayer(name: 'P', colorArgb: 1, type: 'poi');
+      final id = await importedPointOn(layerId);
+
+      await repo.updatePoiPoint(id, name: const Value('Kranz'));
+      expect((await repo.watchAllPoiPoints().first).single.editedAt, isNull);
+
+      await repo.updatePoiPoint(id, name: const Value('Cafe Kranz'));
+      final p = (await repo.watchAllPoiPoints().first).single;
+      expect(p.name, 'Cafe Kranz');
+      expect(p.editedAt, isNotNull);
+      expect(p.origName, 'Kranz', reason: 'what OSM calls it');
+      expect((p.origLat, p.origLng), (48.1, 11.5),
+          reason: 'all three are captured together');
+    });
+
+    test('revert puts an imported POI back and clears the fork', () async {
+      final layerId =
+          await repo.createLayer(name: 'P', colorArgb: 1, type: 'poi');
+      final id = await importedPointOn(layerId);
+      await repo.movePoiPoint(id: id, lat: 49.0, lng: 12.0);
+      await repo.updatePoiPoint(id, name: const Value('Wrong'));
+
+      await repo.revertPoiPoint(id);
+
+      final p = (await repo.watchAllPoiPoints().first).single;
+      expect((p.lat, p.lng, p.name), (48.1, 11.5, 'Kranz'));
+      expect(p.editedAt, isNull);
+      expect(p.origLat, isNull);
+      expect(p.origName, isNull);
+    });
+
+    test('revert on an untouched POI does nothing', () async {
+      final layerId =
+          await repo.createLayer(name: 'P', colorArgb: 1, type: 'poi');
+      final id = await importedPointOn(layerId);
+
+      await repo.revertPoiPoint(id);
+
+      final p = (await repo.watchAllPoiPoints().first).single;
+      expect((p.lat, p.lng, p.name), (48.1, 11.5, 'Kranz'));
+      expect(p.editedAt, isNull);
     });
 
     test('a category can be renamed and re-iconed', () async {

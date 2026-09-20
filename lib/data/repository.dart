@@ -1454,24 +1454,79 @@ class Repository {
     return id;
   }
 
-  /// Moves a hand-placed POI. Guarded the same way [addManualPoiPoint] is, and
-  /// for the same reason: an imported POI's position is the fetched fact.
-  Future<void> moveManualPoiPoint({
+  /// Moves a POI — hand-placed or imported.
+  ///
+  /// An imported point's position used to be immutable: it is the fetched fact
+  /// the layer exists to record, and moving one silently turned a record of
+  /// where things are into a drawing of where you think they are. What makes
+  /// it safe now is that the move is no longer silent. The first edit captures
+  /// what the import returned ([PoiPoints.origLat]/[origLng]/[origName]) and
+  /// stamps [PoiPoints.editedAt], so the row says out loud that it has forked
+  /// from upstream — the same contract a reshaped border area lives under, and
+  /// it matters for the same reason: the row keeps its `osmId`, so a later
+  /// import over the same ground skips it and the edit wins over whatever OSM
+  /// now says.
+  ///
+  /// The capture happens **once**. A second move does not overwrite the
+  /// original with the first correction, or Revert would only ever walk back
+  /// one step and the report would misstate what OSM has.
+  ///
+  /// A move that changes nothing does not fork — the same guard
+  /// [reshapeBorderArea] uses, so a drag that ends where it started is not an
+  /// edit.
+  Future<void> movePoiPoint({
     required String id,
     required double lat,
     required double lng,
   }) async {
     final row = await _db.customSelect(
-      'SELECT s.source AS source FROM poi_points p '
+      'SELECT s.source AS source, p.lat AS lat, p.lng AS lng, '
+      'p.name AS name, p.edited_at AS edited_at FROM poi_points p '
       'JOIN poi_sets s ON p.poi_set_id = s.id WHERE p.id = ?',
       variables: [Variable<String>(id)],
     ).getSingleOrNull();
     if (row == null) return;
-    if (row.read<String>('source') != kPoiSourceManual) {
-      throw ArgumentError('An imported POI records where OSM put it');
+    if (row.read<double>('lat') == lat && row.read<double>('lng') == lng) {
+      return;
     }
-    await (_db.update(_db.poiPoints)..where((p) => p.id.equals(id)))
-        .write(PoiPointsCompanion(lat: Value(lat), lng: Value(lng)));
+    final isManual = row.read<String>('source') == kPoiSourceManual;
+    final forking = !isManual && row.read<DateTime?>('edited_at') == null;
+    await (_db.update(_db.poiPoints)..where((p) => p.id.equals(id))).write(
+      PoiPointsCompanion(
+        lat: Value(lat),
+        lng: Value(lng),
+        editedAt: forking ? Value(DateTime.now()) : const Value.absent(),
+        origLat: forking ? Value(row.read<double>('lat')) : const Value.absent(),
+        origLng: forking ? Value(row.read<double>('lng')) : const Value.absent(),
+        origName:
+            forking ? Value(row.read<String?>('name')) : const Value.absent(),
+      ),
+    );
+  }
+
+  /// Puts an edited POI back to exactly what the import returned, and clears
+  /// the fork.
+  ///
+  /// The counterpart to the capture in [movePoiPoint]: because a POI is three
+  /// scalars rather than a 119 238-point ring, keeping the original costs
+  /// nothing and an imported point — unlike a reshaped boundary — can simply
+  /// be handed back. A no-op on a point that was never edited.
+  Future<void> revertPoiPoint(String id) async {
+    final row = await (_db.select(_db.poiPoints)
+          ..where((p) => p.id.equals(id)))
+        .getSingleOrNull();
+    if (row == null || row.editedAt == null) return;
+    await (_db.update(_db.poiPoints)..where((p) => p.id.equals(id))).write(
+      PoiPointsCompanion(
+        lat: Value(row.origLat ?? row.lat),
+        lng: Value(row.origLng ?? row.lng),
+        name: Value(row.origName),
+        editedAt: const Value(null),
+        origLat: const Value(null),
+        origLng: const Value(null),
+        origName: const Value(null),
+      ),
+    );
   }
 
   /// Writes the fetched points into [poiSetId] and marks the import done.
@@ -1518,6 +1573,16 @@ class Repository {
               osmType: Value(keep[i].osmType),
               osmId: Value(keep[i].osmId),
               modeMask: Value(keep[i].modeMask),
+              // Only ever set when restoring a ZoneCraft file: a point that
+              // was corrected by hand comes back still saying so, rather than
+              // arriving as though OSM had always had it there. The timestamp
+              // is new — the *fact* of the fork travels, not when it happened.
+              editedAt: keep[i].origLat != null
+                  ? Value(DateTime.now())
+                  : const Value.absent(),
+              origLat: Value(keep[i].origLat),
+              origLng: Value(keep[i].origLng),
+              origName: Value(keep[i].origName),
             ),
           );
         }
@@ -1619,13 +1684,38 @@ class Repository {
     return (_db.delete(_db.poiSets)..where((s) => s.id.equals(id))).go();
   }
 
-  /// Renames one stored POI. The name is the only thing about a POI that is
-  /// safe to change: its **position** is the fetched fact the layer exists to
-  /// record (and for a station, so are its mode bits), and there is no column
-  /// that would say a coordinate had been moved.
-  Future<void> updatePoiPoint(String id, {required Value<String?> name}) {
-    return (_db.update(_db.poiPoints)..where((p) => p.id.equals(id)))
-        .write(PoiPointsCompanion(name: name));
+  /// Renames one stored POI.
+  ///
+  /// Renaming an imported point forks it from upstream exactly as moving one
+  /// does, and is recorded the same way — see [movePoiPoint] for why. It was
+  /// possible long before [PoiPoints.editedAt] existed and was simply never
+  /// recorded, which is the case this closes: a locally renamed POI keeps its
+  /// `osmId`, so nothing downstream could tell the new name from OSM's.
+  ///
+  /// A station's **mode bits** remain untouchable. They are a lossy
+  /// re-encoding of tags this app never stored, so there is no correction to
+  /// be made here that could be stated honestly to anyone.
+  Future<void> updatePoiPoint(String id, {required Value<String?> name}) async {
+    final row = await (_db.select(_db.poiPoints)
+          ..where((p) => p.id.equals(id)))
+        .getSingleOrNull();
+    if (row == null) return;
+    final next = name.present ? name.value : row.name;
+    if (next == row.name) return;
+    final set = await (_db.select(_db.poiSets)
+          ..where((s) => s.id.equals(row.poiSetId)))
+        .getSingleOrNull();
+    final forking =
+        set != null && !set.isManual && row.editedAt == null;
+    await (_db.update(_db.poiPoints)..where((p) => p.id.equals(id))).write(
+      PoiPointsCompanion(
+        name: name,
+        editedAt: forking ? Value(DateTime.now()) : const Value.absent(),
+        origLat: forking ? Value(row.lat) : const Value.absent(),
+        origLng: forking ? Value(row.lng) : const Value.absent(),
+        origName: forking ? Value(row.name) : const Value.absent(),
+      ),
+    );
   }
 
   /// Removes one stored POI — curating an import down to what you want, without
@@ -1637,6 +1727,88 @@ class Repository {
   /// copy of something upstream, and the upstream copy is still there.
   Future<void> deletePoiPoint(String id) {
     return (_db.delete(_db.poiPoints)..where((p) => p.id.equals(id))).go();
+  }
+
+  // --- OSM reports (the outbox) ---------------------------------------------
+
+  /// Every report, newest first — the outbox screen's whole data source.
+  Stream<List<OsmReport>> watchOsmReports() {
+    return (_db.select(_db.osmReports)
+          ..orderBy([(r) => OrderingTerm.desc(r.createdAt)]))
+        .watch();
+  }
+
+  /// Stores a composed report. **Storing is not sending**: the row starts with
+  /// [OsmReports.sentAt] null and stays that way until somebody presses Send.
+  Future<String> createOsmReport({
+    required double lat,
+    required double lng,
+    required String kind,
+    required String body,
+    String? osmType,
+    int? osmId,
+    String? poiPointId,
+  }) async {
+    final id = _uuid.v4();
+    await _db.into(_db.osmReports).insert(
+          OsmReportsCompanion.insert(
+            id: id,
+            lat: lat,
+            lng: lng,
+            kind: kind,
+            body: body,
+            osmType: Value(osmType),
+            osmId: Value(osmId),
+            poiPointId: Value(poiPointId),
+          ),
+        );
+    return id;
+  }
+
+  /// Lets a draft be corrected before it is sent. Refuses to touch a report
+  /// that has already gone: the note on OSM would no longer match, and the row
+  /// is a record of what was said, not a place to keep revising it.
+  Future<void> updateOsmReport(String id, {required String body}) async {
+    await (_db.update(_db.osmReports)
+          ..where((r) => r.id.equals(id) & r.sentAt.isNull()))
+        .write(OsmReportsCompanion(body: Value(body)));
+  }
+
+  /// Records that OSM accepted the note, clearing any earlier failure.
+  Future<void> markOsmReportSent(String id, int noteId) {
+    return (_db.update(_db.osmReports)..where((r) => r.id.equals(id))).write(
+      OsmReportsCompanion(
+        sentAt: Value(DateTime.now()),
+        noteId: Value(noteId),
+        lastError: const Value(null),
+      ),
+    );
+  }
+
+  /// Leaves the row in the outbox with the reason attached, so it can present
+  /// itself as a retry — the same shape a failed import's row has.
+  Future<void> markOsmReportFailed(String id, String message) {
+    return (_db.update(_db.osmReports)..where((r) => r.id.equals(id)))
+        .write(OsmReportsCompanion(lastError: Value(message)));
+  }
+
+  Future<void> deleteOsmReport(String id) {
+    return (_db.delete(_db.osmReports)..where((r) => r.id.equals(id))).go();
+  }
+
+  /// How many notes have actually reached OSM in the last [window].
+  ///
+  /// Read by the report sheet to hold itself back: osm.org's own form warns
+  /// after five anonymous notes in a day and stops offering itself after ten,
+  /// and an app that ignored that would earn the blanket block the API usage
+  /// policy promises. Counts **sent** rows only — drafts sitting in the outbox
+  /// have cost nobody anything.
+  Future<int> osmReportsSentSince(Duration window) async {
+    final since = DateTime.now().subtract(window);
+    final rows = await (_db.select(_db.osmReports)
+          ..where((r) => r.sentAt.isBiggerThanValue(since)))
+        .get();
+    return rows.length;
   }
 
   // --- Border sets ----------------------------------------------------------
@@ -2209,6 +2381,12 @@ class Repository {
           .delete(_db.appSettings)
           .go(); // reverts to column defaults on read
       await _db.delete(_db.overpassCache).go(); // persisted POI/border overlays
+      // The outbox goes too. It holds free text the user typed, so leaving it
+      // behind would make "clear all data" untrue in the one place that
+      // matters most — and the dialog says so before it runs. Notes already
+      // delivered are on OSM's servers and no local delete reaches them; what
+      // goes is this device's record of them.
+      await _db.delete(_db.osmReports).go();
       return ensureDefaultLayer();
     });
     await _db.undo.clear();
@@ -2429,6 +2607,7 @@ class Repository {
               // draws every one of them a second time. Written only when at
               // least one POI has it (rows from before v21 never did).
               final identified = pts.any((p) => p.osmId != null);
+              final corrected = pts.any((p) => p.editedAt != null);
               final box = s.isStationImport;
               objects.add(ExportObject(
                 kind: 'poi',
@@ -2445,6 +2624,20 @@ class Repository {
                     identified ? [for (final p in pts) p.osmId ?? 0] : null,
                 pointOsmTypes:
                     identified ? [for (final p in pts) p.osmType] : null,
+                // What OSM said, for the points somebody has since corrected.
+                // Written only when the set holds at least one — so an import
+                // nobody touched exports byte-for-byte as it did before v31,
+                // and a corrected one cannot arrive elsewhere pretending to be
+                // what OSM returned.
+                pointOrigLat: corrected
+                    ? [for (final p in pts) p.origLat]
+                    : null,
+                pointOrigLng: corrected
+                    ? [for (final p in pts) p.origLng]
+                    : null,
+                pointOrigNames: corrected
+                    ? [for (final p in pts) p.origName]
+                    : null,
                 // Only a station import carries mode bits; every other kind
                 // would write a list of zeros.
                 pointModeMasks: box && pts.isNotEmpty
@@ -2833,6 +3026,12 @@ class Repository {
         final poiIds = o.pointOsmIds ?? const <int>[];
         final poiTypes = o.pointOsmTypes ?? const <String?>[];
         final masks = o.pointModeMasks ?? const <int>[];
+        // A point somebody corrected by hand keeps saying so on the way in.
+        // Absent in a v4 file, and absent per-slot for every point that was
+        // never touched.
+        final origLat = o.pointOrigLat ?? const <double?>[];
+        final origLng = o.pointOrigLng ?? const <double?>[];
+        final origNames = o.pointOrigNames ?? const <String?>[];
         await fillPoiSet(sid, [
           for (var i = 1; i < o.coords.length; i++)
             PoiResult(
@@ -2845,6 +3044,9 @@ class Repository {
                   ? poiIds[i - 1]
                   : null,
               modeMask: i - 1 < masks.length ? masks[i - 1] : 0,
+              origLat: i - 1 < origLat.length ? origLat[i - 1] : null,
+              origLng: i - 1 < origLng.length ? origLng[i - 1] : null,
+              origName: i - 1 < origNames.length ? origNames[i - 1] : null,
             ),
         ]);
       case 'borderarea':

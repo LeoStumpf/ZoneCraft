@@ -19,6 +19,9 @@
 #   TILE_URL=<template>   base-map tile URL, e.g.
 #                         'https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=KEY'
 #   TILE_ATTRIBUTION=<s>  the attribution line shown for it
+#   OSM_API_URL=<url>     where "Tell OpenStreetMap" sends notes. Unset = the
+#                         real database. Use
+#                         https://master.apis.dev.openstreetmap.org to test.
 #   TILE_ALLOWS_PREFETCH=true
 #                         RE-ENABLE the offline features (viewport prefetch +
 #                         "download this area"), which are off by default
@@ -58,7 +61,7 @@ for arg in "$@"; do
     --install)     INSTALL=1 ;;
     --run)         INSTALL=1; RUN=1 ;; # running implies installing first
     --skip-checks) SKIP_CHECKS=1 ;;
-    -h|--help)     sed -n '2,25p' "$0"; exit 0 ;;
+    -h|--help)     sed -n '2,35p' "$0"; exit 0 ;;
     *) echo "Unknown option: $arg (try --help)" >&2; exit 1 ;;
   esac
 done
@@ -106,6 +109,14 @@ if [ "${TILE_ALLOWS_PREFETCH:-}" = "true" ]; then
   fi
   DART_DEFINES+=(--dart-define=TILE_ALLOWS_PREFETCH=true)
   echo "==> prefetch + area download ENABLED (you asserted the provider allows it)"
+fi
+# Where corrections are sent. Unset means the real OpenStreetMap database.
+# Point it at https://master.apis.dev.openstreetmap.org while developing:
+# a note filed against the live database to see whether a button works is one
+# a volunteer then has to read, understand and close by hand.
+if [ -n "${OSM_API_URL:-}" ]; then
+  DART_DEFINES+=(--dart-define=OSM_API_URL="$OSM_API_URL")
+  echo "==> OSM API: $OSM_API_URL (reports do NOT go to openstreetmap.org)"
 fi
 
 # --- checks ------------------------------------------------------------------

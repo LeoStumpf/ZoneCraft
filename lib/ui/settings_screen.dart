@@ -83,8 +83,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Clear all data?'),
         content: const Text(
-          'This deletes every layer and object and resets all settings. '
-          'This cannot be undone.',
+          'This deletes every layer and object, empties your OpenStreetMap '
+          'outbox and resets all settings. This cannot be undone. Reports you '
+          'have already sent stay on OpenStreetMap — only this device\u2019s '
+          'record of them goes.',
         ),
         actions: [
           TextButton(

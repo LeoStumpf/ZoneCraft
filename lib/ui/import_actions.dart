@@ -242,21 +242,45 @@ Future<void> deliverExport(
   ExportChoice choice, {
   required String fileStem,
   required String subject,
+}) {
+  return deliverFile(
+    context,
+    content: choice.isKml ? exportToKml(data) : exportToGeoJson(data),
+    fileName: '$fileStem.${choice.format}',
+    mimeType: choice.mimeType,
+    destination: choice.destination,
+    subject: subject,
+  );
+}
+
+/// Hands one file's worth of text to the share sheet or the document picker.
+///
+/// The delivery half of [deliverExport], split out so the OpenStreetMap
+/// outbox — which exports reports rather than layers, and has no `ExportData`
+/// to hand over — reaches the user's file system through the same code rather
+/// than a second copy of it that could drift on the details this comment
+/// exists to record: the temp file is written either way (`share_plus` needs
+/// a path, and the platform save streams from one), and a failure is always
+/// spoken, because a share sheet that failed silently is indistinguishable
+/// from one that never opened.
+Future<void> deliverFile(
+  BuildContext context, {
+  required String content,
+  required String fileName,
+  required String mimeType,
+  required ExportDestination destination,
+  required String subject,
 }) async {
   final messenger = ScaffoldMessenger.of(context);
   try {
-    final content = choice.isKml
-        ? exportToKml(data)
-        : exportToGeoJson(data);
     final dir = await getTemporaryDirectory();
-    final fileName = '$fileStem.${choice.format}';
     final file = File('${dir.path}/$fileName');
     await file.writeAsString(content);
-    if (choice.destination == ExportDestination.save) {
+    if (destination == ExportDestination.save) {
       final saved = await saveFileToDisk(
         sourcePath: file.path,
         suggestedName: fileName,
-        mimeType: choice.mimeType,
+        mimeType: mimeType,
       );
       if (saved == null) return; // backed out of the picker: say nothing
       messenger.showSnackBar(SnackBar(content: Text('Saved $saved')));
@@ -264,16 +288,49 @@ Future<void> deliverExport(
       await SharePlus.instance.share(
         ShareParams(
           subject: subject,
-          files: [XFile(file.path, mimeType: choice.mimeType)],
+          files: [XFile(file.path, mimeType: mimeType)],
         ),
       );
     }
-  // An export reaches the user as a message whatever went wrong — a share sheet
-  // that failed silently is indistinguishable from one that never opened.
+  // A temp write, a picker and a share sheet fail in unrelated ways, and the
+  // user needs the same sentence for all of them.
   // ignore: avoid_catches_without_on_clauses
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text('Export failed: $e')));
   }
+}
+
+/// Asks only *where* a file should go, for an export with one format.
+///
+/// The outbox writes GeoJSON and nothing else — a report is a point with a
+/// sentence attached, and KML has no better way to say that — so the format
+/// half of [askExportChoice] would be a list of one.
+Future<ExportDestination?> askExportDestination(
+  BuildContext context, {
+  required String title,
+  required String message,
+}) async {
+  if (!platformFilesSupported) return ExportDestination.share;
+  return showDialog<ExportDestination>(
+    context: context,
+    builder: (ctx) => SimpleDialog(
+      title: Text(title),
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+          child: Text(message, style: Theme.of(ctx).textTheme.bodySmall),
+        ),
+        SimpleDialogOption(
+          onPressed: () => Navigator.pop(ctx, ExportDestination.share),
+          child: const Text('Share'),
+        ),
+        SimpleDialogOption(
+          onPressed: () => Navigator.pop(ctx, ExportDestination.save),
+          child: const Text('Save to file'),
+        ),
+      ],
+    ),
+  );
 }
 
 /// Exports every layer to GeoJSON or KML, then shares or saves it.

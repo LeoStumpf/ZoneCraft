@@ -83,6 +83,17 @@ final RequestPacer nominatimPacer =
 final RequestPacer overpassPacer =
     RequestPacer(minInterval: const Duration(seconds: 1));
 
+/// The OpenStreetMap API itself — the one service this app *writes* to, and
+/// only ever one note per deliberate press.
+///
+/// A pacer for a single user-initiated write looks redundant, and that is the
+/// point: it makes a burst impossible by construction rather than by everyone
+/// remembering not to write a loop. The API usage policy's remedy for a client
+/// affecting the service level for others is a block without notice, and a
+/// block lands on the `User-Agent`, i.e. on every ZoneCraft install at once.
+final RequestPacer osmApiPacer =
+    RequestPacer(minInterval: const Duration(seconds: 1));
+
 /// A small most-recently-used cache of results, keyed by query string.
 ///
 /// Nominatim's policy is unusually direct about this — "Results must be cached

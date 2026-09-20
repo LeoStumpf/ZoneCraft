@@ -17,7 +17,7 @@
 import 'dart:convert';
 
 import 'package:drift/drift.dart'
-    show OrderingTerm, Table, TableInfo, Variable, driftRuntimeOptions;
+    show OrderingTerm, Table, TableInfo, Value, Variable, driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
@@ -630,6 +630,63 @@ void main() {
     // Everything unidentified has nothing to match on and is kept, as always:
     // the import's third POI plus the two hand-placed ones, twice over.
     expect(points.where((p) => p.osmId == null), hasLength(6));
+  });
+
+  test('a corrected POI cannot launder itself into "what OSM says"',
+      () async {
+    // The anti-laundering property, and the reason the fork travels at all:
+    // the point keeps its OSM id, so if the correction arrived silently on
+    // somebody else's device, re-import dedup would keep one person's guess
+    // over whatever OSM now holds — with nothing anywhere saying so.
+    final ids = await seedEverything();
+    final layerId = _id(ids, 'poi');
+    final setIds = (await repo.watchAllPoiSets().first)
+        .where((s) => s.layerId == layerId && !s.isManual)
+        .map((s) => s.id)
+        .toSet();
+    final point = (await repo.watchAllPoiPoints().first)
+        .firstWhere((p) => setIds.contains(p.poiSetId) && p.osmId != null);
+    await repo.movePoiPoint(
+        id: point.id, lat: point.lat + 0.001, lng: point.lng + 0.001);
+    await repo.updatePoiPoint(point.id, name: const Value('On the ground'));
+
+    final data = await repo.exportData(onlyLayerId: layerId);
+    final o =
+        data.layers.single.objects.firstWhere((o) => o.manual != true);
+    expect(o.pointOrigLat, isNotNull,
+        reason: 'the set holds a corrected point, so the arrays are written');
+    expect(o.pointOrigLat!.where((v) => v != null), hasLength(1));
+    expect(o.pointOrigNames!.where((v) => v != null), hasLength(1));
+
+    // And it survives the trip: an imported-then-corrected POI arrives still
+    // flagged, with what OSM said intact.
+    final fresh = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(fresh.close);
+    final freshRepo = Repository(fresh);
+    await freshRepo.importData(
+        importFromGeoJson(exportToGeoJson(data))!, simplify: false);
+    final restored = (await freshRepo.watchAllPoiPoints().first)
+        .where((p) => p.editedAt != null)
+        .toList();
+    expect(restored, hasLength(1));
+    expect(restored.single.name, 'On the ground');
+    expect(restored.single.origName, point.name);
+    expect(restored.single.origLat, closeTo(point.lat, 1e-9));
+  });
+
+  test('an untouched POI import writes nothing new, so v4 files are v5 files',
+      () async {
+    // The whole reason the three arrays are conditional: a map where nobody
+    // corrected anything must export byte-for-byte what it did before, or
+    // every existing file stops being a fixed point.
+    final ids = await seedEverything();
+    final data = await repo.exportData(onlyLayerId: _id(ids, 'poi'));
+    for (final o in data.layers.single.objects) {
+      expect(o.pointOrigLat, isNull);
+      expect(o.pointOrigLng, isNull);
+      expect(o.pointOrigNames, isNull);
+    }
+    expect(exportToGeoJson(data), isNot(contains('pointOrigLat')));
   });
 
   test('a folder round-trips with its members and its own settings', () async {

@@ -619,6 +619,34 @@ class PoiPoints extends Table {
   /// for the painter and the hit test.
   IntColumn get modeMask => integer().withDefault(const Constant(0))();
 
+  /// When this point was first corrected by hand (v31). **Null = untouched**:
+  /// name and position are exactly what the import returned.
+  ///
+  /// Correcting an imported POI is allowed — you are standing next to the
+  /// bench and it is plainly twenty metres away — but it forks the row from
+  /// upstream while it keeps its [osmId], so a later import over the same
+  /// ground skips it as "already present" and your edit silently wins over
+  /// whatever OSM now says. This column is what lets the editor and the
+  /// GeoJSON export say so out loud, exactly as [BorderAreas.editedAt] does
+  /// for a reshaped boundary.
+  ///
+  /// Unlike a boundary, the original **is** kept ([origLat]/[origLng]/
+  /// [origName]): a POI is three scalars, not a 119 238-point ring, so storing
+  /// what OSM said costs nothing and buys both a Revert and a report that can
+  /// state what changed. Always null on a hand-placed point, which has no
+  /// upstream to fork from.
+  DateTimeColumn get editedAt => dateTime().nullable()();
+
+  /// What the import returned, captured **once**, together, at the moment
+  /// [editedAt] is first stamped — so "edited" can never disagree with "we
+  /// know what it used to be". Null whenever [editedAt] is null.
+  RealColumn get origLat => real().nullable()();
+  RealColumn get origLng => real().nullable()();
+
+  /// The imported name. Null is a real value here (OSM often has no `name`),
+  /// which is why [editedAt] rather than this is the discriminator.
+  TextColumn get origName => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -890,6 +918,72 @@ class UiHints extends Table {
   Set<Column> get primaryKey => {key};
 }
 
+/// Corrections the user wants the OpenStreetMap community to know about (v31)
+/// — the app's **outbox**, and the only table whose rows are meant to leave
+/// the device.
+///
+/// A row is written when a report is composed, and carries [sentAt] once it
+/// has been delivered as an OSM note. Unsent rows are the point: a report can
+/// be kept and exported as a file for someone to submit under their own
+/// account with their own tools, which is the route for a mapper who would
+/// rather not file anonymous notes.
+///
+/// **Nothing here is ever sent on its own.** No timer, no flush when the
+/// network comes back, no send-at-launch. OSM's own guidance is that notes are
+/// human-to-human communication and that apps must not create them
+/// automatically, so every delivery is one deliberate press. The unsent rows
+/// are a to-do list, not a queue.
+///
+/// The shape deliberately mirrors a pending import ([PoiSets.fetchedAt] /
+/// [PoiSets.lastError]): null-timestamp-means-outstanding, with the last
+/// failure kept beside it so the row can present itself as a retry.
+class OsmReports extends Table {
+  TextColumn get id => text()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  /// Where the note is pinned — not always where the subject currently is.
+  /// A "this is in the wrong place" report is anchored at the *corrected*
+  /// position, because that is where a mapper checking it should look.
+  RealColumn get lat => real()();
+  RealColumn get lng => real()();
+
+  /// An `OsmReportKind` name. Stored as text rather than an index so a future
+  /// kind cannot renumber the existing rows.
+  TextColumn get kind => text()();
+
+  /// The note body, exactly as it will be sent. Composed by the app and then
+  /// **edited by a human** — that review is what keeps this from being an
+  /// automated note.
+  ///
+  /// Named `body`, not `text`: a column called `text` shadows drift's own
+  /// `text()` column builder inside the table class, and the generator fails
+  /// on it with a cast error that names neither.
+  TextColumn get body => text()();
+
+  /// The OSM element the report is about, when there is one. Same two-part
+  /// identity as [PoiPoints.osmType]/[PoiPoints.osmId], and read through
+  /// `osmKey`, which treats id 0 as no identity at all.
+  TextColumn get osmType => text().nullable()();
+  IntColumn get osmId => integer().nullable()();
+
+  /// The `PoiPoints` row this came from, for the editor's "you reported this"
+  /// line. Deliberately **not** a foreign key: "it isn't there any more"
+  /// usually ends with the point being deleted locally, and the report has to
+  /// outlive it.
+  TextColumn get poiPointId => text().nullable()();
+
+  /// When the note was accepted by OSM, and the note number it came back with.
+  /// Null = still in the outbox.
+  DateTimeColumn get sentAt => dateTime().nullable()();
+  IntColumn get noteId => integer().nullable()();
+
+  /// Why the last attempt failed, kept so the row can offer a retry.
+  TextColumn get lastError => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 @DriftDatabase(
   tables: [
     Folders,
@@ -912,6 +1006,7 @@ class UiHints extends Table {
     BorderAreas,
     TileCache,
     OverpassCache,
+    OsmReports,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -943,7 +1038,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 30;
+  int get schemaVersion => 31;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1464,6 +1559,19 @@ class AppDatabase extends _$AppDatabase {
               // with it — and foreign keys are off during a migration anyway.
               await customStatement('DELETE FROM layers WHERE id = ?', [id]);
             }
+          }
+          if (from < 31) {
+            // An imported POI may now be corrected by hand, and the correction
+            // may be offered back to OSM as a note.
+            //
+            // All four columns are null on every existing row, which reads as
+            // "untouched — this is exactly what the import returned", and that
+            // is true: until this version there was no way to change one.
+            await m.addColumn(poiPoints, poiPoints.editedAt);
+            await m.addColumn(poiPoints, poiPoints.origLat);
+            await m.addColumn(poiPoints, poiPoints.origLng);
+            await m.addColumn(poiPoints, poiPoints.origName);
+            await m.createTable(osmReports);
           }
         },
         beforeOpen: (details) async {

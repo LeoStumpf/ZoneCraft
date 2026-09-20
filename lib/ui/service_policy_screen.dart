@@ -20,6 +20,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 
 import '../app_info.dart';
+import '../data/osm_notes.dart';
 import '../data/overpass_client.dart' show overpassEndpoints;
 import '../data/place_search.dart' show defaultNominatimHost;
 import '../data/tile_source.dart';
@@ -136,8 +137,33 @@ class _ServicePolicyScreenState extends State<ServicePolicyScreen> {
                 'seeing a problem can tell which app and which release caused '
                 'it — and can find someone to tell.',
           ),
+          _Rule(
+            icon: Icons.volunteer_activism_outlined,
+            title: 'One thing the app can send, and only on a press',
+            body: 'If you correct an imported point, the app offers to pass '
+                'the correction on as an OpenStreetMap note. You write the '
+                'text, you press Send, and that is the only circumstance in '
+                'which anything you typed leaves this device. Nothing is ever '
+                'sent in a batch, on a timer, or when a connection comes back '
+                '— notes are meant to be one person telling another, and the '
+                'project asks apps not to generate them automatically.',
+          ),
 
           _Heading('Who is asked for what'),
+          _Who(
+            icon: Icons.volunteer_activism_outlined,
+            what: 'Corrections you send',
+            who: osmApiHost,
+            note: osmApiIsLive
+                ? 'The OpenStreetMap database itself. A note is public and '
+                    'permanent, and an anonymous one is not linked to you — '
+                    'which also means nobody can write back, so the outbox '
+                    'keeps a link to each note for you to follow.'
+                : 'This build is pointed at a test server rather than at '
+                    'OpenStreetMap, so nothing sent from it reaches real '
+                    'mappers.',
+            canOpen: _canOpenLinks,
+          ),
           _Who(
             icon: Icons.map_outlined,
             what: 'The base map',

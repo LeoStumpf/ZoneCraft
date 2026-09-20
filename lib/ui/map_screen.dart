@@ -45,6 +45,7 @@ import '../data/overpass_client.dart'
         kOverpassPreferenceMaxElapsed,
         overpassEndpointOverride;
 import '../data/layer_types.dart';
+import '../data/osm_report.dart';
 import '../data/platform_files.dart';
 import '../data/repository.dart' show Repository;
 import '../data/shared_point.dart';
@@ -77,6 +78,7 @@ import 'layer_sheet.dart';
 import 'map_controls.dart';
 import 'layers_panel.dart';
 import 'object_summary.dart';
+import 'osm_report_sheet.dart';
 import 'pending_import_sheet.dart';
 import 'draw_stroke.dart';
 import 'two_finger_gestures.dart';
@@ -3385,14 +3387,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// this coordinate", writing [latlng] to the armed point and disarming.
   /// Returns whether the tap was consumed.
   Future<bool> _consumeArmedPlacement(LatLng latlng) async {
-    // Placement mode: move the selected hand-placed POI. Armed only for a
-    // manual category; the repository refuses an imported POI either way.
+    // Placement mode: move the selected POI. An imported one is allowed now
+    // and records the fork; see `Repository.movePoiPoint`.
     if (ref.read(poiPointPlacementProvider)) {
       final selId = ref.read(selectedPoiPointProvider);
       if (selId != null) {
         await ref
             .read(repositoryProvider)
-            .moveManualPoiPoint(
+            .movePoiPoint(
               id: selId,
               lat: latlng.latitude,
               lng: latlng.longitude,
@@ -3503,6 +3505,28 @@ class _MapScreenState extends ConsumerState<MapScreen>
   ///
   /// It opens one menu listing (a) the active layer's objects under the finger,
   /// ranked most-likely first, and (b) the contextual "add a point exactly
+  /// Opens the report form for bare ground — a path that is not there, a
+  /// building gone, a name spelled wrong.
+  ///
+  /// The editors cover reporting a POI you can *see*; this covers everything
+  /// else, which is most of the map. It carries no element identity, so the
+  /// sheet offers only "something else" and the whole sentence is the user's.
+  Future<void> _reportPlace(LatLng latlng) async {
+    final result = await showOsmReportSheet(
+      context,
+      OsmReportSubject.place(latlng.latitude, latlng.longitude),
+    );
+    if (!mounted) return;
+    switch (result.outcome) {
+      case OsmReportOutcomeKind.cancelled:
+        return;
+      case OsmReportOutcomeKind.saved:
+        _hint('Saved to your OpenStreetMap outbox');
+      case OsmReportOutcomeKind.sent:
+        _hint('Sent to OpenStreetMap — thank you');
+    }
+  }
+
   /// here" actions the long-press used to perform directly. Everything goes
   /// through the menu on purpose: an accidental long-press must never silently
   /// pop an editor open.
@@ -3655,6 +3679,17 @@ class _MapScreenState extends ConsumerState<MapScreen>
         'Paste coordinates…',
       ),
     );
+    // And what is true of the *ground* — for the things a POI layer cannot
+    // hold: a path that is not there, a name spelled wrong, a building gone.
+    // The editors cover reporting a POI you can see; this covers the rest,
+    // which is most of the map.
+    items.add(
+      _pointMenuItem(
+        'reportHere',
+        Icons.volunteer_activism_outlined,
+        'Tell OpenStreetMap about this place',
+      ),
+    );
 
     final selected = await _showPointMenu(
       activeLayer?.name ?? 'This place',
@@ -3670,6 +3705,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
       return;
     }
     switch (selected) {
+      case 'reportHere':
+        await _reportPlace(latlng);
       case 'deselect':
         _clearSelection();
         setState(() {});
@@ -4076,6 +4113,21 @@ class _MapScreenState extends ConsumerState<MapScreen>
       case _:
         return null;
     }
+  }
+
+  /// The catalogue entry a POI set's category corresponds to, or null.
+  ///
+  /// For an import this is simply the category it was fetched with. For a
+  /// hand-made category it is non-null only when the user picked one of the
+  /// dialog's presets, which copy a catalogue key — a category built from a
+  /// bare icon has no OSM tag behind it, and a report is better off saying
+  /// nothing than suggesting one nobody chose.
+  static PoiCategory? _poiCategoryTag(List<PoiSet> sets, String setId) {
+    final set = sets.where((s) => s.id == setId).firstOrNull;
+    if (set == null) return null;
+    return poiCategories
+        .where((c) => c.key == set.categoryKey)
+        .firstOrNull;
   }
 
   /// The human name of the category a POI's set imported ("Cafés"), for the
@@ -4714,9 +4766,23 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                   poiSets,
                                   selectedPoiPoint.poiSetId,
                                 ),
-                          // Only a hand-placed POI can be moved; an
-                          // imported one's position is the fetched fact.
+                          // Both kinds can be moved; this says which one it
+                          // is, and therefore what the move means.
                           movable: set?.isManual ?? false,
+                          editedAt: selectedPoiPoint.editedAt,
+                          origLat: selectedPoiPoint.origLat,
+                          origLng: selectedPoiPoint.origLng,
+                          origName: selectedPoiPoint.origName,
+                          osmType: selectedPoiPoint.osmType,
+                          osmId: selectedPoiPoint.osmId,
+                          // The OSM tag behind the category, when there is
+                          // one — it is what makes a report actionable, and a
+                          // hand-made category built from a bare icon has
+                          // none to offer.
+                          tagKey: _poiCategoryTag(poiSets,
+                              selectedPoiPoint.poiSetId)?.tagKey,
+                          tagValue: _poiCategoryTag(poiSets,
+                              selectedPoiPoint.poiSetId)?.tagValue,
                         );
                       }()
                     : selectedPoiSet != null

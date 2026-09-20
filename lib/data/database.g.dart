@@ -9079,6 +9079,50 @@ class $PoiPointsTable extends PoiPoints
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _editedAtMeta = const VerificationMeta(
+    'editedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> editedAt = GeneratedColumn<DateTime>(
+    'edited_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _origLatMeta = const VerificationMeta(
+    'origLat',
+  );
+  @override
+  late final GeneratedColumn<double> origLat = GeneratedColumn<double>(
+    'orig_lat',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _origLngMeta = const VerificationMeta(
+    'origLng',
+  );
+  @override
+  late final GeneratedColumn<double> origLng = GeneratedColumn<double>(
+    'orig_lng',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _origNameMeta = const VerificationMeta(
+    'origName',
+  );
+  @override
+  late final GeneratedColumn<String> origName = GeneratedColumn<String>(
+    'orig_name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -9091,6 +9135,10 @@ class $PoiPointsTable extends PoiPoints
     osmType,
     osmId,
     modeMask,
+    editedAt,
+    origLat,
+    origLng,
+    origName,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -9171,6 +9219,30 @@ class $PoiPointsTable extends PoiPoints
         modeMask.isAcceptableOrUnknown(data['mode_mask']!, _modeMaskMeta),
       );
     }
+    if (data.containsKey('edited_at')) {
+      context.handle(
+        _editedAtMeta,
+        editedAt.isAcceptableOrUnknown(data['edited_at']!, _editedAtMeta),
+      );
+    }
+    if (data.containsKey('orig_lat')) {
+      context.handle(
+        _origLatMeta,
+        origLat.isAcceptableOrUnknown(data['orig_lat']!, _origLatMeta),
+      );
+    }
+    if (data.containsKey('orig_lng')) {
+      context.handle(
+        _origLngMeta,
+        origLng.isAcceptableOrUnknown(data['orig_lng']!, _origLngMeta),
+      );
+    }
+    if (data.containsKey('orig_name')) {
+      context.handle(
+        _origNameMeta,
+        origName.isAcceptableOrUnknown(data['orig_name']!, _origNameMeta),
+      );
+    }
     return context;
   }
 
@@ -9220,6 +9292,22 @@ class $PoiPointsTable extends PoiPoints
         DriftSqlType.int,
         data['${effectivePrefix}mode_mask'],
       )!,
+      editedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}edited_at'],
+      ),
+      origLat: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}orig_lat'],
+      ),
+      origLng: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}orig_lng'],
+      ),
+      origName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}orig_name'],
+      ),
     );
   }
 
@@ -9255,6 +9343,34 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
   /// point. A station is drawn iff `poiPointVisible` says so — one predicate
   /// for the painter and the hit test.
   final int modeMask;
+
+  /// When this point was first corrected by hand (v31). **Null = untouched**:
+  /// name and position are exactly what the import returned.
+  ///
+  /// Correcting an imported POI is allowed — you are standing next to the
+  /// bench and it is plainly twenty metres away — but it forks the row from
+  /// upstream while it keeps its [osmId], so a later import over the same
+  /// ground skips it as "already present" and your edit silently wins over
+  /// whatever OSM now says. This column is what lets the editor and the
+  /// GeoJSON export say so out loud, exactly as [BorderAreas.editedAt] does
+  /// for a reshaped boundary.
+  ///
+  /// Unlike a boundary, the original **is** kept ([origLat]/[origLng]/
+  /// [origName]): a POI is three scalars, not a 119 238-point ring, so storing
+  /// what OSM said costs nothing and buys both a Revert and a report that can
+  /// state what changed. Always null on a hand-placed point, which has no
+  /// upstream to fork from.
+  final DateTime? editedAt;
+
+  /// What the import returned, captured **once**, together, at the moment
+  /// [editedAt] is first stamped — so "edited" can never disagree with "we
+  /// know what it used to be". Null whenever [editedAt] is null.
+  final double? origLat;
+  final double? origLng;
+
+  /// The imported name. Null is a real value here (OSM often has no `name`),
+  /// which is why [editedAt] rather than this is the discriminator.
+  final String? origName;
   const PoiPoint({
     required this.id,
     required this.poiSetId,
@@ -9266,6 +9382,10 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
     this.osmType,
     this.osmId,
     required this.modeMask,
+    this.editedAt,
+    this.origLat,
+    this.origLng,
+    this.origName,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -9286,6 +9406,18 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
       map['osm_id'] = Variable<int>(osmId);
     }
     map['mode_mask'] = Variable<int>(modeMask);
+    if (!nullToAbsent || editedAt != null) {
+      map['edited_at'] = Variable<DateTime>(editedAt);
+    }
+    if (!nullToAbsent || origLat != null) {
+      map['orig_lat'] = Variable<double>(origLat);
+    }
+    if (!nullToAbsent || origLng != null) {
+      map['orig_lng'] = Variable<double>(origLng);
+    }
+    if (!nullToAbsent || origName != null) {
+      map['orig_name'] = Variable<String>(origName);
+    }
     return map;
   }
 
@@ -9305,6 +9437,18 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
           ? const Value.absent()
           : Value(osmId),
       modeMask: Value(modeMask),
+      editedAt: editedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(editedAt),
+      origLat: origLat == null && nullToAbsent
+          ? const Value.absent()
+          : Value(origLat),
+      origLng: origLng == null && nullToAbsent
+          ? const Value.absent()
+          : Value(origLng),
+      origName: origName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(origName),
     );
   }
 
@@ -9324,6 +9468,10 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
       osmType: serializer.fromJson<String?>(json['osmType']),
       osmId: serializer.fromJson<int?>(json['osmId']),
       modeMask: serializer.fromJson<int>(json['modeMask']),
+      editedAt: serializer.fromJson<DateTime?>(json['editedAt']),
+      origLat: serializer.fromJson<double?>(json['origLat']),
+      origLng: serializer.fromJson<double?>(json['origLng']),
+      origName: serializer.fromJson<String?>(json['origName']),
     );
   }
   @override
@@ -9340,6 +9488,10 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
       'osmType': serializer.toJson<String?>(osmType),
       'osmId': serializer.toJson<int?>(osmId),
       'modeMask': serializer.toJson<int>(modeMask),
+      'editedAt': serializer.toJson<DateTime?>(editedAt),
+      'origLat': serializer.toJson<double?>(origLat),
+      'origLng': serializer.toJson<double?>(origLng),
+      'origName': serializer.toJson<String?>(origName),
     };
   }
 
@@ -9354,6 +9506,10 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
     Value<String?> osmType = const Value.absent(),
     Value<int?> osmId = const Value.absent(),
     int? modeMask,
+    Value<DateTime?> editedAt = const Value.absent(),
+    Value<double?> origLat = const Value.absent(),
+    Value<double?> origLng = const Value.absent(),
+    Value<String?> origName = const Value.absent(),
   }) => PoiPoint(
     id: id ?? this.id,
     poiSetId: poiSetId ?? this.poiSetId,
@@ -9365,6 +9521,10 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
     osmType: osmType.present ? osmType.value : this.osmType,
     osmId: osmId.present ? osmId.value : this.osmId,
     modeMask: modeMask ?? this.modeMask,
+    editedAt: editedAt.present ? editedAt.value : this.editedAt,
+    origLat: origLat.present ? origLat.value : this.origLat,
+    origLng: origLng.present ? origLng.value : this.origLng,
+    origName: origName.present ? origName.value : this.origName,
   );
   PoiPoint copyWithCompanion(PoiPointsCompanion data) {
     return PoiPoint(
@@ -9378,6 +9538,10 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
       osmType: data.osmType.present ? data.osmType.value : this.osmType,
       osmId: data.osmId.present ? data.osmId.value : this.osmId,
       modeMask: data.modeMask.present ? data.modeMask.value : this.modeMask,
+      editedAt: data.editedAt.present ? data.editedAt.value : this.editedAt,
+      origLat: data.origLat.present ? data.origLat.value : this.origLat,
+      origLng: data.origLng.present ? data.origLng.value : this.origLng,
+      origName: data.origName.present ? data.origName.value : this.origName,
     );
   }
 
@@ -9393,7 +9557,11 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
           ..write('createdAt: $createdAt, ')
           ..write('osmType: $osmType, ')
           ..write('osmId: $osmId, ')
-          ..write('modeMask: $modeMask')
+          ..write('modeMask: $modeMask, ')
+          ..write('editedAt: $editedAt, ')
+          ..write('origLat: $origLat, ')
+          ..write('origLng: $origLng, ')
+          ..write('origName: $origName')
           ..write(')'))
         .toString();
   }
@@ -9410,6 +9578,10 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
     osmType,
     osmId,
     modeMask,
+    editedAt,
+    origLat,
+    origLng,
+    origName,
   );
   @override
   bool operator ==(Object other) =>
@@ -9424,7 +9596,11 @@ class PoiPoint extends DataClass implements Insertable<PoiPoint> {
           other.createdAt == this.createdAt &&
           other.osmType == this.osmType &&
           other.osmId == this.osmId &&
-          other.modeMask == this.modeMask);
+          other.modeMask == this.modeMask &&
+          other.editedAt == this.editedAt &&
+          other.origLat == this.origLat &&
+          other.origLng == this.origLng &&
+          other.origName == this.origName);
 }
 
 class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
@@ -9438,6 +9614,10 @@ class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
   final Value<String?> osmType;
   final Value<int?> osmId;
   final Value<int> modeMask;
+  final Value<DateTime?> editedAt;
+  final Value<double?> origLat;
+  final Value<double?> origLng;
+  final Value<String?> origName;
   final Value<int> rowid;
   const PoiPointsCompanion({
     this.id = const Value.absent(),
@@ -9450,6 +9630,10 @@ class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
     this.osmType = const Value.absent(),
     this.osmId = const Value.absent(),
     this.modeMask = const Value.absent(),
+    this.editedAt = const Value.absent(),
+    this.origLat = const Value.absent(),
+    this.origLng = const Value.absent(),
+    this.origName = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   PoiPointsCompanion.insert({
@@ -9463,6 +9647,10 @@ class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
     this.osmType = const Value.absent(),
     this.osmId = const Value.absent(),
     this.modeMask = const Value.absent(),
+    this.editedAt = const Value.absent(),
+    this.origLat = const Value.absent(),
+    this.origLng = const Value.absent(),
+    this.origName = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        poiSetId = Value(poiSetId),
@@ -9480,6 +9668,10 @@ class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
     Expression<String>? osmType,
     Expression<int>? osmId,
     Expression<int>? modeMask,
+    Expression<DateTime>? editedAt,
+    Expression<double>? origLat,
+    Expression<double>? origLng,
+    Expression<String>? origName,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -9493,6 +9685,10 @@ class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
       if (osmType != null) 'osm_type': osmType,
       if (osmId != null) 'osm_id': osmId,
       if (modeMask != null) 'mode_mask': modeMask,
+      if (editedAt != null) 'edited_at': editedAt,
+      if (origLat != null) 'orig_lat': origLat,
+      if (origLng != null) 'orig_lng': origLng,
+      if (origName != null) 'orig_name': origName,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -9508,6 +9704,10 @@ class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
     Value<String?>? osmType,
     Value<int?>? osmId,
     Value<int>? modeMask,
+    Value<DateTime?>? editedAt,
+    Value<double?>? origLat,
+    Value<double?>? origLng,
+    Value<String?>? origName,
     Value<int>? rowid,
   }) {
     return PoiPointsCompanion(
@@ -9521,6 +9721,10 @@ class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
       osmType: osmType ?? this.osmType,
       osmId: osmId ?? this.osmId,
       modeMask: modeMask ?? this.modeMask,
+      editedAt: editedAt ?? this.editedAt,
+      origLat: origLat ?? this.origLat,
+      origLng: origLng ?? this.origLng,
+      origName: origName ?? this.origName,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -9558,6 +9762,18 @@ class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
     if (modeMask.present) {
       map['mode_mask'] = Variable<int>(modeMask.value);
     }
+    if (editedAt.present) {
+      map['edited_at'] = Variable<DateTime>(editedAt.value);
+    }
+    if (origLat.present) {
+      map['orig_lat'] = Variable<double>(origLat.value);
+    }
+    if (origLng.present) {
+      map['orig_lng'] = Variable<double>(origLng.value);
+    }
+    if (origName.present) {
+      map['orig_name'] = Variable<String>(origName.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -9577,6 +9793,10 @@ class PoiPointsCompanion extends UpdateCompanion<PoiPoint> {
           ..write('osmType: $osmType, ')
           ..write('osmId: $osmId, ')
           ..write('modeMask: $modeMask, ')
+          ..write('editedAt: $editedAt, ')
+          ..write('origLat: $origLat, ')
+          ..write('origLng: $origLng, ')
+          ..write('origName: $origName, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -12196,6 +12416,734 @@ class OverpassCacheCompanion extends UpdateCompanion<OverpassCacheData> {
   }
 }
 
+class $OsmReportsTable extends OsmReports
+    with TableInfo<$OsmReportsTable, OsmReport> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $OsmReportsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _latMeta = const VerificationMeta('lat');
+  @override
+  late final GeneratedColumn<double> lat = GeneratedColumn<double>(
+    'lat',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _lngMeta = const VerificationMeta('lng');
+  @override
+  late final GeneratedColumn<double> lng = GeneratedColumn<double>(
+    'lng',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _bodyMeta = const VerificationMeta('body');
+  @override
+  late final GeneratedColumn<String> body = GeneratedColumn<String>(
+    'body',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _osmTypeMeta = const VerificationMeta(
+    'osmType',
+  );
+  @override
+  late final GeneratedColumn<String> osmType = GeneratedColumn<String>(
+    'osm_type',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _osmIdMeta = const VerificationMeta('osmId');
+  @override
+  late final GeneratedColumn<int> osmId = GeneratedColumn<int>(
+    'osm_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _poiPointIdMeta = const VerificationMeta(
+    'poiPointId',
+  );
+  @override
+  late final GeneratedColumn<String> poiPointId = GeneratedColumn<String>(
+    'poi_point_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sentAtMeta = const VerificationMeta('sentAt');
+  @override
+  late final GeneratedColumn<DateTime> sentAt = GeneratedColumn<DateTime>(
+    'sent_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _noteIdMeta = const VerificationMeta('noteId');
+  @override
+  late final GeneratedColumn<int> noteId = GeneratedColumn<int>(
+    'note_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastErrorMeta = const VerificationMeta(
+    'lastError',
+  );
+  @override
+  late final GeneratedColumn<String> lastError = GeneratedColumn<String>(
+    'last_error',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    createdAt,
+    lat,
+    lng,
+    kind,
+    body,
+    osmType,
+    osmId,
+    poiPointId,
+    sentAt,
+    noteId,
+    lastError,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'osm_reports';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<OsmReport> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('lat')) {
+      context.handle(
+        _latMeta,
+        lat.isAcceptableOrUnknown(data['lat']!, _latMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_latMeta);
+    }
+    if (data.containsKey('lng')) {
+      context.handle(
+        _lngMeta,
+        lng.isAcceptableOrUnknown(data['lng']!, _lngMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_lngMeta);
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('body')) {
+      context.handle(
+        _bodyMeta,
+        body.isAcceptableOrUnknown(data['body']!, _bodyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bodyMeta);
+    }
+    if (data.containsKey('osm_type')) {
+      context.handle(
+        _osmTypeMeta,
+        osmType.isAcceptableOrUnknown(data['osm_type']!, _osmTypeMeta),
+      );
+    }
+    if (data.containsKey('osm_id')) {
+      context.handle(
+        _osmIdMeta,
+        osmId.isAcceptableOrUnknown(data['osm_id']!, _osmIdMeta),
+      );
+    }
+    if (data.containsKey('poi_point_id')) {
+      context.handle(
+        _poiPointIdMeta,
+        poiPointId.isAcceptableOrUnknown(
+          data['poi_point_id']!,
+          _poiPointIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sent_at')) {
+      context.handle(
+        _sentAtMeta,
+        sentAt.isAcceptableOrUnknown(data['sent_at']!, _sentAtMeta),
+      );
+    }
+    if (data.containsKey('note_id')) {
+      context.handle(
+        _noteIdMeta,
+        noteId.isAcceptableOrUnknown(data['note_id']!, _noteIdMeta),
+      );
+    }
+    if (data.containsKey('last_error')) {
+      context.handle(
+        _lastErrorMeta,
+        lastError.isAcceptableOrUnknown(data['last_error']!, _lastErrorMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  OsmReport map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return OsmReport(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lat: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}lat'],
+      )!,
+      lng: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}lng'],
+      )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      body: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}body'],
+      )!,
+      osmType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}osm_type'],
+      ),
+      osmId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}osm_id'],
+      ),
+      poiPointId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}poi_point_id'],
+      ),
+      sentAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}sent_at'],
+      ),
+      noteId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}note_id'],
+      ),
+      lastError: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_error'],
+      ),
+    );
+  }
+
+  @override
+  $OsmReportsTable createAlias(String alias) {
+    return $OsmReportsTable(attachedDatabase, alias);
+  }
+}
+
+class OsmReport extends DataClass implements Insertable<OsmReport> {
+  final String id;
+  final DateTime createdAt;
+
+  /// Where the note is pinned — not always where the subject currently is.
+  /// A "this is in the wrong place" report is anchored at the *corrected*
+  /// position, because that is where a mapper checking it should look.
+  final double lat;
+  final double lng;
+
+  /// An `OsmReportKind` name. Stored as text rather than an index so a future
+  /// kind cannot renumber the existing rows.
+  final String kind;
+
+  /// The note body, exactly as it will be sent. Composed by the app and then
+  /// **edited by a human** — that review is what keeps this from being an
+  /// automated note.
+  ///
+  /// Named `body`, not `text`: a column called `text` shadows drift's own
+  /// `text()` column builder inside the table class, and the generator fails
+  /// on it with a cast error that names neither.
+  final String body;
+
+  /// The OSM element the report is about, when there is one. Same two-part
+  /// identity as [PoiPoints.osmType]/[PoiPoints.osmId], and read through
+  /// `osmKey`, which treats id 0 as no identity at all.
+  final String? osmType;
+  final int? osmId;
+
+  /// The `PoiPoints` row this came from, for the editor's "you reported this"
+  /// line. Deliberately **not** a foreign key: "it isn't there any more"
+  /// usually ends with the point being deleted locally, and the report has to
+  /// outlive it.
+  final String? poiPointId;
+
+  /// When the note was accepted by OSM, and the note number it came back with.
+  /// Null = still in the outbox.
+  final DateTime? sentAt;
+  final int? noteId;
+
+  /// Why the last attempt failed, kept so the row can offer a retry.
+  final String? lastError;
+  const OsmReport({
+    required this.id,
+    required this.createdAt,
+    required this.lat,
+    required this.lng,
+    required this.kind,
+    required this.body,
+    this.osmType,
+    this.osmId,
+    this.poiPointId,
+    this.sentAt,
+    this.noteId,
+    this.lastError,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['lat'] = Variable<double>(lat);
+    map['lng'] = Variable<double>(lng);
+    map['kind'] = Variable<String>(kind);
+    map['body'] = Variable<String>(body);
+    if (!nullToAbsent || osmType != null) {
+      map['osm_type'] = Variable<String>(osmType);
+    }
+    if (!nullToAbsent || osmId != null) {
+      map['osm_id'] = Variable<int>(osmId);
+    }
+    if (!nullToAbsent || poiPointId != null) {
+      map['poi_point_id'] = Variable<String>(poiPointId);
+    }
+    if (!nullToAbsent || sentAt != null) {
+      map['sent_at'] = Variable<DateTime>(sentAt);
+    }
+    if (!nullToAbsent || noteId != null) {
+      map['note_id'] = Variable<int>(noteId);
+    }
+    if (!nullToAbsent || lastError != null) {
+      map['last_error'] = Variable<String>(lastError);
+    }
+    return map;
+  }
+
+  OsmReportsCompanion toCompanion(bool nullToAbsent) {
+    return OsmReportsCompanion(
+      id: Value(id),
+      createdAt: Value(createdAt),
+      lat: Value(lat),
+      lng: Value(lng),
+      kind: Value(kind),
+      body: Value(body),
+      osmType: osmType == null && nullToAbsent
+          ? const Value.absent()
+          : Value(osmType),
+      osmId: osmId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(osmId),
+      poiPointId: poiPointId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(poiPointId),
+      sentAt: sentAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sentAt),
+      noteId: noteId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(noteId),
+      lastError: lastError == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastError),
+    );
+  }
+
+  factory OsmReport.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return OsmReport(
+      id: serializer.fromJson<String>(json['id']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lat: serializer.fromJson<double>(json['lat']),
+      lng: serializer.fromJson<double>(json['lng']),
+      kind: serializer.fromJson<String>(json['kind']),
+      body: serializer.fromJson<String>(json['body']),
+      osmType: serializer.fromJson<String?>(json['osmType']),
+      osmId: serializer.fromJson<int?>(json['osmId']),
+      poiPointId: serializer.fromJson<String?>(json['poiPointId']),
+      sentAt: serializer.fromJson<DateTime?>(json['sentAt']),
+      noteId: serializer.fromJson<int?>(json['noteId']),
+      lastError: serializer.fromJson<String?>(json['lastError']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lat': serializer.toJson<double>(lat),
+      'lng': serializer.toJson<double>(lng),
+      'kind': serializer.toJson<String>(kind),
+      'body': serializer.toJson<String>(body),
+      'osmType': serializer.toJson<String?>(osmType),
+      'osmId': serializer.toJson<int?>(osmId),
+      'poiPointId': serializer.toJson<String?>(poiPointId),
+      'sentAt': serializer.toJson<DateTime?>(sentAt),
+      'noteId': serializer.toJson<int?>(noteId),
+      'lastError': serializer.toJson<String?>(lastError),
+    };
+  }
+
+  OsmReport copyWith({
+    String? id,
+    DateTime? createdAt,
+    double? lat,
+    double? lng,
+    String? kind,
+    String? body,
+    Value<String?> osmType = const Value.absent(),
+    Value<int?> osmId = const Value.absent(),
+    Value<String?> poiPointId = const Value.absent(),
+    Value<DateTime?> sentAt = const Value.absent(),
+    Value<int?> noteId = const Value.absent(),
+    Value<String?> lastError = const Value.absent(),
+  }) => OsmReport(
+    id: id ?? this.id,
+    createdAt: createdAt ?? this.createdAt,
+    lat: lat ?? this.lat,
+    lng: lng ?? this.lng,
+    kind: kind ?? this.kind,
+    body: body ?? this.body,
+    osmType: osmType.present ? osmType.value : this.osmType,
+    osmId: osmId.present ? osmId.value : this.osmId,
+    poiPointId: poiPointId.present ? poiPointId.value : this.poiPointId,
+    sentAt: sentAt.present ? sentAt.value : this.sentAt,
+    noteId: noteId.present ? noteId.value : this.noteId,
+    lastError: lastError.present ? lastError.value : this.lastError,
+  );
+  OsmReport copyWithCompanion(OsmReportsCompanion data) {
+    return OsmReport(
+      id: data.id.present ? data.id.value : this.id,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lat: data.lat.present ? data.lat.value : this.lat,
+      lng: data.lng.present ? data.lng.value : this.lng,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      body: data.body.present ? data.body.value : this.body,
+      osmType: data.osmType.present ? data.osmType.value : this.osmType,
+      osmId: data.osmId.present ? data.osmId.value : this.osmId,
+      poiPointId: data.poiPointId.present
+          ? data.poiPointId.value
+          : this.poiPointId,
+      sentAt: data.sentAt.present ? data.sentAt.value : this.sentAt,
+      noteId: data.noteId.present ? data.noteId.value : this.noteId,
+      lastError: data.lastError.present ? data.lastError.value : this.lastError,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('OsmReport(')
+          ..write('id: $id, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lat: $lat, ')
+          ..write('lng: $lng, ')
+          ..write('kind: $kind, ')
+          ..write('body: $body, ')
+          ..write('osmType: $osmType, ')
+          ..write('osmId: $osmId, ')
+          ..write('poiPointId: $poiPointId, ')
+          ..write('sentAt: $sentAt, ')
+          ..write('noteId: $noteId, ')
+          ..write('lastError: $lastError')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    createdAt,
+    lat,
+    lng,
+    kind,
+    body,
+    osmType,
+    osmId,
+    poiPointId,
+    sentAt,
+    noteId,
+    lastError,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is OsmReport &&
+          other.id == this.id &&
+          other.createdAt == this.createdAt &&
+          other.lat == this.lat &&
+          other.lng == this.lng &&
+          other.kind == this.kind &&
+          other.body == this.body &&
+          other.osmType == this.osmType &&
+          other.osmId == this.osmId &&
+          other.poiPointId == this.poiPointId &&
+          other.sentAt == this.sentAt &&
+          other.noteId == this.noteId &&
+          other.lastError == this.lastError);
+}
+
+class OsmReportsCompanion extends UpdateCompanion<OsmReport> {
+  final Value<String> id;
+  final Value<DateTime> createdAt;
+  final Value<double> lat;
+  final Value<double> lng;
+  final Value<String> kind;
+  final Value<String> body;
+  final Value<String?> osmType;
+  final Value<int?> osmId;
+  final Value<String?> poiPointId;
+  final Value<DateTime?> sentAt;
+  final Value<int?> noteId;
+  final Value<String?> lastError;
+  final Value<int> rowid;
+  const OsmReportsCompanion({
+    this.id = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lat = const Value.absent(),
+    this.lng = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.body = const Value.absent(),
+    this.osmType = const Value.absent(),
+    this.osmId = const Value.absent(),
+    this.poiPointId = const Value.absent(),
+    this.sentAt = const Value.absent(),
+    this.noteId = const Value.absent(),
+    this.lastError = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  OsmReportsCompanion.insert({
+    required String id,
+    this.createdAt = const Value.absent(),
+    required double lat,
+    required double lng,
+    required String kind,
+    required String body,
+    this.osmType = const Value.absent(),
+    this.osmId = const Value.absent(),
+    this.poiPointId = const Value.absent(),
+    this.sentAt = const Value.absent(),
+    this.noteId = const Value.absent(),
+    this.lastError = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       lat = Value(lat),
+       lng = Value(lng),
+       kind = Value(kind),
+       body = Value(body);
+  static Insertable<OsmReport> custom({
+    Expression<String>? id,
+    Expression<DateTime>? createdAt,
+    Expression<double>? lat,
+    Expression<double>? lng,
+    Expression<String>? kind,
+    Expression<String>? body,
+    Expression<String>? osmType,
+    Expression<int>? osmId,
+    Expression<String>? poiPointId,
+    Expression<DateTime>? sentAt,
+    Expression<int>? noteId,
+    Expression<String>? lastError,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lat != null) 'lat': lat,
+      if (lng != null) 'lng': lng,
+      if (kind != null) 'kind': kind,
+      if (body != null) 'body': body,
+      if (osmType != null) 'osm_type': osmType,
+      if (osmId != null) 'osm_id': osmId,
+      if (poiPointId != null) 'poi_point_id': poiPointId,
+      if (sentAt != null) 'sent_at': sentAt,
+      if (noteId != null) 'note_id': noteId,
+      if (lastError != null) 'last_error': lastError,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  OsmReportsCompanion copyWith({
+    Value<String>? id,
+    Value<DateTime>? createdAt,
+    Value<double>? lat,
+    Value<double>? lng,
+    Value<String>? kind,
+    Value<String>? body,
+    Value<String?>? osmType,
+    Value<int?>? osmId,
+    Value<String?>? poiPointId,
+    Value<DateTime?>? sentAt,
+    Value<int?>? noteId,
+    Value<String?>? lastError,
+    Value<int>? rowid,
+  }) {
+    return OsmReportsCompanion(
+      id: id ?? this.id,
+      createdAt: createdAt ?? this.createdAt,
+      lat: lat ?? this.lat,
+      lng: lng ?? this.lng,
+      kind: kind ?? this.kind,
+      body: body ?? this.body,
+      osmType: osmType ?? this.osmType,
+      osmId: osmId ?? this.osmId,
+      poiPointId: poiPointId ?? this.poiPointId,
+      sentAt: sentAt ?? this.sentAt,
+      noteId: noteId ?? this.noteId,
+      lastError: lastError ?? this.lastError,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lat.present) {
+      map['lat'] = Variable<double>(lat.value);
+    }
+    if (lng.present) {
+      map['lng'] = Variable<double>(lng.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (body.present) {
+      map['body'] = Variable<String>(body.value);
+    }
+    if (osmType.present) {
+      map['osm_type'] = Variable<String>(osmType.value);
+    }
+    if (osmId.present) {
+      map['osm_id'] = Variable<int>(osmId.value);
+    }
+    if (poiPointId.present) {
+      map['poi_point_id'] = Variable<String>(poiPointId.value);
+    }
+    if (sentAt.present) {
+      map['sent_at'] = Variable<DateTime>(sentAt.value);
+    }
+    if (noteId.present) {
+      map['note_id'] = Variable<int>(noteId.value);
+    }
+    if (lastError.present) {
+      map['last_error'] = Variable<String>(lastError.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('OsmReportsCompanion(')
+          ..write('id: $id, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lat: $lat, ')
+          ..write('lng: $lng, ')
+          ..write('kind: $kind, ')
+          ..write('body: $body, ')
+          ..write('osmType: $osmType, ')
+          ..write('osmId: $osmId, ')
+          ..write('poiPointId: $poiPointId, ')
+          ..write('sentAt: $sentAt, ')
+          ..write('noteId: $noteId, ')
+          ..write('lastError: $lastError, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -12220,6 +13168,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $BorderAreasTable borderAreas = $BorderAreasTable(this);
   late final $TileCacheTable tileCache = $TileCacheTable(this);
   late final $OverpassCacheTable overpassCache = $OverpassCacheTable(this);
+  late final $OsmReportsTable osmReports = $OsmReportsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -12245,6 +13194,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     borderAreas,
     tileCache,
     overpassCache,
+    osmReports,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -19449,6 +20399,10 @@ typedef $$PoiPointsTableCreateCompanionBuilder =
       Value<String?> osmType,
       Value<int?> osmId,
       Value<int> modeMask,
+      Value<DateTime?> editedAt,
+      Value<double?> origLat,
+      Value<double?> origLng,
+      Value<String?> origName,
       Value<int> rowid,
     });
 typedef $$PoiPointsTableUpdateCompanionBuilder =
@@ -19463,6 +20417,10 @@ typedef $$PoiPointsTableUpdateCompanionBuilder =
       Value<String?> osmType,
       Value<int?> osmId,
       Value<int> modeMask,
+      Value<DateTime?> editedAt,
+      Value<double?> origLat,
+      Value<double?> origLng,
+      Value<String?> origName,
       Value<int> rowid,
     });
 
@@ -19539,6 +20497,26 @@ class $$PoiPointsTableFilterComposer
 
   ColumnFilters<int> get modeMask => $composableBuilder(
     column: $table.modeMask,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get editedAt => $composableBuilder(
+    column: $table.editedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get origLat => $composableBuilder(
+    column: $table.origLat,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get origLng => $composableBuilder(
+    column: $table.origLng,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get origName => $composableBuilder(
+    column: $table.origName,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -19620,6 +20598,26 @@ class $$PoiPointsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get editedAt => $composableBuilder(
+    column: $table.editedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get origLat => $composableBuilder(
+    column: $table.origLat,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get origLng => $composableBuilder(
+    column: $table.origLng,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get origName => $composableBuilder(
+    column: $table.origName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$PoiSetsTableOrderingComposer get poiSetId {
     final $$PoiSetsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -19679,6 +20677,18 @@ class $$PoiPointsTableAnnotationComposer
 
   GeneratedColumn<int> get modeMask =>
       $composableBuilder(column: $table.modeMask, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get editedAt =>
+      $composableBuilder(column: $table.editedAt, builder: (column) => column);
+
+  GeneratedColumn<double> get origLat =>
+      $composableBuilder(column: $table.origLat, builder: (column) => column);
+
+  GeneratedColumn<double> get origLng =>
+      $composableBuilder(column: $table.origLng, builder: (column) => column);
+
+  GeneratedColumn<String> get origName =>
+      $composableBuilder(column: $table.origName, builder: (column) => column);
 
   $$PoiSetsTableAnnotationComposer get poiSetId {
     final $$PoiSetsTableAnnotationComposer composer = $composerBuilder(
@@ -19742,6 +20752,10 @@ class $$PoiPointsTableTableManager
                 Value<String?> osmType = const Value.absent(),
                 Value<int?> osmId = const Value.absent(),
                 Value<int> modeMask = const Value.absent(),
+                Value<DateTime?> editedAt = const Value.absent(),
+                Value<double?> origLat = const Value.absent(),
+                Value<double?> origLng = const Value.absent(),
+                Value<String?> origName = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PoiPointsCompanion(
                 id: id,
@@ -19754,6 +20768,10 @@ class $$PoiPointsTableTableManager
                 osmType: osmType,
                 osmId: osmId,
                 modeMask: modeMask,
+                editedAt: editedAt,
+                origLat: origLat,
+                origLng: origLng,
+                origName: origName,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -19768,6 +20786,10 @@ class $$PoiPointsTableTableManager
                 Value<String?> osmType = const Value.absent(),
                 Value<int?> osmId = const Value.absent(),
                 Value<int> modeMask = const Value.absent(),
+                Value<DateTime?> editedAt = const Value.absent(),
+                Value<double?> origLat = const Value.absent(),
+                Value<double?> origLng = const Value.absent(),
+                Value<String?> origName = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PoiPointsCompanion.insert(
                 id: id,
@@ -19780,6 +20802,10 @@ class $$PoiPointsTableTableManager
                 osmType: osmType,
                 osmId: osmId,
                 modeMask: modeMask,
+                editedAt: editedAt,
+                origLat: origLat,
+                origLng: origLng,
+                origName: origName,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -21425,6 +22451,338 @@ typedef $$OverpassCacheTableProcessedTableManager =
       OverpassCacheData,
       PrefetchHooks Function()
     >;
+typedef $$OsmReportsTableCreateCompanionBuilder =
+    OsmReportsCompanion Function({
+      required String id,
+      Value<DateTime> createdAt,
+      required double lat,
+      required double lng,
+      required String kind,
+      required String body,
+      Value<String?> osmType,
+      Value<int?> osmId,
+      Value<String?> poiPointId,
+      Value<DateTime?> sentAt,
+      Value<int?> noteId,
+      Value<String?> lastError,
+      Value<int> rowid,
+    });
+typedef $$OsmReportsTableUpdateCompanionBuilder =
+    OsmReportsCompanion Function({
+      Value<String> id,
+      Value<DateTime> createdAt,
+      Value<double> lat,
+      Value<double> lng,
+      Value<String> kind,
+      Value<String> body,
+      Value<String?> osmType,
+      Value<int?> osmId,
+      Value<String?> poiPointId,
+      Value<DateTime?> sentAt,
+      Value<int?> noteId,
+      Value<String?> lastError,
+      Value<int> rowid,
+    });
+
+class $$OsmReportsTableFilterComposer
+    extends Composer<_$AppDatabase, $OsmReportsTable> {
+  $$OsmReportsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get lat => $composableBuilder(
+    column: $table.lat,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get lng => $composableBuilder(
+    column: $table.lng,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get osmType => $composableBuilder(
+    column: $table.osmType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get osmId => $composableBuilder(
+    column: $table.osmId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get poiPointId => $composableBuilder(
+    column: $table.poiPointId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get sentAt => $composableBuilder(
+    column: $table.sentAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get noteId => $composableBuilder(
+    column: $table.noteId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastError => $composableBuilder(
+    column: $table.lastError,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$OsmReportsTableOrderingComposer
+    extends Composer<_$AppDatabase, $OsmReportsTable> {
+  $$OsmReportsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get lat => $composableBuilder(
+    column: $table.lat,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get lng => $composableBuilder(
+    column: $table.lng,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get osmType => $composableBuilder(
+    column: $table.osmType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get osmId => $composableBuilder(
+    column: $table.osmId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get poiPointId => $composableBuilder(
+    column: $table.poiPointId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get sentAt => $composableBuilder(
+    column: $table.sentAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get noteId => $composableBuilder(
+    column: $table.noteId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lastError => $composableBuilder(
+    column: $table.lastError,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$OsmReportsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $OsmReportsTable> {
+  $$OsmReportsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<double> get lat =>
+      $composableBuilder(column: $table.lat, builder: (column) => column);
+
+  GeneratedColumn<double> get lng =>
+      $composableBuilder(column: $table.lng, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get body =>
+      $composableBuilder(column: $table.body, builder: (column) => column);
+
+  GeneratedColumn<String> get osmType =>
+      $composableBuilder(column: $table.osmType, builder: (column) => column);
+
+  GeneratedColumn<int> get osmId =>
+      $composableBuilder(column: $table.osmId, builder: (column) => column);
+
+  GeneratedColumn<String> get poiPointId => $composableBuilder(
+    column: $table.poiPointId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get sentAt =>
+      $composableBuilder(column: $table.sentAt, builder: (column) => column);
+
+  GeneratedColumn<int> get noteId =>
+      $composableBuilder(column: $table.noteId, builder: (column) => column);
+
+  GeneratedColumn<String> get lastError =>
+      $composableBuilder(column: $table.lastError, builder: (column) => column);
+}
+
+class $$OsmReportsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $OsmReportsTable,
+          OsmReport,
+          $$OsmReportsTableFilterComposer,
+          $$OsmReportsTableOrderingComposer,
+          $$OsmReportsTableAnnotationComposer,
+          $$OsmReportsTableCreateCompanionBuilder,
+          $$OsmReportsTableUpdateCompanionBuilder,
+          (
+            OsmReport,
+            BaseReferences<_$AppDatabase, $OsmReportsTable, OsmReport>,
+          ),
+          OsmReport,
+          PrefetchHooks Function()
+        > {
+  $$OsmReportsTableTableManager(_$AppDatabase db, $OsmReportsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$OsmReportsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$OsmReportsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$OsmReportsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<double> lat = const Value.absent(),
+                Value<double> lng = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<String> body = const Value.absent(),
+                Value<String?> osmType = const Value.absent(),
+                Value<int?> osmId = const Value.absent(),
+                Value<String?> poiPointId = const Value.absent(),
+                Value<DateTime?> sentAt = const Value.absent(),
+                Value<int?> noteId = const Value.absent(),
+                Value<String?> lastError = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => OsmReportsCompanion(
+                id: id,
+                createdAt: createdAt,
+                lat: lat,
+                lng: lng,
+                kind: kind,
+                body: body,
+                osmType: osmType,
+                osmId: osmId,
+                poiPointId: poiPointId,
+                sentAt: sentAt,
+                noteId: noteId,
+                lastError: lastError,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                Value<DateTime> createdAt = const Value.absent(),
+                required double lat,
+                required double lng,
+                required String kind,
+                required String body,
+                Value<String?> osmType = const Value.absent(),
+                Value<int?> osmId = const Value.absent(),
+                Value<String?> poiPointId = const Value.absent(),
+                Value<DateTime?> sentAt = const Value.absent(),
+                Value<int?> noteId = const Value.absent(),
+                Value<String?> lastError = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => OsmReportsCompanion.insert(
+                id: id,
+                createdAt: createdAt,
+                lat: lat,
+                lng: lng,
+                kind: kind,
+                body: body,
+                osmType: osmType,
+                osmId: osmId,
+                poiPointId: poiPointId,
+                sentAt: sentAt,
+                noteId: noteId,
+                lastError: lastError,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$OsmReportsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $OsmReportsTable,
+      OsmReport,
+      $$OsmReportsTableFilterComposer,
+      $$OsmReportsTableOrderingComposer,
+      $$OsmReportsTableAnnotationComposer,
+      $$OsmReportsTableCreateCompanionBuilder,
+      $$OsmReportsTableUpdateCompanionBuilder,
+      (OsmReport, BaseReferences<_$AppDatabase, $OsmReportsTable, OsmReport>),
+      OsmReport,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -21469,4 +22827,6 @@ class $AppDatabaseManager {
       $$TileCacheTableTableManager(_db, _db.tileCache);
   $$OverpassCacheTableTableManager get overpassCache =>
       $$OverpassCacheTableTableManager(_db, _db.overpassCache);
+  $$OsmReportsTableTableManager get osmReports =>
+      $$OsmReportsTableTableManager(_db, _db.osmReports);
 }

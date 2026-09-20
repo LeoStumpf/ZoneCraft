@@ -32,7 +32,7 @@ import 'generated_migrations/schema.dart';
 /// any of that was `scripts/build.sh --install` re-installing over the one
 /// development phone, i.e. exactly one upgrade path on exactly one database.
 ///
-/// With **eleven** snapshots (v20 … v30) this now does what one snapshot could not:
+/// With **twelve** snapshots (v20 … v31) this now does what one snapshot could not:
 /// it opens a real older database, runs the app's own `onUpgrade` against it,
 /// and compares the result to the next version's independently-dumped shape. That is what
 /// catches a column added to a table class without the matching
@@ -47,7 +47,7 @@ import 'generated_migrations/schema.dart';
 /// dart run drift_dev schema generate drift_schemas/ test/generated_migrations/
 /// ```
 ///
-/// then add the v30 → v31 step below. A snapshot must be taken *before* that
+/// then add the v31 → v32 step below. A snapshot must be taken *before* that
 /// version ships; it cannot be reconstructed afterwards.
 void main() {
   late SchemaVerifier verifier;
@@ -56,10 +56,10 @@ void main() {
     verifier = SchemaVerifier(GeneratedHelper());
   });
 
-  test('the schema the table classes build matches the v30 snapshot', () async {
+  test('the schema the table classes build matches the v31 snapshot', () async {
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 30);
+    await verifier.migrateAndValidate(db, 31);
   });
 
   test('v20 → today upgrades a real database, and keeps its rows', () async {
@@ -88,7 +88,7 @@ void main() {
     // Validated against the *current* version, not v21: opening a database runs
     // the whole remaining chain, so this is the real "upgrade from an old
     // install" path rather than a snapshot-to-snapshot hop.
-    await verifier.migrateAndValidate(db, 30);
+    await verifier.migrateAndValidate(db, 31);
 
     final rows = await db.select(db.poiPoints).get();
     expect(rows, hasLength(1), reason: 'the upgrade must not drop POIs');
@@ -114,7 +114,7 @@ void main() {
 
     final db = AppDatabase.forTesting(old.newConnection());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 30);
+    await verifier.migrateAndValidate(db, 31);
 
     final circle = (await db.select(db.circles).get()).single;
     expect(circle.label, 'Home', reason: 'the upgrade must not drop circles');
@@ -148,7 +148,7 @@ void main() {
 
     final db = AppDatabase.forTesting(old.newConnection());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 30);
+    await verifier.migrateAndValidate(db, 31);
 
     final area = (await db.select(db.borderAreas).get()).single;
     expect(area.name, 'Maxvorstadt', reason: 'the upgrade must not drop areas');
@@ -169,7 +169,7 @@ void main() {
 
     final db = AppDatabase.forTesting(old.newConnection());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 30);
+    await verifier.migrateAndValidate(db, 31);
 
     final layer = (await db.select(db.layers).get()).single;
     expect(layer.name, 'Lines', reason: 'the upgrade must not drop layers');
@@ -195,7 +195,7 @@ void main() {
 
     final db = AppDatabase.forTesting(old.newConnection());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 30);
+    await verifier.migrateAndValidate(db, 31);
 
     final set = (await db.select(db.poiSets).get()).single;
     expect(set.label, 'Cafés', reason: 'the upgrade must not drop imports');
@@ -241,7 +241,7 @@ void main() {
 
     final db = AppDatabase.forTesting(old.newConnection());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 30);
+    await verifier.migrateAndValidate(db, 31);
 
     final rows = await db.select(db.circles).get();
     final z = {for (final c in rows) c.id: c.zOrder};
@@ -292,7 +292,7 @@ void main() {
 
     final db = AppDatabase.forTesting(old.newConnection());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 30);
+    await verifier.migrateAndValidate(db, 31);
 
     // planes: same id, near side is main at sort 0, layer retyped, z kept.
     final sub = (await db.select(db.subspaces).get()).single;
@@ -364,7 +364,7 @@ void main() {
 
     final db = AppDatabase.forTesting(old.newConnection());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 30);
+    await verifier.migrateAndValidate(db, 31);
 
     final settings = await db.select(db.appSettings).getSingle();
     expect(settings.uncertaintyMeters, 250, reason: 'existing rows survive');
@@ -384,7 +384,7 @@ void main() {
 
     final db = AppDatabase.forTesting(old.newConnection());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 30);
+    await verifier.migrateAndValidate(db, 31);
 
     final settings = await db.select(db.appSettings).getSingle();
     expect(settings.uncertaintyMeters, 300, reason: 'existing rows survive');
@@ -425,7 +425,7 @@ void main() {
 
     final db = AppDatabase.forTesting(old.newConnection());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 30);
+    await verifier.migrateAndValidate(db, 31);
 
     // The folder stands where the mixed layer stood, and carries what a folder
     // can carry: its name, its visibility and its invert.
@@ -470,7 +470,46 @@ void main() {
     expect((below.type, below.folderId, below.sortOrder), ('circles', null, 0));
   });
 
-  test('a v30 database opens, writes and reads back', () async {
+  test('v30 → v31 leaves every imported POI marked untouched', () async {
+    // The four new columns say "you have corrected this, and here is what OSM
+    // said before you did". Until v31 there was no way to correct an imported
+    // point at all, so the only honest value for an existing row is null on
+    // all four — anything else would claim a fork that never happened, and a
+    // re-import would then keep a row it should have replaced.
+    final old = await verifier.schemaAt(30);
+    old.rawDatabase.execute(
+      "INSERT INTO layers (id, name, color_argb, sort_order, type) "
+      "VALUES ('l1', 'POIs', 1, 0, 'poi')",
+    );
+    old.rawDatabase.execute(
+      "INSERT INTO poi_sets (id, layer_id, category_key, center_lat, "
+      "center_lng, radius_meters, source) "
+      "VALUES ('s1', 'l1', 'bench', 48.1, 11.5, 800, 'radius')",
+    );
+    old.rawDatabase.execute(
+      "INSERT INTO poi_points (id, poi_set_id, lat, lng, name, sort_order, "
+      "osm_type, osm_id) "
+      "VALUES ('p1', 's1', 48.1, 11.5, 'West gate', 0, 'node', 240109189)",
+    );
+
+    final db = AppDatabase.forTesting(old.newConnection());
+    addTearDown(db.close);
+    await verifier.migrateAndValidate(db, 31);
+
+    final point = await db.select(db.poiPoints).getSingle();
+    expect((point.lat, point.lng, point.name), (48.1, 11.5, 'West gate'),
+        reason: 'existing rows survive');
+    expect(point.osmId, 240109189, reason: 'upstream identity survives');
+    expect(point.editedAt, isNull);
+    expect(point.origLat, isNull);
+    expect(point.origLng, isNull);
+    expect(point.origName, isNull);
+    // The outbox arrives empty. It is not derived from anything, so there is
+    // nothing to backfill it from.
+    expect(await db.select(db.osmReports).get(), isEmpty);
+  });
+
+  test('a v31 database opens, writes and reads back', () async {
     // `migrateAndValidate` proves the *shape*; this proves the thing opens and
     // the foreign keys the cascade deletes depend on are actually on.
     final db = AppDatabase.forTesting(NativeDatabase.memory());

@@ -29,6 +29,7 @@ import 'layer_tree.dart';
 import 'layer_objects_sheet.dart';
 import 'map_controls_screen.dart';
 import 'object_summary.dart';
+import 'osm_reports_screen.dart';
 import 'settings_screen.dart';
 import 'theme.dart';
 
@@ -315,6 +316,31 @@ class LayersDrawer extends ConsumerWidget {
                         );
                       },
                     ),
+                    // Only once there is something in it. An outbox nobody
+                    // has written to is a row explaining a feature, and the
+                    // drawer is not where features are explained — the editor
+                    // that offers the report is.
+                    if (ref.watch(osmReportsProvider).asData?.value.isNotEmpty
+                        ?? false)
+                      ListTile(
+                        leading: Badge(
+                          isLabelVisible:
+                              ref.watch(pendingOsmReportsProvider) > 0,
+                          label: Text('${ref.watch(pendingOsmReportsProvider)}'),
+                          child: const Icon(Icons.volunteer_activism_outlined),
+                        ),
+                        title: const Text('OpenStreetMap outbox'),
+                        onTap: () {
+                          Navigator.pop(context); // close the drawer
+                          unawaited(
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => const OsmReportsScreen(),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                     ListTile(
                       leading: const Icon(Icons.settings_outlined),
                       title: const Text('Settings'),

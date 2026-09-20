@@ -66,6 +66,9 @@ class ExportObject {
     this.pointOsmIds,
     this.pointModeMasks,
     this.pointOsmTypes,
+    this.pointOrigLat,
+    this.pointOrigLng,
+    this.pointOrigNames,
     this.heightRings,
     this.generated,
     this.setLabel,
@@ -181,6 +184,26 @@ class ExportObject {
   /// them an imported POI has no identity, so a later import over the same
   /// ground draws it a second time.
   final List<String?>? pointOsmTypes;
+
+  /// poi: what the import returned for each point that has since been
+  /// **corrected by hand** (v31), aligned with `coords[1..]`; null in a slot
+  /// means that point is untouched.
+  ///
+  /// A non-null `pointOrigLat` is the edited flag — position and name are
+  /// captured together at the first edit, so one cannot be present without
+  /// the other. Travelling matters for the same reason a border area's
+  /// [edited] does, and more so: the point keeps its OSM id, so a shared file
+  /// whose corrections arrived silently would launder one person's guess into
+  /// "what OSM says" on somebody else's device, and re-import dedup would
+  /// then keep it.
+  ///
+  /// The *timestamp* is not carried, only the fact — the same trade
+  /// [edited] makes. All three arrays are written only when the set holds at
+  /// least one corrected point, so a file from an untouched map is byte for
+  /// byte what v4 wrote.
+  final List<double?>? pointOrigLat;
+  final List<double?>? pointOrigLng;
+  final List<String?>? pointOrigNames;
 
   /// height: the **generated** fill rings, exactly as stored. They are derived
   /// from terrain tiles, but deriving them again needs the network and can
@@ -326,7 +349,13 @@ class ExportData {
 /// what v3 wrote. A v3 file's `mixed` layer is split on the way in, one layer
 /// per kind it actually carries, grouped under a folder when that is several —
 /// the same thing the v30 migration does to a database.
-const int geoJsonSchemaVersion = 4;
+///
+/// v5 carries a POI point that has been **corrected by hand**:
+/// `pointOrigLat`/`pointOrigLng`/`pointOrigNames` say what the import
+/// returned for the points that have since been changed. All three are
+/// written only when a set holds at least one such point, so a file from a map
+/// where nothing was corrected is exactly what v4 wrote.
+const int geoJsonSchemaVersion = 5;
 
 /// Serialises [data] to a pretty-printed GeoJSON `FeatureCollection`. Each object
 /// becomes a `Feature`; layer attributes ride in a non-standard top-level
@@ -410,6 +439,9 @@ Map<String, dynamic> _objectToFeature(ExportObject o, int layerIndex) {
     if (o.pointOsmIds != null) 'pointOsmIds': o.pointOsmIds,
     if (o.pointModeMasks != null) 'pointModeMasks': o.pointModeMasks,
     if (o.pointOsmTypes != null) 'pointOsmTypes': o.pointOsmTypes,
+    if (o.pointOrigLat != null) 'pointOrigLat': o.pointOrigLat,
+    if (o.pointOrigLng != null) 'pointOrigLng': o.pointOrigLng,
+    if (o.pointOrigNames != null) 'pointOrigNames': o.pointOrigNames,
     // A height region's fills stay in `properties`, not in the geometry: the
     // centre is the region, the fills are what was generated from it, and a
     // reader that knows neither still gets the point it always got.
@@ -714,6 +746,9 @@ ExportObject? _featureToObject(Map<String, dynamic> f) {
     visibleModeMask: (props['visibleModeMask'] as num?)?.toInt(),
     pointOsmIds: pointOsmIds,
     pointModeMasks: _readInts(props['pointModeMasks']),
+    pointOrigLat: _readNullableDoubles(props['pointOrigLat']),
+    pointOrigLng: _readNullableDoubles(props['pointOrigLng']),
+    pointOrigNames: _readStrings(props['pointOrigNames']),
     label: props['label'] as String?,
     radiusMeters: (props['radiusMeters'] as num?)?.toDouble(),
     offsetMeters: (props['offsetMeters'] as num?)?.toDouble(),
@@ -808,6 +843,16 @@ List<int>? _readInts(Object? raw) => raw is List
 List<String?>? _readStrings(Object? raw) => raw is List
     ? [
         for (final e in raw) e is String ? e : null,
+      ]
+    : null;
+
+/// A list that may hold nulls — a per-point value present only for the points
+/// that have one. A non-finite number reads as absent rather than poisoning
+/// the row.
+List<double?>? _readNullableDoubles(Object? raw) => raw is List
+    ? [
+        for (final e in raw)
+          if (e is num && e.toDouble().isFinite) e.toDouble() else null,
       ]
     : null;
 

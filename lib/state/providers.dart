@@ -196,6 +196,19 @@ final poiSetsProvider = StreamProvider<List<PoiSet>>((ref) {
 });
 
 /// Reactive list of every stored POI (across all sets), ordered.
+/// The OpenStreetMap outbox, newest first — reports composed but not
+/// necessarily sent. Nothing here leaves the device without a press; see
+/// `OsmReports`.
+final osmReportsProvider = StreamProvider<List<OsmReport>>((ref) {
+  return ref.watch(repositoryProvider).watchOsmReports();
+});
+
+/// How many reports are still waiting to be sent, for the drawer's badge.
+final pendingOsmReportsProvider = Provider<int>((ref) {
+  final rows = ref.watch(osmReportsProvider).asData?.value ?? const [];
+  return rows.where((r) => r.sentAt == null).length;
+});
+
 final poiPointsProvider = StreamProvider<List<PoiPoint>>((ref) {
   return ref.watch(repositoryProvider).watchAllPoiPoints();
 });
@@ -792,11 +805,12 @@ final mapRequestProvider = NotifierProvider<MapRequestNotifier, MapRequest?>(
   MapRequestNotifier.new,
 );
 
-/// While a hand-placed POI is selected, whether the next map tap moves it.
+/// While a POI is selected, whether the next map tap moves it.
 ///
-/// Only ever armed for a POI in a **manual** category: an imported POI's
-/// position is the fetched fact its layer exists to record (see
-/// `Repository.moveManualPoiPoint`, which refuses the write regardless).
+/// Armed for imported points as well as hand-placed ones. Moving an import is
+/// no longer forbidden, it is *recorded*: `Repository.movePoiPoint` captures
+/// what OSM returned and stamps `PoiPoints.editedAt`, so the correction can
+/// never pass itself off as upstream data.
 class PoiPointPlacementNotifier extends Notifier<bool> {
   @override
   bool build() => false;

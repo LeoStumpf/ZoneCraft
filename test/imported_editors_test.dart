@@ -87,7 +87,14 @@ void main() {
       );
 
   group('ImportedPointEditorSheet', () {
-    Widget poiSheet({String? name}) => ImportedPointEditorSheet(
+    Widget poiSheet({
+      String? name,
+      DateTime? editedAt,
+      double? origLat,
+      double? origLng,
+      String? origName,
+    }) =>
+        ImportedPointEditorSheet(
           id: 'p1',
           name: name,
           lat: 48.001,
@@ -95,14 +102,33 @@ void main() {
           icon: Icons.place_outlined,
           title: 'Edit POI',
           subtitle: 'Cafés',
+          osmType: 'node',
+          osmId: 240109189,
+          tagKey: 'amenity',
+          tagValue: 'cafe',
+          editedAt: editedAt,
+          origLat: origLat,
+          origLng: origLng,
+          origName: origName,
         );
+
+    // There are two fields now — name and position — so every entry has to
+    // say which.
+    final nameField = find.ancestor(
+      of: find.text('Name'),
+      matching: find.byType(TextField),
+    );
+    final positionField = find.ancestor(
+      of: find.text('Position (lat, lng)'),
+      matching: find.byType(TextField),
+    );
 
     testWidgets('typing a name renames that POI', (tester) async {
       await pump(tester, poiSheet(name: 'Alte Post'));
       expect(find.text('Edit POI'), findsOneWidget);
       expect(find.text('Alte Post'), findsOneWidget);
 
-      await tester.enterText(find.byType(TextField), 'Neue Post');
+      await tester.enterText(nameField, 'Neue Post');
       await tester.pump();
       expect(repo.calls, contains('updatePoiPoint p1 name=Neue Post'));
     });
@@ -112,7 +138,7 @@ void main() {
       // The renderer draws no plate for a nameless POI, and only null says
       // that — a stored '' would leave an empty white plate on the map.
       await pump(tester, poiSheet(name: 'Alte Post'));
-      await tester.enterText(find.byType(TextField), '   ');
+      await tester.enterText(nameField, '   ');
       await tester.pump();
       expect(repo.calls, contains('updatePoiPoint p1 name=null'));
     });
@@ -146,7 +172,7 @@ void main() {
           subtitle: 'Train, Subway',
         ),
       );
-      await tester.enterText(find.byType(TextField), 'Hbf');
+      await tester.enterText(nameField, 'Hbf');
       await tester.pump();
       expect(repo.calls, contains('updatePoiPoint s1 name=Hbf'));
 
@@ -156,15 +182,68 @@ void main() {
       expect(container.read(selectedPoiPointProvider), isNull);
     });
 
-    testWidgets('the position is shown but never offered as a field',
+    testWidgets('an imported position can be corrected, and it is recorded',
         (tester) async {
-      // The coordinate is the fetched fact the layer exists to record, and no
-      // column would say one had been moved — so there is exactly one text
-      // field here, and it is the name.
+      // The coordinate used to be untouchable, because no column could say one
+      // had been moved. There is one now, so the field exists — and what makes
+      // that safe is the write it makes: `movePoiPoint`, which captures what
+      // OSM returned and stamps the fork.
       await pump(tester, poiSheet(name: 'Alte Post'));
-      expect(find.byType(TextField), findsOneWidget);
+      expect(positionField, findsOneWidget);
+      // Printed once, in the field — it used to be a line of text because
+      // there was nowhere else to put it.
       expect(find.textContaining('48.0010'), findsOneWidget);
       expect(find.textContaining('Cafés'), findsOneWidget);
+
+      await tester.enterText(positionField, '48.5, 11.5');
+      await tester.pump();
+      expect(repo.calls, contains('movePoiPoint p1 48.5,11.5'));
+    });
+
+    testWidgets('an untouched import says its copy is OSM\u2019s',
+        (tester) async {
+      await pump(tester, poiSheet(name: 'Alte Post'));
+      expect(find.textContaining('Imported from OpenStreetMap'), findsOneWidget);
+      expect(find.text('Revert'), findsNothing);
+      // The offer is there from the start: you may have noticed it is gone,
+      // or wrong in a way you do not want to fix locally.
+      expect(find.text('Tell OpenStreetMap'), findsOneWidget);
+    });
+
+    testWidgets('a corrected point says so, and says what OSM still has',
+        (tester) async {
+      // The whole point of recording the fork: the row keeps its osmId, so
+      // without this line nothing anywhere distinguishes your correction from
+      // upstream's data.
+      await pump(
+        tester,
+        poiSheet(
+          name: 'Neue Post',
+          editedAt: DateTime(2026, 3, 12),
+          origLat: 48.001,
+          origLng: 11.002,
+          origName: 'Alte Post',
+        ),
+      );
+      expect(find.textContaining('Corrected by you'), findsOneWidget);
+      expect(find.textContaining('Alte Post'), findsOneWidget);
+      expect(find.text('Share this correction'), findsOneWidget);
+    });
+
+    testWidgets('revert hands an imported point back', (tester) async {
+      await pump(
+        tester,
+        poiSheet(
+          name: 'Neue Post',
+          editedAt: DateTime(2026, 3, 12),
+          origLat: 48.5,
+          origLng: 11.5,
+          origName: 'Alte Post',
+        ),
+      );
+      await tester.tap(find.text('Revert'));
+      await tester.pump();
+      expect(repo.calls, contains('revertPoiPoint p1'));
     });
   });
 
@@ -545,6 +624,19 @@ class _RecordingRepository extends Repository {
 
   @override
   Future<void> deletePoiPoint(String id) async => calls.add('deletePoiPoint $id');
+
+  @override
+  Future<void> movePoiPoint({
+    required String id,
+    required double lat,
+    required double lng,
+  }) async {
+    calls.add('movePoiPoint $id $lat,$lng');
+  }
+
+  @override
+  Future<void> revertPoiPoint(String id) async =>
+      calls.add('revertPoiPoint $id');
 
   @override
   Future<void> updatePoiSet(

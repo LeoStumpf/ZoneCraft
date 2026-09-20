@@ -55,10 +55,19 @@ const undoCtlTable = '_undo_ctl';
 ///   not an edit, and "undo" landing on the count of how many times the app
 ///   explained that button would be a step the user cannot see, cannot want,
 ///   and would have to press past to reach a real one.
+/// - `osm_reports`: the outbox. Writing a report is not a map edit, and for a
+///   report already sent an undo would be a lie — the note is on somebody
+///   else's server and no local statement can take it back. Rows are removed
+///   from the outbox screen, deliberately and one at a time.
 ///
 /// `app_settings` is not here because it is journalled — but only partly; see
 /// [undoSettingsColumns].
-const undoExcludedTables = {'tile_cache', 'overpass_cache', 'ui_hints'};
+const undoExcludedTables = {
+  'tile_cache',
+  'overpass_cache',
+  'ui_hints',
+  'osm_reports',
+};
 
 /// The settings row is written constantly by things that are not edits:
 /// `saveCamera` on every camera change, `updateToolsExpanded`,

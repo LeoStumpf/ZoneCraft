@@ -184,6 +184,9 @@ class PoiResult {
     this.osmType,
     this.osmId,
     this.modeMask = 0,
+    this.origLat,
+    this.origLng,
+    this.origName,
   });
 
   final double lat;
@@ -203,6 +206,21 @@ class PoiResult {
   /// format), which costs that POI nothing except a place in the dedup check.
   final String? osmType;
   final int? osmId;
+
+  /// What an earlier import returned for a point the user has since corrected
+  /// by hand — set **only** when restoring a ZoneCraft file, never by
+  /// Overpass, which has no idea anyone edited anything.
+  ///
+  /// It rides here rather than being applied in a pass after `fillPoiSet`
+  /// because that pass would have to match points by index, and `fillPoiSet`
+  /// drops duplicates — so a single skipped POI would shift every correction
+  /// after it onto the wrong row.
+  ///
+  /// `origLat != null` is the edited flag; the three are captured together and
+  /// travel together.
+  final double? origLat;
+  final double? origLng;
+  final String? origName;
 }
 
 /// Encodes [pois] to a compact JSON string for the persistent overlay cache.
