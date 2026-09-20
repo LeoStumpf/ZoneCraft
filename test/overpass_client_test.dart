@@ -412,4 +412,54 @@ void main() {
       );
     });
   });
+
+  // The response body used to be gathered with `<int>[for (c in chunks) ...c]`,
+  // a growable list of tagged words — eight bytes per byte of response. Against
+  // the 48 MB border cap that is ~384 MB for the copy alone, which is past the
+  // heap a mid-range Android phone will give a process: the import did not fail,
+  // it killed the app. It is a `BytesBuilder` now, and these pin the two things
+  // that could go wrong in swapping it.
+  group('response assembly', () {
+    http.Client chunked(List<List<int>> chunks) =>
+        MockClient.streaming((request, _) async {
+          return http.StreamedResponse(
+            Stream.fromIterable(chunks),
+            200,
+            request: request,
+          );
+        });
+
+    test('a body split across chunks is reassembled in order', () async {
+      const whole = '{"elements":[1,2,3,4,5,6,7,8,9]}';
+      final bytes = utf8.encode(whole);
+      final chunks = <List<int>>[
+        for (var i = 0; i < bytes.length; i += 4)
+          bytes.sublist(i, i + 4 > bytes.length ? bytes.length : i + 4),
+      ];
+      expect(chunks.length, greaterThan(1), reason: 'the split is the point');
+
+      final out = await post(chunked(chunks));
+      expect(out.value, whole);
+    });
+
+    // The failure a naive `chunk-by-chunk decode` would produce, and the reason
+    // the bytes are gathered before decoding rather than after: a UTF-8 code
+    // point does not have to arrive in one piece.
+    test('a multi-byte character split across chunks survives', () async {
+      const whole = '{"elements":["Grünwälder Straße — Füßgängerzone"]}';
+      final bytes = utf8.encode(whole);
+      final chunks = <List<int>>[
+        for (var i = 0; i < bytes.length; i += 3)
+          bytes.sublist(i, i + 3 > bytes.length ? bytes.length : i + 3),
+      ];
+
+      final out = await post(chunked(chunks));
+      expect(out.value, whole);
+    });
+
+    test('an empty body is not mistaken for a successful parse', () async {
+      final out = await post(chunked([<int>[]]));
+      expect(out.value, isNull);
+    });
+  });
 }

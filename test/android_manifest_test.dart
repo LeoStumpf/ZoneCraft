@@ -141,6 +141,46 @@ void main() {
     }
   });
 
+  // PRIVACY.md tells the user their content lives "on your device only", and
+  // the Play data-safety form says nothing is collected. Android's Auto Backup
+  // is on unless the manifest says otherwise, and would have uploaded the whole
+  // database — layers, the OpenStreetMap outbox, and a tile cache that implies
+  // where the user has been — to their Google Drive. A default cannot be left
+  // to carry a promise this specific.
+  test('Auto Backup is off, or PRIVACY.md is wrong', () {
+    final app = manifest.findAllElements('application').single;
+    expect(app.getAttribute('android:allowBackup'), 'false');
+    expect(app.getAttribute('android:fullBackupContent'), 'false');
+    expect(
+      app.getAttribute('android:dataExtractionRules'),
+      '@xml/data_extraction_rules',
+      reason: 'Android 12+ ignores allowBackup for its two transfer paths',
+    );
+  });
+
+  // The Android 12+ half of the same promise. Both paths, every domain: a
+  // rules file that listed only some of them would back up the rest.
+  test('the extraction rules refuse both transfer paths', () {
+    final rules = XmlDocument.parse(
+      File('android/app/src/main/res/xml/data_extraction_rules.xml')
+          .readAsStringSync(),
+    );
+    for (final path in ['cloud-backup', 'device-transfer']) {
+      final section = rules.findAllElements(path).single;
+      final excluded = section
+          .findElements('exclude')
+          .map((e) => e.getAttribute('domain'))
+          .whereType<String>()
+          .toSet();
+      expect(
+        excluded,
+        containsAll(<String>['root', 'file', 'database', 'sharedpref']),
+        reason: '$path leaves a domain backed up',
+      );
+      expect(section.findElements('include'), isEmpty);
+    }
+  });
+
   // The contact route on the "Servers and limits" page. Since API 30 a package
   // is invisible unless queried for, so without this canLaunchUrl reports no
   // mail app on every device and the button an operator would press is dead —

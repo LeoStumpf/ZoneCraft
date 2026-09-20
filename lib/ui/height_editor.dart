@@ -23,6 +23,7 @@ import 'package:http/http.dart' as http;
 
 import '../app_info.dart';
 import '../data/database.dart';
+import '../data/error_log.dart';
 import '../data/height_generator.dart';
 import '../data/layer_types.dart';
 import '../data/repository.dart';
@@ -228,11 +229,11 @@ class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
                 onChanged: (s) {
                   final ll = parseLatLng(s);
                   if (ll != null) {
-                    unawaited(_repo.updateHeightRegion(
+                    logAsyncFailure(_repo.updateHeightRegion(
                         id,
                         centerLat: ll.latitude,
                         centerLng: ll.longitude,
-                      ));
+                      ), 'Moving the area');
                   }
                 },
               ),
@@ -267,7 +268,10 @@ class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
                 onChanged: (s) {
                   final n = parseDecimal(s);
                   if (n != null && n.isFinite && n > 0) {
-                    unawaited(_repo.updateHeightRegion(id, radiusMeters: n));
+                    logAsyncFailure(
+                      _repo.updateHeightRegion(id, radiusMeters: n),
+                      'Saving the radius',
+                    );
                   }
                 },
               ),
@@ -287,7 +291,10 @@ class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
                 onChanged: (s) {
                   final n = parseDecimal(s);
                   if (n != null && n.isFinite) {
-                    unawaited(_repo.updateHeightRegion(id, thresholdMeters: n));
+                    logAsyncFailure(
+                      _repo.updateHeightRegion(id, thresholdMeters: n),
+                      'Saving the elevation',
+                    );
                   }
                 },
               ),
@@ -316,7 +323,10 @@ class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
               ],
               onChanged: (v) {
                 if (v != null) {
-                  unawaited(_repo.updateHeightRegion(id, sampleZoom: v));
+                  logAsyncFailure(
+                    _repo.updateHeightRegion(id, sampleZoom: v),
+                    'Saving the detail level',
+                  );
                 }
               },
             ),
@@ -330,8 +340,9 @@ class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
           ),
           onChanged: (s) {
             final t = s.trim();
-            unawaited(
-              _repo.updateHeightRegion(id, label: Value(t.isEmpty ? null : t))
+            logAsyncFailure(
+              _repo.updateHeightRegion(id, label: Value(t.isEmpty ? null : t)),
+              'Saving the name',
             );
           },
         ),

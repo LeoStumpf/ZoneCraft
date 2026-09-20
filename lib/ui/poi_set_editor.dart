@@ -22,6 +22,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/database.dart';
 import '../data/overpass.dart' show poiCategories;
+import '../data/error_log.dart';
 import '../data/poi_sets.dart';
 import '../data/repository.dart';
 import '../data/transit.dart';
@@ -198,8 +199,9 @@ class _PoiSetEditorSheetState extends ConsumerState<PoiSetEditorSheet> {
           ),
           onChanged: (t) {
             final v = t.trim();
-            unawaited(
-              _repo.updatePoiSet(s.id, label: Value(v.isEmpty ? null : v))
+            logAsyncFailure(
+              _repo.updatePoiSet(s.id, label: Value(v.isEmpty ? null : v)),
+              'Saving the name',
             );
           },
         ),

@@ -8,9 +8,33 @@
          open, which is what PRIVACY.md promises. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <!--
+        allowBackup=false is a deliberate promise, not a default.
+
+        Android's Auto Backup is on unless you say otherwise, and it would ship
+        the whole app data directory to the user's Google Drive: zonecraft.sqlite
+        holds every layer they have drawn, the OpenStreetMap outbox with text
+        they typed, and the tile cache, which implies which places they looked
+        at. PRIVACY.md tells them their content lives "on your device only", and
+        that has to be true.
+
+        It would not even have worked: Auto Backup silently skips any app whose
+        backup set passes 25 MB, and the tile cache alone is capped at 200 MB
+        (data/cached_tile_provider.dart). So the default was the worst of both —
+        exposed in principle, and not actually backing anything up.
+
+        The cost is real and is paid in the UI instead: a new phone starts
+        empty, so Settings and About both say that Export is the backup, and
+        "Clear all data" offers to export first.
+
+        test/android_manifest_test.dart pins this.
+    -->
     <application
         android:label="ZoneCraft"
         android:name="${applicationName}"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"

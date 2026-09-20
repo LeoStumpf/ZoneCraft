@@ -17,6 +17,7 @@
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show compute;
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
@@ -820,7 +821,7 @@ Future<TransitOutcome<List<TransitStationData>>> fetchTransitStations({
     preferEndpoint: preferEndpoint,
     onProgress: onProgress,
     cancel: cancel,
-    parse: (body) => parseTransitStations(body, keepModes: modeMask),
+    parse: (body) => compute(_parseStationsIsolate, (body, modeMask)),
   );
 }
 
@@ -830,3 +831,9 @@ double _diagonalMeters(
       LengthUnit.Meter, LatLng(south, west), LatLng(north, east));
   return d.isFinite ? d : double.nan;
 }
+
+/// [parseTransitStations] behind one sendable argument, so it can run off the
+/// platform thread. A closure over `modeMask` cannot be sent to an isolate; a
+/// record of plain values can.
+List<TransitStationData>? _parseStationsIsolate((String, int) args) =>
+    parseTransitStations(args.$1, keepModes: args.$2);

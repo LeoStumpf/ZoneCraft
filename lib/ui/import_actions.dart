@@ -19,6 +19,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart' show XTypeGroup, openFile;
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart' show LatLng;
@@ -78,6 +79,76 @@ const int kLargeExportPoints = 50000;
 /// their own indented lines, plus the brackets. Only used to put a number on
 /// the warning, so being a little over is the safe direction.
 const int _bytesPerPoint = 45;
+
+/// Above this a file is worth confirming before it is parsed.
+///
+/// The export side has warned about size since it existed; the import side had
+/// no guard at all, which was the wrong way round. An import is the only path
+/// that takes bytes the user did not produce — a file *another app shared in*
+/// is never chosen from a picker at all — and parsing happens before anything
+/// is known about it.
+const int kLargeImportBytes = 16 * 1024 * 1024;
+
+/// Above this an import is refused outright.
+///
+/// Chosen well above anything ZoneCraft itself writes (a whole-database export
+/// of several border layers reaches tens of megabytes) and well below what
+/// would exhaust the heap while a parsed object tree is alive next to it.
+const int kMaxImportBytes = 96 * 1024 * 1024;
+
+/// Confirms, or refuses, an unusually large file before it is parsed.
+Future<bool> confirmLargeImport(
+  BuildContext context,
+  String name,
+  int byteCount,
+) async {
+  if (byteCount < kLargeImportBytes) return true;
+  final mb = byteCount / (1024 * 1024);
+  final size = '${mb.toStringAsFixed(mb >= 10 ? 0 : 1)} MB';
+
+  if (byteCount > kMaxImportBytes) {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('That file is too big'),
+        content: Text(
+          '"$name" is $size. ZoneCraft cannot read a file that large without '
+          'running out of memory. If it came from ZoneCraft, export one layer '
+          'at a time instead of the whole map.',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+    return false;
+  }
+
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Large file'),
+      content: Text(
+        '"$name" is $size. Reading it may take a while and will use a lot of '
+        'memory.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Import'),
+        ),
+      ],
+    ),
+  );
+  return ok == true;
+}
 
 /// Warns before writing a very large export, since the result is meant to be
 /// shared and a 40 MB attachment is a surprise worth having in advance.
@@ -242,15 +313,30 @@ Future<void> deliverExport(
   ExportChoice choice, {
   required String fileStem,
   required String subject,
-}) {
+}) async {
+  // Serialised in an isolate: `exportData()` already holds every point of
+  // every layer in memory, and rendering that to one pretty-printed string
+  // builds the whole document again beside it. On the platform thread the app
+  // simply stopped for the duration — and being before the first `await`, it
+  // stopped without even painting the progress the caller had just shown.
+  final content = await compute(
+    _serialiseExport,
+    (data, choice.isKml),
+  );
+  if (!context.mounted) return;
   return deliverFile(
     context,
-    content: choice.isKml ? exportToKml(data) : exportToGeoJson(data),
+    content: content,
     fileName: '$fileStem.${choice.format}',
     mimeType: choice.mimeType,
     destination: choice.destination,
     subject: subject,
   );
+}
+
+String _serialiseExport((ExportData, bool) args) {
+  final (data, isKml) = args;
+  return isKml ? exportToKml(data) : exportToGeoJson(data);
 }
 
 /// Hands one file's worth of text to the share sheet or the document picker.
@@ -719,14 +805,19 @@ Future<void> importBytesFlow(
   WidgetRef? ref,
 }) async {
   final messenger = ScaffoldMessenger.of(context);
+  if (!await confirmLargeImport(context, name, bytes.length)) return;
+  if (!context.mounted) return;
   try {
-    // 1. Prefer our own tagged GeoJSON (lossless, all object types).
-    ExportData? data = importFromGeoJson(
-      utf8.decode(bytes, allowMalformed: true),
+    // Both attempts in one isolate hop. Parsing ran on the platform thread
+    // until now, with no cap on the input: `jsonDecode` of a large export, or
+    // `ZipDecoder` over a KMZ, froze the UI for as long as it took — and this
+    // is reachable from a file another app shared in, which the user never
+    // picked and whose size they never saw.
+    final (parsed, fromZonecraft) = await compute(
+      _parseImportBytes,
+      (name, bytes),
     );
-    final fromZonecraft = data != null;
-    // 2. Fall back to generic geometry → synthesize freehand layers.
-    data ??= _syntheticLayers(name, bytes);
+    ExportData? data = parsed;
     if (data == null || data.layers.isEmpty || data.objectCount == 0) {
       messenger.showSnackBar(
         const SnackBar(
@@ -911,6 +1002,19 @@ Future<void> convertRingsToFreehandFlow(
 
 /// Wraps generic line/area geometry into freehand [ExportLayer]s (one freeline
 /// layer for lines, one freearea layer for closed areas).
+/// ZoneCraft's own GeoJSON first, then generic geometry — as one sendable
+/// call, so the whole parse happens in one isolate rather than two.
+///
+/// Returns the data and whether it came from ZoneCraft, which decides whether
+/// the geometry is thinned on insert (`simplify: !fromZonecraft`): RDP-thinning
+/// what this app itself wrote would change shapes on every round-trip.
+(ExportData?, bool) _parseImportBytes((String, Uint8List) args) {
+  final (name, bytes) = args;
+  final own = importFromGeoJson(utf8.decode(bytes, allowMalformed: true));
+  if (own != null) return (own, true);
+  return (_syntheticLayers(name, bytes), false);
+}
+
 ExportData? _syntheticLayers(String filename, Uint8List bytes) {
   final feats = parseExternalGeometry(filename, bytes);
   if (feats.isEmpty) return null;

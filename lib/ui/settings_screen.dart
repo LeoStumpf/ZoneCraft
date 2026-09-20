@@ -34,6 +34,9 @@ import 'share_place.dart';
 ///
 /// Writes persist live via [Repository.updateUncertainty]; the map re-renders
 /// because the engine watches [settingsProvider].
+/// What the "Clear all data?" dialog came back with.
+enum _ClearChoice { cancel, exportFirst, clear }
+
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
@@ -78,7 +81,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _clearAllData() async {
-    final confirmed = await showDialog<bool>(
+    // A three-way answer, not a nullable bool: dismissing the dialog with the
+    // back button also returns null, so "Export first" needs a value of its
+    // own or a stray back press would start an export.
+    final choice = await showDialog<_ClearChoice>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Clear all data?'),
@@ -90,17 +96,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
+            onPressed: () => Navigator.pop(ctx, _ClearChoice.cancel),
             child: const Text('Cancel'),
           ),
+          // There is no backup to fall back on — Auto Backup is off (see the
+          // AndroidManifest comment) and there is no account and no server. So
+          // the way out has to be offered here, at the one moment the user is
+          // about to lose everything, rather than left in a section of Settings
+          // they have no reason to be reading.
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, _ClearChoice.exportFirst),
+            child: const Text('Export first'),
+          ),
           FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
+            onPressed: () => Navigator.pop(ctx, _ClearChoice.clear),
             child: const Text('Clear all data'),
           ),
         ],
       ),
     );
-    if (confirmed != true) return;
+    if (choice == _ClearChoice.exportFirst) {
+      await _export();
+      return;
+    }
+    if (choice != _ClearChoice.clear) return;
 
     // Drop any selection that points at a now-deleted object before the wipe.
     ref.read(selectedCircleProvider.notifier).select(null);
@@ -271,6 +290,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             'either as new layers or merged into an existing one. You can also '
             'export or import a single layer from the layers drawer.',
             style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 8),
+          // Said plainly, because nothing else in the app will say it and the
+          // consequence is total. There is no account, no sync and no device
+          // backup: exporting is the only copy that survives this phone.
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.info_outline,
+                size: 16,
+                color: Theme.of(context).colorScheme.outline,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Your map is stored only on this phone. It is not backed up '
+                  'to Google, and uninstalling ZoneCraft or losing the phone '
+                  'takes it with them \u2014 an export is the only copy that '
+                  'survives. Keep one somewhere safe.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           Wrap(

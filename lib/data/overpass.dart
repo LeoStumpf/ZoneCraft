@@ -17,6 +17,7 @@
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show compute;
 import 'package:http/http.dart' as http;
 
 import 'overpass_client.dart';
@@ -440,6 +441,11 @@ Future<OverpassOutcome<List<PoiResult>>> fetchPois({
     preferEndpoint: preferEndpoint,
     onProgress: onProgress,
     cancel: cancel,
-    parse: (body) => parseOverpassResponse(body, cats),
+    parse: (body) => compute(_parsePoisIsolate, (body, cats)),
   );
 }
+
+/// [parseOverpassResponse] behind one sendable argument — see
+/// `transit.dart`'s `_parseStationsIsolate` for why the closure could not be.
+List<PoiResult> _parsePoisIsolate((String, List<PoiCategory>) args) =>
+    parseOverpassResponse(args.$1, args.$2);

@@ -16,6 +16,8 @@
 
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show compute;
+
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
@@ -355,6 +357,6 @@ Future<OverpassOutcome<List<BorderRelationData>>> fetchBorderAreas({
     preferEndpoint: preferEndpoint,
     onProgress: onProgress,
     cancel: cancel,
-    parse: parseBorderRelations,
+    parse: (body) => compute(parseBorderRelations, body),
   );
 }

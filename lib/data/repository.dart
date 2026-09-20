@@ -2352,7 +2352,19 @@ class Repository {
   }
 
   /// Empties the tile cache (the Settings "Clear cached map tiles" button).
-  Future<void> clearTileCache() => _db.delete(_db.tileCache).go();
+  ///
+  /// The `VACUUM` is the point. Deleting the rows returns their pages to
+  /// SQLite's own freelist and leaves the file exactly as large as it was — so
+  /// the Settings readout (a `SUM(size_bytes)`) dropped to 0 B, the snackbar
+  /// said the cache was cleared, and Android's Storage screen went on showing
+  /// the same few hundred megabytes. A user low on space, who pressed the
+  /// button *because* they were low on space, was told a thing that was not
+  /// true. It runs on drift's background isolate like every other statement
+  /// here, so a long vacuum does not block a frame.
+  Future<void> clearTileCache() async {
+    await _db.delete(_db.tileCache).go();
+    await _db.customStatement('VACUUM');
+  }
 
   // --- Overpass overlay cache ----------------------------------------------
   //

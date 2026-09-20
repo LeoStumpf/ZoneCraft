@@ -21,6 +21,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/database.dart';
+import '../data/error_log.dart';
 import '../data/layer_types.dart';
 import '../data/repository.dart';
 import '../geo/coords.dart';
@@ -242,7 +243,10 @@ class _FreeAreaEditorSheetState extends ConsumerState<FreeAreaEditorSheet> {
                 onChanged: (s) {
                   final n = parseDecimal(s);
                   if (n != null && n.isFinite) {
-                    unawaited(_repo.updateFreeArea(id, offsetMeters: n));
+                    logAsyncFailure(
+                      _repo.updateFreeArea(id, offsetMeters: n),
+                      'Saving the offset',
+                    );
                   }
                 },
               ),
@@ -257,8 +261,9 @@ class _FreeAreaEditorSheetState extends ConsumerState<FreeAreaEditorSheet> {
           ),
           onChanged: (s) {
             final t = s.trim();
-            unawaited(
-              _repo.updateFreeArea(id, label: Value(t.isEmpty ? null : t))
+            logAsyncFailure(
+              _repo.updateFreeArea(id, label: Value(t.isEmpty ? null : t)),
+              'Saving the name',
             );
           },
         ),
@@ -285,11 +290,11 @@ class _FreeAreaEditorSheetState extends ConsumerState<FreeAreaEditorSheet> {
             onChanged: (s) {
               final ll = parseLatLng(s);
               if (ll != null) {
-                unawaited(_repo.updateFreeAreaPoint(
+                logAsyncFailure(_repo.updateFreeAreaPoint(
                     p.id,
                     lat: ll.latitude,
                     lng: ll.longitude,
-                  ));
+                  ), 'Moving the point');
               }
             },
           ),
@@ -342,15 +347,19 @@ class _FreeAreaEditorSheetState extends ConsumerState<FreeAreaEditorSheet> {
           onSelected: (v) {
             switch (v) {
               case 'up':
-                unawaited(
-                  _repo.swapFreeAreaPointOrder(p.id, widget.points[index - 1].id)
+                logAsyncFailure(
+                  _repo.swapFreeAreaPointOrder(
+                      p.id, widget.points[index - 1].id),
+                  'Reordering the points',
                 );
               case 'down':
-                unawaited(
-                  _repo.swapFreeAreaPointOrder(p.id, widget.points[index + 1].id)
+                logAsyncFailure(
+                  _repo.swapFreeAreaPointOrder(
+                      p.id, widget.points[index + 1].id),
+                  'Reordering the points',
                 );
               case 'remove':
-                unawaited(_deletePoint(p));
+                logAsyncFailure(_deletePoint(p), 'Removing the point');
             }
           },
         ),

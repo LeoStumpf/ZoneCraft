@@ -20,6 +20,7 @@ import 'package:flutter/material.dart';
 
 import '../app_info.dart';
 import '../data/tile_source.dart';
+import 'error_screen.dart';
 import 'external_link.dart';
 import 'service_policy_screen.dart';
 
@@ -262,6 +263,27 @@ class _AboutScreenState extends State<AboutScreen> {
                 body: 'The complete corresponding source, as the licence '
                     'requires.',
                 canOpen: _canOpenLinks,
+              ),
+            ],
+          ),
+
+          _Section(
+            'When something goes wrong',
+            'ZoneCraft reports nothing to anyone, which also means nothing '
+                'reports a problem to its author. If something breaks, this is '
+                'where to find out what — and the only way it reaches us is '
+                'you sending it.',
+            children: [
+              _Action(
+                icon: Icons.bug_report_outlined,
+                label: 'Recent errors',
+                detail: 'Kept in memory for this run only: never written to '
+                    'disk, never included in an export, never sent anywhere.',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const ErrorLogScreen(),
+                  ),
+                ),
               ),
             ],
           ),

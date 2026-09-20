@@ -16,6 +16,7 @@
 
 import 'dart:async';
 import 'dart:convert' show Utf8Decoder;
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -258,7 +259,12 @@ const Duration kOverpassPreferenceMaxElapsed = Duration(seconds: 20);
 /// POSTs [query] to each endpoint in turn until one answers.
 ///
 /// [parse] returns null when the body is unintelligible, which is reported
-/// distinctly from "parsed fine, found nothing". [oversizeMessage] is what a
+/// distinctly from "parsed fine, found nothing". It may be asynchronous, and
+/// every caller makes it so: `jsonDecode` of a body that is allowed to reach
+/// 48 MB (`borders.dart`) takes seconds, and run on the platform thread those
+/// are seconds of frozen UI — past the 5 s at which Android's watchdog offers
+/// to kill the app. `buildBorderAreas` was already moved to an isolate for
+/// exactly this reason; the parse that feeds it was simply left behind. [oversizeMessage] is what a
 /// body past [maxBytes] says — the advice differs per import (fewer transit
 /// types vs. a smaller box), so the caller owns the wording.
 ///
@@ -270,7 +276,7 @@ Future<OverpassOutcome<T>> overpassPost<T>(
   String query, {
   required http.Client? client,
   required Duration timeout,
-  required T? Function(String body) parse,
+  required FutureOr<T?> Function(String body) parse,
   int? maxBytes,
   String? oversizeMessage,
   String? preferEndpoint,
@@ -354,7 +360,7 @@ Future<OverpassOutcome<T>> overpassPost<T>(
         if (resp.statusCode == 200) {
           onProgress?.call(progress(OverpassStage.processing,
               bytes: resp.body.length));
-          final parsed = parse(resp.body);
+          final parsed = await parse(resp.body);
           if (parsed == null) {
             return const OverpassOutcome.failed(
                 'Overpass sent a response we could not read. Try again.');
@@ -443,13 +449,20 @@ Future<_Response> _send(
   }
   final total = streamed.contentLength;
 
-  final chunks = <List<int>>[];
+  // `BytesBuilder(copy: false)` retains each chunk and concatenates once, into
+  // a `Uint8List`. The obvious `<int>[for (final c in chunks) ...c]` is a
+  // growable list of *tagged words* — eight bytes per byte — so a border import
+  // at its 48 MB cap (`borders.dart`) allocated ~384 MB for this copy alone, on
+  // top of the chunks it had not released and the string it was about to build.
+  // That is past the per-app heap ceiling on a mid-range phone, and the process
+  // is killed with no Dart error to catch.
+  final builder = BytesBuilder(copy: false);
   var received = 0;
   final done = Completer<void>();
   late final StreamSubscription<List<int>> sub;
   sub = streamed.stream.listen(
     (chunk) {
-      chunks.add(chunk);
+      builder.add(chunk);
       received += chunk.length;
       if (maxBytes != null && received > maxBytes) {
         unawaited(sub.cancel());
@@ -484,11 +497,10 @@ Future<_Response> _send(
     await cancelSub?.cancel();
   }
 
-  final bytes = <int>[for (final chunk in chunks) ...chunk];
-  return _Response(streamed.statusCode, _decodeUtf8(bytes));
+  return _Response(streamed.statusCode, _decodeUtf8(builder.takeBytes()));
 }
 
 /// Overpass always answers UTF-8; a malformed byte becomes U+FFFD rather than
 /// taking the whole import down.
-String _decodeUtf8(List<int> bytes) =>
+String _decodeUtf8(Uint8List bytes) =>
     const Utf8Decoder(allowMalformed: true).convert(bytes);

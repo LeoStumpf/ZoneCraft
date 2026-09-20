@@ -14,7 +14,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import 'dart:async';
 
 import 'dart:math' as math;
 
@@ -23,6 +22,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/database.dart';
+import '../data/error_log.dart';
 import '../data/layer_types.dart';
 import '../data/repository.dart';
 import '../geo/coords.dart';
@@ -126,7 +126,10 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
 
   void _setRadius(double meters) {
     setState(() => _radius = meters);
-    unawaited(_repo.updateCircle(widget.circle.id, radiusMeters: meters));
+    logAsyncFailure(
+      _repo.updateCircle(widget.circle.id, radiusMeters: meters),
+      'Saving the radius',
+    );
   }
 
   /// Mirrors the current radius into the field, unless the user is typing in
@@ -268,11 +271,11 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
                 onChanged: (s) {
                   final p = parseLatLng(s);
                   if (p != null) {
-                    unawaited(_repo.updateCircle(
+                    logAsyncFailure(_repo.updateCircle(
                         widget.circle.id,
                         centerLat: p.latitude,
                         centerLng: p.longitude,
-                      ));
+                      ), 'Moving the circle');
                   }
                 },
               ),
@@ -294,10 +297,10 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
           ),
           onChanged: (s) {
             final t = s.trim();
-            unawaited(_repo.updateCircle(
+            logAsyncFailure(_repo.updateCircle(
                 widget.circle.id,
                 label: Value(t.isEmpty ? null : t),
-              ));
+              ), 'Saving the name');
           },
         ),
       ],

@@ -21,6 +21,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/database.dart';
+import '../data/error_log.dart';
 import '../data/layer_types.dart';
 import '../data/repository.dart';
 import '../geo/coords.dart';
@@ -216,7 +217,10 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
             groupValue: mainId,
             onChanged: (v) {
               if (v != null) {
-                unawaited(_repo.setMainPoint(widget.subspace.id, v));
+                logAsyncFailure(
+                  _repo.setMainPoint(widget.subspace.id, v),
+                  'Setting the main point',
+                );
               }
             },
             child: ListView.separated(
@@ -248,8 +252,9 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
           ),
           onChanged: (s) {
             final t = s.trim();
-            unawaited(
-              _repo.updateSubspace(id, label: Value(t.isEmpty ? null : t))
+            logAsyncFailure(
+              _repo.updateSubspace(id, label: Value(t.isEmpty ? null : t)),
+              'Saving the name',
             );
           },
         ),
@@ -318,11 +323,11 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
             onChanged: (s) {
               final ll = parseLatLng(s);
               if (ll != null) {
-                unawaited(_repo.updateSubspacePoint(
+                logAsyncFailure(_repo.updateSubspacePoint(
                     p.id,
                     lat: ll.latitude,
                     lng: ll.longitude,
-                  ));
+                  ), 'Moving the point');
               }
             },
           ),

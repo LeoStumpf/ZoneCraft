@@ -25,6 +25,7 @@ skimmed past.
 | Anything sent off the device | Only a correction you write and press Send on |
 | Advertising ID / device identifier | Not used |
 | Analytics, crash reporting or usage tracking | None |
+| Backed up to Google Drive | No — deliberately switched off |
 
 ## Data stored on your device
 
@@ -187,6 +188,29 @@ nothing:
 - **Settings → Clear cached map tiles** empties the tile cache (kept separate, because it is
   cache rather than your data).
 - **Uninstalling the app** removes everything, both together.
+
+### There is no cloud backup, and that is on purpose
+
+Android offers to back an app's data up to the user's Google Drive automatically. ZoneCraft
+**switches that off** (`android:allowBackup="false"`, plus the Android 12+ extraction rules).
+Left on, it would have copied the whole database — every layer you have drawn, the
+OpenStreetMap outbox with text you typed, and the tile cache, which implies which places you
+have looked at — to Google. "On your device only", above, would not have been true.
+
+The cost of that choice is yours to manage, so it is worth stating plainly: **a new phone
+starts empty, and uninstalling really does delete everything.** Use **Settings → Export** to
+save a copy of your map to a file. That export is the only copy that outlives this phone.
+
+## When something goes wrong
+
+If the app hits an error, it keeps a short note of it — the message, and where in the code it
+happened — so that the **About → Recent errors** screen can show it to you and let you copy it
+into an email or a bug report.
+
+This is not crash reporting. The notes are held **in memory only**: they are never written to
+disk, never included in an export, and are gone the moment you close the app. Nothing is sent
+anywhere, ever. They leave your device only if you press Copy and send them yourself, and you
+can read exactly what you would be sending before you do.
 
 ## Your rights
 
