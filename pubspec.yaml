@@ -56,7 +56,13 @@ dependencies:
   http: ^1.2.2
   # Used directly for @immutable on the pure-Dart value types in geo/.
   meta: ^1.18.0
-  share_plus: ^13.1.0
+  # Pinned below 13.2.0: 13.3.0 fails to compile against this project's
+  # Android setup (AGP 9 / Kotlin 2.3 / `android.builtInKotlin=false`) with
+  # "Unresolved reference 'SharePlusPendingIntent'" inside the plugin's own
+  # Kotlin sources. Caught by building a release APK; every unit test passed.
+  # Revisit when a later release fixes it — and re-check the KGP warning then,
+  # since share_plus is one of the two plugins that trigger it.
+  share_plus: ">=13.1.0 <13.2.0"
   path_provider: ^2.1.5
   file_selector: ^1.1.0
   xml: ^6.5.0

@@ -2361,8 +2361,13 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
   final double? lastLng;
   final double? lastZoom;
 
-  /// When true, transparent public-transport tile overlays (ÖPNVKarte +
-  /// OpenRailwayMap) are drawn above the base map.
+  /// **Dead column.** Once drove transparent public-transport tile overlays
+  /// (ÖPNVKarte + OpenRailwayMap) above the base map. Those were removed at
+  /// v20 and superseded by `poi` station imports; nothing reads this.
+  ///
+  /// Kept because migrations are append-only and dropping a column means a
+  /// table rebuild for no benefit — see `repository.dart`'s "Overpass overlay
+  /// cache" note, which is the one place that records the whole set of these.
   final bool transportOverlay;
 
   /// The Overpass endpoint that last served a transit import, so the next one
@@ -2370,12 +2375,14 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
   /// `transitEndpoints`.
   final String? transitEndpoint;
 
-  /// Packed bitmask of enabled map-POI categories (see `poiCategories` in
-  /// `overpass.dart`). 0 = none shown.
+  /// **Dead column.** Once the packed bitmask of enabled map-POI categories,
+  /// when POIs were a global overlay rather than the `poi` layer type. Nothing
+  /// reads it; see [transportOverlay] for why it stays.
   final int poiCategories;
 
-  /// Packed bitmask of enabled administrative-border levels (see `borderLevels`
-  /// in `borders.dart`). 0 = none shown.
+  /// **Dead column.** Once the packed bitmask of enabled administrative-border
+  /// levels, when borders were a global overlay rather than the `borders`
+  /// layer type. Nothing reads it; see [transportOverlay] for why it stays.
   final int borderLevels;
 
   /// Whether the right-side utility FABs are shown (vs. collapsed behind the
@@ -13337,7 +13344,7 @@ final class $$FoldersTableReferences
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.layers,
-    aliasName: $_aliasNameGenerator(db.folders.id, db.layers.folderId),
+    aliasName: 'folders__id__layers__folder_id',
   );
 
   $$LayersTableProcessedTableManager get layersRefs {
@@ -13597,7 +13604,7 @@ class $$FoldersTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$FoldersTable, Folder>(table),
                   $$FoldersTableReferences(db, table, e),
                 ),
               )
@@ -13681,8 +13688,8 @@ final class $$LayersTableReferences
     extends BaseReferences<_$AppDatabase, $LayersTable, Layer> {
   $$LayersTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $FoldersTable _folderIdTable(_$AppDatabase db) => db.folders
-      .createAlias($_aliasNameGenerator(db.layers.folderId, db.folders.id));
+  static $FoldersTable _folderIdTable(_$AppDatabase db) =>
+      db.folders.createAlias('layers__folder_id__folders__id');
 
   $$FoldersTableProcessedTableManager? get folderId {
     final $_column = $_itemColumn<String>('folder_id');
@@ -13702,7 +13709,7 @@ final class $$LayersTableReferences
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.circles,
-    aliasName: $_aliasNameGenerator(db.layers.id, db.circles.layerId),
+    aliasName: 'layers__id__circles__layer_id',
   );
 
   $$CirclesTableProcessedTableManager get circlesRefs {
@@ -13720,7 +13727,7 @@ final class $$LayersTableReferences
   static MultiTypedResultKey<$SubspacesTable, List<Subspace>>
   _subspacesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.subspaces,
-    aliasName: $_aliasNameGenerator(db.layers.id, db.subspaces.layerId),
+    aliasName: 'layers__id__subspaces__layer_id',
   );
 
   $$SubspacesTableProcessedTableManager get subspacesRefs {
@@ -13738,7 +13745,7 @@ final class $$LayersTableReferences
   static MultiTypedResultKey<$FreeLinesTable, List<FreeLine>>
   _freeLinesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.freeLines,
-    aliasName: $_aliasNameGenerator(db.layers.id, db.freeLines.layerId),
+    aliasName: 'layers__id__free_lines__layer_id',
   );
 
   $$FreeLinesTableProcessedTableManager get freeLinesRefs {
@@ -13756,7 +13763,7 @@ final class $$LayersTableReferences
   static MultiTypedResultKey<$FreeAreasTable, List<FreeArea>>
   _freeAreasRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.freeAreas,
-    aliasName: $_aliasNameGenerator(db.layers.id, db.freeAreas.layerId),
+    aliasName: 'layers__id__free_areas__layer_id',
   );
 
   $$FreeAreasTableProcessedTableManager get freeAreasRefs {
@@ -13774,7 +13781,7 @@ final class $$LayersTableReferences
   static MultiTypedResultKey<$HeightRegionsTable, List<HeightRegion>>
   _heightRegionsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.heightRegions,
-    aliasName: $_aliasNameGenerator(db.layers.id, db.heightRegions.layerId),
+    aliasName: 'layers__id__height_regions__layer_id',
   );
 
   $$HeightRegionsTableProcessedTableManager get heightRegionsRefs {
@@ -13793,7 +13800,7 @@ final class $$LayersTableReferences
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.poiSets,
-    aliasName: $_aliasNameGenerator(db.layers.id, db.poiSets.layerId),
+    aliasName: 'layers__id__poi_sets__layer_id',
   );
 
   $$PoiSetsTableProcessedTableManager get poiSetsRefs {
@@ -13811,7 +13818,7 @@ final class $$LayersTableReferences
   static MultiTypedResultKey<$BorderSetsTable, List<BorderSet>>
   _borderSetsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.borderSets,
-    aliasName: $_aliasNameGenerator(db.layers.id, db.borderSets.layerId),
+    aliasName: 'layers__id__border_sets__layer_id',
   );
 
   $$BorderSetsTableProcessedTableManager get borderSetsRefs {
@@ -14541,8 +14548,10 @@ class $$LayersTableTableManager
               ),
           withReferenceMapper: (p0) => p0
               .map(
-                (e) =>
-                    (e.readTable(table), $$LayersTableReferences(db, table, e)),
+                (e) => (
+                  e.readTable<$LayersTable, Layer>(table),
+                  $$LayersTableReferences(db, table, e),
+                ),
               )
               .toList(),
           prefetchHooksCallback:
@@ -14804,9 +14813,8 @@ final class $$CirclesTableReferences
     extends BaseReferences<_$AppDatabase, $CirclesTable, Circle> {
   $$CirclesTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $LayersTable _layerIdTable(_$AppDatabase db) => db.layers.createAlias(
-    $_aliasNameGenerator(db.circles.layerId, db.layers.id),
-  );
+  static $LayersTable _layerIdTable(_$AppDatabase db) =>
+      db.layers.createAlias('circles__layer_id__layers__id');
 
   $$LayersTableProcessedTableManager get layerId {
     final $_column = $_itemColumn<String>('layer_id')!;
@@ -15124,7 +15132,7 @@ class $$CirclesTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$CirclesTable, Circle>(table),
                   $$CirclesTableReferences(db, table, e),
                 ),
               )
@@ -15591,7 +15599,16 @@ class $$AppSettingsTableTableManager
                 hintsEnabled: hintsEnabled,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$AppSettingsTable, AppSetting>(table),
+                  BaseReferences<_$AppDatabase, $AppSettingsTable, AppSetting>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -15733,7 +15750,16 @@ class $$UiHintsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$UiHintsTable, UiHint>(table),
+                  BaseReferences<_$AppDatabase, $UiHintsTable, UiHint>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -15781,9 +15807,8 @@ final class $$SubspacesTableReferences
     extends BaseReferences<_$AppDatabase, $SubspacesTable, Subspace> {
   $$SubspacesTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $LayersTable _layerIdTable(_$AppDatabase db) => db.layers.createAlias(
-    $_aliasNameGenerator(db.subspaces.layerId, db.layers.id),
-  );
+  static $LayersTable _layerIdTable(_$AppDatabase db) =>
+      db.layers.createAlias('subspaces__layer_id__layers__id');
 
   $$LayersTableProcessedTableManager get layerId {
     final $_column = $_itemColumn<String>('layer_id')!;
@@ -15802,10 +15827,7 @@ final class $$SubspacesTableReferences
   static MultiTypedResultKey<$SubspacePointsTable, List<SubspacePoint>>
   _subspacePointsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.subspacePoints,
-    aliasName: $_aliasNameGenerator(
-      db.subspaces.id,
-      db.subspacePoints.subspaceId,
-    ),
+    aliasName: 'subspaces__id__subspace_points__subspace_id',
   );
 
   $$SubspacePointsTableProcessedTableManager get subspacePointsRefs {
@@ -16119,7 +16141,7 @@ class $$SubspacesTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$SubspacesTable, Subspace>(table),
                   $$SubspacesTableReferences(db, table, e),
                 ),
               )
@@ -16242,9 +16264,7 @@ final class $$SubspacePointsTableReferences
   );
 
   static $SubspacesTable _subspaceIdTable(_$AppDatabase db) =>
-      db.subspaces.createAlias(
-        $_aliasNameGenerator(db.subspacePoints.subspaceId, db.subspaces.id),
-      );
+      db.subspaces.createAlias('subspace_points__subspace_id__subspaces__id');
 
   $$SubspacesTableProcessedTableManager get subspaceId {
     final $_column = $_itemColumn<String>('subspace_id')!;
@@ -16526,7 +16546,7 @@ class $$SubspacePointsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$SubspacePointsTable, SubspacePoint>(table),
                   $$SubspacePointsTableReferences(db, table, e),
                 ),
               )
@@ -16626,9 +16646,8 @@ final class $$FreeLinesTableReferences
     extends BaseReferences<_$AppDatabase, $FreeLinesTable, FreeLine> {
   $$FreeLinesTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $LayersTable _layerIdTable(_$AppDatabase db) => db.layers.createAlias(
-    $_aliasNameGenerator(db.freeLines.layerId, db.layers.id),
-  );
+  static $LayersTable _layerIdTable(_$AppDatabase db) =>
+      db.layers.createAlias('free_lines__layer_id__layers__id');
 
   $$LayersTableProcessedTableManager get layerId {
     final $_column = $_itemColumn<String>('layer_id')!;
@@ -16647,10 +16666,7 @@ final class $$FreeLinesTableReferences
   static MultiTypedResultKey<$FreeLinePointsTable, List<FreeLinePoint>>
   _freeLinePointsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.freeLinePoints,
-    aliasName: $_aliasNameGenerator(
-      db.freeLines.id,
-      db.freeLinePoints.freeLineId,
-    ),
+    aliasName: 'free_lines__id__free_line_points__free_line_id',
   );
 
   $$FreeLinePointsTableProcessedTableManager get freeLinePointsRefs {
@@ -17040,7 +17056,7 @@ class $$FreeLinesTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$FreeLinesTable, FreeLine>(table),
                   $$FreeLinesTableReferences(db, table, e),
                 ),
               )
@@ -17158,10 +17174,8 @@ final class $$FreeLinePointsTableReferences
     super.$_typedResult,
   );
 
-  static $FreeLinesTable _freeLineIdTable(_$AppDatabase db) =>
-      db.freeLines.createAlias(
-        $_aliasNameGenerator(db.freeLinePoints.freeLineId, db.freeLines.id),
-      );
+  static $FreeLinesTable _freeLineIdTable(_$AppDatabase db) => db.freeLines
+      .createAlias('free_line_points__free_line_id__free_lines__id');
 
   $$FreeLinesTableProcessedTableManager get freeLineId {
     final $_column = $_itemColumn<String>('free_line_id')!;
@@ -17409,7 +17423,7 @@ class $$FreeLinePointsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$FreeLinePointsTable, FreeLinePoint>(table),
                   $$FreeLinePointsTableReferences(db, table, e),
                 ),
               )
@@ -17503,9 +17517,8 @@ final class $$FreeAreasTableReferences
     extends BaseReferences<_$AppDatabase, $FreeAreasTable, FreeArea> {
   $$FreeAreasTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $LayersTable _layerIdTable(_$AppDatabase db) => db.layers.createAlias(
-    $_aliasNameGenerator(db.freeAreas.layerId, db.layers.id),
-  );
+  static $LayersTable _layerIdTable(_$AppDatabase db) =>
+      db.layers.createAlias('free_areas__layer_id__layers__id');
 
   $$LayersTableProcessedTableManager get layerId {
     final $_column = $_itemColumn<String>('layer_id')!;
@@ -17524,10 +17537,7 @@ final class $$FreeAreasTableReferences
   static MultiTypedResultKey<$FreeAreaPointsTable, List<FreeAreaPoint>>
   _freeAreaPointsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.freeAreaPoints,
-    aliasName: $_aliasNameGenerator(
-      db.freeAreas.id,
-      db.freeAreaPoints.freeAreaId,
-    ),
+    aliasName: 'free_areas__id__free_area_points__free_area_id',
   );
 
   $$FreeAreaPointsTableProcessedTableManager get freeAreaPointsRefs {
@@ -17860,7 +17870,7 @@ class $$FreeAreasTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$FreeAreasTable, FreeArea>(table),
                   $$FreeAreasTableReferences(db, table, e),
                 ),
               )
@@ -17978,10 +17988,8 @@ final class $$FreeAreaPointsTableReferences
     super.$_typedResult,
   );
 
-  static $FreeAreasTable _freeAreaIdTable(_$AppDatabase db) =>
-      db.freeAreas.createAlias(
-        $_aliasNameGenerator(db.freeAreaPoints.freeAreaId, db.freeAreas.id),
-      );
+  static $FreeAreasTable _freeAreaIdTable(_$AppDatabase db) => db.freeAreas
+      .createAlias('free_area_points__free_area_id__free_areas__id');
 
   $$FreeAreasTableProcessedTableManager get freeAreaId {
     final $_column = $_itemColumn<String>('free_area_id')!;
@@ -18229,7 +18237,7 @@ class $$FreeAreaPointsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$FreeAreaPointsTable, FreeAreaPoint>(table),
                   $$FreeAreaPointsTableReferences(db, table, e),
                 ),
               )
@@ -18339,9 +18347,8 @@ final class $$HeightRegionsTableReferences
     super.$_typedResult,
   );
 
-  static $LayersTable _layerIdTable(_$AppDatabase db) => db.layers.createAlias(
-    $_aliasNameGenerator(db.heightRegions.layerId, db.layers.id),
-  );
+  static $LayersTable _layerIdTable(_$AppDatabase db) =>
+      db.layers.createAlias('height_regions__layer_id__layers__id');
 
   $$LayersTableProcessedTableManager get layerId {
     final $_column = $_itemColumn<String>('layer_id')!;
@@ -18360,10 +18367,7 @@ final class $$HeightRegionsTableReferences
   static MultiTypedResultKey<$HeightPolygonsTable, List<HeightPolygon>>
   _heightPolygonsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.heightPolygons,
-    aliasName: $_aliasNameGenerator(
-      db.heightRegions.id,
-      db.heightPolygons.heightRegionId,
-    ),
+    aliasName: 'height_regions__id__height_polygons__height_region_id',
   );
 
   $$HeightPolygonsTableProcessedTableManager get heightPolygonsRefs {
@@ -18806,7 +18810,7 @@ class $$HeightRegionsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$HeightRegionsTable, HeightRegion>(table),
                   $$HeightRegionsTableReferences(db, table, e),
                 ),
               )
@@ -18922,13 +18926,9 @@ final class $$HeightPolygonsTableReferences
     super.$_typedResult,
   );
 
-  static $HeightRegionsTable _heightRegionIdTable(_$AppDatabase db) =>
-      db.heightRegions.createAlias(
-        $_aliasNameGenerator(
-          db.heightPolygons.heightRegionId,
-          db.heightRegions.id,
-        ),
-      );
+  static $HeightRegionsTable _heightRegionIdTable(_$AppDatabase db) => db
+      .heightRegions
+      .createAlias('height_polygons__height_region_id__height_regions__id');
 
   $$HeightRegionsTableProcessedTableManager get heightRegionId {
     final $_column = $_itemColumn<String>('height_region_id')!;
@@ -18951,10 +18951,7 @@ final class $$HeightPolygonsTableReferences
   _heightPolygonPointsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.heightPolygonPoints,
-        aliasName: $_aliasNameGenerator(
-          db.heightPolygons.id,
-          db.heightPolygonPoints.polygonId,
-        ),
+        aliasName: 'height_polygons__id__height_polygon_points__polygon_id',
       );
 
   $$HeightPolygonPointsTableProcessedTableManager get heightPolygonPointsRefs {
@@ -19223,7 +19220,7 @@ class $$HeightPolygonsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$HeightPolygonsTable, HeightPolygon>(table),
                   $$HeightPolygonsTableReferences(db, table, e),
                 ),
               )
@@ -19351,13 +19348,9 @@ final class $$HeightPolygonPointsTableReferences
     super.$_typedResult,
   );
 
-  static $HeightPolygonsTable _polygonIdTable(_$AppDatabase db) =>
-      db.heightPolygons.createAlias(
-        $_aliasNameGenerator(
-          db.heightPolygonPoints.polygonId,
-          db.heightPolygons.id,
-        ),
-      );
+  static $HeightPolygonsTable _polygonIdTable(_$AppDatabase db) => db
+      .heightPolygons
+      .createAlias('height_polygon_points__polygon_id__height_polygons__id');
 
   $$HeightPolygonsTableProcessedTableManager get polygonId {
     final $_column = $_itemColumn<String>('polygon_id')!;
@@ -19611,7 +19604,9 @@ class $$HeightPolygonPointsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$HeightPolygonPointsTable, HeightPolygonPoint>(
+                    table,
+                  ),
                   $$HeightPolygonPointsTableReferences(db, table, e),
                 ),
               )
@@ -19732,9 +19727,8 @@ final class $$PoiSetsTableReferences
     extends BaseReferences<_$AppDatabase, $PoiSetsTable, PoiSet> {
   $$PoiSetsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $LayersTable _layerIdTable(_$AppDatabase db) => db.layers.createAlias(
-    $_aliasNameGenerator(db.poiSets.layerId, db.layers.id),
-  );
+  static $LayersTable _layerIdTable(_$AppDatabase db) =>
+      db.layers.createAlias('poi_sets__layer_id__layers__id');
 
   $$LayersTableProcessedTableManager get layerId {
     final $_column = $_itemColumn<String>('layer_id')!;
@@ -19753,7 +19747,7 @@ final class $$PoiSetsTableReferences
   static MultiTypedResultKey<$PoiPointsTable, List<PoiPoint>>
   _poiPointsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.poiPoints,
-    aliasName: $_aliasNameGenerator(db.poiSets.id, db.poiPoints.poiSetId),
+    aliasName: 'poi_sets__id__poi_points__poi_set_id',
   );
 
   $$PoiPointsTableProcessedTableManager get poiPointsRefs {
@@ -20311,7 +20305,7 @@ class $$PoiSetsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$PoiSetsTable, PoiSet>(table),
                   $$PoiSetsTableReferences(db, table, e),
                 ),
               )
@@ -20428,8 +20422,8 @@ final class $$PoiPointsTableReferences
     extends BaseReferences<_$AppDatabase, $PoiPointsTable, PoiPoint> {
   $$PoiPointsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $PoiSetsTable _poiSetIdTable(_$AppDatabase db) => db.poiSets
-      .createAlias($_aliasNameGenerator(db.poiPoints.poiSetId, db.poiSets.id));
+  static $PoiSetsTable _poiSetIdTable(_$AppDatabase db) =>
+      db.poiSets.createAlias('poi_points__poi_set_id__poi_sets__id');
 
   $$PoiSetsTableProcessedTableManager get poiSetId {
     final $_column = $_itemColumn<String>('poi_set_id')!;
@@ -20811,7 +20805,7 @@ class $$PoiPointsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$PoiPointsTable, PoiPoint>(table),
                   $$PoiPointsTableReferences(db, table, e),
                 ),
               )
@@ -20912,9 +20906,8 @@ final class $$BorderSetsTableReferences
     extends BaseReferences<_$AppDatabase, $BorderSetsTable, BorderSet> {
   $$BorderSetsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $LayersTable _layerIdTable(_$AppDatabase db) => db.layers.createAlias(
-    $_aliasNameGenerator(db.borderSets.layerId, db.layers.id),
-  );
+  static $LayersTable _layerIdTable(_$AppDatabase db) =>
+      db.layers.createAlias('border_sets__layer_id__layers__id');
 
   $$LayersTableProcessedTableManager get layerId {
     final $_column = $_itemColumn<String>('layer_id')!;
@@ -20933,7 +20926,7 @@ final class $$BorderSetsTableReferences
   static MultiTypedResultKey<$BorderAreasTable, List<BorderArea>>
   _borderAreasRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.borderAreas,
-    aliasName: $_aliasNameGenerator(db.borderSets.id, db.borderAreas.setId),
+    aliasName: 'border_sets__id__border_areas__set_id',
   );
 
   $$BorderAreasTableProcessedTableManager get borderAreasRefs {
@@ -21334,7 +21327,7 @@ class $$BorderSetsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$BorderSetsTable, BorderSet>(table),
                   $$BorderSetsTableReferences(db, table, e),
                 ),
               )
@@ -21466,9 +21459,7 @@ final class $$BorderAreasTableReferences
   $$BorderAreasTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $BorderSetsTable _setIdTable(_$AppDatabase db) =>
-      db.borderSets.createAlias(
-        $_aliasNameGenerator(db.borderAreas.setId, db.borderSets.id),
-      );
+      db.borderSets.createAlias('border_areas__set_id__border_sets__id');
 
   $$BorderSetsTableProcessedTableManager get setId {
     final $_column = $_itemColumn<String>('set_id')!;
@@ -21905,7 +21896,7 @@ class $$BorderAreasTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$BorderAreasTable, BorderArea>(table),
                   $$BorderAreasTableReferences(db, table, e),
                 ),
               )
@@ -22166,7 +22157,16 @@ class $$TileCacheTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$TileCacheTable, TileCacheData>(table),
+                  BaseReferences<_$AppDatabase, $TileCacheTable, TileCacheData>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -22427,7 +22427,16 @@ class $$OverpassCacheTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$OverpassCacheTable, OverpassCacheData>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $OverpassCacheTable,
+                    OverpassCacheData
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -22762,7 +22771,16 @@ class $$OsmReportsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$OsmReportsTable, OsmReport>(table),
+                  BaseReferences<_$AppDatabase, $OsmReportsTable, OsmReport>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
