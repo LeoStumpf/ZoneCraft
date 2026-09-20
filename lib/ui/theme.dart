@@ -119,6 +119,10 @@ const Color kCompassNeedle = OsmPalette.health;
 /// scheme's `outline`, [MapChrome]'s border, and [kSwatchRing].
 const Color _outline = Color(0xFF6F6961);
 
+/// The dark scheme's hairline: warm, like everything else here, because a
+/// neutral grey next to these browns reads blue.
+const Color _outlineDark = Color(0xFF8A837A);
+
 /// The ring around a colour swatch. A swatch shows a *data* colour, so its ring
 /// has to read against both a saturated fill and paper — which Material's
 /// `black26` does not, against a dark swatch. Not a `ColorScheme` read because
@@ -154,6 +158,15 @@ class ZoneCraftColors extends ThemeExtension<ZoneCraftColors> {
   static const ZoneCraftColors light = ZoneCraftColors(
     warning: Color(0xFF9A5B00),
     chromeBorder: _outline,
+  );
+
+  /// The same two roles on a dark ground. The warning lifts to an amber that
+  /// passes on the dark surfaces (the light one, #9A5B00, is 2.1:1 there and
+  /// unreadable), and the hairline lightens rather than darkens — a border's
+  /// job is to separate, and on dark that means going up, not down.
+  static const ZoneCraftColors dark = ZoneCraftColors(
+    warning: Color(0xFFE0A35C),
+    chromeBorder: _outlineDark,
   );
 
   @override
@@ -235,6 +248,68 @@ const ColorScheme zoneCraftLight = ColorScheme(
   surfaceTint: Color(0xFF0B6E13),
 );
 
+/// The same scheme after dark, for the screens that are **not** the map.
+///
+/// Derived from the light one rather than from Material's dark baseline: the
+/// app's identity is osm-carto's warm paper, and the usual near-black
+/// (#1C1B1F) is faintly blue, which next to these greens and browns reads as
+/// a different app. So the ground is a warm charcoal — the same hue family as
+/// `surface`, several steps down — and the accents lift instead of deepening,
+/// because a colour chosen to be dark *on* paper (primary is #0B6E13, 5.6:1
+/// there) is 1.4:1 on charcoal and effectively invisible.
+///
+/// This scheme never touches the map. See [zoneCraftDarkTheme].
+const ColorScheme zoneCraftDark = ColorScheme(
+  brightness: Brightness.dark,
+
+  // The park green lifted until it carries on charcoal: 7.4:1 on `surface`.
+  primary: Color(0xFF7FCB86),
+  onPrimary: Color(0xFF05320C),
+  primaryContainer: Color(0xFF17491D),
+  onPrimaryContainer: Color(0xFFCFE9CD),
+
+  // The water blue, lifted the same way. #005F87 is 1.6:1 here.
+  secondary: Color(0xFF86CCE8),
+  onSecondary: Color(0xFF04303F),
+  secondaryContainer: Color(0xFF12414F),
+  onSecondaryContainer: Color(0xFFC6E7F3),
+
+  tertiary: Color(0xFFD9B382),
+  onTertiary: Color(0xFF3A2405),
+  tertiaryContainer: Color(0xFF52391A),
+  onTertiaryContainer: Color(0xFFF5DCBA),
+
+  // #BF0000 is 2.0:1 on charcoal; this is the same red opened up to 6.0.
+  error: Color(0xFFF08A82),
+  onError: Color(0xFF4A0000),
+  errorContainer: Color(0xFF6B1410),
+  onErrorContainer: Color(0xFFF7DCD8),
+
+  // Warm charcoal, not Material's blue-black: the light scheme is built on
+  // #F2EFE9, nine points more red than blue, and the dark one keeps that cast.
+  surface: Color(0xFF1B1A17),
+  onSurface: Color(0xFFE9E5DD),
+  onSurfaceVariant: Color(0xFFBDB7AC), // 9.1 on surface
+  surfaceDim: Color(0xFF141311),
+  surfaceBright: Color(0xFF3A3833),
+  surfaceContainerLowest: Color(0xFF100F0D),
+  surfaceContainerLow: Color(0xFF232120),
+  surfaceContainer: Color(0xFF272522),
+  surfaceContainerHigh: Color(0xFF322F2B),
+  surfaceContainerHighest: Color(0xFF3D3A35),
+
+  outline: _outlineDark, // 4.6 on surface
+  outlineVariant: Color(0xFF4A453E),
+
+  inverseSurface: Color(0xFFE9E5DD),
+  onInverseSurface: Color(0xFF1B1A17),
+  inversePrimary: Color(0xFF0B6E13),
+
+  shadow: Color(0xFF000000),
+  scrim: Color(0xFF000000),
+  surfaceTint: Color(0xFF7FCB86),
+);
+
 /// Corner radii, stepped down from Material's 28/16/12. A map is drawn with
 /// rules and fine lines; the M3 pill is the loudest "stock Flutter" tell.
 const double kRadiusLarge = 12;
@@ -245,8 +320,28 @@ const double kRadiusSmall = 6;
 /// shadow carries almost no signal — the hairline does the separating.
 const double kMapChromeElevation = 1;
 
-ThemeData zoneCraftLightTheme() {
-  const scheme = zoneCraftLight;
+/// The light theme: the map's own colours, and the app's default.
+ThemeData zoneCraftLightTheme() =>
+    zoneCraftTheme(zoneCraftLight, ZoneCraftColors.light);
+
+/// The dark theme, for **full screens only** — Settings, About, the button
+/// guide, the OpenStreetMap outbox, the error screens.
+///
+/// The map itself stays light in every case, and so does anything floating
+/// over it. That is not an omission: osm-carto has no dark variant, the tiles
+/// are bright paper whatever the system says, and dark chrome on a bright map
+/// is not dark mode, it is a contrast bug. `MapScreen` pins its own subtree to
+/// [zoneCraftLightTheme] for exactly that reason — which also keeps the
+/// sheets and dialogs it raises light, since they sit on top of the map.
+///
+/// The invariant that makes this safe already existed, written down when the
+/// palette was built: *chrome reads the `ColorScheme`, ink drawn on the map
+/// reads constants*. `kMapInk`, `kMapPlate` and [MapLabel] are constants and
+/// are untouched here.
+ThemeData zoneCraftDarkTheme() =>
+    zoneCraftTheme(zoneCraftDark, ZoneCraftColors.dark);
+
+ThemeData zoneCraftTheme(ColorScheme scheme, ZoneCraftColors colors) {
   final base = ThemeData(colorScheme: scheme, useMaterial3: true);
   final hairline = BorderSide(color: scheme.outline);
   final medium = BorderRadius.circular(kRadiusMedium);
@@ -255,8 +350,10 @@ ThemeData zoneCraftLightTheme() {
     scaffoldBackgroundColor: scheme.surface,
     // Material's black38 measures ~3.4:1 on paper, and this carries the "this
     // layer is hidden" labels — dimmed has to stay readable.
-    disabledColor: const Color(0xFF6B655C),
-    extensions: const <ThemeExtension<dynamic>>[ZoneCraftColors.light],
+    disabledColor: scheme.brightness == Brightness.light
+        ? const Color(0xFF6B655C)
+        : const Color(0xFF8F887E),
+    extensions: <ThemeExtension<dynamic>>[colors],
 
     // ---- surfaces and shapes ------------------------------------------------
     appBarTheme: AppBarThemeData(

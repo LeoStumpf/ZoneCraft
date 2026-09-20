@@ -15,6 +15,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'data/database_recovery.dart';
@@ -119,6 +120,49 @@ final class ErrorLogObserver extends ProviderObserver {
   }
 }
 
+/// The locales the app will resolve to.
+///
+/// **Declaring the delegates alone does nothing.** Flutter resolves the device
+/// locale against this list first, so with `[Locale('en')]` a German phone
+/// resolves to English and every Material widget renders English anyway —
+/// which is the state this is fixing.
+///
+/// So the list is every locale Flutter itself translates, minus the
+/// right-to-left ones. That split is deliberate, and the two halves are
+/// different kinds of thing:
+///
+/// * **Platform chrome** — the date picker, the text-selection menu, the
+///   reorderable list's semantics — is Flutter's, translated by Flutter, and a
+///   German user long-pressing text should get "Einfügen". That is not a
+///   half-translated app; it is system UI in the system's language.
+/// * **ZoneCraft's own ~650 strings** are English, several of them the long
+///   explanatory prose the app is actually built around. Translating those is
+///   a content job, not a string extraction, and it is not done. The store
+///   listing says English.
+///
+/// RTL is excluded because it is **untested**, not because it is unwanted:
+/// declaring `ar` flips the whole layout, and the map chrome, the FAB row and
+/// the banner column have never been looked at mirrored. Shipping a layout
+/// nobody has seen is worse for an Arabic speaker than leaving them the
+/// English one they can at least read around. Remove a code from here once its
+/// direction has actually been checked on a device.
+const Set<String> _untestedRtlLanguages = {
+  'ar', 'fa', 'he', 'iw', 'ps', 'sd', 'ug', 'ur', 'yi', 'ji',
+};
+
+/// English is **first, deliberately**. When the device locale matches nothing
+/// in this list, Flutter falls back to `supportedLocales.first` — and
+/// `kMaterialSupportedLanguages` is a `HashSet`, whose iteration order is
+/// arbitrary. Built straight from it, an Arabic or Thai phone would have
+/// landed on whatever language happened to come out first, which is a worse
+/// answer than English and a much stranger one.
+List<Locale> get supportedLocales => [
+      const Locale('en'),
+      for (final code in kMaterialSupportedLanguages.toList()..sort())
+        if (code != 'en' && !_untestedRtlLanguages.contains(code))
+          Locale(code),
+    ];
+
 /// The root messenger, so a failure with no context of its own can still
 /// reach the user. The drawer keeps its own — a Scaffold draws its drawer
 /// above its snackbars — and that is unaffected.
@@ -136,9 +180,26 @@ class ZoneCraftApp extends StatelessWidget {
       title: 'ZoneCraft',
       debugShowCheckedModeBanner: false,
       scaffoldMessengerKey: appMessengerKey,
+      // Flutter's own widgets carry translations for ~80 locales and use none
+      // of them unless the delegates are declared. Without these, a German
+      // phone showed an English date picker, an English "Paste" in the text
+      // menu and English semantics on the reorderable layer list, inside an
+      // otherwise translated system — and with no supportedLocales at all,
+      // nothing was ever laid out right-to-left.
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: supportedLocales,
       // One theme, written out rather than seeded, and grounded in the map's
       // own palette — see `ui/theme.dart` for why seeding cannot express it.
       theme: zoneCraftLightTheme(),
+      // Full screens — Settings, About, the guide, the outbox — follow the
+      // system. The map does not: `MapScreen` pins its own subtree light,
+      // because the tiles are bright paper whatever the system says and dark
+      // chrome on a bright map is a contrast bug, not dark mode.
+      darkTheme: zoneCraftDarkTheme(),
       home: _Root(recovery: recovery),
     );
   }
@@ -181,7 +242,30 @@ class _RootState extends State<_Root> {
         }
         return child!;
       },
-      child: const MapScreen(),
+      // The map is pinned light, whatever the system theme is.
+      //
+      // osm-carto has no dark variant: the tiles are bright warm paper at 3am
+      // as much as at noon, so chrome that followed the system would be dark
+      // buttons on a bright map. That is not dark mode, it is a contrast bug
+      // — the "half-migrated dark mode, worse than none" this app avoided
+      // until there was a rule for it. The rule: the map and everything drawn
+      // over it is light; every full screen the app pushes follows the system.
+      //
+      // It wraps MapScreen from **outside**, not inside its build. That is
+      // load-bearing: `map_screen.build` reads `Theme.of(context)` inline in
+      // dozens of places, and a wrapper returned *by* that method is below the
+      // context those calls use — so the greyed FABs went dark while the ones
+      // that resolve the theme in their own build (MapChrome) stayed light.
+      // An ancestor puts the whole subtree, and MapScreen's own context, on
+      // the light theme.
+      //
+      // Pushed routes build under MaterialApp's theme and still follow the
+      // system; the sheets and dialogs raised from the map's context inherit
+      // this one, which is what we want, since they sit on top of the map.
+      child: Theme(
+        data: zoneCraftLightTheme(),
+        child: const MapScreen(),
+      ),
     );
   }
 }
