@@ -1,0 +1,80 @@
+# The verification ZoneCraft did not have.
+#
+# Until now the only gate was `scripts/build.sh` on one laptop, with a
+# `--skip-checks` escape hatch — and a dependency bump is exactly the moment
+# somebody reaches for it. Nothing else ever told this project that a change
+# was safe.
+#
+# Four steps, in increasing cost:
+#   1. the lockfile is honoured    — `--enforce-lockfile` turns the committed
+#                                    pubspec.lock into an assertion rather than
+#                                    a suggestion, so a bump must be deliberate
+#   2. formatting                  — cheapest, and keeps diffs reviewable
+#   3. analyze + test              — the same gate build.sh runs
+#   4. a *release* build           — R8 and the native-asset path only exist in
+#                                    release, so a break there would otherwise
+#                                    surface the night before a store upload
+#
+# No secrets. `android/app/build.gradle.kts` falls back to the debug signing
+# key when `key.properties` is absent, and `scripts/build.sh` guards the tile
+# key's env file with `if [ -f ]`, so both work unconfigured. The APK produced
+# here is a smoke test, never something to ship.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The Android build needs a JDK, and this is the *runtime* one, not the
+      # bytecode target — `android/app/build.gradle.kts` pins source, target
+      # and jvmTarget to 17 either way. It is 21 because that is what builds
+      # this project on the developer's machine, and CI that runs a different
+      # JDK from the one a human uses reports on a build nobody makes. AGP is
+      # 9.0.1 on Gradle 9.1.0 here, which is far enough ahead that guessing at
+      # the minimum it tolerates is not worth a red run for a reason nobody
+      # changed.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # Pinned, not `stable`. A moving SDK would mean a green run today and a
+      # red one tomorrow for reasons nobody changed — and `app_links` already
+      # sets the floor at 3.44.0 in pubspec.lock.
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          channel: stable
+          cache: true
+
+      - name: Dependencies match the lockfile
+        run: flutter pub get --enforce-lockfile
+
+      - name: Formatting
+        run: dart format --output=none --set-exit-if-changed lib test
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      # Last because it is the slowest. Release mode only: debug would not
+      # exercise R8 or the native-asset path, which is the whole reason this
+      # step exists.
+      - name: Release build
+        run: flutter build apk --release
