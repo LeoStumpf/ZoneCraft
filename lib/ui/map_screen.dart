@@ -70,6 +70,7 @@ import 'camera_viewport.dart';
 import 'height_editor.dart';
 import 'imported_point_editor.dart';
 import 'poi_set_editor.dart';
+import 'go_to_place_dialog.dart';
 import 'hit_test.dart';
 import 'import_actions.dart';
 import 'import_progress.dart';
@@ -98,6 +99,7 @@ import 'subspace_editor.dart';
 import 'theme.dart';
 import 'transit_import_dialog.dart';
 import 'undo_buttons.dart';
+import 'welcome_sheet.dart';
 
 /// How far in "Locate me" and "Zoom to" will zoom when the map is far out.
 ///
@@ -411,6 +413,22 @@ class _MapScreenState extends ConsumerState<MapScreen>
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => unawaited(_consumeSharedFile()),
     );
+    // What the app is for, once, on the first launch. Counted through the same
+    // UiHints machinery as the button tips — so "Show all tips again" brings it
+    // back, and switching tips off silences it — but with a limit of one: a
+    // welcome that returns on the second launch reads as the app not trusting
+    // you to have read it.
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => unawaited(_maybeWelcome()),
+    );
+  }
+
+  Future<void> _maybeWelcome() async {
+    final show = await ref
+        .read(repositoryProvider)
+        .noteHintShown(kWelcomeHintKey, limit: 1);
+    if (!show || !mounted) return;
+    await showWelcomeSheet(context);
   }
 
   /// Picks up `zonecraft://p?…` links — the one that launched the app and any
@@ -4205,6 +4223,40 @@ class _MapScreenState extends ConsumerState<MapScreen>
     return bestOrder;
   }
 
+  /// Type a place, move the map there — and change nothing else.
+  ///
+  /// The one route a new install has to anywhere but the default camera. It
+  /// deliberately does not touch the layers: reaching a town should not create,
+  /// select or import anything, so this is the only map button whose whole
+  /// effect is where you are looking.
+  Future<void> _goToPlace() async {
+    final place = await showGoToPlaceDialog(context);
+    if (place == null || !mounted) return;
+
+    // A boundary frames to its own extent; a landmark or address has no shape,
+    // so it centres at kMinFocusZoom — a *floor*, so someone already looking
+    // at a street is never yanked back out to see a town.
+    final shape = <LatLng>[
+      for (final ring in place.areas) ...ring,
+      for (final ring in place.lines) ...ring,
+    ];
+    if (shape.length >= 2) {
+      _animateToFit(
+        CameraFit.coordinates(
+          coordinates: shape,
+          padding: const EdgeInsets.all(64),
+          maxZoom: 16,
+        ),
+      );
+    } else {
+      _animateTo(
+        place.center,
+        math.max(_mapController.camera.zoom, kMinFocusZoom).clamp(2.0, 19.0),
+      );
+    }
+    _hint('Moved to ${place.shortName}');
+  }
+
   /// Frames [points] — a single point centres (a camera fit on a degenerate
   /// box zooms to the maximum), several points fit with padding.
   void _applyFocus(MapFocusRequest req) {
@@ -5985,6 +6037,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     ),
                     const SizedBox(height: 12),
                   ],
+                  // First in the column, because on a fresh install it is
+                  // the only button that can get you to your own town: the
+                  // camera starts over southern Germany wherever you are.
+                  FloatingActionButton.small(
+                    heroTag: 'goToPlace',
+                    tooltip: mapControl(MapControlId.goToPlace).name,
+                    onPressed: () => unawaited(_goToPlace()),
+                    child: Icon(mapControl(MapControlId.goToPlace).icon),
+                  ),
+                  const SizedBox(height: 12),
                   // (The compass lives on the map itself, top-right, and only
                   // while the map is rotated — see the map chrome above.)
                   // A toggle, lit while the marker is up, in the shape the

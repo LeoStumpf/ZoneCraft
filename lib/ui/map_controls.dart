@@ -85,6 +85,7 @@ enum MapControlId {
   activeLayer,
   compass,
   download,
+  goToPlace,
   locate,
   share,
   elevation,
@@ -142,6 +143,15 @@ const List<MapControl> mapControls = [
     what: 'Stores the map around you for use with no reception.',
     sometimes: 'Only in a build pointed at a map provider whose terms allow '
         'downloading ahead. Never on OpenStreetMap’s own servers.',
+  ),
+  MapControl(
+    id: MapControlId.goToPlace,
+    area: MapControlArea.tools,
+    icon: Icons.search,
+    name: 'Go to place',
+    what: 'Type a town, street or landmark and the map moves there. It '
+        'searches OpenStreetMap\u2019s own place index and changes nothing '
+        'on your map.',
   ),
   MapControl(
     id: MapControlId.locate,
@@ -318,6 +328,7 @@ String? unavailableReason(MapControlId id, MapControlState s) {
     case MapControlId.activeLayer:
     case MapControlId.compass:
     case MapControlId.download:
+    case MapControlId.goToPlace:
     case MapControlId.locate:
     case MapControlId.share:
     case MapControlId.elevation:

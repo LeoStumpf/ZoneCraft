@@ -36,6 +36,7 @@ import 'request_pacer.dart';
 class PlaceResult {
   const PlaceResult({
     required this.displayName,
+    required this.center,
     required this.areas,
     required this.lines,
     this.category,
@@ -44,6 +45,11 @@ class PlaceResult {
 
   /// Full human label, e.g. "Munich, Bavaria, Germany".
   final String displayName;
+
+  /// Nominatim's own point for the hit. Every result has one, including the
+  /// ones with no geometry at all — which is what makes "Go to place" able to
+  /// find a landmark or a street address, not just an administrative area.
+  final LatLng center;
 
   /// Outer rings of the feature's polygon(s).
   final List<List<LatLng>> areas;
@@ -70,6 +76,11 @@ class PlaceResult {
   int get pointCount =>
       areas.fold(0, (n, r) => n + r.length) +
       lines.fold(0, (n, r) => n + r.length);
+
+  /// Whether there is a shape to import. Point-only hits are perfectly good
+  /// to *navigate* to and impossible to import, so the feature-import dialog
+  /// filters on this while "Go to place" does not.
+  bool get hasGeometry => pointCount > 0;
 }
 
 /// Caps how many candidates Nominatim returns.
@@ -119,9 +130,15 @@ String _host(String? override) {
   return defaultNominatimHost;
 }
 
-/// Parses a Nominatim `jsonv2` response, keeping hits that carry line or area
-/// geometry (points are dropped). Returns empty on any structural surprise
-/// rather than throwing.
+/// Parses a Nominatim `jsonv2` response. Returns empty on any structural
+/// surprise rather than throwing.
+///
+/// Point-only hits are **kept**, with empty [PlaceResult.areas]/[lines] and a
+/// [PlaceResult.center]. They used to be dropped here, because the only caller
+/// imported geometry and a point has none — but that also meant a search for a
+/// landmark or a street address came back empty, which is most of what anyone
+/// types. Callers that need a shape filter on [PlaceResult.hasGeometry];
+/// dropping them here would have put the same filter inside the shared cache.
 List<PlaceResult> parsePlaceSearchResponse(String body) {
   final List<PlaceResult> out = [];
   final dynamic decoded;
@@ -136,10 +153,11 @@ List<PlaceResult> parsePlaceSearchResponse(String body) {
   for (final e in decoded) {
     if (e is! Map) continue;
     final geojson = e['geojson'];
-    if (geojson is! Map) continue;
     // Reuse the generic GeoJSON parser, which extracts both line and area
     // features from (Multi)LineString / (Multi)Polygon.
-    final feats = parseGeoJsonGeometry(jsonEncode(geojson));
+    final feats = geojson is Map
+        ? parseGeoJsonGeometry(jsonEncode(geojson))
+        : const <ImportedFeature>[];
     final areas = [
       for (final f in feats)
         if (f.kind == GeometryKind.area) f.coords,
@@ -148,9 +166,15 @@ List<PlaceResult> parsePlaceSearchResponse(String body) {
       for (final f in feats)
         if (f.kind == GeometryKind.line) f.coords,
     ];
-    if (areas.isEmpty && lines.isEmpty) continue;
+    // Nominatim sends lat/lon as strings on every hit; the geometry is the
+    // fallback for anything that does not, so a result is dropped only when
+    // there is no way at all to say where it is.
+    final center = _pointOf(e['lat'], e['lon']) ?? _centerOfGeometry(areas, lines);
+    if (center == null) continue;
+
     out.add(PlaceResult(
       displayName: (e['display_name'] as String?)?.trim() ?? 'Unnamed feature',
+      center: center,
       areas: areas,
       lines: lines,
       category: e['category'] as String?,
@@ -158,6 +182,35 @@ List<PlaceResult> parsePlaceSearchResponse(String body) {
     ));
   }
   return out;
+}
+
+LatLng? _pointOf(Object? lat, Object? lng) {
+  final a = double.tryParse('$lat');
+  final b = double.tryParse('$lng');
+  if (a == null || b == null || !a.isFinite || !b.isFinite) return null;
+  return LatLng(a, b);
+}
+
+/// The middle of a feature's bounding box.
+///
+/// Not a centroid: for a ring this is cheaper, and for an L-shaped boundary the
+/// true centroid can fall outside the shape entirely, which is a worse place to
+/// put the camera than the middle of the box.
+LatLng? _centerOfGeometry(
+  List<List<LatLng>> areas,
+  List<List<LatLng>> lines,
+) {
+  double? minLat, maxLat, minLng, maxLng;
+  for (final ring in [...areas, ...lines]) {
+    for (final p in ring) {
+      minLat = minLat == null || p.latitude < minLat ? p.latitude : minLat;
+      maxLat = maxLat == null || p.latitude > maxLat ? p.latitude : maxLat;
+      minLng = minLng == null || p.longitude < minLng ? p.longitude : minLng;
+      maxLng = maxLng == null || p.longitude > maxLng ? p.longitude : maxLng;
+    }
+  }
+  if (minLat == null) return null;
+  return LatLng((minLat + maxLat!) / 2, (minLng! + maxLng!) / 2);
 }
 
 /// Results already fetched this session, so a repeated search costs nothing.

@@ -33,6 +33,56 @@ void main() {
   });
 
   group('parsePlaceSearchResponse', () {
+    // These used to be dropped, because the only caller imported geometry and
+    // a point has none. That also meant a search for a landmark or a street
+    // address came back empty — which is most of what anybody types, and is
+    // why the app had no usable "go to place" at all.
+    test('a point-only hit is kept, so it can be navigated to', () {
+      const body = '''
+      [
+        {
+          "display_name": "Eiffel Tower, Paris, France",
+          "category": "tourism",
+          "type": "attraction",
+          "lat": "48.8583701",
+          "lon": "2.2944813"
+        }
+      ]
+      ''';
+      final out = parsePlaceSearchResponse(body);
+      expect(out, hasLength(1));
+      expect(out.single.center.latitude, closeTo(48.85837, 1e-5));
+      expect(out.single.center.longitude, closeTo(2.29448, 1e-5));
+      expect(out.single.hasGeometry, isFalse,
+          reason: 'nothing for the import dialog to offer');
+    });
+
+    test('a hit with neither coordinates nor geometry is dropped', () {
+      const body = '[{"display_name": "Nowhere"}]';
+      expect(parsePlaceSearchResponse(body), isEmpty);
+    });
+
+    // Nominatim always sends lat/lon, but a hit that somehow lacks them is
+    // still usable when it carries a shape, and dropping it would lose a
+    // perfectly good answer.
+    test('geometry supplies a centre when lat/lon are missing', () {
+      const body = '''
+      [
+        {
+          "display_name": "Somewhere",
+          "geojson": {
+            "type": "LineString",
+            "coordinates": [[10.0, 50.0], [12.0, 52.0]]
+          }
+        }
+      ]
+      ''';
+      final out = parsePlaceSearchResponse(body);
+      expect(out, hasLength(1));
+      expect(out.single.center.latitude, closeTo(51.0, 1e-9));
+      expect(out.single.center.longitude, closeTo(11.0, 1e-9));
+    });
+
     test('extracts a Polygon outer ring (closing vertex dropped) as an area', () {
       const body = '''
       [
@@ -144,13 +194,27 @@ void main() {
       expect(results.first.dominantKind, GeometryKind.area);
     });
 
-    test('drops hits without line or area geometry', () {
+    // The rule is "drop what cannot be located", not "drop what has no shape":
+    // a GeoJSON Point contributes no line or area feature, so both of these
+    // are unplaceable. A Point hit carrying lat/lon is kept — see the
+    // point-only test above — and the import dialog filters those out itself.
+    test('drops hits that carry no way to locate them at all', () {
       const body = '''
       [
         {"display_name": "A point", "geojson": {"type": "Point", "coordinates": [1,2]}},
         {"display_name": "No geojson"}
       ]''';
       expect(parsePlaceSearchResponse(body), isEmpty);
+    });
+
+    test('a shapeless hit never reaches the feature-import dialog', () {
+      const body = '''
+      [
+        {"display_name": "A landmark", "lat": "48.0", "lon": "11.0"}
+      ]''';
+      final out = parsePlaceSearchResponse(body);
+      expect(out, hasLength(1), reason: 'navigable');
+      expect(out.where((r) => r.hasGeometry), isEmpty, reason: 'not importable');
     });
 
     test('returns empty on malformed JSON rather than throwing', () {

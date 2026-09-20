@@ -916,35 +916,70 @@ typedef LayerTypeChoice = ({
   String? subtitle,
 });
 
-/// The seven types plus the combined one, in the order the menu offers them.
+/// The seven types, in the order the menu offers them.
+///
+/// Every subtitle says what the layer *is for*, never how it is built. This is
+/// the one menu a beginner cannot avoid — you need a layer before you can draw
+/// anything — and every entry used to be a bare noun with `subtitle: null`.
+/// Several of those nouns are jargon: "subspace" is a Voronoi cell, a word that
+/// appears six times in this codebase and not once in the UI; "height" reads as
+/// z-order in a list of layers, which is exactly what it is not.
+///
+/// The app already writes these explanations well — `subspace_editor` says
+/// "everywhere closer to the main point than to any other point" — but only
+/// *after* you have created one and can see it. Saying it at the moment of
+/// choosing is the same sentence, one step earlier.
+///
+/// The precedent is this project's own best naming decision: "Invert" became
+/// "Fill outside", named by result rather than operation. Same rule here.
 const kLayerTypeChoices = <LayerTypeChoice>[
   (
     type: kCircles,
     icon: Icons.circle_outlined,
     label: 'Circles layer',
-    subtitle: null,
+    subtitle: 'Everything within a distance of a point — "within 2 km of '
+        'the station".',
   ),
   (
     type: kSubspace,
     icon: Icons.scatter_plot_outlined,
-    label: 'Subspace layer',
-    subtitle: null,
+    label: 'Nearest-point layer',
+    subtitle: 'Everywhere closer to one point than to any of the others. Two '
+        'points split the map in half.',
   ),
   (
     type: kFreeLine,
     icon: Icons.polyline,
     label: 'Freehand line layer',
-    subtitle: null,
+    subtitle: 'Draw a line to cut an area in two, and keep one side.',
   ),
   (
     type: kFreeArea,
     icon: Icons.hexagon_outlined,
     label: 'Freehand area layer',
-    subtitle: null,
+    subtitle: 'Draw any shape by hand and fill it.',
   ),
-  (type: kHeight, icon: Icons.terrain, label: 'Height layer', subtitle: null),
-  (type: kPoi, icon: Icons.travel_explore, label: 'POI layer', subtitle: null),
-  (type: kBorders, icon: Icons.public, label: 'Borders layer', subtitle: null),
+  (
+    type: kHeight,
+    icon: Icons.terrain,
+    label: 'Ground-height layer',
+    subtitle: 'Ground above or below an elevation you choose. Needs the '
+        'network once, then works offline.',
+  ),
+  (
+    type: kPoi,
+    icon: Icons.place_outlined,
+    label: 'Places layer',
+    subtitle: 'Import cafés, benches or stations from OpenStreetMap, or place '
+        'your own markers.',
+  ),
+  (
+    type: kBorders,
+    icon: Icons.public,
+    label: 'Borders layer',
+    subtitle: 'Download real district, city or country outlines once and keep '
+        'them offline.',
+  ),
 ];
 
 /// What a new layer is coloured, in creation order.

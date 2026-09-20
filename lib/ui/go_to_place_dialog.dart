@@ -16,28 +16,36 @@
 
 import 'package:flutter/material.dart';
 
-import '../data/geo_import.dart';
 import '../data/place_search.dart';
 
-/// A search dialog that geocodes an OSM feature name (Nominatim) and lets the
-/// user pick a result to import — areas become a freehand area, lines (rivers,
-/// roads, coastlines…) a freehand line. Returns the chosen [PlaceResult], or
-/// null if cancelled. Network errors / empty results are surfaced inline.
-Future<PlaceResult?> showFeatureSearchDialog(BuildContext context) {
+/// Type a place, move the map there. Changes nothing.
+///
+/// The app opened on Munich at zoom 5 on a fresh install and had **no way to
+/// type a place name at all** — the only geocoder route was bolted onto the
+/// feature *import* flow, whose button appears solely on freehand line and
+/// area layers, and the layer a new install is seeded with is `circles`. So a
+/// first-time user anywhere but southern Germany had exactly two ways to reach
+/// their own town: pinch-pan across a continent, or grant location permission.
+///
+/// Deliberately separate from `feature_search_dialog`: that one *writes* — it
+/// imports a boundary as an editable layer — and this one only moves the
+/// camera. Sharing a dialog would have meant one button that sometimes edits
+/// the map and sometimes does not.
+Future<PlaceResult?> showGoToPlaceDialog(BuildContext context) {
   return showDialog<PlaceResult>(
     context: context,
-    builder: (_) => const _FeatureSearchDialog(),
+    builder: (_) => const _GoToPlaceDialog(),
   );
 }
 
-class _FeatureSearchDialog extends StatefulWidget {
-  const _FeatureSearchDialog();
+class _GoToPlaceDialog extends StatefulWidget {
+  const _GoToPlaceDialog();
 
   @override
-  State<_FeatureSearchDialog> createState() => _FeatureSearchDialogState();
+  State<_GoToPlaceDialog> createState() => _GoToPlaceDialogState();
 }
 
-class _FeatureSearchDialogState extends State<_FeatureSearchDialog> {
+class _GoToPlaceDialogState extends State<_GoToPlaceDialog> {
   final _controller = TextEditingController();
   bool _searching = false;
   String? _error;
@@ -49,6 +57,12 @@ class _FeatureSearchDialogState extends State<_FeatureSearchDialog> {
     super.dispose();
   }
 
+  /// Runs on submit and on the search button only.
+  ///
+  /// Never per keystroke: Nominatim's usage policy forbids autocomplete
+  /// outright, and `searchPlaces` additionally paces and caches so that
+  /// repeating a search — type, look, cancel, reopen, type again — cannot
+  /// become the request pattern that gets a client blocked.
   Future<void> _search() async {
     final q = _controller.text.trim();
     if (q.isEmpty || _searching) return;
@@ -62,32 +76,35 @@ class _FeatureSearchDialogState extends State<_FeatureSearchDialog> {
     setState(() {
       _searching = false;
       if (res == null) {
-        _error = 'Search failed — offline or rate-limited. Try again shortly.';
+        _error = 'Search failed — offline, or the geocoder is busy. '
+            'Try again shortly.';
       } else {
-        // This dialog imports a *shape*, so a point-only hit is no use here —
-        // the parser keeps those now, because "Go to place" needs them.
-        _results = res.where((r) => r.hasGeometry).toList();
-        if (_results!.isEmpty) {
-          _error = 'No map features found for “$q”.';
-        }
+        // Everything is navigable, shape or no shape.
+        _results = res;
+        if (res.isEmpty) _error = 'Nothing found for “$q”.';
       }
     });
   }
 
   String _subtitle(PlaceResult r) {
-    final shape = r.dominantKind == GeometryKind.area ? 'area' : 'line';
     final kind = [r.category, r.type]
         .where((s) => s != null && s.isNotEmpty)
         .join(' · ');
-    final tail = '$shape · ${r.pointCount} pts';
-    return kind.isEmpty ? tail : '$kind · $tail';
+    return kind.isEmpty ? r.displayName : '$kind · ${r.displayName}';
+  }
+
+  IconData _icon(PlaceResult r) {
+    if (r.areas.isNotEmpty) return Icons.hexagon_outlined;
+    if (r.lines.isNotEmpty) return Icons.polyline;
+    return Icons.place_outlined;
   }
 
   @override
   Widget build(BuildContext context) {
     final results = _results;
+    final theme = Theme.of(context);
     return AlertDialog(
-      title: const Text('Import map feature'),
+      title: const Text('Go to place'),
       content: SizedBox(
         width: 360,
         child: Column(
@@ -100,8 +117,8 @@ class _FeatureSearchDialogState extends State<_FeatureSearchDialog> {
               textInputAction: TextInputAction.search,
               onSubmitted: (_) => _search(),
               decoration: InputDecoration(
-                labelText: 'Feature name',
-                hintText: 'e.g. Munich, or Isar',
+                labelText: 'Town, street or landmark',
+                hintText: 'e.g. Lisbon, or Bahnhofstrasse Ulm',
                 isDense: true,
                 suffixIcon: IconButton(
                   tooltip: 'Search',
@@ -121,7 +138,7 @@ class _FeatureSearchDialogState extends State<_FeatureSearchDialog> {
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Text(
                   _error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  style: TextStyle(color: theme.colorScheme.error),
                 ),
               )
             else if (results != null && results.isNotEmpty)
@@ -135,30 +152,32 @@ class _FeatureSearchDialogState extends State<_FeatureSearchDialog> {
                     return ListTile(
                       dense: true,
                       contentPadding: EdgeInsets.zero,
-                      leading: Icon(r.dominantKind == GeometryKind.area
-                          ? Icons.hexagon_outlined
-                          : Icons.polyline),
-                      title: Text(r.displayName,
-                          maxLines: 2, overflow: TextOverflow.ellipsis),
-                      subtitle: Text(_subtitle(r)),
-                      onTap: () => Navigator.of(context).pop(r),
+                      leading: Icon(_icon(r)),
+                      title: Text(r.shortName),
+                      subtitle: Text(
+                        _subtitle(r),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      onTap: () => Navigator.pop(context, r),
                     );
                   },
                 ),
               )
             else
-              Text(
-                'Type a place, river, road or boundary name, then search. The '
-                'match is imported as a freehand area (boundaries, parks, lakes…) '
-                'or a freehand line (rivers, roads, coastlines…).',
-                style: Theme.of(context).textTheme.bodySmall,
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  'Moves the map only — nothing is added to your layers.',
+                  style: theme.textTheme.bodySmall,
+                ),
               ),
           ],
         ),
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => Navigator.pop(context),
           child: const Text('Cancel'),
         ),
       ],
