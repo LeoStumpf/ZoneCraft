@@ -12,7 +12,7 @@ Android-first, iOS-ready. Built with Flutter.
 
 ## What you can build
 
-Each **layer** holds one kind of object (or, as a *combined* layer, several). The five *region*
+Each **layer** holds one kind of object, and layers can be grouped into **folders**. The five *region*
 types paint a single flat-coloured area — overlapping objects within a layer never darken each
 other — and a per-layer **invert** fills everything *outside* the region instead. The two
 *import* types pull a snapshot of real OpenStreetMap data and draw it directly.
@@ -49,8 +49,9 @@ never refetch and never poll.
 - Full-bleed OpenStreetMap base map (no API key needed); one floating menu button opens the
   layers drawer.
 - Layers drawer: show/hide, reorder, rename, recolour, adjust opacity, **invert**, add, delete.
-  The active layer receives new objects; a layer is single-type, chosen when you add it, or
-  **combined** to hold several types at once.
+  The active layer receives new objects, and its type is chosen when you add it.
+  **Folders** group layers without merging them — hide, invert or collapse a whole group while
+  each member keeps its own colour, opacity and settings, and can be taken out again.
   The base map is a pinned bottom layer — hideable and dimmable, never deletable.
 - An **Elements** list per layer, naming that layer's objects with Edit / Zoom to / Rename /
   Delete.
