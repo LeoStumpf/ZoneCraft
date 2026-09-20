@@ -97,8 +97,11 @@ void main() {
         ctx(kCircles, holdsAnything: false, holdsInvertible: false),
       );
       expect(reason, contains('empty'));
-      expect(reason, contains('circle'),
-          reason: 'the remedy names the layer\'s own noun');
+      expect(
+        reason,
+        contains('circle'),
+        reason: 'the remedy names the layer\'s own noun',
+      );
     });
 
     test('a layer that is not empty can still have nothing to invert', () {
@@ -110,8 +113,11 @@ void main() {
         ctx(kCircles, holdsInvertible: false, holdsRegionFill: false),
       );
       expect(reason, isNotNull);
-      expect(reason, isNot(contains('empty')),
-          reason: 'it is not empty — that would be the wrong complaint');
+      expect(
+        reason,
+        isNot(contains('empty')),
+        reason: 'it is not empty — that would be the wrong complaint',
+      );
       expect(reason, contains('first'));
     });
 
@@ -204,8 +210,11 @@ void main() {
           if (reason == null) continue;
           expect(reason, endsWith('.'), reason: id.name);
           expect(reason.length, greaterThan(20), reason: '${id.name} terse');
-          expect(reason, contains('first'),
-              reason: '${id.name} does not say what to do about it');
+          expect(
+            reason,
+            contains('first'),
+            reason: '${id.name} does not say what to do about it',
+          );
         }
       }
     });
@@ -250,13 +259,14 @@ void main() {
 
     test('stays quiet when transparency works, or when it is obvious', () {
       expect(layerOpacityNote(ctx(kCircles)), isNull);
-      expect(layerOpacityNote(ctx(kPoi)), isNull,
-          reason: 'a POI layer fades its markers through an Opacity wrapper');
+      expect(
+        layerOpacityNote(ctx(kPoi)),
+        isNull,
+        reason: 'a POI layer fades its markers through an Opacity wrapper',
+      );
       expect(layerOpacityNote(ctx(kBorders)), isNull);
       expect(
-        layerOpacityNote(
-          ctx(kBorders, holdsAnything: false, fillAreas: false),
-        ),
+        layerOpacityNote(ctx(kBorders, holdsAnything: false, fillAreas: false)),
         isNull,
         reason: 'an empty layer fading nothing needs no explaining',
       );
@@ -443,8 +453,9 @@ void main() {
   // they are shown. The map renders one of these as a bare icon whose only
   // explanation is this text, so an empty or lazy description is a button
   // nobody can read.
-  testWidgets('every action explains itself, not just names itself',
-      (tester) async {
+  testWidgets('every action explains itself, not just names itself', (
+    tester,
+  ) async {
     final layers = [
       _layer('a', kCircles),
       _layer('b', kBorders),
@@ -502,8 +513,9 @@ void main() {
     }
   });
 
-  testWidgets('the region toggle is named by its result, not its operation',
-      (tester) async {
+  testWidgets('the region toggle is named by its result, not its operation', (
+    tester,
+  ) async {
     // "Invert" made the user ask invert *what*, into what. Both states have to
     // read as a statement about what the map will show.
     for (final inverted in [false, true]) {
@@ -515,8 +527,9 @@ void main() {
             home: Consumer(
               builder: (context, ref, _) {
                 final l = _layer('a', kCircles, isInverted: inverted);
-                invert = layerActionsFor(context, ref, l, [l])
-                    .firstWhere((a) => a.id == LayerActionId.invert);
+                invert = layerActionsFor(context, ref, l, [
+                  l,
+                ]).firstWhere((a) => a.id == LayerActionId.invert);
                 return const SizedBox.shrink();
               },
             ),
@@ -602,19 +615,22 @@ final _overrides = [
   ),
 ];
 
-Layer _layer(String id, String type,
-        {bool isInverted = false, String? folderId}) =>
-    Layer(
-      id: id,
-      name: 'L$id',
-      colorArgb: 0xFF000000,
-      type: type,
-      isVisible: true,
-      sortOrder: 0,
-      isInverted: isInverted,
-      opacity: 1,
-      createdAt: DateTime(2026),
-      borderFillAreas: false,
-      borderShowNames: false,
-      folderId: folderId,
-    );
+Layer _layer(
+  String id,
+  String type, {
+  bool isInverted = false,
+  String? folderId,
+}) => Layer(
+  id: id,
+  name: 'L$id',
+  colorArgb: 0xFF000000,
+  type: type,
+  isVisible: true,
+  sortOrder: 0,
+  isInverted: isInverted,
+  opacity: 1,
+  createdAt: DateTime(2026),
+  borderFillAreas: false,
+  borderShowNames: false,
+  folderId: folderId,
+);

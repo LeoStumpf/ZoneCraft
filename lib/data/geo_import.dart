@@ -37,11 +37,7 @@ enum GeometryKind { line, area }
 
 /// One geometry extracted from an imported file.
 class ImportedFeature {
-  const ImportedFeature({
-    required this.kind,
-    required this.coords,
-    this.label,
-  });
+  const ImportedFeature({required this.kind, required this.coords, this.label});
 
   final GeometryKind kind;
   final List<LatLng> coords;
@@ -85,9 +81,9 @@ List<ImportedFeature> parseGeoJsonGeometry(String text) {
   Object? root;
   try {
     root = jsonDecode(text);
-  // A file the user picked is arbitrary bytes. Every way it can fail to be
-  // GeoJSON means the same empty result.
-  // ignore: avoid_catches_without_on_clauses
+    // A file the user picked is arbitrary bytes. Every way it can fail to be
+    // GeoJSON means the same empty result.
+    // ignore: avoid_catches_without_on_clauses
   } catch (_) {
     return const [];
   }
@@ -99,32 +95,52 @@ List<ImportedFeature> parseGeoJsonGeometry(String text) {
       case 'LineString':
         final ring = _coordList(c);
         if (ring.length >= 2) {
-          out.add(ImportedFeature(
-              kind: GeometryKind.line, coords: ring, label: label));
+          out.add(
+            ImportedFeature(
+              kind: GeometryKind.line,
+              coords: ring,
+              label: label,
+            ),
+          );
         }
       case 'MultiLineString':
         if (c is List) {
           for (final line in c) {
             final ring = _coordList(line);
             if (ring.length >= 2) {
-              out.add(ImportedFeature(
-                  kind: GeometryKind.line, coords: ring, label: label));
+              out.add(
+                ImportedFeature(
+                  kind: GeometryKind.line,
+                  coords: ring,
+                  label: label,
+                ),
+              );
             }
           }
         }
       case 'Polygon':
         final ring = _polygonOuter(c);
         if (ring.length >= 3) {
-          out.add(ImportedFeature(
-              kind: GeometryKind.area, coords: ring, label: label));
+          out.add(
+            ImportedFeature(
+              kind: GeometryKind.area,
+              coords: ring,
+              label: label,
+            ),
+          );
         }
       case 'MultiPolygon':
         if (c is List) {
           for (final poly in c) {
             final ring = _polygonOuter(poly);
             if (ring.length >= 3) {
-              out.add(ImportedFeature(
-                  kind: GeometryKind.area, coords: ring, label: label));
+              out.add(
+                ImportedFeature(
+                  kind: GeometryKind.area,
+                  coords: ring,
+                  label: label,
+                ),
+              );
             }
           }
         }
@@ -150,7 +166,8 @@ List<ImportedFeature> parseGeoJsonGeometry(String text) {
       }
     } else if (type == 'Feature') {
       final geom = node['geometry'];
-      final label = (node['properties'] as Map<String, dynamic>?)?['name'] as String?;
+      final label =
+          (node['properties'] as Map<String, dynamic>?)?['name'] as String?;
       if (geom is Map<String, dynamic>) handleGeometry(geom, label);
     } else if (type is String) {
       handleGeometry(node, null); // bare geometry
@@ -198,25 +215,22 @@ List<ImportedFeature> parseKml(String text) {
   final XmlDocument doc;
   try {
     doc = XmlDocument.parse(text);
-  // As above: an arbitrary file that is not KML fails in arbitrary ways, and
-  // they all mean "nothing to import".
-  // ignore: avoid_catches_without_on_clauses
+    // As above: an arbitrary file that is not KML fails in arbitrary ways, and
+    // they all mean "nothing to import".
+    // ignore: avoid_catches_without_on_clauses
   } catch (_) {
     return const [];
   }
   final out = <ImportedFeature>[];
 
   for (final placemark in doc.findAllElements('Placemark')) {
-    final label = placemark
-        .findElements('name')
-        .firstOrNull
-        ?.innerText
-        .trim();
+    final label = placemark.findElements('name').firstOrNull?.innerText.trim();
     for (final ls in placemark.findAllElements('LineString')) {
       final ring = _kmlCoords(ls.findElements('coordinates').firstOrNull);
       if (ring.length >= 2) {
-        out.add(ImportedFeature(
-            kind: GeometryKind.line, coords: ring, label: label));
+        out.add(
+          ImportedFeature(kind: GeometryKind.line, coords: ring, label: label),
+        );
       }
     }
     for (final poly in placemark.findAllElements('Polygon')) {
@@ -228,8 +242,9 @@ List<ImportedFeature> parseKml(String text) {
       final ring = _kmlCoords(coordsEl);
       _dropClosing(ring);
       if (ring.length >= 3) {
-        out.add(ImportedFeature(
-            kind: GeometryKind.area, coords: ring, label: label));
+        out.add(
+          ImportedFeature(kind: GeometryKind.area, coords: ring, label: label),
+        );
       }
     }
   }
@@ -267,9 +282,9 @@ List<ImportedFeature> parseKmz(Uint8List bytes) {
   final Archive archive;
   try {
     archive = ZipDecoder().decodeBytes(bytes);
-  // A KMZ that is not a readable zip fails inside the decoder in ways that are
-  // not worth enumerating; none of them are ours to fix.
-  // ignore: avoid_catches_without_on_clauses
+    // A KMZ that is not a readable zip fails inside the decoder in ways that are
+    // not worth enumerating; none of them are ours to fix.
+    // ignore: avoid_catches_without_on_clauses
   } catch (_) {
     return const [];
   }
@@ -325,8 +340,8 @@ List<ImportedFeature> parseGpx(String text) {
   final XmlDocument doc;
   try {
     doc = XmlDocument.parse(text);
-  // As above, for GPX.
-  // ignore: avoid_catches_without_on_clauses
+    // As above, for GPX.
+    // ignore: avoid_catches_without_on_clauses
   } catch (_) {
     return const [];
   }
@@ -337,8 +352,9 @@ List<ImportedFeature> parseGpx(String text) {
     for (final seg in trk.findAllElements('trkseg')) {
       final pts = _gpxPoints(seg.findElements('trkpt'));
       if (pts.length >= 2) {
-        out.add(ImportedFeature(
-            kind: GeometryKind.line, coords: pts, label: label));
+        out.add(
+          ImportedFeature(kind: GeometryKind.line, coords: pts, label: label),
+        );
       }
     }
   }
@@ -346,8 +362,9 @@ List<ImportedFeature> parseGpx(String text) {
     final label = rte.findElements('name').firstOrNull?.innerText.trim();
     final pts = _gpxPoints(rte.findElements('rtept'));
     if (pts.length >= 2) {
-      out.add(ImportedFeature(
-          kind: GeometryKind.line, coords: pts, label: label));
+      out.add(
+        ImportedFeature(kind: GeometryKind.line, coords: pts, label: label),
+      );
     }
   }
   return out;
@@ -399,7 +416,8 @@ List<LatLng> stitchPolylines(List<List<LatLng>> parts) =>
 /// starts a new component. See [stitchPolylines] for why a gap is never bridged.
 List<List<LatLng>> stitchComponents(List<List<LatLng>> parts) {
   final remaining = <List<LatLng>>[
-    for (final p in parts) if (p.length >= 2) List<LatLng>.of(p),
+    for (final p in parts)
+      if (p.length >= 2) List<LatLng>.of(p),
   ];
   if (remaining.isEmpty) return const [];
 

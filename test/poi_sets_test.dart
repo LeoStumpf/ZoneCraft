@@ -30,39 +30,42 @@ import 'package:zonecraft/geo/border_areas.dart' show outerRings;
 /// and the hit test read the same function; this proves the function.
 void main() {
   PoiSet set(String source, {int visible = -1}) => PoiSet(
-        id: 's',
-        layerId: 'l',
-        categoryKey: 'x',
-        centerLat: 48,
-        centerLng: 11,
-        radiusMeters: 1,
-        createdAt: DateTime(2026),
-        colorShade: 0,
-        zOrder: 0,
-        source: source,
-        south: source == kPoiSourceBox ? 47.9 : null,
-        west: source == kPoiSourceBox ? 10.9 : null,
-        north: source == kPoiSourceBox ? 48.1 : null,
-        east: source == kPoiSourceBox ? 11.1 : null,
-        modeMask: source == kPoiSourceBox ? 3 : 0,
-        visibleModeMask: visible,
-      );
+    id: 's',
+    layerId: 'l',
+    categoryKey: 'x',
+    centerLat: 48,
+    centerLng: 11,
+    radiusMeters: 1,
+    createdAt: DateTime(2026),
+    colorShade: 0,
+    zOrder: 0,
+    source: source,
+    south: source == kPoiSourceBox ? 47.9 : null,
+    west: source == kPoiSourceBox ? 10.9 : null,
+    north: source == kPoiSourceBox ? 48.1 : null,
+    east: source == kPoiSourceBox ? 11.1 : null,
+    modeMask: source == kPoiSourceBox ? 3 : 0,
+    visibleModeMask: visible,
+  );
   PoiPoint point(int modeMask) => PoiPoint(
-        id: 'p',
-        poiSetId: 's',
-        lat: 48,
-        lng: 11,
-        sortOrder: 0,
-        createdAt: DateTime(2026),
-        modeMask: modeMask,
-      );
+    id: 'p',
+    poiSetId: 's',
+    lat: 48,
+    lng: 11,
+    sortOrder: 0,
+    createdAt: DateTime(2026),
+    modeMask: modeMask,
+  );
 
   group('poiPointVisible', () {
     test('a station import follows transitStationVisible exactly', () {
       for (final station in [0, 1, 2, 3]) {
         for (final visible in [0, 1, 2, 3]) {
           expect(
-            poiPointVisible(point(station), set(kPoiSourceBox, visible: visible)),
+            poiPointVisible(
+              point(station),
+              set(kPoiSourceBox, visible: visible),
+            ),
             transitStationVisible(station, visible),
             reason: 'station $station, visible $visible',
           );
@@ -77,8 +80,11 @@ void main() {
       // POI whenever the set's filter happened to be 0.
       for (final source in [kPoiSourceRadius, kPoiSourceManual]) {
         for (final visible in [0, -1]) {
-          expect(poiPointVisible(point(0), set(source, visible: visible)),
-              isTrue, reason: '$source, visible $visible');
+          expect(
+            poiPointVisible(point(0), set(source, visible: visible)),
+            isTrue,
+            reason: '$source, visible $visible',
+          );
         }
       }
     });
@@ -91,21 +97,31 @@ void main() {
   group('PoiSetKind', () {
     test('the three sources are told apart', () {
       final manual = set(kPoiSourceManual);
-      expect((manual.isManual, manual.isImport, manual.isStationImport),
-          (true, false, false));
+      expect(
+        (manual.isManual, manual.isImport, manual.isStationImport),
+        (true, false, false),
+      );
       final radius = set(kPoiSourceRadius);
-      expect((radius.isManual, radius.isImport, radius.isStationImport),
-          (false, true, false));
+      expect(
+        (radius.isManual, radius.isImport, radius.isStationImport),
+        (false, true, false),
+      );
       final box = set(kPoiSourceBox);
-      expect((box.isManual, box.isImport, box.isStationImport),
-          (false, true, true));
+      expect(
+        (box.isManual, box.isImport, box.isStationImport),
+        (false, true, true),
+      );
     });
 
     test('only an import can be pending, and only until fetched', () {
       expect(set(kPoiSourceManual).isPending, isFalse);
       expect(set(kPoiSourceRadius).isPending, isTrue);
-      expect(set(kPoiSourceRadius).copyWith(fetchedAt: Value(DateTime(2026)))
-          .isPending, isFalse);
+      expect(
+        set(
+          kPoiSourceRadius,
+        ).copyWith(fetchedAt: Value(DateTime(2026))).isPending,
+        isFalse,
+      );
     });
 
     test('only a box set has a box', () {
@@ -118,15 +134,26 @@ void main() {
     // A migrated transit layer and a radius import of "Transit stations"
     // share this key, so it has to exist in the catalogue the radius import
     // reads its label and icon from.
-    expect(poiCategories.map((c) => c.key), contains(kTransitStationCategoryKey));
+    expect(
+      poiCategories.map((c) => c.key),
+      contains(kTransitStationCategoryKey),
+    );
   });
 
   test('boxCoveringRadiusMeters is half the diagonal', () {
     final r = boxCoveringRadiusMeters(
-        south: 48.0, west: 11.0, north: 48.0, east: 11.0);
+      south: 48.0,
+      west: 11.0,
+      north: 48.0,
+      east: 11.0,
+    );
     expect(r, 0);
     final wide = boxCoveringRadiusMeters(
-        south: 48.0, west: 11.0, north: 48.1, east: 11.1);
+      south: 48.0,
+      west: 11.0,
+      north: 48.1,
+      east: 11.1,
+    );
     // ~11 km on the ground for a 0.1° × 0.1° box at 48°N, halved.
     expect(wide, closeTo(6650, 200));
   });
@@ -142,8 +169,11 @@ void main() {
     tearDown(() => db.close());
 
     test('come back in stored order, and empty before generation', () async {
-      final layerId =
-          await repo.createLayer(name: 'H', colorArgb: 1, type: 'height');
+      final layerId = await repo.createLayer(
+        name: 'H',
+        colorArgb: 1,
+        type: 'height',
+      );
       final region = await repo.createHeightRegion(
         layerId: layerId,
         centerLat: 47.5,
@@ -154,8 +184,12 @@ void main() {
       expect(await repo.heightRegionRings(region), isEmpty);
 
       const rings = [
-        [LatLng(47.4, 10.9), LatLng(47.4, 11.1), LatLng(47.6, 11.1),
-          LatLng(47.6, 10.9)],
+        [
+          LatLng(47.4, 10.9),
+          LatLng(47.4, 11.1),
+          LatLng(47.6, 11.1),
+          LatLng(47.6, 10.9),
+        ],
         [LatLng(47.45, 10.95), LatLng(47.45, 11.05), LatLng(47.55, 11.05)],
       ];
       await repo.replaceHeightPolygons(region, rings);
@@ -172,7 +206,10 @@ void main() {
       // is a disk with the mountains cut out, and only the disk survives.
       const disk = [LatLng(0, 0), LatLng(0, 1), LatLng(1, 1), LatLng(1, 0)];
       const hole = [
-        LatLng(0.4, 0.4), LatLng(0.4, 0.6), LatLng(0.6, 0.6), LatLng(0.6, 0.4),
+        LatLng(0.4, 0.4),
+        LatLng(0.4, 0.6),
+        LatLng(0.6, 0.6),
+        LatLng(0.6, 0.4),
       ];
       const exclave = [LatLng(2, 2), LatLng(2, 3), LatLng(3, 3)];
       final kept = outerRings([disk, hole, exclave]);

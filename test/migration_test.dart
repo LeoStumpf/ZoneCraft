@@ -97,63 +97,72 @@ void main() {
     expect(rows.single.osmId, isNull);
   });
 
-  test('v21 → today leaves every existing element on the layer colour', () async {
-    // The v22 change adds per-element colours. The promise that matters to
-    // someone upgrading is that their map does not change: every migrated row
-    // must come out with **no** override and shade **0**, and shade 0 is the
-    // layer colour itself (see `ui/element_color.dart`).
-    final old = await verifier.schemaAt(21);
-    old.rawDatabase.execute(
-      "INSERT INTO layers (id, name, color_argb, sort_order, type) "
-      "VALUES ('l1', 'Circles', 4278190335, 0, 'circles')",
-    );
-    old.rawDatabase.execute(
-      "INSERT INTO circles (id, layer_id, center_lat, center_lng, "
-      "radius_meters, label) VALUES ('c1', 'l1', 48.1, 11.5, 1000, 'Home')",
-    );
+  test(
+    'v21 → today leaves every existing element on the layer colour',
+    () async {
+      // The v22 change adds per-element colours. The promise that matters to
+      // someone upgrading is that their map does not change: every migrated row
+      // must come out with **no** override and shade **0**, and shade 0 is the
+      // layer colour itself (see `ui/element_color.dart`).
+      final old = await verifier.schemaAt(21);
+      old.rawDatabase.execute(
+        "INSERT INTO layers (id, name, color_argb, sort_order, type) "
+        "VALUES ('l1', 'Circles', 4278190335, 0, 'circles')",
+      );
+      old.rawDatabase.execute(
+        "INSERT INTO circles (id, layer_id, center_lat, center_lng, "
+        "radius_meters, label) VALUES ('c1', 'l1', 48.1, 11.5, 1000, 'Home')",
+      );
 
-    final db = AppDatabase.forTesting(old.newConnection());
-    addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 31);
+      final db = AppDatabase.forTesting(old.newConnection());
+      addTearDown(db.close);
+      await verifier.migrateAndValidate(db, 31);
 
-    final circle = (await db.select(db.circles).get()).single;
-    expect(circle.label, 'Home', reason: 'the upgrade must not drop circles');
-    expect(circle.colorArgb, isNull, reason: 'no override was ever set');
-    expect(circle.colorShade, 0, reason: 'shade 0 == the layer colour');
-  });
+      final circle = (await db.select(db.circles).get()).single;
+      expect(circle.label, 'Home', reason: 'the upgrade must not drop circles');
+      expect(circle.colorArgb, isNull, reason: 'no override was ever set');
+      expect(circle.colorShade, 0, reason: 'shade 0 == the layer colour');
+    },
+  );
 
-  test('v22 → today leaves every border area marked as untouched OSM geometry',
-      () async {
-    // The v23 change makes border outlines reshapeable and records when one
-    // was. Everything that already exists is by definition *not* reshaped, and
-    // that has to survive the upgrade: a stored area wrongly flagged as edited
-    // would tell the user their snapshot had been forked when it hadn't.
-    final old = await verifier.schemaAt(22);
-    old.rawDatabase.execute(
-      "INSERT INTO layers (id, name, color_argb, sort_order, type, "
-      "border_level) VALUES ('l1', 'Districts', 4278190335, 0, 'borders', '8')",
-    );
-    old.rawDatabase.execute(
-      "INSERT INTO border_sets (id, layer_id, south, west, north, east, "
-      "admin_level, fetched_at) VALUES ('s1', 'l1', 48.0, 11.0, 48.2, 11.3, "
-      "'8', 1700000000)",
-    );
-    old.rawDatabase.execute(
-      "INSERT INTO border_areas (id, set_id, osm_id, name, south, west, "
-      "north, east, label_lat, label_lng, point_count, rings, way_ids) "
-      "VALUES ('a1', 's1', 42, 'Maxvorstadt', 48.0, 11.0, 48.1, 11.1, "
-      "48.05, 11.05, 4, "
-      "'[[[48.0,11.0],[48.0,11.1],[48.1,11.1],[48.1,11.0]]]', '[7]')",
-    );
+  test(
+    'v22 → today leaves every border area marked as untouched OSM geometry',
+    () async {
+      // The v23 change makes border outlines reshapeable and records when one
+      // was. Everything that already exists is by definition *not* reshaped, and
+      // that has to survive the upgrade: a stored area wrongly flagged as edited
+      // would tell the user their snapshot had been forked when it hadn't.
+      final old = await verifier.schemaAt(22);
+      old.rawDatabase.execute(
+        "INSERT INTO layers (id, name, color_argb, sort_order, type, "
+        "border_level) VALUES ('l1', 'Districts', 4278190335, 0, 'borders', '8')",
+      );
+      old.rawDatabase.execute(
+        "INSERT INTO border_sets (id, layer_id, south, west, north, east, "
+        "admin_level, fetched_at) VALUES ('s1', 'l1', 48.0, 11.0, 48.2, 11.3, "
+        "'8', 1700000000)",
+      );
+      old.rawDatabase.execute(
+        "INSERT INTO border_areas (id, set_id, osm_id, name, south, west, "
+        "north, east, label_lat, label_lng, point_count, rings, way_ids) "
+        "VALUES ('a1', 's1', 42, 'Maxvorstadt', 48.0, 11.0, 48.1, 11.1, "
+        "48.05, 11.05, 4, "
+        "'[[[48.0,11.0],[48.0,11.1],[48.1,11.1],[48.1,11.0]]]', '[7]')",
+      );
 
-    final db = AppDatabase.forTesting(old.newConnection());
-    addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 31);
+      final db = AppDatabase.forTesting(old.newConnection());
+      addTearDown(db.close);
+      await verifier.migrateAndValidate(db, 31);
 
-    final area = (await db.select(db.borderAreas).get()).single;
-    expect(area.name, 'Maxvorstadt', reason: 'the upgrade must not drop areas');
-    expect(area.editedAt, isNull, reason: 'null == untouched OSM geometry');
-  });
+      final area = (await db.select(db.borderAreas).get()).single;
+      expect(
+        area.name,
+        'Maxvorstadt',
+        reason: 'the upgrade must not drop areas',
+      );
+      expect(area.editedAt, isNull, reason: 'null == untouched OSM geometry');
+    },
+  );
 
   test('v23 → today keeps a layer that never had the track columns', () async {
     // v24 put the track type's two settings on *every* layer row and v27 took
@@ -174,7 +183,6 @@ void main() {
     final layer = (await db.select(db.layers).get()).single;
     expect(layer.name, 'Lines', reason: 'the upgrade must not drop layers');
   });
-
 
   test('v24 → today leaves every existing POI set an import', () async {
     // The v25 change adds hand-placed POI categories. The distinction is the
@@ -199,158 +207,202 @@ void main() {
 
     final set = (await db.select(db.poiSets).get()).single;
     expect(set.label, 'Cafés', reason: 'the upgrade must not drop imports');
-    expect(set.source, kPoiSourceRadius, reason: 'a fetched set is not hand-made');
+    expect(
+      set.source,
+      kPoiSourceRadius,
+      reason: 'a fetched set is not hand-made',
+    );
     expect(set.iconKey, isNull, reason: 'an import icons itself by category');
-    expect(set.fetchedAt, isNotNull,
-        reason: 'an import that exists was fetched — not a retry row');
+    expect(
+      set.fetchedAt,
+      isNotNull,
+      reason: 'an import that exists was fetched — not a retry row',
+    );
   });
 
-  test('v25 → today backfills the stack in the order it already painted', () async {
-    // The v26 change gives elements a draw order they never had. The whole
-    // promise of the backfill is that an existing map renders *identically*
-    // afterwards, so the order it writes has to be the order the painter
-    // already used: colour groups ranked by `color_shade`, the per-layer
-    // creation counter. Anything else silently restacks somebody's map on
-    // upgrade — the one failure this feature can cause and nobody would report
-    // as a bug, only as "it looks wrong now".
-    final old = await verifier.schemaAt(25);
-    old.rawDatabase.execute(
-      "INSERT INTO layers (id, name, color_argb, sort_order, type) "
-      "VALUES ('l1', 'Circles', 4278190335, 0, 'circles')",
-    );
-    // Deliberately inserted newest-first, so a migration that just used rowid
-    // would get the answer backwards.
-    for (final (id, shade) in const [('c3', 2), ('c1', 0), ('c2', 1)]) {
+  test(
+    'v25 → today backfills the stack in the order it already painted',
+    () async {
+      // The v26 change gives elements a draw order they never had. The whole
+      // promise of the backfill is that an existing map renders *identically*
+      // afterwards, so the order it writes has to be the order the painter
+      // already used: colour groups ranked by `color_shade`, the per-layer
+      // creation counter. Anything else silently restacks somebody's map on
+      // upgrade — the one failure this feature can cause and nobody would report
+      // as a bug, only as "it looks wrong now".
+      final old = await verifier.schemaAt(25);
+      old.rawDatabase.execute(
+        "INSERT INTO layers (id, name, color_argb, sort_order, type) "
+        "VALUES ('l1', 'Circles', 4278190335, 0, 'circles')",
+      );
+      // Deliberately inserted newest-first, so a migration that just used rowid
+      // would get the answer backwards.
+      for (final (id, shade) in const [('c3', 2), ('c1', 0), ('c2', 1)]) {
+        old.rawDatabase.execute(
+          "INSERT INTO circles (id, layer_id, center_lat, center_lng, "
+          "radius_meters, created_at, color_shade) "
+          "VALUES ('$id', 'l1', 48.1, 11.5, 100.0, 0, $shade)",
+        );
+      }
+      // A second layer proves the rank is per layer, not global: its lone circle
+      // must come out at 0, not at 3.
+      old.rawDatabase.execute(
+        "INSERT INTO layers (id, name, color_argb, sort_order, type) "
+        "VALUES ('l2', 'More', 4278190335, 1, 'circles')",
+      );
       old.rawDatabase.execute(
         "INSERT INTO circles (id, layer_id, center_lat, center_lng, "
         "radius_meters, created_at, color_shade) "
-        "VALUES ('$id', 'l1', 48.1, 11.5, 100.0, 0, $shade)",
+        "VALUES ('c9', 'l2', 48.1, 11.5, 100.0, 0, 0)",
       );
-    }
-    // A second layer proves the rank is per layer, not global: its lone circle
-    // must come out at 0, not at 3.
-    old.rawDatabase.execute(
-      "INSERT INTO layers (id, name, color_argb, sort_order, type) "
-      "VALUES ('l2', 'More', 4278190335, 1, 'circles')",
-    );
-    old.rawDatabase.execute(
-      "INSERT INTO circles (id, layer_id, center_lat, center_lng, "
-      "radius_meters, created_at, color_shade) "
-      "VALUES ('c9', 'l2', 48.1, 11.5, 100.0, 0, 0)",
-    );
 
-    final db = AppDatabase.forTesting(old.newConnection());
-    addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 31);
+      final db = AppDatabase.forTesting(old.newConnection());
+      addTearDown(db.close);
+      await verifier.migrateAndValidate(db, 31);
 
-    final rows = await db.select(db.circles).get();
-    final z = {for (final c in rows) c.id: c.zOrder};
-    expect(z, {'c1': 0, 'c2': 1, 'c3': 2, 'c9': 0});
-  });
+      final rows = await db.select(db.circles).get();
+      final z = {for (final c in rows) c.id: c.zOrder};
+      expect(z, {'c1': 0, 'c2': 1, 'c3': 2, 'c9': 0});
+    },
+  );
 
-  test('v26 → v27 folds planes into subspaces, transit into POIs, drops tracks',
-      () async {
-    // Three types left in one step, and two of them carry data across. The
-    // promises: a plane comes back as the *same* half-plane (the near side is
-    // the main point), a station import comes back as a box POI set with its
-    // stations, filter and retry state intact, a hand-made category stays
-    // hand-made, an old radius import does not turn into a retry row, and the
-    // track layer is gone rather than left as a ghost of an unknown type.
-    final old = await verifier.schemaAt(26);
-    final x = old.rawDatabase.execute;
-    x("INSERT INTO layers (id, name, color_argb, sort_order, type) "
-        "VALUES ('lp', 'Planes', 1, 0, 'planes')");
-    x("INSERT INTO planes (id, layer_id, a_lat, a_lng, b_lat, b_lng, near_a, "
+  test(
+    'v26 → v27 folds planes into subspaces, transit into POIs, drops tracks',
+    () async {
+      // Three types left in one step, and two of them carry data across. The
+      // promises: a plane comes back as the *same* half-plane (the near side is
+      // the main point), a station import comes back as a box POI set with its
+      // stations, filter and retry state intact, a hand-made category stays
+      // hand-made, an old radius import does not turn into a retry row, and the
+      // track layer is gone rather than left as a ghost of an unknown type.
+      final old = await verifier.schemaAt(26);
+      final x = old.rawDatabase.execute;
+      x(
+        "INSERT INTO layers (id, name, color_argb, sort_order, type) "
+        "VALUES ('lp', 'Planes', 1, 0, 'planes')",
+      );
+      x(
+        "INSERT INTO planes (id, layer_id, a_lat, a_lng, b_lat, b_lng, near_a, "
         "label, z_order) VALUES ('p1', 'lp', 48.0, 11.0, 48.2, 11.4, 0, "
-        "'Half', 3)");
-    x("INSERT INTO layers (id, name, color_argb, sort_order, type) "
-        "VALUES ('lt', 'Transit', 1, 1, 'transit')");
-    x("INSERT INTO transit_sets (id, layer_id, south, west, north, east, "
+        "'Half', 3)",
+      );
+      x(
+        "INSERT INTO layers (id, name, color_argb, sort_order, type) "
+        "VALUES ('lt', 'Transit', 1, 1, 'transit')",
+      );
+      x(
+        "INSERT INTO transit_sets (id, layer_id, south, west, north, east, "
         "mode_mask, visible_mode_mask, label, fetched_at, station_count, "
         "node_count) VALUES ('t1', 'lt', 48.0, 11.4, 48.3, 11.8, 7, 3, "
-        "'Munich', 1700000000, 2, 5)");
-    x("INSERT INTO transit_sets (id, layer_id, south, west, north, east, "
+        "'Munich', 1700000000, 2, 5)",
+      );
+      x(
+        "INSERT INTO transit_sets (id, layer_id, south, west, north, east, "
         "mode_mask, last_error) VALUES ('t2', 'lt', 48.0, 11.0, 48.1, 11.1, "
-        "1, 'Overpass was busy')");
-    x("INSERT INTO transit_stops (id, set_id, osm_id, lat, lng, name, "
+        "1, 'Overpass was busy')",
+      );
+      x(
+        "INSERT INTO transit_stops (id, set_id, osm_id, lat, lng, name, "
         "mode_mask, node_count, route_ref) VALUES ('s1', 't1', 42, 48.1, "
-        "11.5, 'Pasing', 6, 31, NULL)");
-    x("INSERT INTO transit_stops (id, set_id, osm_id, lat, lng, name, "
+        "11.5, 'Pasing', 6, 31, NULL)",
+      );
+      x(
+        "INSERT INTO transit_stops (id, set_id, osm_id, lat, lng, name, "
         "mode_mask, node_count, route_ref) VALUES ('s2', 't1', 0, 48.15, "
-        "11.55, NULL, 0, 1, 'U3')");
-    x("INSERT INTO layers (id, name, color_argb, sort_order, type) "
-        "VALUES ('lq', 'POIs', 1, 2, 'poi')");
-    x("INSERT INTO poi_sets (id, layer_id, category_key, center_lat, "
+        "11.55, NULL, 0, 1, 'U3')",
+      );
+      x(
+        "INSERT INTO layers (id, name, color_argb, sort_order, type) "
+        "VALUES ('lq', 'POIs', 1, 2, 'poi')",
+      );
+      x(
+        "INSERT INTO poi_sets (id, layer_id, category_key, center_lat, "
         "center_lng, radius_meters, is_manual, created_at) "
-        "VALUES ('m1', 'lq', 'star', 48, 11, 0, 1, 1700000000)");
-    x("INSERT INTO poi_sets (id, layer_id, category_key, center_lat, "
+        "VALUES ('m1', 'lq', 'star', 48, 11, 0, 1, 1700000000)",
+      );
+      x(
+        "INSERT INTO poi_sets (id, layer_id, category_key, center_lat, "
         "center_lng, radius_meters, created_at) "
-        "VALUES ('r1', 'lq', 'cafe', 48, 11, 800, 1700000000)");
-    x("INSERT INTO layers (id, name, color_argb, sort_order, type) "
-        "VALUES ('lk', 'Walk', 1, 3, 'track')");
-    x("INSERT INTO tracks (id, layer_id) VALUES ('k1', 'lk')");
+        "VALUES ('r1', 'lq', 'cafe', 48, 11, 800, 1700000000)",
+      );
+      x(
+        "INSERT INTO layers (id, name, color_argb, sort_order, type) "
+        "VALUES ('lk', 'Walk', 1, 3, 'track')",
+      );
+      x("INSERT INTO tracks (id, layer_id) VALUES ('k1', 'lk')");
 
-    final db = AppDatabase.forTesting(old.newConnection());
-    addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 31);
+      final db = AppDatabase.forTesting(old.newConnection());
+      addTearDown(db.close);
+      await verifier.migrateAndValidate(db, 31);
 
-    // planes: same id, near side is main at sort 0, layer retyped, z kept.
-    final sub = (await db.select(db.subspaces).get()).single;
-    expect((sub.id, sub.label, sub.zOrder), ('p1', 'Half', 3));
-    final pts = await (db.select(db.subspacePoints)
-          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
-        .get();
-    expect(
-      [for (final p in pts) (p.lat, p.lng, p.isMain)],
-      [(48.2, 11.4, true), (48.0, 11.0, false)],
-      reason: 'near_a = 0 means B was the kept side, so B is the main point',
-    );
-    final types = {
-      for (final l in await db.select(db.layers).get()) l.id: l.type,
-    };
-    expect(types, {'lp': 'subspace', 'lt': 'poi', 'lq': 'poi'},
-        reason: 'the track layer is gone, not left as an unknown type');
+      // planes: same id, near side is main at sort 0, layer retyped, z kept.
+      final sub = (await db.select(db.subspaces).get()).single;
+      expect((sub.id, sub.label, sub.zOrder), ('p1', 'Half', 3));
+      final pts = await (db.select(
+        db.subspacePoints,
+      )..orderBy([(p) => OrderingTerm(expression: p.sortOrder)])).get();
+      expect(
+        [for (final p in pts) (p.lat, p.lng, p.isMain)],
+        [(48.2, 11.4, true), (48.0, 11.0, false)],
+        reason: 'near_a = 0 means B was the kept side, so B is the main point',
+      );
+      final types = {
+        for (final l in await db.select(db.layers).get()) l.id: l.type,
+      };
+      expect(types, {
+        'lp': 'subspace',
+        'lt': 'poi',
+        'lq': 'poi',
+      }, reason: 'the track layer is gone, not left as an unknown type');
 
-    // transit: ids kept, source box, bbox + masks, pending row kept pending.
-    final sets = {for (final s in await db.select(db.poiSets).get()) s.id: s};
-    final t1 = sets['t1']!;
-    expect(t1.source, kPoiSourceBox);
-    expect(t1.categoryKey, kTransitStationCategoryKey);
-    expect((t1.south, t1.west, t1.north, t1.east), (48.0, 11.4, 48.3, 11.8));
-    expect((t1.modeMask, t1.visibleModeMask), (7, 3));
-    expect(t1.fetchedAt, isNotNull);
-    expect(t1.centerLat, closeTo(48.15, 1e-9));
-    expect(t1.centerLng, closeTo(11.6, 1e-9));
-    expect(
-      t1.radiusMeters,
-      closeTo(
+      // transit: ids kept, source box, bbox + masks, pending row kept pending.
+      final sets = {for (final s in await db.select(db.poiSets).get()) s.id: s};
+      final t1 = sets['t1']!;
+      expect(t1.source, kPoiSourceBox);
+      expect(t1.categoryKey, kTransitStationCategoryKey);
+      expect((t1.south, t1.west, t1.north, t1.east), (48.0, 11.4, 48.3, 11.8));
+      expect((t1.modeMask, t1.visibleModeMask), (7, 3));
+      expect(t1.fetchedAt, isNotNull);
+      expect(t1.centerLat, closeTo(48.15, 1e-9));
+      expect(t1.centerLng, closeTo(11.6, 1e-9));
+      expect(
+        t1.radiusMeters,
+        closeTo(
           boxCoveringRadiusMeters(
-              south: 48.0, west: 11.4, north: 48.3, east: 11.8),
-          1e-6),
-      reason: 'the migration and createPoiSet use the same formula',
-    );
-    final t2 = sets['t2']!;
-    expect(t2.fetchedAt, isNull);
-    expect(t2.lastError, 'Overpass was busy');
-    final stops = {
-      for (final p in await db.select(db.poiPoints).get()) p.id: p,
-    };
-    final s1 = stops['s1']!;
-    expect((s1.poiSetId, s1.osmType, s1.osmId, s1.modeMask, s1.name),
-        ('t1', 'node', 42, 6, 'Pasing'));
-    expect(stops['s2']!.osmId, isNull, reason: 'osm id 0 is "no identity"');
-    expect({s1.sortOrder, stops['s2']!.sortOrder}, {0, 1});
+            south: 48.0,
+            west: 11.4,
+            north: 48.3,
+            east: 11.8,
+          ),
+          1e-6,
+        ),
+        reason: 'the migration and createPoiSet use the same formula',
+      );
+      final t2 = sets['t2']!;
+      expect(t2.fetchedAt, isNull);
+      expect(t2.lastError, 'Overpass was busy');
+      final stops = {
+        for (final p in await db.select(db.poiPoints).get()) p.id: p,
+      };
+      final s1 = stops['s1']!;
+      expect(
+        (s1.poiSetId, s1.osmType, s1.osmId, s1.modeMask, s1.name),
+        ('t1', 'node', 42, 6, 'Pasing'),
+      );
+      expect(stops['s2']!.osmId, isNull, reason: 'osm id 0 is "no identity"');
+      expect({s1.sortOrder, stops['s2']!.sortOrder}, {0, 1});
 
-    // poi: is_manual folded into source; an old import is not a retry row.
-    expect(sets['m1']!.source, kPoiSourceManual);
-    expect(sets['m1']!.fetchedAt, isNull);
-    expect(sets['r1']!.source, kPoiSourceRadius);
-    expect(sets['r1']!.fetchedAt, sets['r1']!.createdAt);
+      // poi: is_manual folded into source; an old import is not a retry row.
+      expect(sets['m1']!.source, kPoiSourceManual);
+      expect(sets['m1']!.fetchedAt, isNull);
+      expect(sets['r1']!.source, kPoiSourceRadius);
+      expect(sets['r1']!.fetchedAt, sets['r1']!.createdAt);
 
-    // The ids survived, so the cascade still hangs together.
-    await Repository(db).deletePoiSet('t1');
-    expect(await db.select(db.poiPoints).get(), isEmpty);
-  });
+      // The ids survived, so the cascade still hangs together.
+      await Repository(db).deletePoiSet('t1');
+      expect(await db.select(db.poiPoints).get(), isEmpty);
+    },
+  );
 
   test('v27 → v28 adds the endpoint overrides, all unset', () async {
     // The overrides are an escape hatch, so the only thing worth proving is
@@ -392,83 +444,114 @@ void main() {
     expect(await db.select(db.uiHints).get(), isEmpty);
   });
 
-  test('v29 → v30 splits a combined layer back into the layers it swallowed',
-      () async {
-    // The `mixed` layer grouped by destroying what it grouped. Undoing that is
-    // the whole promise here: every kind it held comes back as its own layer,
-    // in the order the mixed painter drew them, inside a folder standing where
-    // the mixed layer stood — and a mixed layer that only ever held one kind
-    // was a layer of that kind wearing the wrong label, so it becomes one
-    // rather than a folder around nothing.
-    final old = await verifier.schemaAt(29);
-    final x = old.rawDatabase.execute;
-    x("INSERT INTO layers (id, name, color_argb, sort_order, type) "
-        "VALUES ('lb', 'Below', 7, 0, 'circles')");
-    x("INSERT INTO layers (id, name, color_argb, sort_order, type, "
+  test(
+    'v29 → v30 splits a combined layer back into the layers it swallowed',
+    () async {
+      // The `mixed` layer grouped by destroying what it grouped. Undoing that is
+      // the whole promise here: every kind it held comes back as its own layer,
+      // in the order the mixed painter drew them, inside a folder standing where
+      // the mixed layer stood — and a mixed layer that only ever held one kind
+      // was a layer of that kind wearing the wrong label, so it becomes one
+      // rather than a folder around nothing.
+      final old = await verifier.schemaAt(29);
+      final x = old.rawDatabase.execute;
+      x(
+        "INSERT INTO layers (id, name, color_argb, sort_order, type) "
+        "VALUES ('lb', 'Below', 7, 0, 'circles')",
+      );
+      x(
+        "INSERT INTO layers (id, name, color_argb, sort_order, type, "
         "is_inverted, opacity, is_visible) "
-        "VALUES ('lm', 'Everything', 42, 1, 'mixed', 1, 0.45, 0)");
-    x("INSERT INTO circles (id, layer_id, center_lat, center_lng, "
-        "radius_meters, z_order) VALUES ('c1', 'lm', 48.0, 11.0, 500, 2)");
-    x("INSERT INTO free_areas (id, layer_id, label, z_order) "
-        "VALUES ('a1', 'lm', 'Park', 1)");
-    x("INSERT INTO poi_sets (id, layer_id, category_key, center_lat, "
+        "VALUES ('lm', 'Everything', 42, 1, 'mixed', 1, 0.45, 0)",
+      );
+      x(
+        "INSERT INTO circles (id, layer_id, center_lat, center_lng, "
+        "radius_meters, z_order) VALUES ('c1', 'lm', 48.0, 11.0, 500, 2)",
+      );
+      x(
+        "INSERT INTO free_areas (id, layer_id, label, z_order) "
+        "VALUES ('a1', 'lm', 'Park', 1)",
+      );
+      x(
+        "INSERT INTO poi_sets (id, layer_id, category_key, center_lat, "
         "center_lng, radius_meters, created_at) "
-        "VALUES ('p1', 'lm', 'cafe', 48, 11, 800, 1700000000)");
-    // A combined layer holding exactly one kind, and an empty one.
-    x("INSERT INTO layers (id, name, color_argb, sort_order, type) "
-        "VALUES ('lo', 'Only POIs', 9, 2, 'mixed')");
-    x("INSERT INTO poi_sets (id, layer_id, category_key, center_lat, "
+        "VALUES ('p1', 'lm', 'cafe', 48, 11, 800, 1700000000)",
+      );
+      // A combined layer holding exactly one kind, and an empty one.
+      x(
+        "INSERT INTO layers (id, name, color_argb, sort_order, type) "
+        "VALUES ('lo', 'Only POIs', 9, 2, 'mixed')",
+      );
+      x(
+        "INSERT INTO poi_sets (id, layer_id, category_key, center_lat, "
         "center_lng, radius_meters, created_at) "
-        "VALUES ('p2', 'lo', 'bench', 48, 11, 300, 1700000000)");
-    x("INSERT INTO layers (id, name, color_argb, sort_order, type) "
-        "VALUES ('le', 'Empty', 3, 3, 'mixed')");
+        "VALUES ('p2', 'lo', 'bench', 48, 11, 300, 1700000000)",
+      );
+      x(
+        "INSERT INTO layers (id, name, color_argb, sort_order, type) "
+        "VALUES ('le', 'Empty', 3, 3, 'mixed')",
+      );
 
-    final db = AppDatabase.forTesting(old.newConnection());
-    addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 31);
+      final db = AppDatabase.forTesting(old.newConnection());
+      addTearDown(db.close);
+      await verifier.migrateAndValidate(db, 31);
 
-    // The folder stands where the mixed layer stood, and carries what a folder
-    // can carry: its name, its visibility and its invert.
-    final folder = (await db.select(db.folders).get()).single;
-    expect(
-      (folder.name, folder.sortOrder, folder.isVisible, folder.isInverted),
-      ('Everything', 1, false, true),
-    );
+      // The folder stands where the mixed layer stood, and carries what a folder
+      // can carry: its name, its visibility and its invert.
+      final folder = (await db.select(db.folders).get()).single;
+      expect(
+        (folder.name, folder.sortOrder, folder.isVisible, folder.isInverted),
+        ('Everything', 1, false, true),
+      );
 
-    final layers = await db.select(db.layers).get();
-    expect(layers.where((l) => l.type == 'mixed'), isEmpty);
-    final children = layers.where((l) => l.folderId == folder.id).toList()
-      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-    // Draw order, not table order: regions below, markers on top.
-    expect(children.map((l) => l.type), ['circles', 'freearea', 'poi']);
-    expect(children.map((l) => l.name),
-        ['Everything (Circles)', 'Everything (Areas)', 'Everything (POIs)']);
-    // The colour and opacity were the mixed layer's and stay; the invert moved
-    // up to the folder, so the members are un-inverted and flipped by it.
-    expect(children.every((l) => l.colorArgb == 42), isTrue);
-    expect(children.every((l) => l.opacity == 0.45), isTrue);
-    expect(children.every((l) => !l.isInverted), isTrue);
-    expect(children.every((l) => l.isVisible), isTrue);
+      final layers = await db.select(db.layers).get();
+      expect(layers.where((l) => l.type == 'mixed'), isEmpty);
+      final children = layers.where((l) => l.folderId == folder.id).toList()
+        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+      // Draw order, not table order: regions below, markers on top.
+      expect(children.map((l) => l.type), ['circles', 'freearea', 'poi']);
+      expect(children.map((l) => l.name), [
+        'Everything (Circles)',
+        'Everything (Areas)',
+        'Everything (POIs)',
+      ]);
+      // The colour and opacity were the mixed layer's and stay; the invert moved
+      // up to the folder, so the members are un-inverted and flipped by it.
+      expect(children.every((l) => l.colorArgb == 42), isTrue);
+      expect(children.every((l) => l.opacity == 0.45), isTrue);
+      expect(children.every((l) => !l.isInverted), isTrue);
+      expect(children.every((l) => l.isVisible), isTrue);
 
-    // Every row it held followed its kind, ids and stacking untouched.
-    final circle = (await db.select(db.circles).get()).single;
-    expect((circle.id, circle.layerId, circle.zOrder),
-        ('c1', children[0].id, 2));
-    expect((await db.select(db.freeAreas).get()).single.layerId, children[1].id);
-    final sets = await db.select(db.poiSets).get();
-    expect(sets.firstWhere((s) => s.id == 'p1').layerId, children[2].id);
+      // Every row it held followed its kind, ids and stacking untouched.
+      final circle = (await db.select(db.circles).get()).single;
+      expect(
+        (circle.id, circle.layerId, circle.zOrder),
+        ('c1', children[0].id, 2),
+      );
+      expect(
+        (await db.select(db.freeAreas).get()).single.layerId,
+        children[1].id,
+      );
+      final sets = await db.select(db.poiSets).get();
+      expect(sets.firstWhere((s) => s.id == 'p1').layerId, children[2].id);
 
-    // One kind: the same layer, retyped, still at the root and in place.
-    final only = layers.firstWhere((l) => l.id == 'lo');
-    expect((only.type, only.folderId, only.name, only.sortOrder),
-        ('poi', null, 'Only POIs', 2));
-    expect(sets.firstWhere((s) => s.id == 'p2').layerId, 'lo');
-    // Nothing at all: a layer of the default type, not a folder around nothing.
-    expect(layers.firstWhere((l) => l.id == 'le').type, 'circles');
-    // The layer that was already a plain layer is untouched.
-    final below = layers.firstWhere((l) => l.id == 'lb');
-    expect((below.type, below.folderId, below.sortOrder), ('circles', null, 0));
-  });
+      // One kind: the same layer, retyped, still at the root and in place.
+      final only = layers.firstWhere((l) => l.id == 'lo');
+      expect(
+        (only.type, only.folderId, only.name, only.sortOrder),
+        ('poi', null, 'Only POIs', 2),
+      );
+      expect(sets.firstWhere((s) => s.id == 'p2').layerId, 'lo');
+      // Nothing at all: a layer of the default type, not a folder around nothing.
+      expect(layers.firstWhere((l) => l.id == 'le').type, 'circles');
+      // The layer that was already a plain layer is untouched.
+      final below = layers.firstWhere((l) => l.id == 'lb');
+      expect(
+        (below.type, below.folderId, below.sortOrder),
+        ('circles', null, 0),
+      );
+    },
+  );
 
   test('v30 → v31 leaves every imported POI marked untouched', () async {
     // The four new columns say "you have corrected this, and here is what OSM
@@ -497,8 +580,11 @@ void main() {
     await verifier.migrateAndValidate(db, 31);
 
     final point = await db.select(db.poiPoints).getSingle();
-    expect((point.lat, point.lng, point.name), (48.1, 11.5, 'West gate'),
-        reason: 'existing rows survive');
+    expect(
+      (point.lat, point.lng, point.name),
+      (48.1, 11.5, 'West gate'),
+      reason: 'existing rows survive',
+    );
     expect(point.osmId, 240109189, reason: 'upstream identity survives');
     expect(point.editedAt, isNull);
     expect(point.origLat, isNull);
@@ -540,7 +626,8 @@ void main() {
     expect(
       GeneratedHelper.versions,
       contains(db.schemaVersion),
-      reason: 'Schema is at v${db.schemaVersion} but the newest snapshot is '
+      reason:
+          'Schema is at v${db.schemaVersion} but the newest snapshot is '
           'v${GeneratedHelper.versions.last}. Run:\n'
           '  dart run drift_dev schema dump lib/data/database.dart drift_schemas/\n'
           '  dart run drift_dev schema generate drift_schemas/ test/generated_migrations/',

@@ -59,8 +59,11 @@ void main() {
     for (final c in mapControls) {
       expect(c.name, isNotEmpty, reason: c.id.name);
       expect(c.what, isNotEmpty, reason: c.id.name);
-      expect(c.what, isNot(c.name),
-          reason: '${c.id.name} repeats its own name instead of explaining');
+      expect(
+        c.what,
+        isNot(c.name),
+        reason: '${c.id.name} repeats its own name instead of explaining',
+      );
       // The name doubles as a tooltip, so it has to be short enough to read.
       expect(c.name.length, lessThan(30), reason: c.id.name);
     }
@@ -68,8 +71,11 @@ void main() {
 
   test('every area is used', () {
     for (final area in MapControlArea.values) {
-      expect(mapControls.any((c) => c.area == area), isTrue,
-          reason: '${area.name} has no controls — the heading would be empty');
+      expect(
+        mapControls.any((c) => c.area == area),
+        isTrue,
+        reason: '${area.name} has no controls — the heading would be empty',
+      );
     }
   });
 
@@ -118,7 +124,7 @@ void main() {
       const hidden = MapControlState(
         hasActiveLayer: true,
         activeLayerType: 'circles',
-          activeLayerVisible: false,
+        activeLayerVisible: false,
         anythingSelectable: true,
       );
       expect(
@@ -134,7 +140,7 @@ void main() {
       const none = MapControlState(
         hasActiveLayer: false,
         activeLayerType: null,
-          activeLayerVisible: false,
+        activeLayerVisible: false,
         anythingSelectable: false,
       );
       expect(unavailableReason(MapControlId.add, none), contains('No layer'));

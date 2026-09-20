@@ -31,10 +31,7 @@ void main() {
     test('offers many languages, so Flutter’s own widgets translate', () {
       expect(supportedLocales.length, greaterThan(50));
       for (final code in ['de', 'fr', 'es', 'pt', 'pl', 'ja']) {
-        expect(
-          supportedLocales.map((l) => l.languageCode),
-          contains(code),
-        );
+        expect(supportedLocales.map((l) => l.languageCode), contains(code));
       }
     });
 

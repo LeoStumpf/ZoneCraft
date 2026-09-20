@@ -55,8 +55,11 @@ void main() {
         await repo.noteHintShown('a');
       }
       expect(await repo.noteHintShown('a'), isFalse);
-      expect(await repo.noteHintShown('b'), isTrue,
-          reason: 'one exhausted tip must not silence the others');
+      expect(
+        await repo.noteHintShown('b'),
+        isTrue,
+        reason: 'one exhausted tip must not silence the others',
+      );
     });
 
     test('two taps in the same frame cannot show a fourth time', () async {
@@ -112,10 +115,7 @@ void main() {
       await repo.updateHintsEnabled(enabled: false);
       await repo.resetHints();
       expect(await repo.noteHintShown('a'), isTrue);
-      expect(
-        (await repo.watchSettings().first).hintsEnabled,
-        isTrue,
-      );
+      expect((await repo.watchSettings().first).hintsEnabled, isTrue);
     });
   });
 }

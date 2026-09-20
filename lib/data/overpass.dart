@@ -53,122 +53,141 @@ class PoiCategory {
 /// here is part of the persisted format — append new entries, never reorder.
 const poiCategories = <PoiCategory>[
   PoiCategory(
-      key: 'bench',
-      label: 'Benches',
-      tagKey: 'amenity',
-      tagValue: 'bench',
-      bit: 1 << 0),
+    key: 'bench',
+    label: 'Benches',
+    tagKey: 'amenity',
+    tagValue: 'bench',
+    bit: 1 << 0,
+  ),
   PoiCategory(
-      key: 'post_box',
-      label: 'Post boxes',
-      tagKey: 'amenity',
-      tagValue: 'post_box',
-      bit: 1 << 1),
+    key: 'post_box',
+    label: 'Post boxes',
+    tagKey: 'amenity',
+    tagValue: 'post_box',
+    bit: 1 << 1,
+  ),
   PoiCategory(
-      key: 'drinking_water',
-      label: 'Drinking water',
-      tagKey: 'amenity',
-      tagValue: 'drinking_water',
-      bit: 1 << 2),
+    key: 'drinking_water',
+    label: 'Drinking water',
+    tagKey: 'amenity',
+    tagValue: 'drinking_water',
+    bit: 1 << 2,
+  ),
   PoiCategory(
-      key: 'toilets',
-      label: 'Toilets',
-      tagKey: 'amenity',
-      tagValue: 'toilets',
-      bit: 1 << 3),
+    key: 'toilets',
+    label: 'Toilets',
+    tagKey: 'amenity',
+    tagValue: 'toilets',
+    bit: 1 << 3,
+  ),
   PoiCategory(
-      key: 'waste_basket',
-      label: 'Waste baskets',
-      tagKey: 'amenity',
-      tagValue: 'waste_basket',
-      bit: 1 << 4),
+    key: 'waste_basket',
+    label: 'Waste baskets',
+    tagKey: 'amenity',
+    tagValue: 'waste_basket',
+    bit: 1 << 4,
+  ),
   PoiCategory(
-      key: 'cafe',
-      label: 'Cafés',
-      tagKey: 'amenity',
-      tagValue: 'cafe',
-      bit: 1 << 5,
-      seedable: true),
+    key: 'cafe',
+    label: 'Cafés',
+    tagKey: 'amenity',
+    tagValue: 'cafe',
+    bit: 1 << 5,
+    seedable: true,
+  ),
   PoiCategory(
-      key: 'restaurant',
-      label: 'Restaurants',
-      tagKey: 'amenity',
-      tagValue: 'restaurant',
-      bit: 1 << 6,
-      seedable: true),
+    key: 'restaurant',
+    label: 'Restaurants',
+    tagKey: 'amenity',
+    tagValue: 'restaurant',
+    bit: 1 << 6,
+    seedable: true,
+  ),
   PoiCategory(
-      key: 'pharmacy',
-      label: 'Pharmacies',
-      tagKey: 'amenity',
-      tagValue: 'pharmacy',
-      bit: 1 << 7,
-      seedable: true),
+    key: 'pharmacy',
+    label: 'Pharmacies',
+    tagKey: 'amenity',
+    tagValue: 'pharmacy',
+    bit: 1 << 7,
+    seedable: true,
+  ),
   PoiCategory(
-      key: 'library',
-      label: 'Libraries',
-      tagKey: 'amenity',
-      tagValue: 'library',
-      bit: 1 << 8,
-      seedable: true),
+    key: 'library',
+    label: 'Libraries',
+    tagKey: 'amenity',
+    tagValue: 'library',
+    bit: 1 << 8,
+    seedable: true,
+  ),
   PoiCategory(
-      key: 'aquarium',
-      label: 'Aquariums',
-      tagKey: 'tourism',
-      tagValue: 'aquarium',
-      bit: 1 << 9,
-      seedable: true),
+    key: 'aquarium',
+    label: 'Aquariums',
+    tagKey: 'tourism',
+    tagValue: 'aquarium',
+    bit: 1 << 9,
+    seedable: true,
+  ),
   PoiCategory(
-      key: 'zoo',
-      label: 'Zoos',
-      tagKey: 'tourism',
-      tagValue: 'zoo',
-      bit: 1 << 10,
-      seedable: true),
+    key: 'zoo',
+    label: 'Zoos',
+    tagKey: 'tourism',
+    tagValue: 'zoo',
+    bit: 1 << 10,
+    seedable: true,
+  ),
   PoiCategory(
-      key: 'golf_course',
-      label: 'Golf courses',
-      tagKey: 'leisure',
-      tagValue: 'golf_course',
-      bit: 1 << 11,
-      seedable: true),
+    key: 'golf_course',
+    label: 'Golf courses',
+    tagKey: 'leisure',
+    tagValue: 'golf_course',
+    bit: 1 << 11,
+    seedable: true,
+  ),
   PoiCategory(
-      key: 'consulate',
-      label: 'Foreign consulates',
-      tagKey: 'office',
-      tagValue: 'diplomatic',
-      bit: 1 << 12,
-      seedable: true),
+    key: 'consulate',
+    label: 'Foreign consulates',
+    tagKey: 'office',
+    tagValue: 'diplomatic',
+    bit: 1 << 12,
+    seedable: true,
+  ),
   PoiCategory(
-      key: 'transit_station',
-      label: 'Transit stations',
-      tagKey: 'public_transport',
-      tagValue: 'station',
-      bit: 1 << 13,
-      seedable: true),
+    key: 'transit_station',
+    label: 'Transit stations',
+    tagKey: 'public_transport',
+    tagValue: 'station',
+    bit: 1 << 13,
+    seedable: true,
+  ),
   PoiCategory(
-      key: 'hospital',
-      label: 'Hospitals',
-      tagKey: 'amenity',
-      tagValue: 'hospital',
-      bit: 1 << 14,
-      seedable: true),
+    key: 'hospital',
+    label: 'Hospitals',
+    tagKey: 'amenity',
+    tagValue: 'hospital',
+    bit: 1 << 14,
+    seedable: true,
+  ),
   PoiCategory(
-      key: 'cinema',
-      label: 'Movie theatres',
-      tagKey: 'amenity',
-      tagValue: 'cinema',
-      bit: 1 << 15,
-      seedable: true),
+    key: 'cinema',
+    label: 'Movie theatres',
+    tagKey: 'amenity',
+    tagValue: 'cinema',
+    bit: 1 << 15,
+    seedable: true,
+  ),
 ];
 
 /// The categories offered when seeding circle/subspace layers — named places
 /// only. See [PoiCategory.seedable].
-final seedablePoiCategories =
-    poiCategories.where((c) => c.seedable).toList(growable: false);
+final seedablePoiCategories = poiCategories
+    .where((c) => c.seedable)
+    .toList(growable: false);
 
 /// The categories enabled in [mask].
-Set<PoiCategory> poiCategoriesFromMask(int mask) =>
-    {for (final c in poiCategories) if (mask & c.bit != 0) c};
+Set<PoiCategory> poiCategoriesFromMask(int mask) => {
+  for (final c in poiCategories)
+    if (mask & c.bit != 0) c,
+};
 
 /// [mask] with [c] turned on/off.
 int poiMaskWith(int mask, PoiCategory c, {required bool on}) =>
@@ -226,16 +245,16 @@ class PoiResult {
 
 /// Encodes [pois] to a compact JSON string for the persistent overlay cache.
 String encodePoiResults(Iterable<PoiResult> pois) => jsonEncode([
-      for (final p in pois)
-        {
-          'lat': p.lat,
-          'lng': p.lng,
-          'k': p.categoryKey,
-          if (p.name != null) 'n': p.name,
-          if (p.osmType != null) 't': p.osmType,
-          if (p.osmId != null) 'i': p.osmId,
-        },
-    ]);
+  for (final p in pois)
+    {
+      'lat': p.lat,
+      'lng': p.lng,
+      'k': p.categoryKey,
+      if (p.name != null) 'n': p.name,
+      if (p.osmType != null) 't': p.osmType,
+      if (p.osmId != null) 'i': p.osmId,
+    },
+]);
 
 /// Decodes the string produced by [encodePoiResults]. Returns empty on any
 /// structural surprise rather than throwing.
@@ -244,9 +263,9 @@ List<PoiResult> decodePoiResults(String json) {
   final dynamic decoded;
   try {
     decoded = jsonDecode(json);
-  // A non-JSON body is a server or proxy error page. Structural surprise is the
-  // expected case here, not an exceptional one.
-  // ignore: avoid_catches_without_on_clauses
+    // A non-JSON body is a server or proxy error page. Structural surprise is the
+    // expected case here, not an exceptional one.
+    // ignore: avoid_catches_without_on_clauses
   } catch (_) {
     return out;
   }
@@ -261,15 +280,17 @@ List<PoiResult> decodePoiResults(String json) {
     final i = e['i'];
     if (lat == null || lng == null || k is! String) continue;
     if (!lat.isFinite || !lng.isFinite) continue;
-    out.add(PoiResult(
-      lat: lat,
-      lng: lng,
-      categoryKey: k,
-      name: n is String ? n : null,
-      // Absent in anything written before v21; the POI still decodes.
-      osmType: t is String ? t : null,
-      osmId: i is num ? i.toInt() : null,
-    ));
+    out.add(
+      PoiResult(
+        lat: lat,
+        lng: lng,
+        categoryKey: k,
+        name: n is String ? n : null,
+        // Absent in anything written before v21; the POI still decodes.
+        osmType: t is String ? t : null,
+        osmId: i is num ? i.toInt() : null,
+      ),
+    );
   }
   return out;
 }
@@ -305,8 +326,8 @@ List<PoiResult> parseOverpassResponse(
   final dynamic decoded;
   try {
     decoded = jsonDecode(body);
-  // As above.
-  // ignore: avoid_catches_without_on_clauses
+    // As above.
+    // ignore: avoid_catches_without_on_clauses
   } catch (_) {
     return out;
   }
@@ -346,14 +367,16 @@ List<PoiResult> parseOverpassResponse(
     // inventing half a key, since a half key would collide across types.
     final type = e['type'];
     final id = e['id'];
-    out.add(PoiResult(
-      lat: lat,
-      lng: lng,
-      categoryKey: matched.key,
-      name: name,
-      osmType: type is String ? type : null,
-      osmId: id is num ? id.toInt() : null,
-    ));
+    out.add(
+      PoiResult(
+        lat: lat,
+        lng: lng,
+        categoryKey: matched.key,
+        name: name,
+        osmType: type is String ? type : null,
+        osmId: id is num ? id.toInt() : null,
+      ),
+    );
   }
   return out;
 }
@@ -378,13 +401,13 @@ List<PoiResult> poisWithinRadius(
   return [for (final e in scored.take(cap)) e.value];
 }
 
-double _haversineMeters(
-    double lat1, double lon1, double lat2, double lon2) {
+double _haversineMeters(double lat1, double lon1, double lat2, double lon2) {
   const earthRadius = 6371000.0;
   double rad(double d) => d * math.pi / 180;
   final dLat = rad(lat2 - lat1);
   final dLon = rad(lon2 - lon1);
-  final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+  final a =
+      math.sin(dLat / 2) * math.sin(dLat / 2) +
       math.cos(rad(lat1)) *
           math.cos(rad(lat2)) *
           math.sin(dLon / 2) *
@@ -424,7 +447,9 @@ Future<OverpassOutcome<List<PoiResult>>> fetchPois({
   OverpassCancel? cancel,
 }) {
   final cats = categories.toList();
-  if (cats.isEmpty) return Future.value(const OverpassOutcome.ok(<PoiResult>[]));
+  if (cats.isEmpty) {
+    return Future.value(const OverpassOutcome.ok(<PoiResult>[]));
+  }
   return overpassPost(
     buildOverpassQuery(
       south: south,
@@ -436,7 +461,8 @@ Future<OverpassOutcome<List<PoiResult>>> fetchPois({
     client: client,
     timeout: poiRequestTimeout,
     maxBytes: poiMaxResponseBytes,
-    oversizeMessage: 'That search returns too much data — pick a smaller '
+    oversizeMessage:
+        'That search returns too much data — pick a smaller '
         'radius.',
     preferEndpoint: preferEndpoint,
     onProgress: onProgress,

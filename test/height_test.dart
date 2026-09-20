@@ -85,38 +85,47 @@ void main() {
   const centerLat = 47.42, centerLng = 10.98, radius = 400.0;
 
   test('all terrain above threshold fills the bounded circle', () {
-    final rings = buildHeightRings(_flatRequest(
-      centerLat: centerLat,
-      centerLng: centerLng,
-      radius: radius,
-      elevation: 1000,
-      threshold: 500,
-      above: true,
-    ));
+    final rings = buildHeightRings(
+      _flatRequest(
+        centerLat: centerLat,
+        centerLng: centerLng,
+        radius: radius,
+        elevation: 1000,
+        threshold: 500,
+        above: true,
+      ),
+    );
     expect(rings, isNotEmpty);
     // The fill encloses the centre…
-    expect(rings.any((r) => _pointInRing(const LatLng(centerLat, centerLng), r)),
-        isTrue);
+    expect(
+      rings.any((r) => _pointInRing(const LatLng(centerLat, centerLng), r)),
+      isTrue,
+    );
     // …and stays within ~the circle (no vertex far outside the radius).
     const dist = Distance(calculator: Haversine());
     for (final ring in rings) {
       for (var i = 0; i + 1 < ring.length; i += 2) {
-        final d = dist.as(LengthUnit.Meter,
-            const LatLng(centerLat, centerLng), LatLng(ring[i], ring[i + 1]));
+        final d = dist.as(
+          LengthUnit.Meter,
+          const LatLng(centerLat, centerLng),
+          LatLng(ring[i], ring[i + 1]),
+        );
         expect(d, lessThan(radius * 1.25));
       }
     }
   });
 
   test('terrarium decode is correct (1000 m flat, below 500 => empty)', () {
-    final rings = buildHeightRings(_flatRequest(
-      centerLat: centerLat,
-      centerLng: centerLng,
-      radius: radius,
-      elevation: 1000,
-      threshold: 500,
-      above: false,
-    ));
+    final rings = buildHeightRings(
+      _flatRequest(
+        centerLat: centerLat,
+        centerLng: centerLng,
+        radius: radius,
+        elevation: 1000,
+        threshold: 500,
+        above: false,
+      ),
+    );
     expect(rings, isEmpty);
   });
 
@@ -125,20 +134,28 @@ void main() {
     final x = terrariumTileX(centerLng, z);
     final y = terrariumTileY(centerLat, z);
     final e = elevationFromTilePng(
-        _flatTile(1234), z, x, y, centerLat, centerLng);
+      _flatTile(1234),
+      z,
+      x,
+      y,
+      centerLat,
+      centerLng,
+    );
     expect(e, isNotNull);
     expect(e!.round(), 1234);
   });
 
   test('all terrain below threshold (above=true) yields no fill', () {
-    final rings = buildHeightRings(_flatRequest(
-      centerLat: centerLat,
-      centerLng: centerLng,
-      radius: radius,
-      elevation: 100,
-      threshold: 500,
-      above: true,
-    ));
+    final rings = buildHeightRings(
+      _flatRequest(
+        centerLat: centerLat,
+        centerLng: centerLng,
+        radius: radius,
+        elevation: 100,
+        threshold: 500,
+        above: true,
+      ),
+    );
     expect(rings, isEmpty);
   });
 }

@@ -50,9 +50,7 @@ void main() {
     test('vertices closer than the spacing collapse to one real vertex', () {
       // An administrative boundary carries a vertex every few metres: without
       // thinning, the dots merge into a band with nothing to aim at.
-      final dense = [
-        for (var i = 0; i < 40; i++) Offset(i * 2.0, 0),
-      ];
+      final dense = [for (var i = 0; i < 40; i++) Offset(i * 2.0, 0)];
       final r = reshapeHandles(
         [dense],
         bounds: viewport,
@@ -93,11 +91,7 @@ void main() {
     });
 
     test('a non-finite vertex is skipped rather than poisoning the pass', () {
-      const ring = [
-        Offset(10, 10),
-        Offset(double.nan, 50),
-        Offset(90, 90),
-      ];
+      const ring = [Offset(10, 10), Offset(double.nan, 50), Offset(90, 90)];
       final r = reshapeHandles(
         const [ring],
         bounds: viewport,

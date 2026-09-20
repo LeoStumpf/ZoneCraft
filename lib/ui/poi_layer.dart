@@ -29,24 +29,24 @@ import 'theme.dart';
 /// The marker icon for a POI category key (see `poiCategories` in
 /// `data/overpass.dart`). Unknown keys fall back to a generic place pin.
 IconData poiIconFor(String categoryKey) => switch (categoryKey) {
-      'bench' => Icons.chair_outlined,
-      'post_box' => Icons.markunread_mailbox_outlined,
-      'drinking_water' => Icons.water_drop_outlined,
-      'toilets' => Icons.wc_outlined,
-      'waste_basket' => Icons.delete_outline,
-      'cafe' => Icons.local_cafe_outlined,
-      'restaurant' => Icons.restaurant_outlined,
-      'pharmacy' => Icons.local_pharmacy_outlined,
-      'library' => Icons.local_library_outlined,
-      'aquarium' => Icons.set_meal_outlined,
-      'zoo' => Icons.pets_outlined,
-      'golf_course' => Icons.golf_course_outlined,
-      'consulate' => Icons.flag_outlined,
-      'transit_station' => Icons.directions_transit_outlined,
-      'hospital' => Icons.local_hospital_outlined,
-      'cinema' => Icons.local_movies_outlined,
-      _ => Icons.place_outlined,
-    };
+  'bench' => Icons.chair_outlined,
+  'post_box' => Icons.markunread_mailbox_outlined,
+  'drinking_water' => Icons.water_drop_outlined,
+  'toilets' => Icons.wc_outlined,
+  'waste_basket' => Icons.delete_outline,
+  'cafe' => Icons.local_cafe_outlined,
+  'restaurant' => Icons.restaurant_outlined,
+  'pharmacy' => Icons.local_pharmacy_outlined,
+  'library' => Icons.local_library_outlined,
+  'aquarium' => Icons.set_meal_outlined,
+  'zoo' => Icons.pets_outlined,
+  'golf_course' => Icons.golf_course_outlined,
+  'consulate' => Icons.flag_outlined,
+  'transit_station' => Icons.directions_transit_outlined,
+  'hospital' => Icons.local_hospital_outlined,
+  'cinema' => Icons.local_movies_outlined,
+  _ => Icons.place_outlined,
+};
 
 /// What a tapped cluster badge stood for: where it was anchored, how many
 /// points it collapsed, whether every one of them is a station, and the icon
@@ -189,27 +189,27 @@ class PoiMarkersLayer extends StatelessWidget {
         if (sharedIcon == null && allStations) {
           sharedIcon = transitIconFor(maskUnion);
         }
-        final center =
-            LatLng(lat / c.indices.length, lng / c.indices.length);
+        final center = LatLng(lat / c.indices.length, lng / c.indices.length);
         // A badge over two differently-coloured sets belongs to neither, so it
         // falls back to the layer's own colour.
-        markers.add(_clusterMarker(
-          PoiClusterTap(
-            center: center,
-            count: c.indices.length,
-            stations: allStations,
-            icon: sharedIcon,
+        markers.add(
+          _clusterMarker(
+            PoiClusterTap(
+              center: center,
+              count: c.indices.length,
+              stations: allStations,
+              icon: sharedIcon,
+            ),
+            sharedColor ?? layerColor,
           ),
-          sharedColor ?? layerColor,
-        ));
+        );
       }
     }
     return MarkerLayer(markers: markers);
   }
 
   /// A single POI: white disc + its set's icon, name on a tiny plate below.
-  Marker _poiMarker(
-      LatLng point, IconData icon, String? name, Color color) {
+  Marker _poiMarker(LatLng point, IconData icon, String? name, Color color) {
     const coreSize = 26.0;
     const labelHeight = 14.0;
     const gap = 1.0;
@@ -268,9 +268,7 @@ class PoiMarkersLayer extends StatelessWidget {
             color: Colors.white,
             shape: BoxShape.circle,
             border: Border.all(color: color, width: 2.5),
-            boxShadow: const [
-              BoxShadow(color: kMapShadow, blurRadius: 3),
-            ],
+            boxShadow: const [BoxShadow(color: kMapShadow, blurRadius: 3)],
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,

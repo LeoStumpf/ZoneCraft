@@ -87,8 +87,10 @@ class _OsmReportsScreenState extends ConsumerState<OsmReportsScreen> {
     // the limit the sheet enforces.
     final today = await _repo.osmReportsSentSince(const Duration(days: 1));
     if (today >= kOsmReportsHardCapPerDay) {
-      _toast('That is as many reports as OpenStreetMap accepts anonymously '
-          'in a day. Try tomorrow, or export them.');
+      _toast(
+        'That is as many reports as OpenStreetMap accepts anonymously '
+        'in a day. Try tomorrow, or export them.',
+      );
       return;
     }
     setState(() => _sending = report.id);
@@ -139,16 +141,19 @@ class _OsmReportsScreenState extends ConsumerState<OsmReportsScreen> {
 
   Future<void> _delete(OsmReport report) async {
     await _repo.deleteOsmReport(report.id);
-    _toast(report.sentAt == null
-        ? 'Report discarded'
-        : 'Removed from this list — the note stays on OpenStreetMap');
+    _toast(
+      report.sentAt == null
+          ? 'Report discarded'
+          : 'Removed from this list — the note stays on OpenStreetMap',
+    );
   }
 
   Future<void> _export(List<OsmReport> reports) async {
     final destination = await askExportDestination(
       context,
       title: 'Export reports',
-      message: 'A GeoJSON point per report, with its text and the element it '
+      message:
+          'A GeoJSON point per report, with its text and the element it '
           'is about — a to-do layer for JOSM or QGIS.',
     );
     if (destination == null || !mounted) return;
@@ -175,8 +180,9 @@ class _OsmReportsScreenState extends ConsumerState<OsmReportsScreen> {
           IconButton(
             tooltip: 'Export all reports',
             icon: const Icon(Icons.ios_share),
-            onPressed:
-                reports.isEmpty ? null : () => unawaited(_export(reports)),
+            onPressed: reports.isEmpty
+                ? null
+                : () => unawaited(_export(reports)),
           ),
         ],
       ),
@@ -188,9 +194,9 @@ class _OsmReportsScreenState extends ConsumerState<OsmReportsScreen> {
                 Text(
                   unsent == 0
                       ? 'Everything here has been sent. Tap a note number to '
-                          'see what mappers have made of it.'
+                            'see what mappers have made of it.'
                       : '$unsent waiting to be sent. Nothing leaves this '
-                          'device until you press Send.',
+                            'device until you press Send.',
                   style: theme.textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 16),
@@ -215,35 +221,35 @@ class _OsmReportsScreenState extends ConsumerState<OsmReportsScreen> {
   }
 
   Widget _empty(ThemeData theme) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.volunteer_activism_outlined,
-                size: 48,
-                color: theme.colorScheme.outline,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Nothing to report yet',
-                style: theme.textTheme.titleMedium,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Tap an imported POI on the map and correct it — the editor '
-                'then offers to pass the correction on. Reports you keep here '
-                'can be exported as a file for someone to file under their '
-                'own OpenStreetMap account.',
-                style: theme.textTheme.bodySmall,
-                textAlign: TextAlign.center,
-              ),
-            ],
+    child: Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.volunteer_activism_outlined,
+            size: 48,
+            color: theme.colorScheme.outline,
           ),
-        ),
-      );
+          const SizedBox(height: 16),
+          Text(
+            'Nothing to report yet',
+            style: theme.textTheme.titleMedium,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Tap an imported POI on the map and correct it — the editor '
+            'then offers to pass the correction on. Reports you keep here '
+            'can be exported as a file for someone to file under their '
+            'own OpenStreetMap account.',
+            style: theme.textTheme.bodySmall,
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _ReportCard extends StatelessWidget {
@@ -297,8 +303,9 @@ class _ReportCard extends StatelessWidget {
                 ),
                 Text(
                   _day(report.createdAt),
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),
@@ -308,8 +315,9 @@ class _ReportCard extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 report.lastError!,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.error),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.error,
+                ),
               ),
             ],
             const SizedBox(height: 4),
@@ -333,10 +341,12 @@ class _ReportCard extends StatelessWidget {
                       // Without a browser the number is still printed above;
                       // a dead button would be worse than none.
                       onPressed: canOpenLinks
-                          ? () => unawaited(openExternalUrl(
+                          ? () => unawaited(
+                              openExternalUrl(
                                 Uri.parse(noteUrl),
                                 context: context,
-                              ))
+                              ),
+                            )
                           : null,
                       icon: const Icon(Icons.open_in_new, size: 16),
                       label: Text('Note ${report.noteId}'),

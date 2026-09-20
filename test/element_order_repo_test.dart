@@ -33,11 +33,11 @@ void main() {
   tearDown(() async => db.close());
 
   Future<String> circle(String layerId) => repo.createCircle(
-        layerId: layerId,
-        centerLat: 48.1,
-        centerLng: 11.5,
-        radiusMeters: 500,
-      );
+    layerId: layerId,
+    centerLat: 48.1,
+    centerLng: 11.5,
+    radiusMeters: 500,
+  );
 
   /// The layer's circles as the renderer sees them: back to front.
   Future<List<String>> stack(String layerId) async {
@@ -56,15 +56,17 @@ void main() {
     expect(await stack(l), [a, b, c]);
   });
 
-  test('z is per layer, so a second layer starts again at the bottom',
-      () async {
-    final l1 = await repo.createLayer(name: 'A', colorArgb: 0xFF43A047);
-    final l2 = await repo.createLayer(name: 'B', colorArgb: 0xFF2196F3);
-    await circle(l1);
-    final only = await circle(l2);
-    final rows = await repo.watchAllCircles().first;
-    expect(rows.firstWhere((c) => c.id == only).zOrder, 0);
-  });
+  test(
+    'z is per layer, so a second layer starts again at the bottom',
+    () async {
+      final l1 = await repo.createLayer(name: 'A', colorArgb: 0xFF43A047);
+      final l2 = await repo.createLayer(name: 'B', colorArgb: 0xFF2196F3);
+      await circle(l1);
+      final only = await circle(l2);
+      final rows = await repo.watchAllCircles().first;
+      expect(rows.firstWhere((c) => c.id == only).zOrder, 0);
+    },
+  );
 
   group('moveElementZ', () {
     late String l;
@@ -112,8 +114,10 @@ void main() {
       await repo.moveElementZ(ColoredElement.circle, a, ZMove.toBack);
       await repo.moveElementZ(ColoredElement.circle, a, ZMove.backward);
       final after = await repo.watchAllCircles().first;
-      expect([for (final r in after) r.zOrder],
-          [for (final r in before) r.zOrder]);
+      expect(
+        [for (final r in after) r.zOrder],
+        [for (final r in before) r.zOrder],
+      );
     });
 
     test('an unknown id is ignored rather than restacking the layer', () async {

@@ -26,7 +26,8 @@ void main() {
     for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
       final xi = poly[i].longitude, yi = poly[i].latitude;
       final xj = poly[j].longitude, yj = poly[j].latitude;
-      final intersect = (yi > q.latitude) != (yj > q.latitude) &&
+      final intersect =
+          (yi > q.latitude) != (yj > q.latitude) &&
           q.longitude < (xj - xi) * (q.latitude - yi) / (yj - yi) + xi;
       if (intersect) hit = !hit;
     }
@@ -142,9 +143,11 @@ void main() {
     // an imported river that fills nothing).
     final r = freeLineDiskRegion(
       points: <LatLng>[
-        for (var i = -50; i <= -16; i++) LatLng(i * 0.001, 0.0), // dense approach
+        for (var i = -50; i <= -16; i++)
+          LatLng(i * 0.001, 0.0), // dense approach
         const LatLng(0.005, 0.0), // ~2.3 km gap from lat -0.016, still inside
-        for (var i = 6; i <= 50; i++) LatLng(i * 0.001, 0.0), // dense continuation
+        for (var i = 6; i <= 50; i++)
+          LatLng(i * 0.001, 0.0), // dense continuation
       ],
       center: center,
       radiusMeters: radius,

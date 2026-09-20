@@ -57,26 +57,26 @@ void main() {
   int bit(String key) => transitModeByKey(key)!.bit;
 
   Future<String> stationImport(String layerId) => repo.createPoiSet(
-        layerId: layerId,
-        source: kPoiSourceBox,
-        categoryKey: kTransitStationCategoryKey,
-        centerLat: 0,
-        centerLng: 0,
-        radiusMeters: 0,
-        bbox: [48.10, 11.50, 48.15, 11.60],
-        modeMask: transitAllModesMask,
-        visibleModeMask: transitAllModesMask,
-      );
+    layerId: layerId,
+    source: kPoiSourceBox,
+    categoryKey: kTransitStationCategoryKey,
+    centerLat: 0,
+    centerLng: 0,
+    radiusMeters: 0,
+    bbox: [48.10, 11.50, 48.15, 11.60],
+    modeMask: transitAllModesMask,
+    visibleModeMask: transitAllModesMask,
+  );
 
   PoiResult station(String name, int id, int modeMask) => PoiResult(
-        lat: 48.11,
-        lng: 11.51,
-        categoryKey: kTransitStationCategoryKey,
-        name: name,
-        osmType: 'node',
-        osmId: id,
-        modeMask: modeMask,
-      );
+    lat: 48.11,
+    lng: 11.51,
+    categoryKey: kTransitStationCategoryKey,
+    name: name,
+    osmType: 'node',
+    osmId: id,
+    modeMask: modeMask,
+  );
 
   Future<String> radiusImport(String layerId, String category) =>
       repo.createPoiSet(
@@ -99,8 +99,11 @@ void main() {
       );
 
   test('stations are filed under their primary mode, never twice', () async {
-    final layerId =
-        await repo.createLayer(name: 'T', colorArgb: 0xFF123456, type: 'poi');
+    final layerId = await repo.createLayer(
+      name: 'T',
+      colorArgb: 0xFF123456,
+      type: 'poi',
+    );
     final setId = await stationImport(layerId);
     await repo.fillPoiSet(setId, [
       station('Marienplatz', 1, bit('subway') | bit('bus')),
@@ -138,32 +141,42 @@ void main() {
     expect(none.points.single.subtitle, 'No type given');
   });
 
-  test('every group counts the whole layer\'s stations in one section',
-      () async {
-    final layerId =
-        await repo.createLayer(name: 'T', colorArgb: 0xFF123456, type: 'poi');
-    final a = await stationImport(layerId);
-    await repo.fillPoiSet(a, [station('A', 1, bit('bus'))]);
-    final b = await stationImport(layerId);
-    await repo.fillPoiSet(b, [station('B', 2, bit('bus'))]);
+  test(
+    'every group counts the whole layer\'s stations in one section',
+    () async {
+      final layerId = await repo.createLayer(
+        name: 'T',
+        colorArgb: 0xFF123456,
+        type: 'poi',
+      );
+      final a = await stationImport(layerId);
+      await repo.fillPoiSet(a, [station('A', 1, bit('bus'))]);
+      final b = await stationImport(layerId);
+      await repo.fillPoiSet(b, [station('B', 2, bit('bus'))]);
 
-    final groups = await groupsOf(layerId);
+      final groups = await groupsOf(layerId);
 
-    expect(groups.single.key, 'station:bus');
-    expect(groups.single.setIds, {a, b});
-    expect(groups.single.points.map((p) => p.title), ['A', 'B']);
-  });
+      expect(groups.single.key, 'station:bus');
+      expect(groups.single.setIds, {a, b});
+      expect(groups.single.points.map((p) => p.title), ['A', 'B']);
+    },
+  );
 
   test('two imports of one category merge into one group', () async {
-    final layerId =
-        await repo.createLayer(name: 'P', colorArgb: 0xFF123456, type: 'poi');
+    final layerId = await repo.createLayer(
+      name: 'P',
+      colorArgb: 0xFF123456,
+      type: 'poi',
+    );
     final first = await radiusImport(layerId, 'cafe');
     await repo.fillPoiSet(first, [poi('cafe', 'Zum Kaffee', 1)]);
     final second = await radiusImport(layerId, 'cafe');
     // The repository drops the duplicate at import time; the group would
     // otherwise hold the place twice.
-    await repo.fillPoiSet(
-        second, [poi('cafe', 'Zum Kaffee', 1), poi('cafe', 'Aroma', 2)]);
+    await repo.fillPoiSet(second, [
+      poi('cafe', 'Zum Kaffee', 1),
+      poi('cafe', 'Aroma', 2),
+    ]);
     final other = await radiusImport(layerId, 'restaurant');
     await repo.fillPoiSet(other, [poi('restaurant', null, 3)]);
 
@@ -182,8 +195,11 @@ void main() {
   });
 
   test('a hand-made category is its own group, even while empty', () async {
-    final layerId =
-        await repo.createLayer(name: 'P', colorArgb: 0xFF123456, type: 'poi');
+    final layerId = await repo.createLayer(
+      name: 'P',
+      colorArgb: 0xFF123456,
+      type: 'poi',
+    );
     final empty = await repo.createPoiSet(
       layerId: layerId,
       source: kPoiSourceManual,
@@ -203,7 +219,11 @@ void main() {
       label: 'Apples',
     );
     await repo.addManualPoiPoint(
-        poiSetId: filled, lat: 48.1, lng: 11.5, label: 'Granny');
+      poiSetId: filled,
+      lat: 48.1,
+      lng: 11.5,
+      label: 'Granny',
+    );
     await repo.addManualPoiPoint(poiSetId: filled, lat: 48.1, lng: 11.5);
 
     final groups = await groupsOf(layerId);
@@ -218,12 +238,18 @@ void main() {
   });
 
   test('a pending import yields no group; other layers are ignored', () async {
-    final layerId =
-        await repo.createLayer(name: 'P', colorArgb: 0xFF123456, type: 'poi');
+    final layerId = await repo.createLayer(
+      name: 'P',
+      colorArgb: 0xFF123456,
+      type: 'poi',
+    );
     final pending = await radiusImport(layerId, 'cafe');
     await repo.markPoiImportFailed(pending, 'Overpass is busy');
-    final otherLayer =
-        await repo.createLayer(name: 'Q', colorArgb: 0xFF123456, type: 'poi');
+    final otherLayer = await repo.createLayer(
+      name: 'Q',
+      colorArgb: 0xFF123456,
+      type: 'poi',
+    );
     final theirs = await radiusImport(otherLayer, 'restaurant');
     await repo.fillPoiSet(theirs, [poi('restaurant', 'Theirs', 1)]);
 
@@ -233,7 +259,10 @@ void main() {
 
   test('stations first, then categories, then hand-made', () async {
     final layerId = await repo.createLayer(
-        name: 'M', colorArgb: 0xFF123456, type: kPoi);
+      name: 'M',
+      colorArgb: 0xFF123456,
+      type: kPoi,
+    );
     await repo.createPoiSet(
       layerId: layerId,
       source: kPoiSourceManual,

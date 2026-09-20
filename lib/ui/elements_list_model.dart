@@ -69,7 +69,11 @@ class StationToolsRow extends ListRow {
 
 /// One POI type's heading; its points follow only while [expanded].
 class GroupHeaderRow extends ListRow {
-  const GroupHeaderRow(this.group, {required this.expanded, required this.shown});
+  const GroupHeaderRow(
+    this.group, {
+    required this.expanded,
+    required this.shown,
+  });
   final PoiTypeGroup group;
   final bool expanded;
 
@@ -168,14 +172,22 @@ ElementRows buildElementRows({
 
   ElementRow row(ObjectSummary s, {bool inGroup = false}) {
     final f = zFlags[s.ref] ?? (false, false);
-    return ElementRow(s, inGroup: inGroup, canMoveBack: f.$1, canMoveForward: f.$2);
+    return ElementRow(
+      s,
+      inGroup: inGroup,
+      canMoveBack: f.$1,
+      canMoveForward: f.$2,
+    );
   }
 
   List<ObjectSummary> sorted(List<ObjectSummary> rows, ObjectKind kind) {
     final effective = switch (sort) {
-      ElementSort.stack => _stackable(kind) ? ElementSort.stack : ElementSort.name,
+      ElementSort.stack =>
+        _stackable(kind) ? ElementSort.stack : ElementSort.name,
       ElementSort.size =>
-        rows.any((s) => s.sizeMeasure != null) ? ElementSort.size : ElementSort.name,
+        rows.any((s) => s.sizeMeasure != null)
+            ? ElementSort.size
+            : ElementSort.name,
       ElementSort.name => ElementSort.name,
     };
     switch (effective) {
@@ -189,7 +201,9 @@ ElementRows buildElementRows({
       case ElementSort.size:
         return _stableSorted(rows, (a, b) {
           final x = a.sizeMeasure, y = b.sizeMeasure;
-          if (x == null || y == null) return x == null ? (y == null ? 0 : 1) : -1;
+          if (x == null || y == null) {
+            return x == null ? (y == null ? 0 : 1) : -1;
+          }
           return y.compareTo(x); // largest first
         });
     }
@@ -217,16 +231,14 @@ ElementRows buildElementRows({
       if (mine.isEmpty && poiGroups.isEmpty) continue;
       // A hand-made category is not an import: its group heading is where it
       // is renamed or deleted, so it has no second row under "Imports".
-      final manualSetIds = {
-        for (final g in poiGroups) ?g.manualSetId,
-      };
+      final manualSetIds = {for (final g in poiGroups) ?g.manualSetId};
       rows.addAll(
         _poiRows(
           groups: poiGroups,
-          sets: sorted(
-            [for (final s in mine) if (!manualSetIds.contains(s.ref.id)) s],
-            kind,
-          ),
+          sets: sorted([
+            for (final s in mine)
+              if (!manualSetIds.contains(s.ref.id)) s,
+          ], kind),
           searching: searching,
           matches: matches,
           expandedGroups: expandedGroups,
@@ -287,7 +299,8 @@ List<ListRow> _poiRows({
   rows.add(
     SectionRow(
       title: 'Imports',
-      blurb: 'How the points above arrived — deleting an import removes its '
+      blurb:
+          'How the points above arrived — deleting an import removes its '
           'points',
       trailing: '${shownSets.length}',
       expanded: expanded,

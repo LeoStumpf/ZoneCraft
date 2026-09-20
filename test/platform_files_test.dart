@@ -75,8 +75,10 @@ void main() {
 
     test('a name that is nothing but an extension is left alone', () {
       expect(ensureExtension('.geojson', 'application/geo+json'), '.geojson');
-      expect(ensureExtension('.hidden', 'application/geo+json'),
-          '.hidden.geojson');
+      expect(
+        ensureExtension('.hidden', 'application/geo+json'),
+        '.hidden.geojson',
+      );
     });
   });
 

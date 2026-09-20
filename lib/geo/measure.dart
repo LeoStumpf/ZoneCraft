@@ -54,7 +54,10 @@ double polylineLengthMeters(List<LatLng> pts) {
 /// drifts. The ring is closed implicitly, so a repeated closing vertex is
 /// harmless; fewer than three distinct usable points is an area of zero.
 double polygonAreaSquareMeters(List<LatLng> ring) {
-  final pts = [for (final p in ring) if (_finite(p)) p];
+  final pts = [
+    for (final p in ring)
+      if (_finite(p)) p,
+  ];
   if (pts.length >= 2 &&
       pts.first.latitude == pts.last.latitude &&
       pts.first.longitude == pts.last.longitude) {

@@ -62,8 +62,11 @@ class _CollapsibleSheetState extends State<CollapsibleSheet> {
                           borderRadius: BorderRadius.circular(2),
                         ),
                       )
-                    : Icon(Icons.keyboard_arrow_up,
-                        size: 20, color: scheme.onSurfaceVariant),
+                    : Icon(
+                        Icons.keyboard_arrow_up,
+                        size: 20,
+                        color: scheme.onSurfaceVariant,
+                      ),
               ),
             ),
           ),

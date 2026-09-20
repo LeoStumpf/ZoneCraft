@@ -28,8 +28,10 @@ import 'package:zonecraft/data/tile_source.dart' show tileUserAgent;
 void main() {
   test('kAppVersion matches pubspec.yaml', () {
     final pubspec = File('pubspec.yaml').readAsStringSync();
-    final match =
-        RegExp(r'^version:\s*(\S+)\s*$', multiLine: true).firstMatch(pubspec);
+    final match = RegExp(
+      r'^version:\s*(\S+)\s*$',
+      multiLine: true,
+    ).firstMatch(pubspec);
     expect(match, isNotNull, reason: 'pubspec.yaml has no version: line');
 
     // `1.1.0+2` — the build number is Play's, not the user's.

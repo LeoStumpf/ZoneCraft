@@ -39,8 +39,10 @@ void main() {
     });
 
     test('an empty selection is refused, not silently imported', () {
-      expect(checkBbox(48.05, 11.35, 48.25, 11.75, modeMask: 0),
-          BboxVerdict.noModes);
+      expect(
+        checkBbox(48.05, 11.35, 48.25, 11.75, modeMask: 0),
+        BboxVerdict.noModes,
+      );
     });
 
     test('the same box passes for trains and fails for buses', () {
@@ -52,18 +54,27 @@ void main() {
         BboxVerdict.warn,
       );
       expect(
-        checkBbox(b.south, b.west, b.north, b.east,
-            modeMask: bit('train') | bit('bus')),
+        checkBbox(
+          b.south,
+          b.west,
+          b.north,
+          b.east,
+          modeMask: bit('train') | bit('bus'),
+        ),
         BboxVerdict.tooLarge,
       );
     });
 
     test('a merely large box warns instead of blocking', () {
       // ~100 km across: past bus's warning, well under its limit.
-      expect(checkBbox(48.0, 11.0, 48.65, 11.95, modeMask: bit('bus')),
-          BboxVerdict.warn);
-      expect(checkBbox(48.0, 11.0, 48.65, 11.95, modeMask: bit('train')),
-          BboxVerdict.ok);
+      expect(
+        checkBbox(48.0, 11.0, 48.65, 11.95, modeMask: bit('bus')),
+        BboxVerdict.warn,
+      );
+      expect(
+        checkBbox(48.0, 11.0, 48.65, 11.95, modeMask: bit('train')),
+        BboxVerdict.ok,
+      );
     });
   });
 

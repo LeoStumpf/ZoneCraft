@@ -91,9 +91,7 @@ class MapControlsScreen extends ConsumerWidget {
     // The effect is invisible until the next button press, so say it happened.
     messenger
       ..clearSnackBars()
-      ..showSnackBar(
-        const SnackBar(content: Text('Tips will be shown again')),
-      );
+      ..showSnackBar(const SnackBar(content: Text('Tips will be shown again')));
   }
 }
 
@@ -105,9 +103,11 @@ const List<MapControl> _quickToggleVariants = [
     area: MapControlArea.bottom,
     icon: Icons.select_all,
     name: 'Fill outside',
-    what: 'Colours everything except this layer’s shapes, instead of the '
+    what:
+        'Colours everything except this layer’s shapes, instead of the '
         'shapes themselves.',
-    sometimes: 'On layers that draw regions — circles, subspaces, lines, '
+    sometimes:
+        'On layers that draw regions — circles, subspaces, lines, '
         'areas.',
   ),
   MapControl(
@@ -136,13 +136,13 @@ class _Heading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Divider(height: 40),
-          Text(text, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 12),
-        ],
-      );
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Divider(height: 40),
+      Text(text, style: Theme.of(context).textTheme.titleMedium),
+      const SizedBox(height: 12),
+    ],
+  );
 }
 
 /// One button: the icon exactly as it appears on the map, then its name, what

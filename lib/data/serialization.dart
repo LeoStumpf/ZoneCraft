@@ -293,11 +293,7 @@ class ExportLayer {
 
 /// A folder in a file: what it is called, and the two things it does.
 class ExportFolder {
-  const ExportFolder({
-    required this.name,
-    this.isVisible,
-    this.isInverted,
-  });
+  const ExportFolder({required this.name, this.isVisible, this.isInverted});
 
   final String name;
 
@@ -317,14 +313,15 @@ class ExportData {
   /// with no folders, which is why nothing about the format changes for one.
   final List<ExportFolder> folders;
 
-  int get objectCount =>
-      layers.fold(0, (sum, l) => sum + l.objects.length);
+  int get objectCount => layers.fold(0, (sum, l) => sum + l.objects.length);
 
   /// Total vertices across every object — the number an export's file size
   /// tracks, and what the "this will be a big file" warning is measured on. A
   /// single state boundary is ~119 000 points on its own.
   int get pointCount => layers.fold(
-      0, (sum, l) => sum + l.objects.fold(0, (a, o) => a + o.pointCount));
+    0,
+    (sum, l) => sum + l.objects.fold(0, (a, o) => a + o.pointCount),
+  );
 }
 
 // --- GeoJSON ----------------------------------------------------------------
@@ -503,12 +500,16 @@ List<double> _pt(LatLng p) => [p.longitude, p.latitude];
 
 /// A list of closed linear rings, for the ring lists that ride in `properties`
 /// rather than in a feature's geometry (a height region's fills).
-List<List<List<double>>> _ringArray(List<List<LatLng>> rings) =>
-    [for (final r in rings) if (r.isNotEmpty) _closedRing(r)];
+List<List<List<double>>> _ringArray(List<List<LatLng>> rings) => [
+  for (final r in rings)
+    if (r.isNotEmpty) _closedRing(r),
+];
 
 /// A GeoJSON linear ring: the vertices with the first repeated at the end.
-List<List<double>> _closedRing(List<LatLng> ring) =>
-    [for (final c in ring) _pt(c), _pt(ring.first)];
+List<List<double>> _closedRing(List<LatLng> ring) => [
+  for (final c in ring) _pt(c),
+  _pt(ring.first),
+];
 
 /// Parses a ZoneCraft GeoJSON document back into [ExportData]. Returns null when
 /// the text isn't valid GeoJSON or lacks the `zonecraft` extension (i.e. wasn't
@@ -518,9 +519,9 @@ ExportData? importFromGeoJson(String text) {
   Object? root;
   try {
     root = jsonDecode(text);
-  // An arbitrary file is arbitrary bytes; every failure means the same null,
-  // which is what the doc comment above promises.
-  // ignore: avoid_catches_without_on_clauses
+    // An arbitrary file is arbitrary bytes; every failure means the same null,
+    // which is what the doc comment above promises.
+    // ignore: avoid_catches_without_on_clauses
   } catch (_) {
     return null;
   }
@@ -543,19 +544,21 @@ ExportData? importFromGeoJson(String text) {
       continue;
     }
     bucketOfFileLayer.add(layerMeta.length);
-    layerMeta.add(ExportLayer(
-      name: (l['name'] as String?) ?? 'Imported',
-      colorArgb: (l['colorArgb'] as num?)?.toInt() ?? kDefaultLayerColor,
-      type: type,
-      isInverted: l['isInverted'] == true,
-      opacity: (l['opacity'] as num?)?.toDouble(),
-      borderLevel: l['borderLevel'] as String?,
-      borderFillAreas: l['borderFillAreas'] as bool?,
-      borderShowNames: l['borderShowNames'] as bool?,
-      isVisible: l['isVisible'] as bool?,
-      folderName: l['folder'] as String?,
-      objects: const [],
-    ));
+    layerMeta.add(
+      ExportLayer(
+        name: (l['name'] as String?) ?? 'Imported',
+        colorArgb: (l['colorArgb'] as num?)?.toInt() ?? kDefaultLayerColor,
+        type: type,
+        isInverted: l['isInverted'] == true,
+        opacity: (l['opacity'] as num?)?.toDouble(),
+        borderLevel: l['borderLevel'] as String?,
+        borderFillAreas: l['borderFillAreas'] as bool?,
+        borderShowNames: l['borderShowNames'] as bool?,
+        isVisible: l['isVisible'] as bool?,
+        folderName: l['folder'] as String?,
+        objects: const [],
+      ),
+    );
     buckets.add(<ExportObject>[]);
   }
   final folders = <ExportFolder>[
@@ -574,7 +577,9 @@ ExportData? importFromGeoJson(String text) {
     if (f is! Map<String, dynamic>) continue;
     final obj = _featureToObject(f);
     if (obj == null) continue;
-    final fileIdx = ((f['properties'] as Map<String, dynamic>?)?['zonecraftLayer'] as num?)?.toInt();
+    final fileIdx =
+        ((f['properties'] as Map<String, dynamic>?)?['zonecraftLayer'] as num?)
+            ?.toInt();
     if (fileIdx == null || fileIdx < 0 || fileIdx >= bucketOfFileLayer.length) {
       continue;
     }
@@ -583,22 +588,24 @@ ExportData? importFromGeoJson(String text) {
     buckets[idx].add(obj);
   }
 
-  return _splitLegacyMixed(ExportData([
-    for (var i = 0; i < layerMeta.length; i++)
-      ExportLayer(
-        name: layerMeta[i].name,
-        colorArgb: layerMeta[i].colorArgb,
-        type: layerMeta[i].type,
-        isInverted: layerMeta[i].isInverted,
-        opacity: layerMeta[i].opacity,
-        borderLevel: layerMeta[i].borderLevel,
-        borderFillAreas: layerMeta[i].borderFillAreas,
-        borderShowNames: layerMeta[i].borderShowNames,
-        isVisible: layerMeta[i].isVisible,
-        folderName: layerMeta[i].folderName,
-        objects: buckets[i],
-      ),
-  ], folders: folders));
+  return _splitLegacyMixed(
+    ExportData([
+      for (var i = 0; i < layerMeta.length; i++)
+        ExportLayer(
+          name: layerMeta[i].name,
+          colorArgb: layerMeta[i].colorArgb,
+          type: layerMeta[i].type,
+          isInverted: layerMeta[i].isInverted,
+          opacity: layerMeta[i].opacity,
+          borderLevel: layerMeta[i].borderLevel,
+          borderFillAreas: layerMeta[i].borderFillAreas,
+          borderShowNames: layerMeta[i].borderShowNames,
+          isVisible: layerMeta[i].isVisible,
+          folderName: layerMeta[i].folderName,
+          objects: buckets[i],
+        ),
+    ], folders: folders),
+  );
 }
 
 /// Splits every `mixed` layer a v3 file holds into one layer per kind it
@@ -634,37 +641,43 @@ ExportData _splitLegacyMixed(ExportData data) {
       // Nothing in it becomes the default type rather than a folder holding
       // nothing.
       final type = present.isEmpty ? kCircles : present.single;
-      layers.add(ExportLayer(
-        name: l.name,
-        colorArgb: l.colorArgb,
-        type: type,
-        isInverted: l.isInverted,
-        opacity: l.opacity,
-        isVisible: l.isVisible,
-        folderName: l.folderName,
-        objects: byType[type] ?? const [],
-      ));
+      layers.add(
+        ExportLayer(
+          name: l.name,
+          colorArgb: l.colorArgb,
+          type: type,
+          isInverted: l.isInverted,
+          opacity: l.opacity,
+          isVisible: l.isVisible,
+          folderName: l.folderName,
+          objects: byType[type] ?? const [],
+        ),
+      );
       continue;
     }
     var folderName = l.name;
     for (var n = 2; folders.any((f) => f.name == folderName); n++) {
       folderName = '${l.name} $n';
     }
-    folders.add(ExportFolder(
-      name: folderName,
-      isVisible: l.isVisible,
-      isInverted: l.isInverted ? true : null,
-    ));
+    folders.add(
+      ExportFolder(
+        name: folderName,
+        isVisible: l.isVisible,
+        isInverted: l.isInverted ? true : null,
+      ),
+    );
     for (final t in present) {
-      layers.add(ExportLayer(
-        name: '${l.name} (${layerTypeNoun(t)})',
-        colorArgb: l.colorArgb,
-        type: t,
-        isInverted: false,
-        opacity: l.opacity,
-        folderName: folderName,
-        objects: byType[t]!,
-      ));
+      layers.add(
+        ExportLayer(
+          name: '${l.name} (${layerTypeNoun(t)})',
+          colorArgb: l.colorArgb,
+          type: t,
+          isInverted: false,
+          opacity: l.opacity,
+          folderName: folderName,
+          objects: byType[t]!,
+        ),
+      );
     }
   }
   return ExportData(layers, folders: folders);
@@ -764,10 +777,7 @@ ExportObject? _featureToObject(Map<String, dynamic> f) {
     manual: props['manual'] as bool?,
     colorArgb: (props['colorArgb'] as num?)?.toInt(),
     pointLabels: props['pointLabels'] is List
-        ? [
-            for (final n in props['pointLabels'] as List)
-              n is String ? n : null,
-          ]
+        ? [for (final n in props['pointLabels'] as List) n is String ? n : null]
         : null,
   );
 }
@@ -780,7 +790,10 @@ List<List<LatLng>>? _readRings(Map<String, dynamic> geom) {
   final c = geom['coordinates'];
   if (c is! List) return null;
   final polys = switch (type) {
-    'MultiPolygon' => [for (final p in c) if (p is List) p],
+    'MultiPolygon' => [
+      for (final p in c)
+        if (p is List) p,
+    ],
     'Polygon' => [c],
     _ => const <List<dynamic>>[],
   };
@@ -834,17 +847,11 @@ List<double> _extentOf(List<LatLng> points) {
   return [s, w, n, e];
 }
 
-List<int>? _readInts(Object? raw) => raw is List
-    ? [
-        for (final e in raw) (e as num?)?.toInt() ?? 0,
-      ]
-    : null;
+List<int>? _readInts(Object? raw) =>
+    raw is List ? [for (final e in raw) (e as num?)?.toInt() ?? 0] : null;
 
-List<String?>? _readStrings(Object? raw) => raw is List
-    ? [
-        for (final e in raw) e is String ? e : null,
-      ]
-    : null;
+List<String?>? _readStrings(Object? raw) =>
+    raw is List ? [for (final e in raw) e is String ? e : null] : null;
 
 /// A list that may hold nulls — a per-point value present only for the points
 /// that have one. A non-finite number reads as absent rather than poisoning
@@ -993,12 +1000,15 @@ void _kmlPlacemark(StringBuffer b, ExportObject o) {
       b.writeln('      <MultiGeometry>');
       for (final c in o.coords) {
         b.writeln(
-            '        <Point><coordinates>${_coord(c)}</coordinates></Point>');
+          '        <Point><coordinates>${_coord(c)}</coordinates></Point>',
+        );
       }
       b.writeln('      </MultiGeometry>');
     default:
-      b.writeln('      <Point><coordinates>'
-          '${_coord(o.coords.first)}</coordinates></Point>');
+      b.writeln(
+        '      <Point><coordinates>'
+        '${_coord(o.coords.first)}</coordinates></Point>',
+      );
   }
   b.writeln('    </Placemark>');
 }
@@ -1014,8 +1024,10 @@ void _kmlPoints(StringBuffer b, ExportObject o, {required int from}) {
     if (name != null && name.isNotEmpty) {
       b.writeln('      <name>${_xml(name)}</name>');
     }
-    b.writeln('      <Point><coordinates>'
-        '${_coord(o.coords[i])}</coordinates></Point>');
+    b.writeln(
+      '      <Point><coordinates>'
+      '${_coord(o.coords[i])}</coordinates></Point>',
+    );
     b.writeln('    </Placemark>');
   }
 }
@@ -1023,7 +1035,10 @@ void _kmlPoints(StringBuffer b, ExportObject o, {required int from}) {
 String _kmlLine(List<LatLng> pts) =>
     '      <LineString><coordinates>${_coords(pts)}</coordinates></LineString>';
 
-String _kmlPolygon(List<LatLng> ring, {Iterable<List<LatLng>> holes = const []}) {
+String _kmlPolygon(
+  List<LatLng> ring, {
+  Iterable<List<LatLng>> holes = const [],
+}) {
   final b = StringBuffer('      <Polygon>')
     ..write('<outerBoundaryIs><LinearRing><coordinates>')
     ..write(_coords(_closed(ring)))
@@ -1037,8 +1052,10 @@ String _kmlPolygon(List<LatLng> ring, {Iterable<List<LatLng>> holes = const []})
   return (b..write('</Polygon>')).toString();
 }
 
-List<LatLng> _closed(List<LatLng> ring) =>
-    [...ring, if (ring.isNotEmpty) ring.first];
+List<LatLng> _closed(List<LatLng> ring) => [
+  ...ring,
+  if (ring.isNotEmpty) ring.first,
+];
 
 String _coords(List<LatLng> pts) => pts.map(_coord).join(' ');
 String _coord(LatLng p) => '${p.longitude},${p.latitude},0';
@@ -1056,22 +1073,22 @@ String _xml(String s) => s
 /// asking "can this layer hold that object" needs the translation. Null for a
 /// kind this build does not know, which a file from a newer version can carry.
 String? layerTypeForExportKind(String kind) => switch (kind) {
-      'circle' => 'circles',
-      'subspace' => 'subspace',
-      'freeline' => 'freeline',
-      'freearea' => 'freearea',
-      'height' => 'height',
-      'poi' => 'poi',
-      'borderarea' => 'borders',
-      _ => null,
-    };
+  'circle' => 'circles',
+  'subspace' => 'subspace',
+  'freeline' => 'freeline',
+  'freearea' => 'freearea',
+  'height' => 'height',
+  'poi' => 'poi',
+  'borderarea' => 'borders',
+  _ => null,
+};
 
 /// Today's name for a layer type a v1/v2 file may carry: `planes` became
 /// `subspace` and `transit` became `poi` in v27; a `track` layer has no
 /// successor and reads as null (dropped). Everything else is itself.
 String? legacyLayerType(String type) => switch (type) {
-      'planes' => 'subspace',
-      'transit' => 'poi',
-      'track' => null,
-      _ => type,
-    };
+  'planes' => 'subspace',
+  'transit' => 'poi',
+  'track' => null,
+  _ => type,
+};

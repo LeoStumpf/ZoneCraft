@@ -88,8 +88,7 @@ void main() {
       const kml = '''
       <kml><Placemark><name>z</name><LineString><coordinates>
         1,2 3,4</coordinates></LineString></Placemark></kml>''';
-      final archive = Archive()
-        ..addFile(ArchiveFile.string('doc.kml', kml));
+      final archive = Archive()..addFile(ArchiveFile.string('doc.kml', kml));
       final bytes = Uint8List.fromList(ZipEncoder().encode(archive));
       final feats = parseKmz(bytes);
       expect(feats, hasLength(1));
@@ -105,7 +104,8 @@ void main() {
       // otherwise the test would pass for the wrong reason, on a payload that
       // was simply not KML. The padding is a comment, which is legal XML and
       // highly compressible: tiny zip in, enormous document out.
-      final huge = '<kml><!--${'a' * (kMaxKmzUncompressedBytes + 1024)}-->'
+      final huge =
+          '<kml><!--${'a' * (kMaxKmzUncompressedBytes + 1024)}-->'
           '<Placemark><name>bomb</name><LineString><coordinates>'
           '1,2 3,4</coordinates></LineString></Placemark></kml>';
       final archive = Archive()..addFile(ArchiveFile.string('doc.kml', huge));
@@ -124,15 +124,20 @@ void main() {
       for (var i = 0; i < 8; i++) {
         archive.addFile(ArchiveFile.string('pad$i.txt', chunk));
       }
-      archive.addFile(ArchiveFile.string(
-        'doc.kml',
-        '<kml><Placemark><LineString><coordinates>1,2 3,4'
-            '</coordinates></LineString></Placemark></kml>',
-      ));
+      archive.addFile(
+        ArchiveFile.string(
+          'doc.kml',
+          '<kml><Placemark><LineString><coordinates>1,2 3,4'
+              '</coordinates></LineString></Placemark></kml>',
+        ),
+      );
       final bytes = Uint8List.fromList(ZipEncoder().encode(archive));
 
-      expect(parseKmz(bytes), isEmpty,
-          reason: 'no single entry is over the cap, but together they are');
+      expect(
+        parseKmz(bytes),
+        isEmpty,
+        reason: 'no single entry is over the cap, but together they are',
+      );
     });
 
     test('an ordinary KMZ well under the cap still imports', () {
@@ -173,9 +178,12 @@ void main() {
 
   group('dispatch by filename', () {
     test('routes .geojson to the GeoJSON parser', () {
-      final bytes = Uint8List.fromList(utf8.encode(
+      final bytes = Uint8List.fromList(
+        utf8.encode(
           '{"type":"Feature","geometry":{"type":"LineString",'
-          '"coordinates":[[1,2],[3,4]]}}'));
+          '"coordinates":[[1,2],[3,4]]}}',
+        ),
+      );
       final feats = parseExternalGeometry('x.geojson', bytes);
       expect(feats, hasLength(1));
     });
@@ -209,14 +217,14 @@ void main() {
     test('handles a single part and empty input', () {
       expect(
         stitchPolylines([
-          [const LatLng(1, 1), const LatLng(2, 2)]
+          [const LatLng(1, 1), const LatLng(2, 2)],
         ]),
         hasLength(2),
       );
       expect(stitchPolylines(const []), isEmpty);
       expect(
         stitchPolylines([
-          [const LatLng(1, 1)] // too short, dropped
+          [const LatLng(1, 1)], // too short, dropped
         ]),
         isEmpty,
       );
@@ -234,7 +242,9 @@ void main() {
 
     test('does not fabricate a connector between far-apart channels', () {
       // A main channel (meridian, ~111 m steps) and a separate channel far east.
-      final main = [for (var i = 0; i <= 10; i++) LatLng(48.0 + i * 0.001, 11.0)];
+      final main = [
+        for (var i = 0; i <= 10; i++) LatLng(48.0 + i * 0.001, 11.0),
+      ];
       final side = [const LatLng(48.0, 11.05), const LatLng(48.003, 11.05)];
       final line = stitchPolylines([main, side]);
       // The longer (main) channel is returned; the side channel is dropped and
@@ -252,7 +262,9 @@ void main() {
     });
 
     test('a near-but-separate channel (gap > threshold) is not merged', () {
-      final main = [for (var i = 0; i <= 8; i++) LatLng(48.0 + i * 0.001, 11.0)];
+      final main = [
+        for (var i = 0; i <= 8; i++) LatLng(48.0 + i * 0.001, 11.0),
+      ];
       // ~149 m east of the main channel — a distinct parallel channel.
       final side = [const LatLng(48.0, 11.002), const LatLng(48.002, 11.002)];
       final line = stitchPolylines([main, side]);
@@ -266,7 +278,9 @@ void main() {
     test('keeps every disconnected run, longest first', () {
       // What stitchPolylines throws away — and what a transit route's branches
       // (or the pieces a bbox clip severed) need back.
-      final main = [for (var i = 0; i <= 10; i++) LatLng(48.0 + i * 0.001, 11.0)];
+      final main = [
+        for (var i = 0; i <= 10; i++) LatLng(48.0 + i * 0.001, 11.0),
+      ];
       final side = [const LatLng(48.0, 11.05), const LatLng(48.003, 11.05)];
       final runs = stitchComponents([side, main]);
       expect(runs, hasLength(2));
@@ -287,7 +301,7 @@ void main() {
       expect(stitchComponents(const []), isEmpty);
       expect(
         stitchComponents([
-          [const LatLng(1, 1)]
+          [const LatLng(1, 1)],
         ]),
         isEmpty,
       );

@@ -70,14 +70,14 @@ import '../app_info.dart';
 const String _tileUrlOverride = String.fromEnvironment('TILE_URL');
 
 /// Build-time attribution line for [_tileUrlOverride].
-const String _tileAttributionOverride =
-    String.fromEnvironment('TILE_ATTRIBUTION');
+const String _tileAttributionOverride = String.fromEnvironment(
+  'TILE_ATTRIBUTION',
+);
 
 /// Build-time opt-in to pre-emptive fetching, deliberately separate from
 /// [_tileUrlOverride]: see the library doc. Defaults to false, so a build that
 /// only redirects the tiles stays as conservative as the stock one.
-const bool _tileAllowsPrefetch =
-    bool.fromEnvironment('TILE_ALLOWS_PREFETCH');
+const bool _tileAllowsPrefetch = bool.fromEnvironment('TILE_ALLOWS_PREFETCH');
 
 /// The base-map tile source in force for this build.
 class TileSource {

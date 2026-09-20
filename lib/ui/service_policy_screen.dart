@@ -63,9 +63,9 @@ class _ServicePolicyScreenState extends State<ServicePolicyScreen> {
     var can = false;
     try {
       can = await canLaunchExternalUrl(Uri.parse('https://openstreetmap.org'));
-    // With no platform implementation at all (a test host, a desktop build)
-    // canLaunchUrl throws rather than answering false.
-    // ignore: avoid_catches_without_on_clauses
+      // With no platform implementation at all (a test host, a desktop build)
+      // canLaunchUrl throws rather than answering false.
+      // ignore: avoid_catches_without_on_clauses
     } catch (_) {
       // Links stay plain, copyable text.
     }
@@ -102,7 +102,8 @@ class _ServicePolicyScreenState extends State<ServicePolicyScreen> {
           _Rule(
             icon: Icons.touch_app_outlined,
             title: 'Only when you ask',
-            body: 'No request is ever made on a timer, in the background, or '
+            body:
+                'No request is ever made on a timer, in the background, or '
                 'because the map moved. An import runs once, when you start '
                 'it, and the result is stored here for good — it is never '
                 'refreshed behind your back.',
@@ -110,7 +111,8 @@ class _ServicePolicyScreenState extends State<ServicePolicyScreen> {
           _Rule(
             icon: Icons.speed_outlined,
             title: 'One request per second, at most',
-            body: 'Searches and imports queue behind a pacer rather than going '
+            body:
+                'Searches and imports queue behind a pacer rather than going '
                 'out together, and a repeated search is answered from memory '
                 'without asking again. There is deliberately no '
                 'search-as-you-type: the geocoder’s policy forbids it.',
@@ -122,25 +124,27 @@ class _ServicePolicyScreenState extends State<ServicePolicyScreen> {
                 : 'The map is never downloaded ahead of you',
             body: tiles.allowsPrefetch
                 ? 'This build was pointed at a tile provider whose terms permit '
-                    'fetching ahead, so the offline download exists. On the '
-                    'default build it does not.'
+                      'fetching ahead, so the offline download exists. On the '
+                      'default build it does not.'
                 : 'OpenStreetMap defines bulk downloading as any fetching of '
-                    'tiles you are not looking at — so there is no small, '
-                    'polite amount of it, and there is no "save this area for '
-                    'offline" button. Tiles you did look at are kept, which '
-                    'their policy asks for.',
+                      'tiles you are not looking at — so there is no small, '
+                      'polite amount of it, and there is no "save this area for '
+                      'offline" button. Tiles you did look at are kept, which '
+                      'their policy asks for.',
           ),
           _Rule(
             icon: Icons.badge_outlined,
             title: 'The app says who it is',
-            body: 'Every request carries a name and version, so an operator '
+            body:
+                'Every request carries a name and version, so an operator '
                 'seeing a problem can tell which app and which release caused '
                 'it — and can find someone to tell.',
           ),
           _Rule(
             icon: Icons.volunteer_activism_outlined,
             title: 'One thing the app can send, and only on a press',
-            body: 'If you correct an imported point, the app offers to pass '
+            body:
+                'If you correct an imported point, the app offers to pass '
                 'the correction on as an OpenStreetMap note. You write the '
                 'text, you press Send, and that is the only circumstance in '
                 'which anything you typed leaves this device. Nothing is ever '
@@ -156,12 +160,12 @@ class _ServicePolicyScreenState extends State<ServicePolicyScreen> {
             who: osmApiHost,
             note: osmApiIsLive
                 ? 'The OpenStreetMap database itself. A note is public and '
-                    'permanent, and an anonymous one is not linked to you — '
-                    'which also means nobody can write back, so the outbox '
-                    'keeps a link to each note for you to follow.'
+                      'permanent, and an anonymous one is not linked to you — '
+                      'which also means nobody can write back, so the outbox '
+                      'keeps a link to each note for you to follow.'
                 : 'This build is pointed at a test server rather than at '
-                    'OpenStreetMap, so nothing sent from it reaches real '
-                    'mappers.',
+                      'OpenStreetMap, so nothing sent from it reaches real '
+                      'mappers.',
             canOpen: _canOpenLinks,
           ),
           _Who(
@@ -170,18 +174,19 @@ class _ServicePolicyScreenState extends State<ServicePolicyScreen> {
             who: tileHost.isEmpty ? tiles.urlTemplate : tileHost,
             note: tiles.isCommunityOsm
                 ? 'OpenStreetMap’s own servers, run on donations. Map data '
-                    'and tiles © OpenStreetMap contributors (ODbL).'
+                      'and tiles © OpenStreetMap contributors (ODbL).'
                 : 'A commercial provider, so OpenStreetMap’s donated '
-                    'servers are not carrying this app’s map traffic. '
-                    'Underlying data is still © OpenStreetMap contributors '
-                    '(ODbL).',
+                      'servers are not carrying this app’s map traffic. '
+                      'Underlying data is still © OpenStreetMap contributors '
+                      '(ODbL).',
             canOpen: _canOpenLinks,
           ),
           _Who(
             icon: Icons.travel_explore,
             what: 'Imports: places, stations, borders',
             who: Uri.tryParse(overpassEndpoints.first)?.host ?? '',
-            note: 'Overpass, run by volunteers. Their documentation says an app '
+            note:
+                'Overpass, run by volunteers. Their documentation says an app '
                 'that leans on the public instances is what running your own '
                 'is for — which is why a border import is capped, one-shot, '
                 'and stored here forever afterwards.',
@@ -191,7 +196,8 @@ class _ServicePolicyScreenState extends State<ServicePolicyScreen> {
             icon: Icons.search,
             what: 'Finding a place by name',
             who: defaultNominatimHost,
-            note: 'Nominatim, OpenStreetMap’s geocoder. Capped at one '
+            note:
+                'Nominatim, OpenStreetMap’s geocoder. Capped at one '
                 'request per second with results cached, and no '
                 'search-as-you-type, which its policy forbids outright.',
             canOpen: _canOpenLinks,
@@ -200,7 +206,8 @@ class _ServicePolicyScreenState extends State<ServicePolicyScreen> {
             icon: Icons.terrain,
             what: 'Ground elevation',
             who: 's3.amazonaws.com/elevation-tiles-prod',
-            note: 'A public open dataset. SRTM, 3DEP and GMTED2010 courtesy of '
+            note:
+                'A public open dataset. SRTM, 3DEP and GMTED2010 courtesy of '
                 'the U.S. Geological Survey; ETOPO1 courtesy of NOAA.',
             canOpen: _canOpenLinks,
           ),
@@ -225,21 +232,20 @@ class _ServicePolicyScreenState extends State<ServicePolicyScreen> {
             style: theme.textTheme.bodyMedium,
           ),
           const SizedBox(height: 12),
-          const _CopyableCode(
-            label: 'User-Agent',
-            value: zoneCraftUserAgent,
-          ),
+          const _CopyableCode(label: 'User-Agent', value: zoneCraftUserAgent),
           const SizedBox(height: 12),
           _CopyableCode(
             label: 'Email',
             value: kContactEmail,
             onOpen: _canOpenLinks
-                ? () => unawaited(openExternalUrl(
+                ? () => unawaited(
+                    openExternalUrl(
                       Uri(scheme: 'mailto', path: kContactEmail),
                       context: context,
                       failureMessage: 'No email app — address copied instead.',
                       onFailure: () => _copy(kContactEmail),
-                    ))
+                    ),
+                  )
                 : null,
           ),
           const SizedBox(height: 12),
@@ -248,8 +254,8 @@ class _ServicePolicyScreenState extends State<ServicePolicyScreen> {
             value: kIssuesUrl,
             onOpen: _canOpenLinks
                 ? () => unawaited(
-                      openExternalUrl(Uri.parse(kIssuesUrl), context: context),
-                    )
+                    openExternalUrl(Uri.parse(kIssuesUrl), context: context),
+                  )
                 : null,
           ),
         ],
@@ -260,8 +266,9 @@ class _ServicePolicyScreenState extends State<ServicePolicyScreen> {
   void _copy(String value) {
     unawaited(Clipboard.setData(ClipboardData(text: value)));
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Copied')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Copied')));
   }
 }
 
@@ -273,13 +280,13 @@ class _Heading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Divider(height: 48),
-          Text(text, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 12),
-        ],
-      );
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Divider(height: 48),
+      Text(text, style: Theme.of(context).textTheme.titleMedium),
+      const SizedBox(height: 12),
+    ],
+  );
 }
 
 /// One thing the app does on purpose, stated as the claim then the reason.
@@ -353,8 +360,7 @@ class _Who extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(what, style: theme.textTheme.bodyLarge),
-                if (who.isNotEmpty)
-                  _HostLink(who, canOpen: canOpen),
+                if (who.isNotEmpty) _HostLink(who, canOpen: canOpen),
                 const SizedBox(height: 2),
                 Text(note, style: theme.textTheme.bodySmall),
               ],
@@ -385,11 +391,13 @@ class _HostLink extends StatelessWidget {
     return Semantics(
       link: true,
       child: InkWell(
-        onTap: () => unawaited(openExternalUrl(
-          Uri.parse('https://$host'),
-          context: context,
-          failureMessage: "Couldn't open $host",
-        )),
+        onTap: () => unawaited(
+          openExternalUrl(
+            Uri.parse('https://$host'),
+            context: context,
+            failureMessage: "Couldn't open $host",
+          ),
+        ),
         child: Text(host, style: style),
       ),
     );
@@ -402,11 +410,7 @@ class _HostLink extends StatelessWidget {
 /// scheme: the whole point of this block is that somebody trying to reach a
 /// human does not hit a dead button.
 class _CopyableCode extends StatelessWidget {
-  const _CopyableCode({
-    required this.label,
-    required this.value,
-    this.onOpen,
-  });
+  const _CopyableCode({required this.label, required this.value, this.onOpen});
 
   final String label;
   final String value;
@@ -429,13 +433,15 @@ class _CopyableCode extends StatelessWidget {
                 children: [
                   Text(
                     label,
-                    style: theme.textTheme.labelSmall
-                        ?.copyWith(color: theme.colorScheme.outline),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.outline,
+                    ),
                   ),
                   SelectableText(
                     value,
-                    style: theme.textTheme.bodyMedium
-                        ?.copyWith(fontFamily: 'monospace'),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontFamily: 'monospace',
+                    ),
                   ),
                 ],
               ),
@@ -451,9 +457,9 @@ class _CopyableCode extends StatelessWidget {
               icon: const Icon(Icons.copy, size: 20),
               onPressed: () {
                 unawaited(Clipboard.setData(ClipboardData(text: value)));
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('$label copied')),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text('$label copied')));
               },
             ),
           ],

@@ -60,7 +60,10 @@ void main() {
     const expected = 1113.2 * 745.0;
 
     test('a small square at mid latitude', () {
-      expect(polygonAreaSquareMeters(square), closeTo(expected, expected * 0.01));
+      expect(
+        polygonAreaSquareMeters(square),
+        closeTo(expected, expected * 0.01),
+      );
     });
 
     test('orientation does not matter', () {
@@ -80,10 +83,7 @@ void main() {
     test('fewer than three distinct points is zero', () {
       expect(polygonAreaSquareMeters(const []), 0);
       expect(polygonAreaSquareMeters(square.sublist(0, 2)), 0);
-      expect(
-        polygonAreaSquareMeters([square[0], square[1], square[0]]),
-        0,
-      );
+      expect(polygonAreaSquareMeters([square[0], square[1], square[0]]), 0);
     });
   });
 }

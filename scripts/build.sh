@@ -8,7 +8,7 @@
 #   scripts/build.sh --install --run     install, then launch the app
 #   scripts/build.sh --release           build a release APK instead of debug
 #   scripts/build.sh --bundle            build a release App Bundle (.aab) for Play
-#   scripts/build.sh --skip-checks       skip `flutter analyze` and `flutter test`
+#   scripts/build.sh --skip-checks       skip format/analyze/test
 #
 # Env overrides:
 #   DEVICE=<adb-serial>   target a specific device (default: Pixel 4a below)
@@ -121,6 +121,15 @@ fi
 
 # --- checks ------------------------------------------------------------------
 if [ "$SKIP_CHECKS" -eq 0 ]; then
+  # Formatting first, because it is the cheapest check and because a drifted
+  # file makes every later diff unreadable: a refactor that also reflows two
+  # hundred lines cannot be reviewed. `--set-exit-if-changed` reports rather
+  # than rewrites, so this never edits the tree behind your back.
+  echo "==> dart format --set-exit-if-changed"
+  if ! dart format --output=none --set-exit-if-changed lib test; then
+    echo "!!! Run 'dart format lib test' and commit the result." >&2
+    exit 1
+  fi
   echo "==> flutter analyze"
   flutter analyze
   echo "==> flutter test"

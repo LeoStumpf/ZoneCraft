@@ -130,9 +130,7 @@ class _ImportedPointEditorSheetState
   void initState() {
     super.initState();
     _name = TextEditingController(text: widget.name ?? '');
-    _pos = TextEditingController(
-      text: formatLatLng(widget.lat, widget.lng),
-    );
+    _pos = TextEditingController(text: formatLatLng(widget.lat, widget.lng));
   }
 
   @override
@@ -173,20 +171,20 @@ class _ImportedPointEditorSheetState
   /// Everything the report needs to know about this point, gathered in one
   /// place so the sheet has no idea it came from a POI row.
   OsmReportSubject get _subject => OsmReportSubject(
-        lat: widget.lat,
-        lng: widget.lng,
-        name: widget.name,
-        origLat: widget.origLat,
-        origLng: widget.origLng,
-        origName: widget.origName,
-        edited: widget.editedAt != null,
-        categoryLabel: widget.subtitle,
-        tagKey: widget.tagKey,
-        tagValue: widget.tagValue,
-        osmType: widget.osmType,
-        osmId: widget.osmId,
-        poiPointId: widget.id,
-      );
+    lat: widget.lat,
+    lng: widget.lng,
+    name: widget.name,
+    origLat: widget.origLat,
+    origLng: widget.origLng,
+    origName: widget.origName,
+    edited: widget.editedAt != null,
+    categoryLabel: widget.subtitle,
+    tagKey: widget.tagKey,
+    tagValue: widget.tagValue,
+    osmType: widget.osmType,
+    osmId: widget.osmId,
+    poiPointId: widget.id,
+  );
 
   Future<void> _report() async {
     // Disarm first: the sheet covers the map, and a tap landing behind it
@@ -289,11 +287,13 @@ class _ImportedPointEditorSheetState
                 onChanged: (t) {
                   final p = parseLatLng(t);
                   if (p == null) return; // half-typed; ignore until valid
-                  unawaited(_repo.movePoiPoint(
+                  unawaited(
+                    _repo.movePoiPoint(
                       id: widget.id,
                       lat: p.latitude,
                       lng: p.longitude,
-                    ));
+                    ),
+                  );
                 },
               ),
             ),
@@ -316,10 +316,7 @@ class _ImportedPointEditorSheetState
         // else for it. There is a field for it now, so this line says only
         // what the field cannot.
         Text(
-          [
-            widget.subtitle,
-            if (widget.movable) 'placed by hand',
-          ].join(' · '),
+          [widget.subtitle, if (widget.movable) 'placed by hand'].join(' · '),
           style: theme.textTheme.bodySmall,
         ),
         if (edited) ...[
@@ -327,8 +324,9 @@ class _ImportedPointEditorSheetState
           Text(
             'Corrected by you. OpenStreetMap still has '
             '${_upstreamDescription()}.',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.tertiary),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.tertiary,
+            ),
           ),
         ] else if (!widget.movable) ...[
           const SizedBox(height: 8),
@@ -356,8 +354,8 @@ class _ImportedPointEditorSheetState
                 edited
                     ? 'Share this correction'
                     : widget.movable
-                        ? 'Add it to OpenStreetMap'
-                        : 'Tell OpenStreetMap',
+                    ? 'Add it to OpenStreetMap'
+                    : 'Tell OpenStreetMap',
               ),
             ),
           ],
@@ -369,7 +367,8 @@ class _ImportedPointEditorSheetState
   /// What OSM holds, in the fewest words that still say which part you
   /// changed — the position, the name, or both.
   String _upstreamDescription() {
-    final moved = widget.origLat != null &&
+    final moved =
+        widget.origLat != null &&
         widget.origLng != null &&
         (widget.origLat != widget.lat || widget.origLng != widget.lng);
     final renamed = widget.origName != widget.name;

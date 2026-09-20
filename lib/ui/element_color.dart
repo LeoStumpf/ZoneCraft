@@ -88,5 +88,6 @@ Color elementColor({
 /// per-layer creation counter and also orders the region painter's colour
 /// groups (newest wins an overlap), so letting a colour choice rewrite it would
 /// silently reshuffle which element sits on top.
-List<Color> shadePalette(Color layerColor, {int count = 8}) =>
-    [for (var i = 0; i < count; i++) autoShade(layerColor, i)];
+List<Color> shadePalette(Color layerColor, {int count = 8}) => [
+  for (var i = 0; i < count; i++) autoShade(layerColor, i),
+];

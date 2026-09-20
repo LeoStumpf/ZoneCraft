@@ -60,8 +60,9 @@ void main() {
       expect(seen.last, 1000, reason: 'the ring is up before the first edit');
     });
 
-    testWidgets('reports every typed radius, and null when unusable',
-        (t) async {
+    testWidgets('reports every typed radius, and null when unusable', (
+      t,
+    ) async {
       final seen = <double?>[];
       await pump(
         t,
@@ -88,8 +89,9 @@ void main() {
 
     // The validator has always used `parseDecimal`; submit used `double.parse`,
     // so in a comma-decimal locale a *valid* entry threw on Import.
-    testWidgets('accepts a comma decimal, the way the validator promises',
-        (t) async {
+    testWidgets('accepts a comma decimal, the way the validator promises', (
+      t,
+    ) async {
       PoiImportConfig? got;
       await pump(
         t,
@@ -101,7 +103,9 @@ void main() {
         ),
       );
       await t.enterText(
-          find.widgetWithText(TextFormField, 'Search radius (m)'), '1500,5');
+        find.widgetWithText(TextFormField, 'Search radius (m)'),
+        '1500,5',
+      );
       await t.tap(find.widgetWithText(FilledButton, 'Import'));
       await t.pump();
 

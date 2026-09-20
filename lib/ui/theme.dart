@@ -204,7 +204,6 @@ const ColorScheme zoneCraftLight = ColorScheme(
   onPrimary: Color(0xFFFFFFFF), // 6.45 on primary
   primaryContainer: Color(0xFFCFE9CD), // park green, off its neon
   onPrimaryContainer: Color(0xFF08320C), // 11.0
-
   // The water blue as ink. #0092DA is 2.99 on paper — fails — so the fill
   // keeps the style's colour and the ink is a deeper cousin at 6.13.
   secondary: Color(0xFF005F87),
@@ -593,12 +592,7 @@ class MapChrome extends StatelessWidget {
 /// own — so a POI name reads as part of the map rather than as a small card
 /// sitting on it.
 class MapLabel extends StatelessWidget {
-  const MapLabel(
-    this.text, {
-    super.key,
-    this.fontSize = 10,
-    this.fontWeight,
-  });
+  const MapLabel(this.text, {super.key, this.fontSize = 10, this.fontWeight});
 
   final String text;
   final double fontSize;
@@ -606,16 +600,16 @@ class MapLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text(
-        text,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontSize: fontSize,
-          height: 1.0,
-          color: kMapInk,
-          fontWeight: fontWeight,
-          shadows: kMapLabelHalo,
-        ),
-      );
+    text,
+    maxLines: 1,
+    overflow: TextOverflow.ellipsis,
+    textAlign: TextAlign.center,
+    style: TextStyle(
+      fontSize: fontSize,
+      height: 1.0,
+      color: kMapInk,
+      fontWeight: fontWeight,
+      shadows: kMapLabelHalo,
+    ),
+  );
 }

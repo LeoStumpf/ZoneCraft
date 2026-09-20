@@ -28,7 +28,9 @@ double _contrast(Color a, Color b) {
   double lum(Color c) {
     double chan(double v) {
       final s = v;
-      return s <= 0.03928 ? s / 12.92 : math.pow((s + 0.055) / 1.055, 2.4) as double;
+      return s <= 0.03928
+          ? s / 12.92
+          : math.pow((s + 0.055) / 1.055, 2.4) as double;
     }
 
     return 0.2126 * chan(c.r) + 0.7152 * chan(c.g) + 0.0722 * chan(c.b);
@@ -69,8 +71,10 @@ void main() {
       expect(_contrast(s.primary, s.surface), greaterThan(4.5));
       expect(_contrast(s.secondary, s.surface), greaterThan(4.5));
       expect(_contrast(s.error, s.surface), greaterThan(4.5));
-      expect(_contrast(ZoneCraftColors.dark.warning, s.surface),
-          greaterThan(4.5));
+      expect(
+        _contrast(ZoneCraftColors.dark.warning, s.surface),
+        greaterThan(4.5),
+      );
     });
 
     test('text on a filled accent passes too', () {
@@ -100,8 +104,9 @@ void main() {
       expect(kMapPlate.a, greaterThan(0.5));
     });
 
-    testWidgets('MapChrome under a light Theme stays light in a dark app',
-        (tester) async {
+    testWidgets('MapChrome under a light Theme stays light in a dark app', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
           theme: zoneCraftLightTheme(),
@@ -139,10 +144,14 @@ void main() {
     });
 
     test('the scaffold ground follows its own scheme', () {
-      expect(zoneCraftLightTheme().scaffoldBackgroundColor,
-          zoneCraftLight.surface);
-      expect(zoneCraftDarkTheme().scaffoldBackgroundColor,
-          zoneCraftDark.surface);
+      expect(
+        zoneCraftLightTheme().scaffoldBackgroundColor,
+        zoneCraftLight.surface,
+      );
+      expect(
+        zoneCraftDarkTheme().scaffoldBackgroundColor,
+        zoneCraftDark.surface,
+      );
     });
   });
 }

@@ -62,8 +62,9 @@ void main() {
     });
   });
 
-  testWidgets('the welcome says what the app is for, not what buttons do',
-      (tester) async {
+  testWidgets('the welcome says what the app is for, not what buttons do', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Builder(
@@ -99,8 +100,11 @@ void main() {
     test('the jargon names are gone from the labels', () {
       final labels = kLayerTypeChoices.map((c) => c.label.toLowerCase());
       for (final word in ['subspace', 'poi', 'voronoi']) {
-        expect(labels, isNot(contains(word)),
-            reason: '"$word" means nothing to a new user');
+        expect(
+          labels,
+          isNot(contains(word)),
+          reason: '"$word" means nothing to a new user',
+        );
       }
     });
 

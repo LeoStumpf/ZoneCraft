@@ -102,17 +102,17 @@ class OsmReportSubject {
 
   /// Ground with nothing mapped on it — a long-press anywhere.
   const OsmReportSubject.place(this.lat, this.lng)
-      : name = null,
-        origLat = null,
-        origLng = null,
-        origName = null,
-        edited = false,
-        categoryLabel = null,
-        tagKey = null,
-        tagValue = null,
-        osmType = null,
-        osmId = null,
-        poiPointId = null;
+    : name = null,
+      origLat = null,
+      origLng = null,
+      origName = null,
+      edited = false,
+      categoryLabel = null,
+      tagKey = null,
+      tagValue = null,
+      osmType = null,
+      osmId = null,
+      poiPointId = null;
 
   /// Where the user's copy is *now* — the corrected position when it has been
   /// moved.
@@ -243,7 +243,8 @@ String describeOffset(double meters) {
 ///
 /// The `User-Agent` already carries this, but a note is read by mappers in a
 /// web page, not by an operator reading headers.
-String get osmReportTrailer => '(reported with ZoneCraft $kAppVersion — '
+String get osmReportTrailer =>
+    '(reported with ZoneCraft $kAppVersion — '
     '$kAppRepositoryUrl)';
 
 /// Builds the draft note for [kind] about [s].
@@ -268,7 +269,9 @@ String composeOsmReportText(OsmReportKind kind, OsmReportSubject s) {
 String? _heading(OsmReportKind kind, OsmReportSubject s) {
   // The name the report is *about* is the one OSM has, not the corrected one —
   // a mapper searching for it needs the string that is in the database.
-  final upstream = kind == OsmReportKind.missing ? s.name : (s.origName ?? s.name);
+  final upstream = kind == OsmReportKind.missing
+      ? s.name
+      : (s.origName ?? s.name);
   final tag = (s.tagKey != null && s.tagValue != null)
       ? '${s.tagKey}=${s.tagValue}'
       : null;
@@ -291,9 +294,7 @@ String _body(OsmReportKind kind, OsmReportSubject s) {
       final from = LatLng(s.origLat!, s.origLng!);
       final to = LatLng(s.lat, s.lng);
       final offset = describeOffset(_haversine.as(LengthUnit.Meter, from, to));
-      final where = compassName(
-        const Distance().bearing(from, to),
-      );
+      final where = compassName(const Distance().bearing(from, to));
       return 'This is mapped about $offset $where of where it actually is. '
           'I make it $here.';
     case OsmReportKind.wrongName:

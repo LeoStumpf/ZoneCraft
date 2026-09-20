@@ -55,8 +55,7 @@ void main() {
 
   test('every point lands in exactly one cluster', () {
     final pts = [
-      for (var i = 0; i < 200; i++)
-        Offset((i * 37) % 500.0, (i * 91) % 700.0),
+      for (var i = 0; i < 200; i++) Offset((i * 37) % 500.0, (i * 91) % 700.0),
     ];
     final clusters = clusterOffsets(pts, 40);
     final all = [for (final c in clusters) ...c.indices]..sort();

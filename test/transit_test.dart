@@ -29,14 +29,13 @@ Map<String, dynamic> node(
   double lon, {
   String? name,
   Map<String, String> tags = const {},
-}) =>
-    {
-      'type': 'node',
-      'id': id,
-      'lat': lat,
-      'lon': lon,
-      'tags': {...tags, 'name': ?name},
-    };
+}) => {
+  'type': 'node',
+  'id': id,
+  'lat': lat,
+  'lon': lon,
+  'tags': {...tags, 'name': ?name},
+};
 
 String bodyOf(List<Map<String, dynamic>> elements) =>
     jsonEncode({'elements': elements});
@@ -52,8 +51,11 @@ void main() {
     final train = transitModeByKey('train')!.bit;
 
     test('a station shows while ANY of its types is enabled', () {
-      expect(transitStationVisible(bus | train, train), isTrue,
-          reason: 'a train stops at Pasing Bahnhof, so unticking Bus keeps it');
+      expect(
+        transitStationVisible(bus | train, train),
+        isTrue,
+        reason: 'a train stops at Pasing Bahnhof, so unticking Bus keeps it',
+      );
       expect(transitStationVisible(bus, train), isFalse);
     });
 
@@ -64,8 +66,11 @@ void main() {
 
     test('unticking everything really hides everything', () {
       for (final station in [0, bus, bus | train, transitAllModesMask]) {
-        expect(transitStationVisible(station, 0), isFalse,
-            reason: 'station mask $station');
+        expect(
+          transitStationVisible(station, 0),
+          isFalse,
+          reason: 'station mask $station',
+        );
       }
     });
 
@@ -117,7 +122,9 @@ void main() {
     test('a neighbourhood shows everything, including bus', () {
       expect(defaultVisibleModes(2000), transitAllModesMask);
       expect(
-          defaultVisibleModes(kTransitBusDefaultMaxMeters), transitAllModesMask);
+        defaultVisibleModes(kTransitBusDefaultMaxMeters),
+        transitAllModesMask,
+      );
     });
 
     test('a city-sized import starts with bus hidden', () {
@@ -136,8 +143,10 @@ void main() {
   group('recommendedImportModes', () {
     test('a city-sized box asks for everything', () {
       expect(recommendedImportModes(2000), transitAllModesMask);
-      expect(recommendedImportModes(kTransitRegionalMaxMeters),
-          transitAllModesMask);
+      expect(
+        recommendedImportModes(kTransitRegionalMaxMeters),
+        transitAllModesMask,
+      );
     });
 
     test('a region drops the buses, which are the expensive half', () {
@@ -159,19 +168,30 @@ void main() {
 
   group('per-mode size limits', () {
     test('the limit of a selection is its strictest member', () {
-      expect(transitMaxDiagonalFor(bit('train')),
-          transitModeByKey('train')!.maxDiagonalMeters);
-      expect(transitMaxDiagonalFor(bit('train') | bit('bus')),
-          transitModeByKey('bus')!.maxDiagonalMeters);
-      expect(transitWarnDiagonalFor(transitAllModesMask),
-          transitModeByKey('bus')!.warnDiagonalMeters);
+      expect(
+        transitMaxDiagonalFor(bit('train')),
+        transitModeByKey('train')!.maxDiagonalMeters,
+      );
+      expect(
+        transitMaxDiagonalFor(bit('train') | bit('bus')),
+        transitModeByKey('bus')!.maxDiagonalMeters,
+      );
+      expect(
+        transitWarnDiagonalFor(transitAllModesMask),
+        transitModeByKey('bus')!.warnDiagonalMeters,
+      );
     });
 
     test('Bavaria is fine for trains and out of the question for buses', () {
       const bavaria = 511000.0;
       expect(transitModesOverLimit(bit('train'), bavaria), isEmpty);
-      expect(transitModesOverLimit(bit('train') | bit('bus'), bavaria)
-          .map((m) => m.key), ['bus']);
+      expect(
+        transitModesOverLimit(
+          bit('train') | bit('bus'),
+          bavaria,
+        ).map((m) => m.key),
+        ['bus'],
+      );
     });
 
     test('a mode only over its warning is warned about, not refused', () {
@@ -229,8 +249,10 @@ void main() {
   group('stopModeMask', () {
     test('reads the mode tags on the node', () {
       expect(stopModeMask({'bus': 'yes'}), bit('bus'));
-      expect(stopModeMask({'bus': 'yes', 'train': 'yes'}),
-          bit('bus') | bit('train'));
+      expect(
+        stopModeMask({'bus': 'yes', 'train': 'yes'}),
+        bit('bus') | bit('train'),
+      );
     });
 
     test('folds trolleybus and share_taxi into bus', () {
@@ -252,10 +274,14 @@ void main() {
     test('station=* beats the bare railway fallback', () {
       // Otherwise a metro station tagged the old way lands in a train-only
       // import as a train.
-      expect(stopModeMask({'railway': 'station', 'station': 'subway'}),
-          bit('subway'));
-      expect(stopModeMask({'railway': 'station', 'station': 'light_rail'}),
-          bit('light_rail'));
+      expect(
+        stopModeMask({'railway': 'station', 'station': 'subway'}),
+        bit('subway'),
+      );
+      expect(
+        stopModeMask({'railway': 'station', 'station': 'light_rail'}),
+        bit('light_rail'),
+      );
     });
 
     test('an explicit tag beats the stop-kind fallback', () {
@@ -272,31 +298,50 @@ void main() {
   });
 
   group('mergeStations', () {
-    TransitStopNode stop(int id, double lat, double lng,
-            {String? name, int mask = 0, bool station = false}) =>
-        TransitStopNode(
-          osmId: id,
-          lat: lat,
-          lng: lng,
-          name: name,
-          modeMask: mask,
-          isStation: station,
-        );
+    TransitStopNode stop(
+      int id,
+      double lat,
+      double lng, {
+      String? name,
+      int mask = 0,
+      bool station = false,
+    }) => TransitStopNode(
+      osmId: id,
+      lat: lat,
+      lng: lng,
+      name: name,
+      modeMask: mask,
+      isStation: station,
+    );
 
-    test('same name, close together, becomes one station with union of modes',
-        () {
-      // Real shape: Pasing Bahnhof is 11 nodes within ~110 m.
-      final merged = mergeStations([
-        stop(1, 48.14888, 11.46041, name: 'Pasing Bahnhof', mask: bit('bus')),
-        stop(2, 48.14895, 11.45968, name: 'Pasing Bahnhof', mask: bit('bus')),
-        stop(3, 48.14904, 11.45993, name: 'Pasing Bahnhof', mask: bit('train')),
-        stop(4, 48.14919, 11.45964, name: 'Pasing Bahnhof', mask: bit('tram')),
-      ]);
-      expect(merged, hasLength(1));
-      expect(merged.single.name, 'Pasing Bahnhof');
-      expect(merged.single.modeMask, bit('bus') | bit('train') | bit('tram'));
-      expect(merged.single.nodeCount, 4);
-    });
+    test(
+      'same name, close together, becomes one station with union of modes',
+      () {
+        // Real shape: Pasing Bahnhof is 11 nodes within ~110 m.
+        final merged = mergeStations([
+          stop(1, 48.14888, 11.46041, name: 'Pasing Bahnhof', mask: bit('bus')),
+          stop(2, 48.14895, 11.45968, name: 'Pasing Bahnhof', mask: bit('bus')),
+          stop(
+            3,
+            48.14904,
+            11.45993,
+            name: 'Pasing Bahnhof',
+            mask: bit('train'),
+          ),
+          stop(
+            4,
+            48.14919,
+            11.45964,
+            name: 'Pasing Bahnhof',
+            mask: bit('tram'),
+          ),
+        ]);
+        expect(merged, hasLength(1));
+        expect(merged.single.name, 'Pasing Bahnhof');
+        expect(merged.single.modeMask, bit('bus') | bit('train') | bit('tram'));
+        expect(merged.single.nodeCount, 4);
+      },
+    );
 
     test('same name far apart stays two stations', () {
       final merged = mergeStations([
@@ -325,8 +370,14 @@ void main() {
     test('a station node anchors the position', () {
       final merged = mergeStations([
         stop(1, 48.1000, 11.5000, name: 'Hbf', mask: bit('bus')),
-        stop(2, 48.1005, 11.5005,
-            name: 'Hbf', mask: bit('train'), station: true),
+        stop(
+          2,
+          48.1005,
+          11.5005,
+          name: 'Hbf',
+          mask: bit('train'),
+          station: true,
+        ),
         stop(3, 48.1010, 11.5010, name: 'Hbf', mask: bit('subway')),
       ]);
       expect(merged, hasLength(1));
@@ -362,7 +413,11 @@ void main() {
   group('buildTransitStopsQuery', () {
     test('asks for stop nodes only, with the bbox', () {
       final q = buildTransitStopsQuery(
-          south: 48.1, west: 11.5, north: 48.2, east: 11.6);
+        south: 48.1,
+        west: 11.5,
+        north: 48.2,
+        east: 11.6,
+      );
       expect(q, contains('(48.1,11.5,48.2,11.6)'));
       expect(q, contains('node["public_transport"="stop_position"]'));
       expect(q, contains('node["highway"="bus_stop"]'));
@@ -389,12 +444,12 @@ void main() {
 
     test('a wide box gets a longer Overpass budget', () {
       String timeoutOf(double diagonal) => buildTransitStopsQuery(
-            south: 48.1,
-            west: 11.5,
-            north: 48.2,
-            east: 11.6,
-            diagonalMeters: diagonal,
-          ).split(';').first;
+        south: 48.1,
+        west: 11.5,
+        north: 48.2,
+        east: 11.6,
+        diagonalMeters: diagonal,
+      ).split(';').first;
       expect(timeoutOf(20000), contains('timeout:90'));
       expect(timeoutOf(511000), contains('timeout:180'));
     });
@@ -402,13 +457,31 @@ void main() {
 
   group('parseTransitStations', () {
     test('parses nodes and merges them', () {
-      final stations = parseTransitStations(bodyOf([
-        node(1, 48.1000, 11.5000,
-            name: 'Hbf', tags: {'bus': 'yes', 'public_transport': 'platform'}),
-        node(2, 48.1002, 11.5001,
-            name: 'Hbf', tags: {'train': 'yes', 'public_transport': 'station'}),
-        node(3, 48.2000, 11.6000, name: 'Ostbahnhof', tags: {'subway': 'yes'}),
-      ]))!;
+      final stations = parseTransitStations(
+        bodyOf([
+          node(
+            1,
+            48.1000,
+            11.5000,
+            name: 'Hbf',
+            tags: {'bus': 'yes', 'public_transport': 'platform'},
+          ),
+          node(
+            2,
+            48.1002,
+            11.5001,
+            name: 'Hbf',
+            tags: {'train': 'yes', 'public_transport': 'station'},
+          ),
+          node(
+            3,
+            48.2000,
+            11.6000,
+            name: 'Ostbahnhof',
+            tags: {'subway': 'yes'},
+          ),
+        ]),
+      )!;
       expect(stations, hasLength(2));
       final hbf = stations.firstWhere((s) => s.name == 'Hbf');
       expect(hbf.modeMask, bit('bus') | bit('train'));
@@ -417,18 +490,32 @@ void main() {
     });
 
     test('keeps route_ref when present, without depending on it', () {
-      final s = parseTransitStations(bodyOf([
-        node(1, 48.1, 11.5,
-            name: 'A', tags: {'bus': 'yes', 'route_ref': '52;X30'}),
-      ]))!;
+      final s = parseTransitStations(
+        bodyOf([
+          node(
+            1,
+            48.1,
+            11.5,
+            name: 'A',
+            tags: {'bus': 'yes', 'route_ref': '52;X30'},
+          ),
+        ]),
+      )!;
       expect(s.single.routeRef, '52;X30');
     });
 
     test('a node with no mode tags is kept with mask 0', () {
-      final s = parseTransitStations(bodyOf([
-        node(1, 48.1, 11.5,
-            name: 'Mystery', tags: {'public_transport': 'platform'}),
-      ]))!;
+      final s = parseTransitStations(
+        bodyOf([
+          node(
+            1,
+            48.1,
+            11.5,
+            name: 'Mystery',
+            tags: {'public_transport': 'platform'},
+          ),
+        ]),
+      )!;
       expect(s, hasLength(1));
       expect(s.single.modeMask, 0);
     });
@@ -439,8 +526,13 @@ void main() {
           node(1, 48.1000, 11.5000, name: 'Hbf', tags: {'bus': 'yes'}),
           node(2, 48.1002, 11.5001, name: 'Hbf', tags: {'train': 'yes'}),
           node(3, 48.2000, 11.6000, name: 'Bus stop', tags: {'bus': 'yes'}),
-          node(4, 48.3000, 11.7000,
-              name: 'Mystery', tags: {'public_transport': 'platform'}),
+          node(
+            4,
+            48.3000,
+            11.7000,
+            name: 'Mystery',
+            tags: {'public_transport': 'platform'},
+          ),
         ]),
         keepModes: bit('train'),
       )!;
@@ -453,8 +545,13 @@ void main() {
     test('an all-modes import keeps the ones that name no mode', () {
       final stations = parseTransitStations(
         bodyOf([
-          node(1, 48.1, 11.5,
-              name: 'Mystery', tags: {'public_transport': 'platform'}),
+          node(
+            1,
+            48.1,
+            11.5,
+            name: 'Mystery',
+            tags: {'public_transport': 'platform'},
+          ),
         ]),
         keepModes: transitAllModesMask,
       )!;
@@ -478,7 +575,7 @@ void main() {
           {'type': 'node', 'id': 'x', 'lat': 'y', 'lon': null, 'tags': 5},
           {'type': 'way', 'id': 1},
           node(2, 48.1, 11.5, name: 'Fine', tags: {'bus': 'yes'}),
-        ]
+        ],
       });
       final s = parseTransitStations(body)!;
       expect(s, hasLength(1));
@@ -487,20 +584,23 @@ void main() {
   });
 
   group('network contract', () {
-    Future<TransitOutcome<List<TransitStationData>>> fetch(http.Client c,
-            {String? prefer}) =>
-        fetchTransitStations(
-          south: 48.1,
-          west: 11.5,
-          north: 48.2,
-          east: 11.6,
-          client: c,
-          preferEndpoint: prefer,
-        );
+    Future<TransitOutcome<List<TransitStationData>>> fetch(
+      http.Client c, {
+      String? prefer,
+    }) => fetchTransitStations(
+      south: 48.1,
+      west: 11.5,
+      north: 48.2,
+      east: 11.6,
+      client: c,
+      preferEndpoint: prefer,
+    );
 
     test('200 parses and reports which endpoint served it', () async {
-      final client = MockClient((_) async =>
-          http.Response(bodyOf([node(1, 48.1, 11.5, name: 'A')]), 200));
+      final client = MockClient(
+        (_) async =>
+            http.Response(bodyOf([node(1, 48.1, 11.5, name: 'A')]), 200),
+      );
       final out = await fetch(client);
       expect(out.ok, isTrue);
       expect(out.value!.single.name, 'A');
@@ -519,22 +619,28 @@ void main() {
       final out = await fetch(client);
       expect(out.ok, isTrue);
       expect(tried, hasLength(2));
-      expect(out.endpoint, transitEndpoints.first,
-          reason: 'the retry stays on the instance that just rejected');
+      expect(
+        out.endpoint,
+        transitEndpoints.first,
+        reason: 'the retry stays on the instance that just rejected',
+      );
     });
 
-    test('an instance that keeps rejecting is abandoned for the next', () async {
-      final tried = <String>[];
-      final client = MockClient((req) async {
-        tried.add(req.url.toString());
-        return req.url.toString() == transitEndpoints.first
-            ? http.Response('busy', 504)
-            : http.Response(bodyOf([node(1, 48.1, 11.5, name: 'A')]), 200);
-      });
-      final out = await fetch(client);
-      expect(out.ok, isTrue);
-      expect(out.endpoint, transitEndpoints[1]);
-    });
+    test(
+      'an instance that keeps rejecting is abandoned for the next',
+      () async {
+        final tried = <String>[];
+        final client = MockClient((req) async {
+          tried.add(req.url.toString());
+          return req.url.toString() == transitEndpoints.first
+              ? http.Response('busy', 504)
+              : http.Response(bodyOf([node(1, 48.1, 11.5, name: 'A')]), 200);
+        });
+        final out = await fetch(client);
+        expect(out.ok, isTrue);
+        expect(out.endpoint, transitEndpoints[1]);
+      },
+    );
 
     test('a timeout or socket error also fails over', () async {
       var calls = 0;
@@ -545,24 +651,32 @@ void main() {
       });
       final out = await fetch(client);
       expect(out.ok, isTrue, reason: 'a timeout says nothing about the query');
-      expect(calls, 2,
-          reason: 'a dead instance is not retried in place — it is moved past');
+      expect(
+        calls,
+        2,
+        reason: 'a dead instance is not retried in place — it is moved past',
+      );
     });
 
-    test('all endpoints busy reports busy, never blames the connection',
-        () async {
-      var calls = 0;
-      final client = MockClient((_) async {
-        calls++;
-        return http.Response('busy', 504);
-      });
-      final out = await fetch(client);
-      expect(out.ok, isFalse);
-      expect(calls, greaterThanOrEqualTo(transitEndpoints.length),
-          reason: 'every instance is tried, each with its retry budget');
-      expect(out.message, contains('busy'));
-      expect(out.message, isNot(contains('connection')));
-    });
+    test(
+      'all endpoints busy reports busy, never blames the connection',
+      () async {
+        var calls = 0;
+        final client = MockClient((_) async {
+          calls++;
+          return http.Response('busy', 504);
+        });
+        final out = await fetch(client);
+        expect(out.ok, isFalse);
+        expect(
+          calls,
+          greaterThanOrEqualTo(transitEndpoints.length),
+          reason: 'every instance is tried, each with its retry budget',
+        );
+        expect(out.message, contains('busy'));
+        expect(out.message, isNot(contains('connection')));
+      },
+    );
 
     test('a query error is reported as-is and does NOT fail over', () async {
       var calls = 0;
@@ -605,18 +719,21 @@ void main() {
       expect(out.message, contains('too much data'));
     });
 
-    test('an unreadable 200 is reported distinctly from an empty area',
-        () async {
-      final client = MockClient((_) async => http.Response('garbage', 200));
-      final out = await fetch(client);
-      expect(out.ok, isFalse);
-      expect(out.message, contains('could not read'));
+    test(
+      'an unreadable 200 is reported distinctly from an empty area',
+      () async {
+        final client = MockClient((_) async => http.Response('garbage', 200));
+        final out = await fetch(client);
+        expect(out.ok, isFalse);
+        expect(out.message, contains('could not read'));
 
-      final empty =
-          MockClient((_) async => http.Response(bodyOf(const []), 200));
-      final ok = await fetch(empty);
-      expect(ok.ok, isTrue);
-      expect(ok.value, isEmpty);
-    });
+        final empty = MockClient(
+          (_) async => http.Response(bodyOf(const []), 200),
+        );
+        final ok = await fetch(empty);
+        expect(ok.ok, isTrue);
+        expect(ok.value, isEmpty);
+      },
+    );
   });
 }

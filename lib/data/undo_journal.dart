@@ -107,9 +107,9 @@ class UndoJournal {
   Stream<UndoState> get changes => _changes.stream;
 
   UndoState get state => UndoState(
-        undoLabel: _undo.isEmpty ? null : _undo.last.label,
-        redoLabel: _redo.isEmpty ? null : _redo.last.label,
-      );
+    undoLabel: _undo.isEmpty ? null : _undo.last.label,
+    redoLabel: _redo.isEmpty ? null : _redo.last.label,
+  );
 
   /// Creates the journal tables and the triggers, then starts watching for
   /// writes. Called from `AppDatabase`'s `beforeOpen`, which drift guarantees

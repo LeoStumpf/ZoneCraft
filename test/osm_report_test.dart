@@ -47,11 +47,15 @@ void main() {
 
   group('upstream identity', () {
     test('a real node gets a link', () {
-      expect(osmElementUrl('node', 240109189),
-          'https://www.openstreetmap.org/node/240109189');
+      expect(
+        osmElementUrl('node', 240109189),
+        'https://www.openstreetmap.org/node/240109189',
+      );
       expect(osmElementUrl('way', 7), 'https://www.openstreetmap.org/way/7');
-      expect(osmElementUrl('relation', 9),
-          'https://www.openstreetmap.org/relation/9');
+      expect(
+        osmElementUrl('relation', 9),
+        'https://www.openstreetmap.org/relation/9',
+      );
     });
 
     test('id 0 is no identity at all, so no link is offered', () {
@@ -66,7 +70,11 @@ void main() {
         composeOsmReportText(
           OsmReportKind.gone,
           const OsmReportSubject(
-              lat: 48.1, lng: 11.5, osmType: 'node', osmId: 0),
+            lat: 48.1,
+            lng: 11.5,
+            osmType: 'node',
+            osmId: 0,
+          ),
         ),
         isNot(contains('openstreetmap.org/node')),
       );
@@ -84,8 +92,10 @@ void main() {
         osmType: 'node',
         osmId: 7,
       );
-      expect(untouched.availableKinds,
-          [OsmReportKind.gone, OsmReportKind.other]);
+      expect(untouched.availableKinds, [
+        OsmReportKind.gone,
+        OsmReportKind.other,
+      ]);
       expect(untouched.defaultKind, OsmReportKind.gone);
     });
 
@@ -114,14 +124,18 @@ void main() {
       // It has no upstream, so "it is not there any more" would be about
       // nothing.
       const manual = OsmReportSubject(lat: 48.1, lng: 11.5, name: 'My bench');
-      expect(manual.availableKinds,
-          [OsmReportKind.missing, OsmReportKind.other]);
+      expect(manual.availableKinds, [
+        OsmReportKind.missing,
+        OsmReportKind.other,
+      ]);
     });
 
     test('bare ground can only say "something else"', () {
       const place = OsmReportSubject.place(48.1, 11.5);
-      expect(place.availableKinds,
-          [OsmReportKind.missing, OsmReportKind.other]);
+      expect(place.availableKinds, [
+        OsmReportKind.missing,
+        OsmReportKind.other,
+      ]);
       expect(place.positionCorrected, isFalse);
       expect(place.nameCorrected, isFalse);
     });
@@ -138,8 +152,11 @@ void main() {
 
     test('every other kind is anchored at the element OSM has', () {
       for (final kind in [OsmReportKind.wrongName, OsmReportKind.gone]) {
-        expect(osmReportAnchor(kind, munich).latitude, 48.137180,
-            reason: '$kind should point at the element, not the correction');
+        expect(
+          osmReportAnchor(kind, munich).latitude,
+          48.137180,
+          reason: '$kind should point at the element, not the correction',
+        );
       }
     });
 
@@ -150,16 +167,18 @@ void main() {
   });
 
   group('the draft', () {
-    test('a misplaced bench names itself, links itself and measures itself',
-        () {
-      final text = composeOsmReportText(OsmReportKind.movedHere, munich);
-      expect(text, startsWith('Benches (amenity=bench) — “West gate bench”'));
-      expect(text, contains('https://www.openstreetmap.org/node/240109189'));
-      // 0.00022° of latitude is about 24 m, due north.
-      expect(text, contains('24 m north'));
-      expect(text, contains('48.137400, 11.575000'));
-      expect(text, contains('ZoneCraft'));
-    });
+    test(
+      'a misplaced bench names itself, links itself and measures itself',
+      () {
+        final text = composeOsmReportText(OsmReportKind.movedHere, munich);
+        expect(text, startsWith('Benches (amenity=bench) — “West gate bench”'));
+        expect(text, contains('https://www.openstreetmap.org/node/240109189'));
+        // 0.00022° of latitude is about 24 m, due north.
+        expect(text, contains('24 m north'));
+        expect(text, contains('48.137400, 11.575000'));
+        expect(text, contains('ZoneCraft'));
+      },
+    );
 
     test('the heading quotes the name OSM has, not the corrected one', () {
       // A mapper searches the database for the string that is in it. Leading
@@ -195,8 +214,10 @@ void main() {
         osmType: 'node',
         osmId: 7,
       );
-      expect(composeOsmReportText(OsmReportKind.wrongName, unnamed),
-          contains('This has a name: “Kranz”.'));
+      expect(
+        composeOsmReportText(OsmReportKind.wrongName, unnamed),
+        contains('This has a name: “Kranz”.'),
+      );
     });
 
     test('a hand-placed POI in a preset category suggests its tag', () {
@@ -212,8 +233,11 @@ void main() {
       expect(text, contains('amenity=bench'));
       expect(text, contains('missing from OpenStreetMap'));
       expect(text, contains('48.137400, 11.575000'));
-      expect(text, isNot(contains('openstreetmap.org/node')),
-          reason: 'it has no upstream to link to');
+      expect(
+        text,
+        isNot(contains('openstreetmap.org/node')),
+        reason: 'it has no upstream to link to',
+      );
     });
 
     test('a category built from a bare icon suggests nothing', () {
@@ -234,9 +258,13 @@ void main() {
       for (final kind in OsmReportKind.values) {
         final text = composeOsmReportText(kind, munich);
         expect(text.trim(), isNotEmpty);
-        expect(text, contains(osmReportTrailer),
-            reason: 'an operator reading a bad report has to be able to '
-                'trace it back to this app');
+        expect(
+          text,
+          contains(osmReportTrailer),
+          reason:
+              'an operator reading a bad report has to be able to '
+              'trace it back to this app',
+        );
       }
     });
 
@@ -244,7 +272,9 @@ void main() {
       // It is the one kind the app has nothing to say about, so it hands over
       // a heading, a link and an empty line rather than a guess.
       final text = composeOsmReportText(
-          OsmReportKind.other, const OsmReportSubject.place(48.1, 11.5));
+        OsmReportKind.other,
+        const OsmReportSubject.place(48.1, 11.5),
+      );
       expect(text.trim(), osmReportTrailer);
     });
   });
@@ -279,19 +309,18 @@ void main() {
       int? osmId = 7,
       DateTime? sentAt,
       int? noteId,
-    }) =>
-        OsmReport(
-          id: id,
-          createdAt: DateTime.utc(2026, 3, 12, 9, 30),
-          lat: 48.1,
-          lng: 11.5,
-          kind: kind,
-          body: 'Not there any more.',
-          osmType: osmType,
-          osmId: osmId,
-          sentAt: sentAt,
-          noteId: noteId,
-        );
+    }) => OsmReport(
+      id: id,
+      createdAt: DateTime.utc(2026, 3, 12, 9, 30),
+      lat: 48.1,
+      lng: 11.5,
+      kind: kind,
+      body: 'Not there any more.',
+      osmType: osmType,
+      osmId: osmId,
+      sentAt: sentAt,
+      noteId: noteId,
+    );
 
     test('is longitude-first, like every other GeoJSON', () {
       // Getting this backwards puts Munich in Somalia, silently.
@@ -316,23 +345,28 @@ void main() {
     });
 
     test('a sent report links to its note', () {
-      final props = _props(osmReportsGeoJson([
-        report(sentAt: DateTime.utc(2026, 3, 12, 10), noteId: 4812345),
-      ]));
+      final props = _props(
+        osmReportsGeoJson([
+          report(sentAt: DateTime.utc(2026, 3, 12, 10), noteId: 4812345),
+        ]),
+      );
       expect(props['sent'], true);
       expect(props['note_url'], 'https://www.openstreetmap.org/note/4812345');
     });
 
-    test('a report with no element omits the identity rather than faking it',
-        () {
-      final props =
-          _props(osmReportsGeoJson([report(osmType: null, osmId: null)]));
-      expect(props.containsKey('osm_id'), isFalse);
-      expect(props.containsKey('osm_url'), isFalse);
-      // And a placeholder id is not an identity either.
-      final zero = _props(osmReportsGeoJson([report(osmId: 0)]));
-      expect(zero.containsKey('osm_id'), isFalse);
-    });
+    test(
+      'a report with no element omits the identity rather than faking it',
+      () {
+        final props = _props(
+          osmReportsGeoJson([report(osmType: null, osmId: null)]),
+        );
+        expect(props.containsKey('osm_id'), isFalse);
+        expect(props.containsKey('osm_url'), isFalse);
+        // And a placeholder id is not an identity either.
+        final zero = _props(osmReportsGeoJson([report(osmId: 0)]));
+        expect(zero.containsKey('osm_id'), isFalse);
+      },
+    );
 
     test('an empty outbox is still a valid FeatureCollection', () {
       final decoded =

@@ -136,8 +136,9 @@ void main() {
     expect(repo.calls, ['deleteCircle C1']);
   });
 
-  testWidgets('cancelling the long-press leaves the element alone',
-      (tester) async {
+  testWidgets('cancelling the long-press leaves the element alone', (
+    tester,
+  ) async {
     await openSheet(tester);
 
     await tester.longPress(find.text('Marienplatz'));
@@ -249,8 +250,9 @@ void poiRows() {
     return opened.future;
   }
 
-  testWidgets('a hand-made category is a heading; its points sit under it',
-      (tester) async {
+  testWidgets('a hand-made category is a heading; its points sit under it', (
+    tester,
+  ) async {
     final result = await openSheet(tester);
 
     // Collapsed: the heading, not the point.
@@ -272,20 +274,22 @@ void poiRows() {
     expect(r.target!.ref.id, 'Q');
   });
 
-  testWidgets('a point row offers rename and delete, never colour or stacking',
-      (tester) async {
-    await openSheet(tester);
-    await tester.tap(find.text('Favourites'));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'a point row offers rename and delete, never colour or stacking',
+    (tester) async {
+      await openSheet(tester);
+      await tester.tap(find.text('Favourites'));
+      await tester.pumpAndSettle();
 
-    // The heading has a menu too; the point's is the second.
-    await tester.tap(find.byIcon(Icons.more_vert).last);
-    await tester.pumpAndSettle();
-    expect(find.text('Rename…'), findsOneWidget);
-    expect(find.text('Delete'), findsOneWidget);
-    expect(find.text('Colour…'), findsNothing);
-    expect(find.text('Bring to front'), findsNothing);
-  });
+      // The heading has a menu too; the point's is the second.
+      await tester.tap(find.byIcon(Icons.more_vert).last);
+      await tester.pumpAndSettle();
+      expect(find.text('Rename…'), findsOneWidget);
+      expect(find.text('Delete'), findsOneWidget);
+      expect(find.text('Colour…'), findsNothing);
+      expect(find.text('Bring to front'), findsNothing);
+    },
+  );
 
   testWidgets('search finds a point inside a collapsed group', (tester) async {
     await openSheet(tester);

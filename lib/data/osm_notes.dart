@@ -89,12 +89,10 @@ String osmNoteUrl(int noteId) => osmApiIsLive
 /// written" (rejected, refused), so the outbox can offer a retry only where
 /// one makes sense.
 class OsmNoteOutcome {
-  const OsmNoteOutcome.ok(this.noteId)
-      : message = null,
-        retryable = false;
+  const OsmNoteOutcome.ok(this.noteId) : message = null, retryable = false;
 
   const OsmNoteOutcome.failed(this.message, {this.retryable = false})
-      : noteId = null;
+    : noteId = null;
 
   final int? noteId;
   final String? message;
@@ -185,8 +183,8 @@ int? parseOsmNoteId(String body) {
         final id = decoded['id'];
         if (id is num) return id.toInt();
       }
-    // A malformed body is simply an unreadable answer, not a crash.
-    // ignore: avoid_catches_without_on_clauses
+      // A malformed body is simply an unreadable answer, not a crash.
+      // ignore: avoid_catches_without_on_clauses
     } catch (_) {
       return null;
     }
@@ -226,9 +224,9 @@ Future<OsmNoteOutcome> submitOsmNote({
           .timeout(kOsmNoteTimeout),
     );
     return classifyOsmNoteResponse(resp.statusCode, resp.body);
-  // Offline, DNS, TLS, timeout — indistinguishable from here, and all mean
-  // the same thing to the person holding the phone.
-  // ignore: avoid_catches_without_on_clauses
+    // Offline, DNS, TLS, timeout — indistinguishable from here, and all mean
+    // the same thing to the person holding the phone.
+    // ignore: avoid_catches_without_on_clauses
   } catch (_) {
     return const OsmNoteOutcome.failed(
       'Could not reach OpenStreetMap. The report is saved — try again when '

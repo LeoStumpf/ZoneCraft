@@ -309,8 +309,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// and `build` already watches `settingsProvider`, so every reader picks up
   /// the new value on the same frame the field is edited.
   TileSource get _tiles => TileSource.resolve(
-        ref.read(settingsProvider).asData?.value.tileUrlOverride,
-      );
+    ref.read(settingsProvider).asData?.value.tileUrlOverride,
+  );
   String get _baseTileUrl => _tiles.urlTemplate;
 
   /// The full explanation behind the tile-failure banner's "Why?".
@@ -322,39 +322,43 @@ class _MapScreenState extends ConsumerState<MapScreen>
   void _showTileFailure(TileFailureKind kind) {
     final tiles = _tiles;
     final host = Uri.tryParse(tiles.urlTemplate)?.host ?? tiles.urlTemplate;
-    unawaited(showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(tileFailureTitle(kind)),
-        content: SingleChildScrollView(
-          child: Text(
-            tileFailureExplanation(
-              kind,
-              host: host,
-              isCommunityOsm: tiles.isCommunityOsm,
+    unawaited(
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(tileFailureTitle(kind)),
+          content: SingleChildScrollView(
+            child: Text(
+              tileFailureExplanation(
+                kind,
+                host: host,
+                isCommunityOsm: tiles.isCommunityOsm,
+              ),
             ),
           ),
-        ),
-        actions: [
-          if (tileFailureIsPersistent(kind))
+          actions: [
+            if (tileFailureIsPersistent(kind))
+              TextButton(
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  unawaited(
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const ServicePolicyScreen(),
+                      ),
+                    ),
+                  );
+                },
+                child: const Text('Servers and limits'),
+              ),
             TextButton(
-              onPressed: () {
-                Navigator.of(ctx).pop();
-                unawaited(Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const ServicePolicyScreen(),
-                  ),
-                ));
-              },
-              child: const Text('Servers and limits'),
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Close'),
             ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Close'),
-          ),
-        ],
+          ],
+        ),
       ),
-    ));
+    );
   }
 
   /// HTTP client owned by this screen and shared by [_tileProvider] for both
@@ -4144,9 +4148,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   static PoiCategory? _poiCategoryTag(List<PoiSet> sets, String setId) {
     final set = sets.where((s) => s.id == setId).firstOrNull;
     if (set == null) return null;
-    return poiCategories
-        .where((c) => c.key == set.categoryKey)
-        .firstOrNull;
+    return poiCategories.where((c) => c.key == set.categoryKey).firstOrNull;
   }
 
   /// The human name of the category a POI's set imported ("Cafés"), for the
@@ -4720,8 +4722,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   ? null
                   : ReceivedPlaceSheet(
                       point: receivedPoint,
-                      onKeep: () =>
-                          unawaited(_keepSharedPlace(receivedPoint)),
+                      onKeep: () => unawaited(_keepSharedPlace(receivedPoint)),
                       onDismiss: () =>
                           ref.read(receivedPointProvider.notifier).clear(),
                     ))
@@ -4798,10 +4799,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         // A station and a POI are the same row; the set
                         // says which it is, and that decides the sheet's
                         // icon, wording and whether the point may move.
-                        final set = _setOf(
-                          poiSets,
-                          selectedPoiPoint.poiSetId,
-                        );
+                        final set = _setOf(poiSets, selectedPoiPoint.poiSetId);
                         final station = set != null && set.isStationImport;
                         return ImportedPointEditorSheet(
                           key: ValueKey(selectedPoiPoint.id),
@@ -4832,10 +4830,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           // one — it is what makes a report actionable, and a
                           // hand-made category built from a bare icon has
                           // none to offer.
-                          tagKey: _poiCategoryTag(poiSets,
-                              selectedPoiPoint.poiSetId)?.tagKey,
-                          tagValue: _poiCategoryTag(poiSets,
-                              selectedPoiPoint.poiSetId)?.tagValue,
+                          tagKey: _poiCategoryTag(
+                            poiSets,
+                            selectedPoiPoint.poiSetId,
+                          )?.tagKey,
+                          tagValue: _poiCategoryTag(
+                            poiSets,
+                            selectedPoiPoint.poiSetId,
+                          )?.tagValue,
                         );
                       }()
                     : selectedPoiSet != null
@@ -4850,15 +4852,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             if (layerHolds(l, kPoi)) l,
                         ],
                       )
-                    : selectedBorderArea != null &&
-                          selectedBorderLayer != null
+                    : selectedBorderArea != null && selectedBorderLayer != null
                     ? BorderAreaEditorSheet(
                         key: ValueKey(selectedBorderArea.id),
                         area: selectedBorderArea,
                         layer: selectedBorderLayer,
                       )
                     : const SizedBox.shrink(),
-            ));
+              ));
 
     return Scaffold(
       key: _scaffoldKey,
@@ -4998,7 +4999,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               // cannot silently fall back to a library default,
                               // which the policy forbids and which OSMF
                               // blanket-blocked for flutter_map in Aug 2025.
-                              userAgentPackageName: 'io.github.leostumpf.zonecraft',
+                              userAgentPackageName:
+                                  'io.github.leostumpf.zonecraft',
                               tileProvider: _tileProvider,
                               maxZoom: 19,
                             ),
@@ -5010,8 +5012,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         // reads as the uncertainty being the more definite of the
                         // two. So every band goes down here first, in the same
                         // bottom-to-top order the fills are drawn in above.
-                        for (final layer
-                            in bandPassLayers(drawLayers, uncertainty))
+                        for (final layer in bandPassLayers(
+                          drawLayers,
+                          uncertainty,
+                        ))
                           regionPass(layer, RegionPhase.band),
                         // One composited region per visible layer, bottom-to-top.
                         // Region layers apply their opacity inside the painter (so
@@ -5034,7 +5038,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               BorderAreasLayer(
                                 key: ValueKey('borders-${layer.id}'),
                                 layer: layer,
-                                shapes: ref.watch(borderShapesProvider(layer.id)),
+                                shapes: ref.watch(
+                                  borderShapesProvider(layer.id),
+                                ),
                                 draft: reshapeDraft,
                               )
                             else
@@ -5152,9 +5158,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                     c.center,
                                     c.radiusMeters,
                                   ),
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.tertiary.withValues(alpha: 0.15),
+                                  color: Theme.of(context).colorScheme.tertiary
+                                      .withValues(alpha: 0.15),
                                   borderColor: Theme.of(
                                     context,
                                   ).colorScheme.tertiary,
@@ -5313,7 +5318,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                           _probing
                                               ? '…'
                                               : _probeElevation != null
-                                              ? _formatElevation(_probeElevation!)
+                                              ? _formatElevation(
+                                                  _probeElevation!,
+                                                )
                                               : 'n/a',
                                           style: const TextStyle(
                                             color: kMapDisc,
@@ -5388,7 +5395,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                     selectedCircle.centerLng,
                                   ),
                                   selectedCircle.radiusMeters,
-                                  key: ValueKey('circle-r-${selectedCircle.id}'),
+                                  key: ValueKey(
+                                    'circle-r-${selectedCircle.id}',
+                                  ),
                                   onResize: (m) => ref
                                       .read(repositoryProvider)
                                       .updateCircle(
@@ -5434,7 +5443,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                   onMenu: (pos) => _showFreeVertexMenu(
                                     pos,
                                     title: 'Line point',
-                                    canRemove: selectedFreeLinePoints.length > 2,
+                                    canRemove:
+                                        selectedFreeLinePoints.length > 2,
                                     onRemove: () => ref
                                         .read(repositoryProvider)
                                         .deleteFreeLinePoint(p.id),
@@ -5488,7 +5498,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                   onMenu: (pos) => _showFreeVertexMenu(
                                     pos,
                                     title: 'Area point',
-                                    canRemove: selectedFreeAreaPoints.length > 3,
+                                    canRemove:
+                                        selectedFreeAreaPoints.length > 3,
                                     onRemove: () => ref
                                         .read(repositoryProvider)
                                         .deleteFreeAreaPoint(p.id),
@@ -6502,9 +6513,7 @@ class _MapAttribution extends StatelessWidget {
     return MediaQuery.withClampedTextScaling(
       maxScaleFactor: 1.3,
       child: Material(
-        color: theme.colorScheme.surfaceContainerLowest.withValues(
-          alpha: 0.72,
-        ),
+        color: theme.colorScheme.surfaceContainerLowest.withValues(alpha: 0.72),
         borderRadius: BorderRadius.circular(4),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
@@ -6533,37 +6542,40 @@ class _MapAttribution extends StatelessWidget {
 /// the data is shown, and naming four of them in a corner pill would crowd out
 /// the OpenStreetMap line that must not be crowded out.
 void _showCredits(BuildContext context) {
-  unawaited(showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    builder: (ctx) => SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Credits', style: Theme.of(ctx).textTheme.titleMedium),
-            const SizedBox(height: 16),
-            _Credit(
-              icon: Icons.map_outlined,
-              text: 'Map data and tiles © OpenStreetMap contributors, '
-                  'licensed under the Open Database License (ODbL).',
-              linkLabel: 'openstreetmap.org/copyright',
-              url: osmCopyrightUrl,
-            ),
-            const SizedBox(height: 16),
-            _Credit(
-              icon: Icons.terrain,
-              text: kTerrainAttribution,
-              linkLabel: 'Full attribution list',
-              url: terrainAttributionUrl,
-            ),
-          ],
+  unawaited(
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Credits', style: Theme.of(ctx).textTheme.titleMedium),
+              const SizedBox(height: 16),
+              _Credit(
+                icon: Icons.map_outlined,
+                text:
+                    'Map data and tiles © OpenStreetMap contributors, '
+                    'licensed under the Open Database License (ODbL).',
+                linkLabel: 'openstreetmap.org/copyright',
+                url: osmCopyrightUrl,
+              ),
+              const SizedBox(height: 16),
+              _Credit(
+                icon: Icons.terrain,
+                text: kTerrainAttribution,
+                linkLabel: 'Full attribution list',
+                url: terrainAttributionUrl,
+              ),
+            ],
+          ),
         ),
       ),
     ),
-  ));
+  );
 }
 
 /// One credit in the sheet: what it is, and where its licence lives.
@@ -6598,8 +6610,7 @@ class _Credit extends StatelessWidget {
               Text(text, style: theme.textTheme.bodyMedium),
               const SizedBox(height: 4),
               InkWell(
-                onTap: () =>
-                    unawaited(openExternalUrl(url, context: context)),
+                onTap: () => unawaited(openExternalUrl(url, context: context)),
                 child: Text(
                   linkLabel,
                   style: theme.textTheme.bodySmall?.copyWith(
@@ -6616,8 +6627,6 @@ class _Credit extends StatelessWidget {
     );
   }
 }
-
-
 
 /// The tile server said no, in one line the user can act on.
 ///

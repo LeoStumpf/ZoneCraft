@@ -23,7 +23,9 @@ import 'package:zonecraft/data/request_pacer.dart';
 void main() {
   group('RequestPacer', () {
     test('spaces consecutive requests by at least the interval', () async {
-      final pacer = RequestPacer(minInterval: const Duration(milliseconds: 120));
+      final pacer = RequestPacer(
+        minInterval: const Duration(milliseconds: 120),
+      );
       final starts = <DateTime>[];
       Future<int> stamp(int i) async {
         starts.add(DateTime.now());
@@ -61,8 +63,7 @@ void main() {
       expect(order, [0, 1, 2, 3, 4]);
     });
 
-    test('a failing request throws to its caller, not into the queue',
-        () async {
+    test('a failing request throws to its caller, not into the queue', () async {
       final pacer = RequestPacer(minInterval: const Duration(milliseconds: 5));
 
       // The whole point: one failure used to be able to wedge the shared chain,
@@ -77,8 +78,10 @@ void main() {
 
     test('the shipped pacers respect the published limits', () {
       // Nominatim: "an absolute maximum of 1 request per second".
-      expect(nominatimPacer.minInterval.inMilliseconds,
-          greaterThanOrEqualTo(1000));
+      expect(
+        nominatimPacer.minInterval.inMilliseconds,
+        greaterThanOrEqualTo(1000),
+      );
       expect(overpassPacer.minInterval, greaterThan(Duration.zero));
     });
   });

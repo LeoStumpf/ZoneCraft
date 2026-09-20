@@ -29,7 +29,8 @@ void main() {
   ];
 
   ({double minLat, double maxLat, double minLng, double maxLng}) bbox(
-      List<List<LatLng>> contours) {
+    List<List<LatLng>> contours,
+  ) {
     var minLat = 90.0, maxLat = -90.0, minLng = 180.0, maxLng = -180.0;
     for (final c in contours) {
       for (final p in c) {
@@ -43,16 +44,24 @@ void main() {
   }
 
   test('offset 0 returns the ring unchanged, no band when uncertainty 0', () {
-    final r = resolveAreaGeometry(square,
-        offsetMeters: 0, bandMeters: 0, inverted: false);
+    final r = resolveAreaGeometry(
+      square,
+      offsetMeters: 0,
+      bandMeters: 0,
+      inverted: false,
+    );
     expect(r.core.length, 1);
     expect(r.core.first.length, 4);
     expect(r.bandEdge, isEmpty);
   });
 
   test('positive offset erodes (shrinks) the core inward', () {
-    final r = resolveAreaGeometry(square,
-        offsetMeters: 300, bandMeters: 0, inverted: false);
+    final r = resolveAreaGeometry(
+      square,
+      offsetMeters: 300,
+      bandMeters: 0,
+      inverted: false,
+    );
     expect(r.core, isNotEmpty);
     final b = bbox(r.core);
     // Each side pulled in, so the eroded bbox sits strictly inside the original.
@@ -63,8 +72,12 @@ void main() {
   });
 
   test('negative offset dilates (grows) the core outward', () {
-    final r = resolveAreaGeometry(square,
-        offsetMeters: -300, bandMeters: 0, inverted: false);
+    final r = resolveAreaGeometry(
+      square,
+      offsetMeters: -300,
+      bandMeters: 0,
+      inverted: false,
+    );
     final b = bbox(r.core);
     expect(b.minLat, lessThan(47.99));
     expect(b.maxLat, greaterThan(48.01));
@@ -73,8 +86,12 @@ void main() {
   });
 
   test('normal layer: band edge (where the solid starts) shrinks inward', () {
-    final r = resolveAreaGeometry(square,
-        offsetMeters: 0, bandMeters: 500, inverted: false);
+    final r = resolveAreaGeometry(
+      square,
+      offsetMeters: 0,
+      bandMeters: 500,
+      inverted: false,
+    );
     expect(r.bandEdge, isNotEmpty);
     final b = bbox(r.bandEdge);
     expect(b.maxLat, lessThan(48.01)); // pulled in inside the ring
@@ -84,8 +101,12 @@ void main() {
   });
 
   test('inverted layer: band edge grows beyond the boundary', () {
-    final r = resolveAreaGeometry(square,
-        offsetMeters: 0, bandMeters: 500, inverted: true);
+    final r = resolveAreaGeometry(
+      square,
+      offsetMeters: 0,
+      bandMeters: 500,
+      inverted: true,
+    );
     expect(r.bandEdge, isNotEmpty);
     final b = bbox(r.bandEdge);
     expect(b.maxLat, greaterThan(48.01)); // pushed out past the ring

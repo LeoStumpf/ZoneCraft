@@ -175,7 +175,7 @@ class _BorderAreaEditorSheetState extends ConsumerState<BorderAreaEditorSheet> {
           onChanged: (s) {
             final t = s.trim();
             unawaited(
-              _repo.updateBorderArea(a.id, name: Value(t.isEmpty ? null : t))
+              _repo.updateBorderArea(a.id, name: Value(t.isEmpty ? null : t)),
             );
           },
         ),
@@ -202,13 +202,12 @@ class _BorderAreaEditorSheetState extends ConsumerState<BorderAreaEditorSheet> {
           contentPadding: EdgeInsets.zero,
           dense: true,
           value: reshaping,
-          onChanged: (v) =>
-              ref.read(borderReshapeProvider.notifier).arm(on: v),
+          onChanged: (v) => ref.read(borderReshapeProvider.notifier).arm(on: v),
           title: const Text('Reshape outline'),
           subtitle: Text(
             reshaping
                 ? 'Drag a handle to move a point · long-press one to remove it '
-                    '· long-press the outline to insert'
+                      '· long-press the outline to insert'
                 : 'Edit the boundary by hand. This forks it from OSM.',
           ),
         ),
@@ -224,8 +223,9 @@ class _BorderAreaEditorSheetState extends ConsumerState<BorderAreaEditorSheet> {
                   child: Text(
                     'Reshaped by hand — this outline is no longer what OSM '
                     'says. Importing the same area again keeps this version.',
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: theme.colorScheme.error),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.error,
+                    ),
                   ),
                 ),
               ],
@@ -256,5 +256,8 @@ class _BorderAreaEditorSheetState extends ConsumerState<BorderAreaEditorSheet> {
   /// Diagonal of the area's stored bounds — a one-number sense of scale that
   /// doesn't need the ring decoded.
   double _spanMeters(BorderArea a) => geoDistance.as(
-      LengthUnit.Meter, LatLng(a.south, a.west), LatLng(a.north, a.east));
+    LengthUnit.Meter,
+    LatLng(a.south, a.west),
+    LatLng(a.north, a.east),
+  );
 }

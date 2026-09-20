@@ -392,8 +392,7 @@ class _ActiveLayerBody extends ConsumerWidget {
             title: Text(a.label),
             subtitle: Text(a.unavailable ?? a.description),
             value: a.checked!,
-            onChanged:
-                a.unavailable != null ? null : (_) => unawaited(run(a)),
+            onChanged: a.unavailable != null ? null : (_) => unawaited(run(a)),
           ),
         for (final a in tiles)
           ListTile(

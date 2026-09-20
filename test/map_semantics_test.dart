@@ -20,18 +20,18 @@ import 'package:zonecraft/data/database.dart';
 import 'package:zonecraft/ui/map_semantics.dart';
 
 Layer _layer(String name, {bool visible = true}) => Layer(
-      id: name,
-      name: name,
-      colorArgb: 0xFF000000,
-      sortOrder: 0,
-      isVisible: visible,
-      isInverted: false,
-      type: 'circles',
-      opacity: 1,
-      borderFillAreas: false,
-      borderShowNames: false,
-      createdAt: DateTime(2026),
-    );
+  id: name,
+  name: name,
+  colorArgb: 0xFF000000,
+  sortOrder: 0,
+  isVisible: visible,
+  isInverted: false,
+  type: 'circles',
+  opacity: 1,
+  borderFillAreas: false,
+  borderShowNames: false,
+  createdAt: DateTime(2026),
+);
 
 void main() {
   // The map is a CustomPaint over raster tiles, so it has no semantics of its
@@ -45,7 +45,10 @@ void main() {
     });
 
     test('names the layers that are actually shown', () {
-      final label = mapSemanticLabel([_layer('Radar 1'), _layer('Thermometer')]);
+      final label = mapSemanticLabel([
+        _layer('Radar 1'),
+        _layer('Thermometer'),
+      ]);
       expect(label, contains('2 layers shown'));
       expect(label, contains('Radar 1'));
       expect(label, contains('Thermometer'));
@@ -59,8 +62,11 @@ void main() {
       expect(label, contains('1 layer shown'));
       expect(label, contains('Shown'));
       expect(label, contains('1 layer hidden'));
-      expect(label, isNot(contains('Secret')),
-          reason: 'a hidden layer is not on the map');
+      expect(
+        label,
+        isNot(contains('Secret')),
+        reason: 'a hidden layer is not on the map',
+      );
     });
 
     test('all-hidden is its own case, not "no layers"', () {

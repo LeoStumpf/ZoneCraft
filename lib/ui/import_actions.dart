@@ -219,9 +219,8 @@ class ExportChoice {
   /// that forces `application/octet-stream` into [_importGroup] — so there is
   /// nothing to swap in and `x.geojson` is saved verbatim. Under
   /// `application/json` the same file would be saved as `x.geojson.json`.
-  String get mimeType => isKml
-      ? 'application/vnd.google-earth.kml+xml'
-      : 'application/geo+json';
+  String get mimeType =>
+      isKml ? 'application/vnd.google-earth.kml+xml' : 'application/geo+json';
 }
 
 /// Remembered for the session only: whoever saved once probably wants to save
@@ -319,10 +318,7 @@ Future<void> deliverExport(
   // builds the whole document again beside it. On the platform thread the app
   // simply stopped for the duration — and being before the first `await`, it
   // stopped without even painting the progress the caller had just shown.
-  final content = await compute(
-    _serialiseExport,
-    (data, choice.isKml),
-  );
+  final content = await compute(_serialiseExport, (data, choice.isKml));
   if (!context.mounted) return;
   return deliverFile(
     context,
@@ -378,9 +374,9 @@ Future<void> deliverFile(
         ),
       );
     }
-  // A temp write, a picker and a share sheet fail in unrelated ways, and the
-  // user needs the same sentence for all of them.
-  // ignore: avoid_catches_without_on_clauses
+    // A temp write, a picker and a share sheet fail in unrelated ways, and the
+    // user needs the same sentence for all of them.
+    // ignore: avoid_catches_without_on_clauses
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text('Export failed: $e')));
   }
@@ -628,8 +624,8 @@ Future<void> importTrackIntoLayer(
         ),
       ),
     );
-  // Same contract as the export above: a failed import says so.
-  // ignore: avoid_catches_without_on_clauses
+    // Same contract as the export above: a failed import says so.
+    // ignore: avoid_catches_without_on_clauses
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text('Import failed: $e')));
   }
@@ -704,9 +700,7 @@ Future<void> importFeatureFlow(
   }
   final layer = ExportLayer(
     name: place.shortName,
-    colorArgb: isArea
-        ? OsmPalette.leisureGreen.toARGB32()
-        : kDefaultLayerColor,
+    colorArgb: isArea ? OsmPalette.leisureGreen.toARGB32() : kDefaultLayerColor,
     type: type,
     isInverted: false,
     objects: objects,
@@ -724,7 +718,7 @@ Future<void> importFeatureFlow(
       note: into == null
           ? null
           : '“${place.shortName}” is a $noun, so it can’t go into '
-              '“${into.name}”.',
+                '“${into.name}”.',
     );
     if (picked == null) return; // cancelled
     target = picked;
@@ -745,9 +739,9 @@ Future<void> importFeatureFlow(
         ),
       ),
     );
-  // Same contract: Overpass, the parser and the write can all fail, and the
-  // user needs one sentence rather than three code paths.
-  // ignore: avoid_catches_without_on_clauses
+    // Same contract: Overpass, the parser and the write can all fail, and the
+    // user needs one sentence rather than three code paths.
+    // ignore: avoid_catches_without_on_clauses
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text('Import failed: $e')));
   }
@@ -770,16 +764,22 @@ Future<void> importLayerFlow(
     picked = await openFile(acceptedTypeGroups: const [_importGroup]);
     if (picked == null) return;
     bytes = await picked.readAsBytes();
-  // The document picker throws platform-specific errors (a revoked grant, a
-  // provider that died); all of them mean the file did not arrive.
-  // ignore: avoid_catches_without_on_clauses
+    // The document picker throws platform-specific errors (a revoked grant, a
+    // provider that died); all of them mean the file did not arrive.
+    // ignore: avoid_catches_without_on_clauses
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text('Import failed: $e')));
     return;
   }
   if (!context.mounted) return;
-  await importBytesFlow(context, repo, layers,
-      name: picked.name, bytes: bytes, ref: ref);
+  await importBytesFlow(
+    context,
+    repo,
+    layers,
+    name: picked.name,
+    bytes: bytes,
+    ref: ref,
+  );
 }
 
 /// The same import with the file already in hand.
@@ -813,10 +813,10 @@ Future<void> importBytesFlow(
     // `ZipDecoder` over a KMZ, froze the UI for as long as it took — and this
     // is reachable from a file another app shared in, which the user never
     // picked and whose size they never saw.
-    final (parsed, fromZonecraft) = await compute(
-      _parseImportBytes,
-      (name, bytes),
-    );
+    final (parsed, fromZonecraft) = await compute(_parseImportBytes, (
+      name,
+      bytes,
+    ));
     ExportData? data = parsed;
     if (data == null || data.layers.isEmpty || data.objectCount == 0) {
       messenger.showSnackBar(
@@ -896,16 +896,16 @@ Future<void> importBytesFlow(
         ),
       ),
     );
-  // ArgumentError is how the importer reports a *rejected file* — data, not a
-  // programming mistake — so it is caught deliberately to be shown.
-  // ignore: avoid_catching_errors
+    // ArgumentError is how the importer reports a *rejected file* — data, not a
+    // programming mistake — so it is caught deliberately to be shown.
+    // ignore: avoid_catching_errors
   } on ArgumentError catch (e) {
     messenger.showSnackBar(
       SnackBar(content: Text('Import failed: ${e.message}')),
     );
-  // The rejection above is typed; this is the backstop that keeps any other
-  // failure from becoming an unhandled async error.
-  // ignore: avoid_catches_without_on_clauses
+    // The rejection above is typed; this is the backstop that keeps any other
+    // failure from becoming an unhandled async error.
+    // ignore: avoid_catches_without_on_clauses
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text('Import failed: $e')));
   }
@@ -993,8 +993,8 @@ Future<void> convertRingsToFreehandFlow(
         ),
       ),
     );
-  // Same contract: a failed conversion says so rather than doing nothing.
-  // ignore: avoid_catches_without_on_clauses
+    // Same contract: a failed conversion says so rather than doing nothing.
+    // ignore: avoid_catches_without_on_clauses
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text('Convert failed: $e')));
   }
@@ -1143,11 +1143,13 @@ Future<_ImportChoice?> _askNewOrMerge(
   // One borders layer holds one admin level, so a level-8 file can only merge
   // into a level-8 layer — offering the others would be offering an error.
   final mergeable = layers
-      .where((l) =>
-          l.type == type &&
-          (type != 'borders' ||
-              borderLevel == null ||
-              l.borderLevel == borderLevel))
+      .where(
+        (l) =>
+            l.type == type &&
+            (type != 'borders' ||
+                borderLevel == null ||
+                l.borderLevel == borderLevel),
+      )
       .toList();
   return showDialog<_ImportChoice>(
     context: context,

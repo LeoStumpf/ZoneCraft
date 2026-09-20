@@ -35,13 +35,21 @@ void main() {
     });
 
     test('toTop puts the layer last, so it draws over everything', () {
-      expect(movedLayerOrder(stack, 'a', LayerMove.toTop),
-          ['b', 'c', 'd', 'a']);
+      expect(movedLayerOrder(stack, 'a', LayerMove.toTop), [
+        'b',
+        'c',
+        'd',
+        'a',
+      ]);
     });
 
     test('toBottom puts the layer first, under everything', () {
-      expect(movedLayerOrder(stack, 'd', LayerMove.toBottom),
-          ['d', 'a', 'b', 'c']);
+      expect(movedLayerOrder(stack, 'd', LayerMove.toBottom), [
+        'd',
+        'a',
+        'b',
+        'c',
+      ]);
     });
 
     test('the other layers keep their relative order', () {
@@ -55,25 +63,39 @@ void main() {
     // caller uses to skip the write — a menu tap at the end of the stack must
     // not spend a batch rewriting every layer's sortOrder to what it already is.
     test('a no-op move returns the list identically', () {
-      expect(identical(movedLayerOrder(stack, 'd', LayerMove.up), stack), isTrue);
-      expect(identical(movedLayerOrder(stack, 'd', LayerMove.toTop), stack),
-          isTrue);
-      expect(identical(movedLayerOrder(stack, 'a', LayerMove.down), stack),
-          isTrue);
-      expect(identical(movedLayerOrder(stack, 'a', LayerMove.toBottom), stack),
-          isTrue);
+      expect(
+        identical(movedLayerOrder(stack, 'd', LayerMove.up), stack),
+        isTrue,
+      );
+      expect(
+        identical(movedLayerOrder(stack, 'd', LayerMove.toTop), stack),
+        isTrue,
+      );
+      expect(
+        identical(movedLayerOrder(stack, 'a', LayerMove.down), stack),
+        isTrue,
+      );
+      expect(
+        identical(movedLayerOrder(stack, 'a', LayerMove.toBottom), stack),
+        isTrue,
+      );
     });
 
     test('an unknown id is left alone rather than inserted', () {
-      expect(identical(movedLayerOrder(stack, 'zz', LayerMove.toTop), stack),
-          isTrue);
+      expect(
+        identical(movedLayerOrder(stack, 'zz', LayerMove.toTop), stack),
+        isTrue,
+      );
     });
 
     test('a single layer is already at both ends', () {
       const one = ['only'];
       for (final move in LayerMove.values) {
-        expect(identical(movedLayerOrder(one, 'only', move), one), isTrue,
-            reason: '$move on a one-layer stack should not write');
+        expect(
+          identical(movedLayerOrder(one, 'only', move), one),
+          isTrue,
+          reason: '$move on a one-layer stack should not write',
+        );
       }
     });
 

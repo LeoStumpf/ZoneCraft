@@ -135,7 +135,8 @@ IconData poiSetIcon(PoiSet set) {
 /// by both a subway and a bus reads better as a subway station), so the icon
 /// and the Elements list's type group can't disagree. Every branch is a
 /// `const IconData` literal for the tree-shaking reason [poiIconGroups] gives.
-IconData transitIconFor(int modeMask) => switch (primaryTransitMode(modeMask)?.key) {
+IconData transitIconFor(int modeMask) =>
+    switch (primaryTransitMode(modeMask)?.key) {
       'subway' => Icons.subway,
       'train' => Icons.train,
       'light_rail' => Icons.tram,

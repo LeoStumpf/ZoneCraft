@@ -113,8 +113,11 @@ void main() {
       }
       h.dismiss();
       expect(h.failure, isNull);
-      expect(h.rawFailure, TileFailureKind.quota,
-          reason: 'the refusal is still in force');
+      expect(
+        h.rawFailure,
+        TileFailureKind.quota,
+        reason: 'the refusal is still in force',
+      );
       // More of the same must not nag.
       for (var i = 0; i < 5; i++) {
         h.report(statusCode: 429);
@@ -167,7 +170,11 @@ void main() {
           host: 'tiles.example.org',
           isCommunityOsm: false,
         );
-        expect(text.toLowerCase(), contains('on this device'), reason: kind.name);
+        expect(
+          text.toLowerCase(),
+          contains('on this device'),
+          reason: kind.name,
+        );
       }
     });
 

@@ -501,10 +501,11 @@ List<LayerAction> layerActionsFor(
   // the areas are counted rather than the sets.
   bool holdsBorderAreas() {
     if (!layerTypeHolds(layer.type, kBorders)) return false;
-    final sets = (ref.read(borderSetsProvider).asData?.value ?? const <BorderSet>[])
-        .where((s) => s.layerId == layer.id)
-        .map((s) => s.id)
-        .toSet();
+    final sets =
+        (ref.read(borderSetsProvider).asData?.value ?? const <BorderSet>[])
+            .where((s) => s.layerId == layer.id)
+            .map((s) => s.id)
+            .toSet();
     if (sets.isEmpty) return false;
     return (ref.read(borderAreasProvider).asData?.value ?? const <BorderArea>[])
         .any((a) => sets.contains(a.setId));
@@ -517,8 +518,8 @@ List<LayerAction> layerActionsFor(
     hasStations: hasStations,
     canCombine: layers.any((l) => canCombineLayers(layer, l)),
     inFolder: layer.folderId != null,
-    anyFolder:
-        (ref.read(foldersProvider).asData?.value ?? const <Folder>[]).isNotEmpty,
+    anyFolder: (ref.read(foldersProvider).asData?.value ?? const <Folder>[])
+        .isNotEmpty,
     isTop: layers.isEmpty || layers.last.id == layer.id,
     isBottom: layers.isEmpty || layers.first.id == layer.id,
     fillAreas: layer.borderFillAreas,
@@ -645,7 +646,8 @@ List<LayerAction> layerActionsFor(
       id: id,
       icon: Icons.travel_explore,
       label: 'Import nearby POIs…',
-      description: 'Fetch places of one kind — cafés, benches — around a point.',
+      description:
+          'Fetch places of one kind — cafés, benches — around a point.',
       needsMap: true,
       run: () async => request(MapRequestKind.importPois),
     ),
@@ -669,7 +671,8 @@ List<LayerAction> layerActionsFor(
       id: id,
       icon: Icons.search,
       label: 'Import map feature…',
-      description: 'Search OpenStreetMap by name and import the shape it finds.',
+      description:
+          'Search OpenStreetMap by name and import the shape it finds.',
       needsMap: true,
       run: () async => request(MapRequestKind.importFeature),
     ),
@@ -837,10 +840,7 @@ bool canCombineLayers(Layer source, Layer target) =>
     (source.type != 'borders' || target.borderLevel == source.borderLevel);
 
 /// Which folder to put a layer in. Null when the sheet is dismissed.
-Future<String?> showFolderPicker(
-  BuildContext context,
-  List<Folder> folders,
-) {
+Future<String?> showFolderPicker(BuildContext context, List<Folder> folders) {
   return showModalBottomSheet<String>(
     context: context,
     builder: (ctx) => SafeArea(
@@ -863,10 +863,7 @@ Future<String?> showFolderPicker(
 
 /// Makes a folder and leaves it where it was made — on top, empty, waiting for
 /// something to be dragged in.
-Future<void> addFolderFlow(
-  WidgetRef ref,
-  List<Folder> folders,
-) async {
+Future<void> addFolderFlow(WidgetRef ref, List<Folder> folders) async {
   await ref
       .read(repositoryProvider)
       .createFolder(name: 'Folder ${folders.length + 1}');
@@ -902,7 +899,7 @@ Future<void> deleteFolderFlow(
     message: layerCount == 0
         ? 'Deleted “${folder.name}”'
         : 'Deleted “${folder.name}” · its '
-            '${layerCount == 1 ? 'layer' : '$layerCount layers'} moved out',
+              '${layerCount == 1 ? 'layer' : '$layerCount layers'} moved out',
   );
 }
 
@@ -937,14 +934,16 @@ const kLayerTypeChoices = <LayerTypeChoice>[
     type: kCircles,
     icon: Icons.circle_outlined,
     label: 'Circles layer',
-    subtitle: 'Everything within a distance of a point — "within 2 km of '
+    subtitle:
+        'Everything within a distance of a point — "within 2 km of '
         'the station".',
   ),
   (
     type: kSubspace,
     icon: Icons.scatter_plot_outlined,
     label: 'Nearest-point layer',
-    subtitle: 'Everywhere closer to one point than to any of the others. Two '
+    subtitle:
+        'Everywhere closer to one point than to any of the others. Two '
         'points split the map in half.',
   ),
   (
@@ -963,21 +962,24 @@ const kLayerTypeChoices = <LayerTypeChoice>[
     type: kHeight,
     icon: Icons.terrain,
     label: 'Ground-height layer',
-    subtitle: 'Ground above or below an elevation you choose. Needs the '
+    subtitle:
+        'Ground above or below an elevation you choose. Needs the '
         'network once, then works offline.',
   ),
   (
     type: kPoi,
     icon: Icons.place_outlined,
     label: 'Places layer',
-    subtitle: 'Import cafés, benches or stations from OpenStreetMap, or place '
+    subtitle:
+        'Import cafés, benches or stations from OpenStreetMap, or place '
         'your own markers.',
   ),
   (
     type: kBorders,
     icon: Icons.public,
     label: 'Borders layer',
-    subtitle: 'Download real district, city or country outlines once and keep '
+    subtitle:
+        'Download real district, city or country outlines once and keep '
         'them offline.',
   ),
 ];
@@ -1085,11 +1087,7 @@ Future<void> renameLayerFlow(
 }
 
 /// One rename dialog, for a layer and for a folder. Returns null on cancel.
-Future<String?> _askName(
-  BuildContext context,
-  String title,
-  String current,
-) {
+Future<String?> _askName(BuildContext context, String title, String current) {
   final controller = TextEditingController(text: current);
   return showDialog<String>(
     context: context,

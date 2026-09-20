@@ -106,8 +106,10 @@ class BorderShape {
 }
 
 /// The decoded areas of one borders layer, rebuilt only when the rows change.
-final borderShapesProvider =
-    Provider.family<List<BorderShape>, String>((ref, layerId) {
+final borderShapesProvider = Provider.family<List<BorderShape>, String>((
+  ref,
+  layerId,
+) {
   final sets = ref.watch(borderSetsProvider).asData?.value ?? const [];
   final areas = ref.watch(borderAreasProvider).asData?.value ?? const [];
   final mine = {
@@ -222,8 +224,7 @@ class BorderAreasLayer extends StatelessWidget {
     final kept = <BorderShape>[];
     final bounds = cameraViewport(camera).inflate(_plateSpacingPx);
     for (final s in named) {
-      if (!s.labelPoint.latitude.isFinite ||
-          !s.labelPoint.longitude.isFinite) {
+      if (!s.labelPoint.latitude.isFinite || !s.labelPoint.longitude.isFinite) {
         continue;
       }
       final o = camera.latLngToScreenOffset(s.labelPoint);
@@ -242,12 +243,12 @@ class BorderAreasLayer extends StatelessWidget {
   }
 
   Marker _plate(BorderShape s) => Marker(
-        point: s.labelPoint,
-        width: 140,
-        height: 18,
-        alignment: Alignment.center,
-        child: Center(child: MapLabel(s.name!, fontSize: 11)),
-      );
+    point: s.labelPoint,
+    width: 140,
+    height: 18,
+    alignment: Alignment.center,
+    child: Center(child: MapLabel(s.name!, fontSize: 11)),
+  );
 }
 
 class _BorderPainter extends CustomPainter {
@@ -300,10 +301,10 @@ class _BorderPainter extends CustomPainter {
     Paint strokeFor(BorderShape s) => s.colorArgb == null
         ? strokePaint
         : (Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5
-          ..strokeCap = StrokeCap.round
-          ..color = Color(s.colorArgb!));
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.5
+            ..strokeCap = StrokeCap.round
+            ..color = Color(s.colorArgb!));
 
     for (final s in shapes) {
       if (fillAreas) {
@@ -311,8 +312,9 @@ class _BorderPainter extends CustomPainter {
         var any = false;
         for (final ring in s.rings) {
           if (ring.length < 3) continue;
-          final pts = clipRingToRect(
-              [for (final p in ring) camera.latLngToScreenOffset(p)], clip);
+          final pts = clipRingToRect([
+            for (final p in ring) camera.latLngToScreenOffset(p),
+          ], clip);
           if (pts.length < 3) continue;
           path.moveTo(pts[0].dx, pts[0].dy);
           for (var i = 1; i < pts.length; i++) {
@@ -339,9 +341,10 @@ class _BorderPainter extends CustomPainter {
         if (ring.length < 2) continue;
         for (var i = 0; i < ring.length; i++) {
           final seg = clipSegmentToRect(
-              camera.latLngToScreenOffset(ring[i]),
-              camera.latLngToScreenOffset(ring[(i + 1) % ring.length]),
-              clip);
+            camera.latLngToScreenOffset(ring[i]),
+            camera.latLngToScreenOffset(ring[(i + 1) % ring.length]),
+            clip,
+          );
           if (seg == null) continue;
           border.moveTo(seg.$1.dx, seg.$1.dy);
           border.lineTo(seg.$2.dx, seg.$2.dy);

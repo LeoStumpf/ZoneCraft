@@ -14,7 +14,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-
 import 'dart:math' as math;
 
 import 'package:drift/drift.dart' show Value;
@@ -144,9 +143,8 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
     );
   }
 
-  static String _radiusFieldText(double m) => m == m.roundToDouble()
-      ? m.round().toString()
-      : m.toStringAsFixed(1);
+  static String _radiusFieldText(double m) =>
+      m == m.roundToDouble() ? m.round().toString() : m.toStringAsFixed(1);
 
   String _radiusLabel(double m) => m >= 1000
       ? '${(m / 1000).toStringAsFixed(m >= 10000 ? 0 : 1)} km'
@@ -271,11 +269,14 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
                 onChanged: (s) {
                   final p = parseLatLng(s);
                   if (p != null) {
-                    logAsyncFailure(_repo.updateCircle(
+                    logAsyncFailure(
+                      _repo.updateCircle(
                         widget.circle.id,
                         centerLat: p.latitude,
                         centerLng: p.longitude,
-                      ), 'Moving the circle');
+                      ),
+                      'Moving the circle',
+                    );
                   }
                 },
               ),
@@ -297,10 +298,13 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
           ),
           onChanged: (s) {
             final t = s.trim();
-            logAsyncFailure(_repo.updateCircle(
+            logAsyncFailure(
+              _repo.updateCircle(
                 widget.circle.id,
                 label: Value(t.isEmpty ? null : t),
-              ), 'Saving the name');
+              ),
+              'Saving the name',
+            );
           },
         ),
       ],

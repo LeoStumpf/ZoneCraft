@@ -217,8 +217,10 @@ final Map<String, TransitMode> _modeByTag = {
 TransitMode? transitModeByKey(String key) =>
     transitModes.where((m) => m.key == key).firstOrNull;
 
-Set<TransitMode> transitModesFromMask(int mask) =>
-    {for (final m in transitModes) if (mask & m.bit != 0) m};
+Set<TransitMode> transitModesFromMask(int mask) => {
+  for (final m in transitModes)
+    if (mask & m.bit != 0) m,
+};
 
 int transitMaskWith(int mask, TransitMode m, {required bool on}) =>
     on ? (mask | m.bit) : (mask & ~m.bit);
@@ -285,7 +287,10 @@ bool transitStationVisible(int stationMask, int? visibleMask) {
 /// gives 'nothing'; the full mask gives 'all types'.
 String transitModeLabels(int mask) {
   if (mask & transitAllModesMask == transitAllModesMask) return 'all types';
-  final names = [for (final m in transitModes) if (mask & m.bit != 0) m.label];
+  final names = [
+    for (final m in transitModes)
+      if (mask & m.bit != 0) m.label,
+  ];
   if (names.isEmpty) return 'nothing';
   return names.join(', ');
 }
@@ -322,8 +327,7 @@ const double kTransitWideMaxMeters = 150000;
 /// a state-sized box only trains are worth asking for — "every bus stop in
 /// Bavaria" is 68 MB and does not come back.
 int recommendedImportModes(double diagonalMeters) {
-  if (!diagonalMeters.isFinite ||
-      diagonalMeters <= kTransitRegionalMaxMeters) {
+  if (!diagonalMeters.isFinite || diagonalMeters <= kTransitRegionalMaxMeters) {
     return transitAllModesMask;
   }
   if (diagonalMeters <= kTransitWideMaxMeters) {
@@ -336,7 +340,8 @@ int recommendedImportModes(double diagonalMeters) {
 /// The widest / least alarming box the selected modes can be fetched over: the
 /// strictest limit among them, because one dense mode is enough to sink the
 /// whole query.
-double transitMaxDiagonalFor(int mask) => _limitFor(mask, (m) => m.maxDiagonalMeters);
+double transitMaxDiagonalFor(int mask) =>
+    _limitFor(mask, (m) => m.maxDiagonalMeters);
 
 double transitWarnDiagonalFor(int mask) =>
     _limitFor(mask, (m) => m.warnDiagonalMeters);
@@ -410,15 +415,15 @@ class TransitStationData {
   /// with its mode bits, keyed on its OSM node. [nodeCount] and [routeRef]
   /// stop here — the merge needed them, the map never did.
   PoiResult toPoiResult() => PoiResult(
-        lat: lat,
-        lng: lng,
-        categoryKey: kTransitStationCategoryKey,
-        name: name,
-        osmType: 'node',
-        // 0 was this model's "no identity" placeholder; a POI says null.
-        osmId: osmId == 0 ? null : osmId,
-        modeMask: modeMask,
-      );
+    lat: lat,
+    lng: lng,
+    categoryKey: kTransitStationCategoryKey,
+    name: name,
+    osmType: 'node',
+    // 0 was this model's "no identity" placeholder; a POI says null.
+    osmId: osmId == 0 ? null : osmId,
+    modeMask: modeMask,
+  );
 }
 
 /// The transport moved to `overpass_client.dart` when the borders layer needed
@@ -501,8 +506,7 @@ String buildTransitStopsQuery({
           for (final m in transitModes)
             if (modeMask & m.bit != 0) ...m.stopSelectors,
         ];
-  final timeout =
-      transitQueryTimeout(diagonalMeters ?? double.nan).inSeconds;
+  final timeout = transitQueryTimeout(diagonalMeters ?? double.nan).inSeconds;
   return '[out:json][timeout:$timeout];'
       '('
       '${[for (final s in selectors) 'node$s$bbox;'].join()}'
@@ -601,14 +605,16 @@ class TransitStopNode {
 /// Never throws. Returns **null** when the body could not be understood at all,
 /// so a malformed response stays distinguishable from a genuinely empty area
 /// (the old code conflated the two and reported "nothing found here").
-List<TransitStationData>? parseTransitStations(String body,
-    {int keepModes = -1}) {
+List<TransitStationData>? parseTransitStations(
+  String body, {
+  int keepModes = -1,
+}) {
   final dynamic decoded;
   try {
     decoded = jsonDecode(body);
-  // As in borders.dart: a malformed body must stay distinguishable from an
-  // area that genuinely has no stations.
-  // ignore: avoid_catches_without_on_clauses
+    // As in borders.dart: a malformed body must stay distinguishable from an
+    // area that genuinely has no stations.
+    // ignore: avoid_catches_without_on_clauses
   } catch (_) {
     return null;
   }
@@ -625,15 +631,17 @@ List<TransitStationData>? parseTransitStations(String body,
     if (id == null || lat == null || lng == null) continue;
     final tags = e['tags'];
     final t = tags is Map<String, dynamic> ? tags : const <String, dynamic>{};
-    raw.add(TransitStopNode(
-      osmId: id,
-      lat: lat,
-      lng: lng,
-      name: _tag(t, 'name'),
-      modeMask: stopModeMask(t),
-      isStation: _tag(t, 'public_transport') == 'station',
-      routeRef: _tag(t, 'route_ref'),
-    ));
+    raw.add(
+      TransitStopNode(
+        osmId: id,
+        lat: lat,
+        lng: lng,
+        name: _tag(t, 'name'),
+        modeMask: stopModeMask(t),
+        isStation: _tag(t, 'public_transport') == 'station',
+        routeRef: _tag(t, 'route_ref'),
+      ),
+    );
   }
   final merged = mergeStations(raw);
   if (keepModes & transitAllModesMask == transitAllModesMask) return merged;
@@ -712,20 +720,20 @@ List<TransitStationData> mergeStations(List<TransitStopNode> raw) {
 /// A station under construction.
 class _Station {
   _Station(TransitStopNode first)
-      : name = first.name,
-        osmId = first.osmId,
-        lat = first.lat,
-        lng = first.lng,
-        mask = first.modeMask,
-        routeRef = first.routeRef,
-        _sumLat = first.lat,
-        _sumLng = first.lng,
-        _south = first.lat,
-        _north = first.lat,
-        _west = first.lng,
-        _east = first.lng,
-        _anchored = first.isStation,
-        nodeCount = 1;
+    : name = first.name,
+      osmId = first.osmId,
+      lat = first.lat,
+      lng = first.lng,
+      mask = first.modeMask,
+      routeRef = first.routeRef,
+      _sumLat = first.lat,
+      _sumLng = first.lng,
+      _south = first.lat,
+      _north = first.lat,
+      _west = first.lng,
+      _east = first.lng,
+      _anchored = first.isStation,
+      nodeCount = 1;
 
   final String? name;
   int osmId;
@@ -749,8 +757,11 @@ class _Station {
   double distanceTo(double pLat, double pLng) {
     final clampedLat = pLat.clamp(_south, _north);
     final clampedLng = pLng.clamp(_west, _east);
-    final d = _distance.as(LengthUnit.Meter, LatLng(clampedLat, clampedLng),
-        LatLng(pLat, pLng));
+    final d = _distance.as(
+      LengthUnit.Meter,
+      LatLng(clampedLat, clampedLng),
+      LatLng(pLat, pLng),
+    );
     return d.isFinite ? d : double.infinity;
   }
 
@@ -776,14 +787,14 @@ class _Station {
   }
 
   TransitStationData toData() => TransitStationData(
-        osmId: osmId,
-        lat: lat,
-        lng: lng,
-        name: name,
-        modeMask: mask,
-        nodeCount: nodeCount,
-        routeRef: routeRef,
-      );
+    osmId: osmId,
+    lat: lat,
+    lng: lng,
+    name: name,
+    modeMask: mask,
+    nodeCount: nodeCount,
+    routeRef: routeRef,
+  );
 }
 
 // --- Network ----------------------------------------------------------------
@@ -816,7 +827,8 @@ Future<TransitOutcome<List<TransitStationData>>> fetchTransitStations({
     client: client,
     timeout: transitRequestTimeout(diagonal),
     maxBytes: transitMaxResponseBytes,
-    oversizeMessage: 'That area returns too much data — pick a smaller box, or '
+    oversizeMessage:
+        'That area returns too much data — pick a smaller box, or '
         'import fewer types (bus stops are the bulk of it).',
     preferEndpoint: preferEndpoint,
     onProgress: onProgress,
@@ -825,10 +837,12 @@ Future<TransitOutcome<List<TransitStationData>>> fetchTransitStations({
   );
 }
 
-double _diagonalMeters(
-    double south, double west, double north, double east) {
+double _diagonalMeters(double south, double west, double north, double east) {
   final d = _distance.as(
-      LengthUnit.Meter, LatLng(south, west), LatLng(north, east));
+    LengthUnit.Meter,
+    LatLng(south, west),
+    LatLng(north, east),
+  );
   return d.isFinite ? d : double.nan;
 }
 

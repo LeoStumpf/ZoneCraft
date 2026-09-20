@@ -55,7 +55,8 @@ void main() {
     expect(
       offenders,
       isEmpty,
-      reason: 'These files are missing the AGPL header:\n${offenders.join('\n')}',
+      reason:
+          'These files are missing the AGPL header:\n${offenders.join('\n')}',
     );
   });
 

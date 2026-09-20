@@ -73,15 +73,17 @@ class RequestPacer {
 /// Nominatim's published ceiling is "an absolute maximum of 1 request per
 /// second". A little over a second, because the limit is enforced at the far
 /// end against clock skew and our own timing jitter.
-final RequestPacer nominatimPacer =
-    RequestPacer(minInterval: const Duration(milliseconds: 1100));
+final RequestPacer nominatimPacer = RequestPacer(
+  minInterval: const Duration(milliseconds: 1100),
+);
 
 /// Overpass publishes no requests-per-second number — it rate-limits by slots
 /// and answers 429/504 when you are over, which `overpass_client.dart` already
 /// treats as transient. A one-second floor costs a user-initiated import
 /// nothing and keeps an impatient double-tap from counting twice.
-final RequestPacer overpassPacer =
-    RequestPacer(minInterval: const Duration(seconds: 1));
+final RequestPacer overpassPacer = RequestPacer(
+  minInterval: const Duration(seconds: 1),
+);
 
 /// The OpenStreetMap API itself — the one service this app *writes* to, and
 /// only ever one note per deliberate press.
@@ -91,8 +93,9 @@ final RequestPacer overpassPacer =
 /// remembering not to write a loop. The API usage policy's remedy for a client
 /// affecting the service level for others is a block without notice, and a
 /// block lands on the `User-Agent`, i.e. on every ZoneCraft install at once.
-final RequestPacer osmApiPacer =
-    RequestPacer(minInterval: const Duration(seconds: 1));
+final RequestPacer osmApiPacer = RequestPacer(
+  minInterval: const Duration(seconds: 1),
+);
 
 /// A small most-recently-used cache of results, keyed by query string.
 ///

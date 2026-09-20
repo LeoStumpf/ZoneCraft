@@ -95,9 +95,9 @@ class Repository {
 
   /// All layers ordered by draw order (ascending; last item is drawn on top).
   Stream<List<Layer>> watchLayers() {
-    return (_db.select(_db.layers)
-          ..orderBy([(l) => OrderingTerm(expression: l.sortOrder)]))
-        .watch();
+    return (_db.select(
+      _db.layers,
+    )..orderBy([(l) => OrderingTerm(expression: l.sortOrder)])).watch();
   }
 
   /// Creates a layer placed on top of all existing ones. Returns its id.
@@ -114,7 +114,9 @@ class Repository {
   }) async {
     final maxOrder = await _maxSortOrder();
     final id = _uuid.v4();
-    await _db.into(_db.layers).insert(
+    await _db
+        .into(_db.layers)
+        .insert(
           LayersCompanion.insert(
             id: id,
             name: name,
@@ -143,10 +145,10 @@ class Repository {
       LayersCompanion(
         name: name == null ? const Value.absent() : Value(name),
         colorArgb: colorArgb == null ? const Value.absent() : Value(colorArgb),
-        isVisible:
-            isVisible == null ? const Value.absent() : Value(isVisible),
-        isInverted:
-            isInverted == null ? const Value.absent() : Value(isInverted),
+        isVisible: isVisible == null ? const Value.absent() : Value(isVisible),
+        isInverted: isInverted == null
+            ? const Value.absent()
+            : Value(isInverted),
         opacity: opacity == null ? const Value.absent() : Value(opacity),
         type: type == null ? const Value.absent() : Value(type),
       ),
@@ -168,13 +170,15 @@ class Repository {
     required String targetId,
   }) async {
     if (sourceId == targetId) return;
-    final src = await (_db.select(_db.layers)
-          ..where((l) => l.id.equals(sourceId)))
-        .getSingleOrNull();
-    final tgt = await (_db.select(_db.layers)
-          ..where((l) => l.id.equals(targetId)))
-        .getSingleOrNull();
-    if (src == null || tgt == null) throw ArgumentError('Layer no longer exists');
+    final src = await (_db.select(
+      _db.layers,
+    )..where((l) => l.id.equals(sourceId))).getSingleOrNull();
+    final tgt = await (_db.select(
+      _db.layers,
+    )..where((l) => l.id.equals(targetId))).getSingleOrNull();
+    if (src == null || tgt == null) {
+      throw ArgumentError('Layer no longer exists');
+    }
     // The target has to be able to *hold* everything the source does — which a
     // mixed target does for all but `borders`, and a single-type target only
     // for its own type.
@@ -263,9 +267,9 @@ class Repository {
 
   /// All folders, ordered by their place among the root items.
   Stream<List<Folder>> watchFolders() {
-    return (_db.select(_db.folders)
-          ..orderBy([(f) => OrderingTerm(expression: f.sortOrder)]))
-        .watch();
+    return (_db.select(
+      _db.folders,
+    )..orderBy([(f) => OrderingTerm(expression: f.sortOrder)])).watch();
   }
 
   /// A new, empty folder on top of the stack.
@@ -275,10 +279,13 @@ class Repository {
     // not in one, so it has to start above both.
     final maxLayer = await _maxSortOrder();
     final maxFolder = _db.folders.sortOrder.max();
-    final row = await (_db.selectOnly(_db.folders)..addColumns([maxFolder]))
-        .getSingleOrNull();
+    final row = await (_db.selectOnly(
+      _db.folders,
+    )..addColumns([maxFolder])).getSingleOrNull();
     final top = math.max(maxLayer, row?.read(maxFolder) ?? -1);
-    await _db.into(_db.folders).insert(
+    await _db
+        .into(_db.folders)
+        .insert(
           FoldersCompanion.insert(id: id, name: name, sortOrder: top + 1),
         );
     return id;
@@ -294,12 +301,13 @@ class Repository {
     return (_db.update(_db.folders)..where((f) => f.id.equals(id))).write(
       FoldersCompanion(
         name: name == null ? const Value.absent() : Value(name),
-        isVisible:
-            isVisible == null ? const Value.absent() : Value(isVisible),
-        isInverted:
-            isInverted == null ? const Value.absent() : Value(isInverted),
-        isCollapsed:
-            isCollapsed == null ? const Value.absent() : Value(isCollapsed),
+        isVisible: isVisible == null ? const Value.absent() : Value(isVisible),
+        isInverted: isInverted == null
+            ? const Value.absent()
+            : Value(isInverted),
+        isCollapsed: isCollapsed == null
+            ? const Value.absent()
+            : Value(isCollapsed),
       ),
     );
   }
@@ -326,15 +334,13 @@ class Repository {
     if (folderId == null) {
       // At the root a layer shares its ordering with the folders.
       final maxFolder = _db.folders.sortOrder.max();
-      final row = await (_db.selectOnly(_db.folders)..addColumns([maxFolder]))
-          .getSingleOrNull();
+      final row = await (_db.selectOnly(
+        _db.folders,
+      )..addColumns([maxFolder])).getSingleOrNull();
       top = math.max(top, row?.read(maxFolder) ?? -1);
     }
     await (_db.update(_db.layers)..where((l) => l.id.equals(layerId))).write(
-      LayersCompanion(
-        folderId: Value(folderId),
-        sortOrder: Value(top + 1),
-      ),
+      LayersCompanion(folderId: Value(folderId), sortOrder: Value(top + 1)),
     );
   }
 
@@ -383,20 +389,21 @@ class Repository {
 
   Future<int> _maxSortOrder() async {
     final max = _db.layers.sortOrder.max();
-    final row = await (_db.selectOnly(_db.layers)..addColumns([max]))
-        .getSingleOrNull();
+    final row = await (_db.selectOnly(
+      _db.layers,
+    )..addColumns([max])).getSingleOrNull();
     return row?.read(max) ?? -1;
   }
 
   // --- Circles --------------------------------------------------------------
 
   Stream<List<Circle>> watchAllCircles() {
-    return (_db.select(_db.circles)
-          ..orderBy([
-            (t) => OrderingTerm(expression: t.zOrder),
-            (t) => OrderingTerm(expression: t.createdAt),
-            (t) => OrderingTerm(expression: t.id),
-          ])).watch();
+    return (_db.select(_db.circles)..orderBy([
+          (t) => OrderingTerm(expression: t.zOrder),
+          (t) => OrderingTerm(expression: t.createdAt),
+          (t) => OrderingTerm(expression: t.id),
+        ]))
+        .watch();
   }
 
   // --- Per-element colour (v22) ---------------------------------------------
@@ -407,27 +414,29 @@ class Repository {
   Future<void> setElementColor(ColoredElement kind, String id, int? argb) {
     final v = Value<int?>(argb);
     return switch (kind) {
-      ColoredElement.circle =>
-        (_db.update(_db.circles)..where((t) => t.id.equals(id)))
-            .write(CirclesCompanion(colorArgb: v)),
-      ColoredElement.subspace =>
-        (_db.update(_db.subspaces)..where((t) => t.id.equals(id)))
-            .write(SubspacesCompanion(colorArgb: v)),
-      ColoredElement.freeLine =>
-        (_db.update(_db.freeLines)..where((t) => t.id.equals(id)))
-            .write(FreeLinesCompanion(colorArgb: v)),
-      ColoredElement.freeArea =>
-        (_db.update(_db.freeAreas)..where((t) => t.id.equals(id)))
-            .write(FreeAreasCompanion(colorArgb: v)),
+      ColoredElement.circle => (_db.update(
+        _db.circles,
+      )..where((t) => t.id.equals(id))).write(CirclesCompanion(colorArgb: v)),
+      ColoredElement.subspace => (_db.update(
+        _db.subspaces,
+      )..where((t) => t.id.equals(id))).write(SubspacesCompanion(colorArgb: v)),
+      ColoredElement.freeLine => (_db.update(
+        _db.freeLines,
+      )..where((t) => t.id.equals(id))).write(FreeLinesCompanion(colorArgb: v)),
+      ColoredElement.freeArea => (_db.update(
+        _db.freeAreas,
+      )..where((t) => t.id.equals(id))).write(FreeAreasCompanion(colorArgb: v)),
       ColoredElement.heightRegion =>
-        (_db.update(_db.heightRegions)..where((t) => t.id.equals(id)))
-            .write(HeightRegionsCompanion(colorArgb: v)),
-      ColoredElement.poiSet =>
-        (_db.update(_db.poiSets)..where((t) => t.id.equals(id)))
-            .write(PoiSetsCompanion(colorArgb: v)),
+        (_db.update(_db.heightRegions)..where((t) => t.id.equals(id))).write(
+          HeightRegionsCompanion(colorArgb: v),
+        ),
+      ColoredElement.poiSet => (_db.update(
+        _db.poiSets,
+      )..where((t) => t.id.equals(id))).write(PoiSetsCompanion(colorArgb: v)),
       ColoredElement.borderArea =>
-        (_db.update(_db.borderAreas)..where((t) => t.id.equals(id)))
-            .write(BorderAreasCompanion(colorArgb: v)),
+        (_db.update(_db.borderAreas)..where((t) => t.id.equals(id))).write(
+          BorderAreasCompanion(colorArgb: v),
+        ),
     };
   }
 
@@ -455,10 +464,9 @@ class Repository {
                 'WHERE s.layer_id = ? AND a.color_argb IS NOT NULL'
           : 'SELECT id FROM ${kind.table} '
                 'WHERE layer_id = ? AND color_argb IS NOT NULL';
-      final rows = await _db.customSelect(
-        sql,
-        variables: [Variable<String>(layerId)],
-      ).get();
+      final rows = await _db
+          .customSelect(sql, variables: [Variable<String>(layerId)])
+          .get();
       out.addAll([for (final r in rows) r.read<String>('id')]);
     }
     return out;
@@ -482,11 +490,13 @@ class Repository {
   /// One layer holds one kind since v30, so one table is the whole answer —
   /// the cross-table maximum a `mixed` layer needed went with it.
   Future<int> _nextColorShade(String table, String layerId) async {
-    final row = await _db.customSelect(
-      'SELECT COALESCE(MAX(color_shade), -1) + 1 AS next '
-      'FROM $table WHERE layer_id = ?',
-      variables: [Variable<String>(layerId)],
-    ).getSingle();
+    final row = await _db
+        .customSelect(
+          'SELECT COALESCE(MAX(color_shade), -1) + 1 AS next '
+          'FROM $table WHERE layer_id = ?',
+          variables: [Variable<String>(layerId)],
+        )
+        .getSingle();
     return row.read<int>('next');
   }
 
@@ -497,14 +507,19 @@ class Repository {
   /// do not overlap at one admin level, and the point tables): the caller is
   /// exhaustive over types, this is only about the ones that stack.
   Future<void> _liftZAbove(
-      String type, String sourceId, String targetId) async {
+    String type,
+    String sourceId,
+    String targetId,
+  ) async {
     final kind = ColoredElement.forLayerType(type);
     if (kind == null || kind == ColoredElement.borderArea) return;
-    final row = await _db.customSelect(
-      'SELECT COALESCE(MAX(z_order), -1) + 1 AS next '
-      'FROM ${kind.table} WHERE layer_id = ?',
-      variables: [Variable<String>(targetId)],
-    ).getSingle();
+    final row = await _db
+        .customSelect(
+          'SELECT COALESCE(MAX(z_order), -1) + 1 AS next '
+          'FROM ${kind.table} WHERE layer_id = ?',
+          variables: [Variable<String>(targetId)],
+        )
+        .getSingle();
     final offset = row.read<int>('next');
     if (offset == 0) return;
     await _db.customUpdate(
@@ -526,30 +541,36 @@ class Repository {
   /// layer. [reorderElements] is what collapses the gaps, and only when the
   /// user actually moves something.
   Future<int> _nextZOrder(String table, String layerId) async {
-    final row = await _db.customSelect(
-      'SELECT COALESCE(MAX(z_order), -1) + 1 AS next '
-      'FROM $table WHERE layer_id = ?',
-      variables: [Variable<String>(layerId)],
-    ).getSingle();
+    final row = await _db
+        .customSelect(
+          'SELECT COALESCE(MAX(z_order), -1) + 1 AS next '
+          'FROM $table WHERE layer_id = ?',
+          variables: [Variable<String>(layerId)],
+        )
+        .getSingle();
     return row.read<int>('next');
   }
 
   /// The ids of [layerId]'s elements of [kind], back-to-front.
   Future<List<String>> _stackedIds(ColoredElement kind, String layerId) async {
-    final rows = await _db.customSelect(
-      'SELECT id FROM ${kind.table} WHERE layer_id = ? '
-      'ORDER BY z_order, created_at, id',
-      variables: [Variable<String>(layerId)],
-    ).get();
+    final rows = await _db
+        .customSelect(
+          'SELECT id FROM ${kind.table} WHERE layer_id = ? '
+          'ORDER BY z_order, created_at, id',
+          variables: [Variable<String>(layerId)],
+        )
+        .get();
     return [for (final r in rows) r.read<String>('id')];
   }
 
   /// The layer an element belongs to, or null if there is no such row.
   Future<String?> _layerOfElement(ColoredElement kind, String id) async {
-    final row = await _db.customSelect(
-      'SELECT layer_id FROM ${kind.table} WHERE id = ?',
-      variables: [Variable<String>(id)],
-    ).getSingleOrNull();
+    final row = await _db
+        .customSelect(
+          'SELECT layer_id FROM ${kind.table} WHERE id = ?',
+          variables: [Variable<String>(id)],
+        )
+        .getSingleOrNull();
     return row?.read<String?>('layer_id');
   }
 
@@ -587,21 +608,23 @@ class Repository {
   /// table. [customUpdate]'s `updates:` is how drift is told, and this is what
   /// it needs to be told *with*.
   TableInfo<Table, dynamic> _tableOf(ColoredElement kind) => switch (kind) {
-        ColoredElement.circle => _db.circles,
-        ColoredElement.subspace => _db.subspaces,
-        ColoredElement.freeLine => _db.freeLines,
-        ColoredElement.freeArea => _db.freeAreas,
-        ColoredElement.heightRegion => _db.heightRegions,
-        ColoredElement.poiSet => _db.poiSets,
-        ColoredElement.borderArea => _db.borderAreas,
-      };
+    ColoredElement.circle => _db.circles,
+    ColoredElement.subspace => _db.subspaces,
+    ColoredElement.freeLine => _db.freeLines,
+    ColoredElement.freeArea => _db.freeAreas,
+    ColoredElement.heightRegion => _db.heightRegions,
+    ColoredElement.poiSet => _db.poiSets,
+    ColoredElement.borderArea => _db.borderAreas,
+  };
 
   /// Persists a whole stack. [orderedIds] is back-to-front, the same direction
   /// [reorderLayers] takes.
   ///
   /// One transaction, so a half-renumbered layer is never observable.
   Future<void> reorderElements(
-      ColoredElement kind, List<String> orderedIds) async {
+    ColoredElement kind,
+    List<String> orderedIds,
+  ) async {
     final table = {_tableOf(kind)};
     await _db.transaction(() async {
       for (var i = 0; i < orderedIds.length; i++) {
@@ -624,7 +647,9 @@ class Repository {
     final id = _uuid.v4();
     final shade = await _nextColorShade('circles', layerId);
     final z = await _nextZOrder('circles', layerId);
-    await _db.into(_db.circles).insert(
+    await _db
+        .into(_db.circles)
+        .insert(
           CirclesCompanion.insert(
             id: id,
             layerId: layerId,
@@ -651,16 +676,14 @@ class Repository {
     // there, so it takes a fresh slot on top — which is what moving something
     // into a layer means. Carrying the old number across would bury it under
     // whatever the target already held.
-    final z =
-        layerId == null ? null : await _nextZOrder('circles', layerId);
+    final z = layerId == null ? null : await _nextZOrder('circles', layerId);
     await (_db.update(_db.circles)..where((c) => c.id.equals(id))).write(
       CirclesCompanion(
-        centerLat:
-            centerLat == null ? const Value.absent() : Value(centerLat),
-        centerLng:
-            centerLng == null ? const Value.absent() : Value(centerLng),
-        radiusMeters:
-            radiusMeters == null ? const Value.absent() : Value(radiusMeters),
+        centerLat: centerLat == null ? const Value.absent() : Value(centerLat),
+        centerLng: centerLng == null ? const Value.absent() : Value(centerLng),
+        radiusMeters: radiusMeters == null
+            ? const Value.absent()
+            : Value(radiusMeters),
         layerId: layerId == null ? const Value.absent() : Value(layerId),
         zOrder: z == null ? const Value.absent() : Value(z),
         label: label,
@@ -675,26 +698,31 @@ class Repository {
   // --- Subspaces ------------------------------------------------------------
 
   Stream<List<Subspace>> watchAllSubspaces() {
-    return (_db.select(_db.subspaces)
-          ..orderBy([
-            (t) => OrderingTerm(expression: t.zOrder),
-            (t) => OrderingTerm(expression: t.createdAt),
-            (t) => OrderingTerm(expression: t.id),
-          ])).watch();
+    return (_db.select(_db.subspaces)..orderBy([
+          (t) => OrderingTerm(expression: t.zOrder),
+          (t) => OrderingTerm(expression: t.createdAt),
+          (t) => OrderingTerm(expression: t.id),
+        ]))
+        .watch();
   }
 
   /// All points across every subspace, ordered by their [SubspacePoints.sortOrder].
   Stream<List<SubspacePoint>> watchAllSubspacePoints() {
-    return (_db.select(_db.subspacePoints)
-          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
-        .watch();
+    return (_db.select(
+      _db.subspacePoints,
+    )..orderBy([(p) => OrderingTerm(expression: p.sortOrder)])).watch();
   }
 
-  Future<String> createSubspace({required String layerId, String? label}) async {
+  Future<String> createSubspace({
+    required String layerId,
+    String? label,
+  }) async {
     final id = _uuid.v4();
     final shade = await _nextColorShade('subspaces', layerId);
     final z = await _nextZOrder('subspaces', layerId);
-    await _db.into(_db.subspaces).insert(
+    await _db
+        .into(_db.subspaces)
+        .insert(
           SubspacesCompanion.insert(
             id: id,
             layerId: layerId,
@@ -715,8 +743,7 @@ class Repository {
     // there, so it takes a fresh slot on top — which is what moving something
     // into a layer means. Carrying the old number across would bury it under
     // whatever the target already held.
-    final z =
-        layerId == null ? null : await _nextZOrder('subspaces', layerId);
+    final z = layerId == null ? null : await _nextZOrder('subspaces', layerId);
     await (_db.update(_db.subspaces)..where((s) => s.id.equals(id))).write(
       SubspacesCompanion(
         layerId: layerId == null ? const Value.absent() : Value(layerId),
@@ -741,7 +768,9 @@ class Repository {
   }) async {
     final order = await _maxPointOrder(subspaceId);
     final id = _uuid.v4();
-    await _db.into(_db.subspacePoints).insert(
+    await _db
+        .into(_db.subspacePoints)
+        .insert(
           SubspacePointsCompanion.insert(
             id: id,
             subspaceId: subspaceId,
@@ -761,7 +790,9 @@ class Repository {
     double? lng,
     Value<String?> label = const Value.absent(),
   }) {
-    return (_db.update(_db.subspacePoints)..where((p) => p.id.equals(id))).write(
+    return (_db.update(
+      _db.subspacePoints,
+    )..where((p) => p.id.equals(id))).write(
       SubspacePointsCompanion(
         lat: lat == null ? const Value.absent() : Value(lat),
         lng: lng == null ? const Value.absent() : Value(lng),
@@ -793,29 +824,30 @@ class Repository {
 
   Future<int> _maxPointOrder(String subspaceId) async {
     final max = _db.subspacePoints.sortOrder.max();
-    final row = await (_db.selectOnly(_db.subspacePoints)
-          ..addColumns([max])
-          ..where(_db.subspacePoints.subspaceId.equals(subspaceId)))
-        .getSingleOrNull();
+    final row =
+        await (_db.selectOnly(_db.subspacePoints)
+              ..addColumns([max])
+              ..where(_db.subspacePoints.subspaceId.equals(subspaceId)))
+            .getSingleOrNull();
     return row?.read(max) ?? -1;
   }
 
   // --- Freehand lines -------------------------------------------------------
 
   Stream<List<FreeLine>> watchAllFreeLines() {
-    return (_db.select(_db.freeLines)
-          ..orderBy([
-            (t) => OrderingTerm(expression: t.zOrder),
-            (t) => OrderingTerm(expression: t.createdAt),
-            (t) => OrderingTerm(expression: t.id),
-          ])).watch();
+    return (_db.select(_db.freeLines)..orderBy([
+          (t) => OrderingTerm(expression: t.zOrder),
+          (t) => OrderingTerm(expression: t.createdAt),
+          (t) => OrderingTerm(expression: t.id),
+        ]))
+        .watch();
   }
 
   /// All points across every freehand line, ordered by [FreeLinePoints.sortOrder].
   Stream<List<FreeLinePoint>> watchAllFreeLinePoints() {
-    return (_db.select(_db.freeLinePoints)
-          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
-        .watch();
+    return (_db.select(
+      _db.freeLinePoints,
+    )..orderBy([(p) => OrderingTerm(expression: p.sortOrder)])).watch();
   }
 
   Future<String> createFreeLine({
@@ -828,7 +860,9 @@ class Repository {
     final id = _uuid.v4();
     final shade = await _nextColorShade('free_lines', layerId);
     final z = await _nextZOrder('free_lines', layerId);
-    await _db.into(_db.freeLines).insert(
+    await _db
+        .into(_db.freeLines)
+        .insert(
           FreeLinesCompanion.insert(
             id: id,
             layerId: layerId,
@@ -856,18 +890,20 @@ class Repository {
     // there, so it takes a fresh slot on top — which is what moving something
     // into a layer means. Carrying the old number across would bury it under
     // whatever the target already held.
-    final z =
-        layerId == null ? null : await _nextZOrder('free_lines', layerId);
+    final z = layerId == null ? null : await _nextZOrder('free_lines', layerId);
     await (_db.update(_db.freeLines)..where((l) => l.id.equals(id))).write(
       FreeLinesCompanion(
         layerId: layerId == null ? const Value.absent() : Value(layerId),
         zOrder: z == null ? const Value.absent() : Value(z),
-        offsetMeters:
-            offsetMeters == null ? const Value.absent() : Value(offsetMeters),
-        inclusionLat:
-            inclusionLat == null ? const Value.absent() : Value(inclusionLat),
-        inclusionLng:
-            inclusionLng == null ? const Value.absent() : Value(inclusionLng),
+        offsetMeters: offsetMeters == null
+            ? const Value.absent()
+            : Value(offsetMeters),
+        inclusionLat: inclusionLat == null
+            ? const Value.absent()
+            : Value(inclusionLat),
+        inclusionLng: inclusionLng == null
+            ? const Value.absent()
+            : Value(inclusionLng),
         inclusionRadiusMeters: inclusionRadiusMeters == null
             ? const Value.absent()
             : Value(inclusionRadiusMeters),
@@ -887,7 +923,9 @@ class Repository {
   }) async {
     final order = await _maxFreeLinePointOrder(freeLineId);
     final id = _uuid.v4();
-    await _db.into(_db.freeLinePoints).insert(
+    await _db
+        .into(_db.freeLinePoints)
+        .insert(
           FreeLinePointsCompanion.insert(
             id: id,
             freeLineId: freeLineId,
@@ -915,7 +953,9 @@ class Repository {
         'WHERE free_line_id = ? AND sort_order >= ?',
         [freeLineId, sortOrder],
       );
-      await _db.into(_db.freeLinePoints).insert(
+      await _db
+          .into(_db.freeLinePoints)
+          .insert(
             FreeLinePointsCompanion.insert(
               id: id,
               freeLineId: freeLineId,
@@ -951,7 +991,9 @@ class Repository {
   }
 
   Future<void> updateFreeLinePoint(String id, {double? lat, double? lng}) {
-    return (_db.update(_db.freeLinePoints)..where((p) => p.id.equals(id))).write(
+    return (_db.update(
+      _db.freeLinePoints,
+    )..where((p) => p.id.equals(id))).write(
       FreeLinePointsCompanion(
         lat: lat == null ? const Value.absent() : Value(lat),
         lng: lng == null ? const Value.absent() : Value(lng),
@@ -966,12 +1008,12 @@ class Repository {
   /// Swaps the ordering of two line points (used to reorder a vertex up/down).
   Future<void> swapFreeLinePointOrder(String idA, String idB) async {
     await _db.transaction(() async {
-      final a = await (_db.select(_db.freeLinePoints)
-            ..where((p) => p.id.equals(idA)))
-          .getSingle();
-      final b = await (_db.select(_db.freeLinePoints)
-            ..where((p) => p.id.equals(idB)))
-          .getSingle();
+      final a = await (_db.select(
+        _db.freeLinePoints,
+      )..where((p) => p.id.equals(idA))).getSingle();
+      final b = await (_db.select(
+        _db.freeLinePoints,
+      )..where((p) => p.id.equals(idB))).getSingle();
       await (_db.update(_db.freeLinePoints)..where((p) => p.id.equals(idA)))
           .write(FreeLinePointsCompanion(sortOrder: Value(b.sortOrder)));
       await (_db.update(_db.freeLinePoints)..where((p) => p.id.equals(idB)))
@@ -981,36 +1023,42 @@ class Repository {
 
   Future<int> _maxFreeLinePointOrder(String freeLineId) async {
     final max = _db.freeLinePoints.sortOrder.max();
-    final row = await (_db.selectOnly(_db.freeLinePoints)
-          ..addColumns([max])
-          ..where(_db.freeLinePoints.freeLineId.equals(freeLineId)))
-        .getSingleOrNull();
+    final row =
+        await (_db.selectOnly(_db.freeLinePoints)
+              ..addColumns([max])
+              ..where(_db.freeLinePoints.freeLineId.equals(freeLineId)))
+            .getSingleOrNull();
     return row?.read(max) ?? -1;
   }
 
   // --- Freehand areas -------------------------------------------------------
 
   Stream<List<FreeArea>> watchAllFreeAreas() {
-    return (_db.select(_db.freeAreas)
-          ..orderBy([
-            (t) => OrderingTerm(expression: t.zOrder),
-            (t) => OrderingTerm(expression: t.createdAt),
-            (t) => OrderingTerm(expression: t.id),
-          ])).watch();
+    return (_db.select(_db.freeAreas)..orderBy([
+          (t) => OrderingTerm(expression: t.zOrder),
+          (t) => OrderingTerm(expression: t.createdAt),
+          (t) => OrderingTerm(expression: t.id),
+        ]))
+        .watch();
   }
 
   /// All points across every freehand area, ordered by [FreeAreaPoints.sortOrder].
   Stream<List<FreeAreaPoint>> watchAllFreeAreaPoints() {
-    return (_db.select(_db.freeAreaPoints)
-          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
-        .watch();
+    return (_db.select(
+      _db.freeAreaPoints,
+    )..orderBy([(p) => OrderingTerm(expression: p.sortOrder)])).watch();
   }
 
-  Future<String> createFreeArea({required String layerId, String? label}) async {
+  Future<String> createFreeArea({
+    required String layerId,
+    String? label,
+  }) async {
     final id = _uuid.v4();
     final shade = await _nextColorShade('free_areas', layerId);
     final z = await _nextZOrder('free_areas', layerId);
-    await _db.into(_db.freeAreas).insert(
+    await _db
+        .into(_db.freeAreas)
+        .insert(
           FreeAreasCompanion.insert(
             id: id,
             layerId: layerId,
@@ -1032,14 +1080,14 @@ class Repository {
     // there, so it takes a fresh slot on top — which is what moving something
     // into a layer means. Carrying the old number across would bury it under
     // whatever the target already held.
-    final z =
-        layerId == null ? null : await _nextZOrder('free_areas', layerId);
+    final z = layerId == null ? null : await _nextZOrder('free_areas', layerId);
     await (_db.update(_db.freeAreas)..where((a) => a.id.equals(id))).write(
       FreeAreasCompanion(
         layerId: layerId == null ? const Value.absent() : Value(layerId),
         zOrder: z == null ? const Value.absent() : Value(z),
-        offsetMeters:
-            offsetMeters == null ? const Value.absent() : Value(offsetMeters),
+        offsetMeters: offsetMeters == null
+            ? const Value.absent()
+            : Value(offsetMeters),
         label: label,
       ),
     );
@@ -1056,7 +1104,9 @@ class Repository {
   }) async {
     final order = await _maxFreeAreaPointOrder(freeAreaId);
     final id = _uuid.v4();
-    await _db.into(_db.freeAreaPoints).insert(
+    await _db
+        .into(_db.freeAreaPoints)
+        .insert(
           FreeAreaPointsCompanion.insert(
             id: id,
             freeAreaId: freeAreaId,
@@ -1084,7 +1134,9 @@ class Repository {
         'WHERE free_area_id = ? AND sort_order >= ?',
         [freeAreaId, sortOrder],
       );
-      await _db.into(_db.freeAreaPoints).insert(
+      await _db
+          .into(_db.freeAreaPoints)
+          .insert(
             FreeAreaPointsCompanion.insert(
               id: id,
               freeAreaId: freeAreaId,
@@ -1119,7 +1171,9 @@ class Repository {
   }
 
   Future<void> updateFreeAreaPoint(String id, {double? lat, double? lng}) {
-    return (_db.update(_db.freeAreaPoints)..where((p) => p.id.equals(id))).write(
+    return (_db.update(
+      _db.freeAreaPoints,
+    )..where((p) => p.id.equals(id))).write(
       FreeAreaPointsCompanion(
         lat: lat == null ? const Value.absent() : Value(lat),
         lng: lng == null ? const Value.absent() : Value(lng),
@@ -1134,12 +1188,12 @@ class Repository {
   /// Swaps the ordering of two area ring points (used to reorder a vertex).
   Future<void> swapFreeAreaPointOrder(String idA, String idB) async {
     await _db.transaction(() async {
-      final a = await (_db.select(_db.freeAreaPoints)
-            ..where((p) => p.id.equals(idA)))
-          .getSingle();
-      final b = await (_db.select(_db.freeAreaPoints)
-            ..where((p) => p.id.equals(idB)))
-          .getSingle();
+      final a = await (_db.select(
+        _db.freeAreaPoints,
+      )..where((p) => p.id.equals(idA))).getSingle();
+      final b = await (_db.select(
+        _db.freeAreaPoints,
+      )..where((p) => p.id.equals(idB))).getSingle();
       await (_db.update(_db.freeAreaPoints)..where((p) => p.id.equals(idA)))
           .write(FreeAreaPointsCompanion(sortOrder: Value(b.sortOrder)));
       await (_db.update(_db.freeAreaPoints)..where((p) => p.id.equals(idB)))
@@ -1149,36 +1203,37 @@ class Repository {
 
   Future<int> _maxFreeAreaPointOrder(String freeAreaId) async {
     final max = _db.freeAreaPoints.sortOrder.max();
-    final row = await (_db.selectOnly(_db.freeAreaPoints)
-          ..addColumns([max])
-          ..where(_db.freeAreaPoints.freeAreaId.equals(freeAreaId)))
-        .getSingleOrNull();
+    final row =
+        await (_db.selectOnly(_db.freeAreaPoints)
+              ..addColumns([max])
+              ..where(_db.freeAreaPoints.freeAreaId.equals(freeAreaId)))
+            .getSingleOrNull();
     return row?.read(max) ?? -1;
   }
 
   // --- Height regions -------------------------------------------------------
 
   Stream<List<HeightRegion>> watchAllHeightRegions() {
-    return (_db.select(_db.heightRegions)
-          ..orderBy([
-            (t) => OrderingTerm(expression: t.zOrder),
-            (t) => OrderingTerm(expression: t.createdAt),
-            (t) => OrderingTerm(expression: t.id),
-          ])).watch();
+    return (_db.select(_db.heightRegions)..orderBy([
+          (t) => OrderingTerm(expression: t.zOrder),
+          (t) => OrderingTerm(expression: t.createdAt),
+          (t) => OrderingTerm(expression: t.id),
+        ]))
+        .watch();
   }
 
   /// All generated height polygons across every region, ordered.
   Stream<List<HeightPolygon>> watchAllHeightPolygons() {
-    return (_db.select(_db.heightPolygons)
-          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
-        .watch();
+    return (_db.select(
+      _db.heightPolygons,
+    )..orderBy([(p) => OrderingTerm(expression: p.sortOrder)])).watch();
   }
 
   /// All height-polygon ring points across every polygon, ordered.
   Stream<List<HeightPolygonPoint>> watchAllHeightPolygonPoints() {
-    return (_db.select(_db.heightPolygonPoints)
-          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
-        .watch();
+    return (_db.select(
+      _db.heightPolygonPoints,
+    )..orderBy([(p) => OrderingTerm(expression: p.sortOrder)])).watch();
   }
 
   Future<String> createHeightRegion({
@@ -1194,7 +1249,9 @@ class Repository {
     final id = _uuid.v4();
     final shade = await _nextColorShade('height_regions', layerId);
     final z = await _nextZOrder('height_regions', layerId);
-    await _db.into(_db.heightRegions).insert(
+    await _db
+        .into(_db.heightRegions)
+        .insert(
           HeightRegionsCompanion.insert(
             id: id,
             layerId: layerId,
@@ -1226,7 +1283,8 @@ class Repository {
     int? sampleZoom,
     Value<String?> label = const Value.absent(),
   }) async {
-    final geometryChanged = centerLat != null ||
+    final geometryChanged =
+        centerLat != null ||
         centerLng != null ||
         radiusMeters != null ||
         thresholdMeters != null ||
@@ -1236,23 +1294,27 @@ class Repository {
     // there, so it takes a fresh slot on top — which is what moving something
     // into a layer means. Carrying the old number across would bury it under
     // whatever the target already held.
-    final z =
-        layerId == null ? null : await _nextZOrder('height_regions', layerId);
+    final z = layerId == null
+        ? null
+        : await _nextZOrder('height_regions', layerId);
     await (_db.update(_db.heightRegions)..where((r) => r.id.equals(id))).write(
       HeightRegionsCompanion(
         layerId: layerId == null ? const Value.absent() : Value(layerId),
         zOrder: z == null ? const Value.absent() : Value(z),
         centerLat: centerLat == null ? const Value.absent() : Value(centerLat),
         centerLng: centerLng == null ? const Value.absent() : Value(centerLng),
-        radiusMeters:
-            radiusMeters == null ? const Value.absent() : Value(radiusMeters),
+        radiusMeters: radiusMeters == null
+            ? const Value.absent()
+            : Value(radiusMeters),
         thresholdMeters: thresholdMeters == null
             ? const Value.absent()
             : Value(thresholdMeters),
         aboveThreshold: aboveThreshold == null
             ? const Value.absent()
             : Value(aboveThreshold),
-        sampleZoom: sampleZoom == null ? const Value.absent() : Value(sampleZoom),
+        sampleZoom: sampleZoom == null
+            ? const Value.absent()
+            : Value(sampleZoom),
         label: label,
         generatedAt: geometryChanged ? const Value(null) : const Value.absent(),
       ),
@@ -1266,10 +1328,12 @@ class Repository {
   /// Replaces all generated polygons for [regionId] with [rings] (delete + batch
   /// insert). Each ring is an ordered list of vertices.
   Future<void> replaceHeightPolygons(
-      String regionId, List<List<LatLng>> rings) async {
-    await (_db.delete(_db.heightPolygons)
-          ..where((p) => p.heightRegionId.equals(regionId)))
-        .go();
+    String regionId,
+    List<List<LatLng>> rings,
+  ) async {
+    await (_db.delete(
+      _db.heightPolygons,
+    )..where((p) => p.heightRegionId.equals(regionId))).go();
     if (rings.isEmpty) return;
     await _db.batch((b) {
       for (var ri = 0; ri < rings.length; ri++) {
@@ -1311,15 +1375,17 @@ class Repository {
   /// geometry rather than the summary row; the painter reads the grouped
   /// providers instead.
   Future<List<List<LatLng>>> heightRegionRings(String id) async {
-    final polys = await (_db.select(_db.heightPolygons)
-          ..where((p) => p.heightRegionId.equals(id))
-          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
-        .get();
+    final polys =
+        await (_db.select(_db.heightPolygons)
+              ..where((p) => p.heightRegionId.equals(id))
+              ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
+            .get();
     if (polys.isEmpty) return const [];
-    final pts = await (_db.select(_db.heightPolygonPoints)
-          ..where((q) => q.polygonId.isIn([for (final p in polys) p.id]))
-          ..orderBy([(q) => OrderingTerm(expression: q.sortOrder)]))
-        .get();
+    final pts =
+        await (_db.select(_db.heightPolygonPoints)
+              ..where((q) => q.polygonId.isIn([for (final p in polys) p.id]))
+              ..orderBy([(q) => OrderingTerm(expression: q.sortOrder)]))
+            .get();
     final byPoly = <String, List<LatLng>>{for (final p in polys) p.id: []};
     for (final q in pts) {
       byPoly[q.polygonId]!.add(LatLng(q.lat, q.lng));
@@ -1330,19 +1396,19 @@ class Repository {
   // --- POI sets -------------------------------------------------------------
 
   Stream<List<PoiSet>> watchAllPoiSets() {
-    return (_db.select(_db.poiSets)
-          ..orderBy([
-            (t) => OrderingTerm(expression: t.zOrder),
-            (t) => OrderingTerm(expression: t.createdAt),
-            (t) => OrderingTerm(expression: t.id),
-          ])).watch();
+    return (_db.select(_db.poiSets)..orderBy([
+          (t) => OrderingTerm(expression: t.zOrder),
+          (t) => OrderingTerm(expression: t.createdAt),
+          (t) => OrderingTerm(expression: t.id),
+        ]))
+        .watch();
   }
 
   /// All stored POIs across every set, ordered by [PoiPoints.sortOrder].
   Stream<List<PoiPoint>> watchAllPoiPoints() {
-    return (_db.select(_db.poiPoints)
-          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
-        .watch();
+    return (_db.select(
+      _db.poiPoints,
+    )..orderBy([(p) => OrderingTerm(expression: p.sortOrder)])).watch();
   }
 
   /// Creates a POI set of the given [source] on a `poi` layer and returns its
@@ -1381,14 +1447,20 @@ class Repository {
       centerLat = (bbox[0] + bbox[2]) / 2;
       centerLng = (bbox[1] + bbox[3]) / 2;
       radiusMeters = boxCoveringRadiusMeters(
-          south: bbox[0], west: bbox[1], north: bbox[2], east: bbox[3]);
+        south: bbox[0],
+        west: bbox[1],
+        north: bbox[2],
+        east: bbox[3],
+      );
     } else if (bbox != null) {
       throw ArgumentError('Only a box import has a box');
     }
     final id = _uuid.v4();
     final shade = await _nextColorShade('poi_sets', layerId);
     final z = await _nextZOrder('poi_sets', layerId);
-    await _db.into(_db.poiSets).insert(
+    await _db
+        .into(_db.poiSets)
+        .insert(
           PoiSetsCompanion.insert(
             id: id,
             layerId: layerId,
@@ -1426,22 +1498,27 @@ class Repository {
     required double lng,
     String? label,
   }) async {
-    final set = await (_db.select(_db.poiSets)
-          ..where((s) => s.id.equals(poiSetId)))
-        .getSingleOrNull();
+    final set = await (_db.select(
+      _db.poiSets,
+    )..where((s) => s.id.equals(poiSetId))).getSingleOrNull();
     if (set == null) throw ArgumentError('That POI category no longer exists');
     if (!set.isManual) {
       throw ArgumentError(
-          'That is an Overpass import — it records what OSM returned, so '
-          'points cannot be added to it by hand');
+        'That is an Overpass import — it records what OSM returned, so '
+        'points cannot be added to it by hand',
+      );
     }
-    final next = await _db.customSelect(
-      'SELECT COALESCE(MAX(sort_order), -1) + 1 AS next '
-      'FROM poi_points WHERE poi_set_id = ?',
-      variables: [Variable<String>(poiSetId)],
-    ).getSingle();
+    final next = await _db
+        .customSelect(
+          'SELECT COALESCE(MAX(sort_order), -1) + 1 AS next '
+          'FROM poi_points WHERE poi_set_id = ?',
+          variables: [Variable<String>(poiSetId)],
+        )
+        .getSingle();
     final id = _uuid.v4();
-    await _db.into(_db.poiPoints).insert(
+    await _db
+        .into(_db.poiPoints)
+        .insert(
           PoiPointsCompanion.insert(
             id: id,
             poiSetId: poiSetId,
@@ -1479,12 +1556,14 @@ class Repository {
     required double lat,
     required double lng,
   }) async {
-    final row = await _db.customSelect(
-      'SELECT s.source AS source, p.lat AS lat, p.lng AS lng, '
-      'p.name AS name, p.edited_at AS edited_at FROM poi_points p '
-      'JOIN poi_sets s ON p.poi_set_id = s.id WHERE p.id = ?',
-      variables: [Variable<String>(id)],
-    ).getSingleOrNull();
+    final row = await _db
+        .customSelect(
+          'SELECT s.source AS source, p.lat AS lat, p.lng AS lng, '
+          'p.name AS name, p.edited_at AS edited_at FROM poi_points p '
+          'JOIN poi_sets s ON p.poi_set_id = s.id WHERE p.id = ?',
+          variables: [Variable<String>(id)],
+        )
+        .getSingleOrNull();
     if (row == null) return;
     if (row.read<double>('lat') == lat && row.read<double>('lng') == lng) {
       return;
@@ -1496,10 +1575,15 @@ class Repository {
         lat: Value(lat),
         lng: Value(lng),
         editedAt: forking ? Value(DateTime.now()) : const Value.absent(),
-        origLat: forking ? Value(row.read<double>('lat')) : const Value.absent(),
-        origLng: forking ? Value(row.read<double>('lng')) : const Value.absent(),
-        origName:
-            forking ? Value(row.read<String?>('name')) : const Value.absent(),
+        origLat: forking
+            ? Value(row.read<double>('lat'))
+            : const Value.absent(),
+        origLng: forking
+            ? Value(row.read<double>('lng'))
+            : const Value.absent(),
+        origName: forking
+            ? Value(row.read<String?>('name'))
+            : const Value.absent(),
       ),
     );
   }
@@ -1512,9 +1596,9 @@ class Repository {
   /// nothing and an imported point — unlike a reshaped boundary — can simply
   /// be handed back. A no-op on a point that was never edited.
   Future<void> revertPoiPoint(String id) async {
-    final row = await (_db.select(_db.poiPoints)
-          ..where((p) => p.id.equals(id)))
-        .getSingleOrNull();
+    final row = await (_db.select(
+      _db.poiPoints,
+    )..where((p) => p.id.equals(id))).getSingleOrNull();
     if (row == null || row.editedAt == null) return;
     await (_db.update(_db.poiPoints)..where((p) => p.id.equals(id))).write(
       PoiPointsCompanion(
@@ -1544,14 +1628,11 @@ class Repository {
   /// must not be a loop of awaited inserts. Takes [PoiResult]s rather than a
   /// bare record: it is exactly what the importer already holds, and it keeps
   /// the OSM identity from having to be spelled out at every call site.
-  Future<ImportTally> fillPoiSet(
-    String poiSetId,
-    List<PoiResult> pts,
-  ) async {
+  Future<ImportTally> fillPoiSet(String poiSetId, List<PoiResult> pts) async {
     return _db.transaction(() async {
-      await (_db.delete(_db.poiPoints)
-            ..where((p) => p.poiSetId.equals(poiSetId)))
-          .go();
+      await (_db.delete(
+        _db.poiPoints,
+      )..where((p) => p.poiSetId.equals(poiSetId))).go();
       final seen = await _poiOsmKeysInLayerOf(poiSetId);
       final keep = [
         for (final p in pts)
@@ -1587,35 +1668,42 @@ class Repository {
           );
         }
       });
-      await (_db.update(_db.poiSets)..where((t) => t.id.equals(poiSetId)))
-          .write(PoiSetsCompanion(
-        fetchedAt: Value(DateTime.now()),
-        lastError: const Value(null),
-      ));
+      await (_db.update(
+        _db.poiSets,
+      )..where((t) => t.id.equals(poiSetId))).write(
+        PoiSetsCompanion(
+          fetchedAt: Value(DateTime.now()),
+          lastError: const Value(null),
+        ),
+      );
       return ImportTally(added: keep.length, skipped: pts.length - keep.length);
     });
   }
 
   /// Every `type/id` held by the *other* sets of the layer owning [poiSetId].
   Future<Set<String>> _poiOsmKeysInLayerOf(String poiSetId) async {
-    final layerId = await (_db.selectOnly(_db.poiSets)
-          ..addColumns([_db.poiSets.layerId])
-          ..where(_db.poiSets.id.equals(poiSetId)))
-        .map((r) => r.read(_db.poiSets.layerId))
-        .getSingleOrNull();
+    final layerId =
+        await (_db.selectOnly(_db.poiSets)
+              ..addColumns([_db.poiSets.layerId])
+              ..where(_db.poiSets.id.equals(poiSetId)))
+            .map((r) => r.read(_db.poiSets.layerId))
+            .getSingleOrNull();
     if (layerId == null) return <String>{};
-    final rows = await (_db.selectOnly(_db.poiPoints)
-          ..addColumns([_db.poiPoints.osmType, _db.poiPoints.osmId])
-          ..join([
-            innerJoin(
-              _db.poiSets,
-              _db.poiSets.id.equalsExp(_db.poiPoints.poiSetId),
-            ),
-          ])
-          ..where(_db.poiSets.layerId.equals(layerId) &
-              _db.poiSets.id.equals(poiSetId).not() &
-              _db.poiPoints.osmId.isNotNull()))
-        .get();
+    final rows =
+        await (_db.selectOnly(_db.poiPoints)
+              ..addColumns([_db.poiPoints.osmType, _db.poiPoints.osmId])
+              ..join([
+                innerJoin(
+                  _db.poiSets,
+                  _db.poiSets.id.equalsExp(_db.poiPoints.poiSetId),
+                ),
+              ])
+              ..where(
+                _db.poiSets.layerId.equals(layerId) &
+                    _db.poiSets.id.equals(poiSetId).not() &
+                    _db.poiPoints.osmId.isNotNull(),
+              ))
+            .get();
     return {
       for (final r in rows)
         ?osmKey(r.read(_db.poiPoints.osmType), r.read(_db.poiPoints.osmId)),
@@ -1625,8 +1713,9 @@ class Repository {
   /// Records why an import didn't finish. The set stays, so the layer can offer
   /// a retry for exactly that query.
   Future<void> markPoiImportFailed(String setId, String message) {
-    return (_db.update(_db.poiSets)..where((t) => t.id.equals(setId)))
-        .write(PoiSetsCompanion(lastError: Value(message)));
+    return (_db.update(_db.poiSets)..where((t) => t.id.equals(setId))).write(
+      PoiSetsCompanion(lastError: Value(message)),
+    );
   }
 
   /// Renames a POI set (or moves it to another `poi` layer). An import's query
@@ -1648,15 +1737,15 @@ class Repository {
     // there, so it takes a fresh slot on top — which is what moving something
     // into a layer means. Carrying the old number across would bury it under
     // whatever the target already held.
-    final z =
-        layerId == null ? null : await _nextZOrder('poi_sets', layerId);
+    final z = layerId == null ? null : await _nextZOrder('poi_sets', layerId);
     await (_db.update(_db.poiSets)..where((s) => s.id.equals(id))).write(
       PoiSetsCompanion(
         layerId: layerId == null ? const Value.absent() : Value(layerId),
         zOrder: z == null ? const Value.absent() : Value(z),
         label: label,
-        categoryKey:
-            categoryKey == null ? const Value.absent() : Value(categoryKey),
+        categoryKey: categoryKey == null
+            ? const Value.absent()
+            : Value(categoryKey),
         iconKey: iconKey,
       ),
     );
@@ -1696,17 +1785,16 @@ class Repository {
   /// re-encoding of tags this app never stored, so there is no correction to
   /// be made here that could be stated honestly to anyone.
   Future<void> updatePoiPoint(String id, {required Value<String?> name}) async {
-    final row = await (_db.select(_db.poiPoints)
-          ..where((p) => p.id.equals(id)))
-        .getSingleOrNull();
+    final row = await (_db.select(
+      _db.poiPoints,
+    )..where((p) => p.id.equals(id))).getSingleOrNull();
     if (row == null) return;
     final next = name.present ? name.value : row.name;
     if (next == row.name) return;
-    final set = await (_db.select(_db.poiSets)
-          ..where((s) => s.id.equals(row.poiSetId)))
-        .getSingleOrNull();
-    final forking =
-        set != null && !set.isManual && row.editedAt == null;
+    final set = await (_db.select(
+      _db.poiSets,
+    )..where((s) => s.id.equals(row.poiSetId))).getSingleOrNull();
+    final forking = set != null && !set.isManual && row.editedAt == null;
     await (_db.update(_db.poiPoints)..where((p) => p.id.equals(id))).write(
       PoiPointsCompanion(
         name: name,
@@ -1733,9 +1821,9 @@ class Repository {
 
   /// Every report, newest first — the outbox screen's whole data source.
   Stream<List<OsmReport>> watchOsmReports() {
-    return (_db.select(_db.osmReports)
-          ..orderBy([(r) => OrderingTerm.desc(r.createdAt)]))
-        .watch();
+    return (_db.select(
+      _db.osmReports,
+    )..orderBy([(r) => OrderingTerm.desc(r.createdAt)])).watch();
   }
 
   /// Stores a composed report. **Storing is not sending**: the row starts with
@@ -1750,7 +1838,9 @@ class Repository {
     String? poiPointId,
   }) async {
     final id = _uuid.v4();
-    await _db.into(_db.osmReports).insert(
+    await _db
+        .into(_db.osmReports)
+        .insert(
           OsmReportsCompanion.insert(
             id: id,
             lat: lat,
@@ -1788,8 +1878,9 @@ class Repository {
   /// Leaves the row in the outbox with the reason attached, so it can present
   /// itself as a retry — the same shape a failed import's row has.
   Future<void> markOsmReportFailed(String id, String message) {
-    return (_db.update(_db.osmReports)..where((r) => r.id.equals(id)))
-        .write(OsmReportsCompanion(lastError: Value(message)));
+    return (_db.update(_db.osmReports)..where((r) => r.id.equals(id))).write(
+      OsmReportsCompanion(lastError: Value(message)),
+    );
   }
 
   Future<void> deleteOsmReport(String id) {
@@ -1805,9 +1896,9 @@ class Repository {
   /// have cost nobody anything.
   Future<int> osmReportsSentSince(Duration window) async {
     final since = DateTime.now().subtract(window);
-    final rows = await (_db.select(_db.osmReports)
-          ..where((r) => r.sentAt.isBiggerThanValue(since)))
-        .get();
+    final rows = await (_db.select(
+      _db.osmReports,
+    )..where((r) => r.sentAt.isBiggerThanValue(since))).get();
     return rows.length;
   }
 
@@ -1838,19 +1929,22 @@ class Repository {
     required double north,
     required double east,
     required String adminLevel,
-    required List<({
-      int osmId,
-      String? name,
-      double south,
-      double west,
-      double north,
-      double east,
-      double labelLat,
-      double labelLng,
-      int pointCount,
-      String rings,
-      List<int> wayIds,
-    })> areas,
+    required List<
+      ({
+        int osmId,
+        String? name,
+        double south,
+        double west,
+        double north,
+        double east,
+        double labelLat,
+        double labelLng,
+        int pointCount,
+        String rings,
+        List<int> wayIds,
+      })
+    >
+    areas,
     String? label,
   }) async {
     final setId = _uuid.v4();
@@ -1864,11 +1958,15 @@ class Repository {
         for (final a in areas)
           if (_isNew(seen, osmKey('relation', a.osmId))) a,
       ];
-      tally =
-          ImportTally(added: keep.length, skipped: areas.length - keep.length);
+      tally = ImportTally(
+        added: keep.length,
+        skipped: areas.length - keep.length,
+      );
       // The set is written even when nothing survived: it records the box that
       // was fetched, and an empty one is invisible (Elements lists *areas*).
-      await _db.into(_db.borderSets).insert(
+      await _db
+          .into(_db.borderSets)
+          .insert(
             BorderSetsCompanion.insert(
               id: setId,
               layerId: layerId,
@@ -1912,19 +2010,19 @@ class Repository {
 
   /// Relation ids already stored on [layerId].
   Future<Set<String>> _borderOsmIdsInLayer(String layerId) async {
-    final rows = await (_db.selectOnly(_db.borderAreas)
-          ..addColumns([_db.borderAreas.osmId])
-          ..join([
-            innerJoin(
-              _db.borderSets,
-              _db.borderSets.id.equalsExp(_db.borderAreas.setId),
-            ),
-          ])
-          ..where(_db.borderSets.layerId.equals(layerId)))
-        .get();
+    final rows =
+        await (_db.selectOnly(_db.borderAreas)
+              ..addColumns([_db.borderAreas.osmId])
+              ..join([
+                innerJoin(
+                  _db.borderSets,
+                  _db.borderSets.id.equalsExp(_db.borderAreas.setId),
+                ),
+              ])
+              ..where(_db.borderSets.layerId.equals(layerId)))
+            .get();
     return {
-      for (final r in rows)
-        ?osmKey('relation', r.read(_db.borderAreas.osmId)),
+      for (final r in rows) ?osmKey('relation', r.read(_db.borderAreas.osmId)),
     };
   }
 
@@ -1935,15 +2033,16 @@ class Repository {
   /// overlapping imports from clashing along their seam — and why it has to run
   /// again after a set is deleted, when a constraint has gone away.
   Future<void> recolourBorderLayer(String layerId) async {
-    final setIds = await (_db.selectOnly(_db.borderSets)
-          ..addColumns([_db.borderSets.id])
-          ..where(_db.borderSets.layerId.equals(layerId)))
-        .map((r) => r.read(_db.borderSets.id)!)
-        .get();
+    final setIds =
+        await (_db.selectOnly(_db.borderSets)
+              ..addColumns([_db.borderSets.id])
+              ..where(_db.borderSets.layerId.equals(layerId)))
+            .map((r) => r.read(_db.borderSets.id)!)
+            .get();
     if (setIds.isEmpty) return;
-    final areas = await (_db.select(_db.borderAreas)
-          ..where((a) => a.setId.isIn(setIds)))
-        .get();
+    final areas = await (_db.select(
+      _db.borderAreas,
+    )..where((a) => a.setId.isIn(setIds))).get();
     if (areas.isEmpty) return;
 
     final colors = assignAreaColors([
@@ -1969,8 +2068,8 @@ class Repository {
     final dynamic decoded;
     try {
       decoded = jsonDecode(json);
-    // A corrupt row costs a colour, not the map, however it is corrupt.
-    // ignore: avoid_catches_without_on_clauses
+      // A corrupt row costs a colour, not the map, however it is corrupt.
+      // ignore: avoid_catches_without_on_clauses
     } catch (_) {
       return const [];
     }
@@ -2037,9 +2136,9 @@ class Repository {
         if (p.longitude > east) east = p.longitude;
       }
     }
-    final area = await (_db.select(_db.borderAreas)
-          ..where((a) => a.id.equals(id)))
-        .getSingleOrNull();
+    final area = await (_db.select(
+      _db.borderAreas,
+    )..where((a) => a.id.equals(id))).getSingleOrNull();
     if (area == null) return false;
     final encoded = encodeRings(usable);
     if (encoded == area.rings) return true; // nothing moved; stay untouched
@@ -2059,13 +2158,13 @@ class Repository {
 
   /// Deletes one imported area, then recolours what is left of its layer.
   Future<void> deleteBorderArea(String id) async {
-    final area = await (_db.select(_db.borderAreas)
-          ..where((a) => a.id.equals(id)))
-        .getSingleOrNull();
+    final area = await (_db.select(
+      _db.borderAreas,
+    )..where((a) => a.id.equals(id))).getSingleOrNull();
     if (area == null) return;
-    final set = await (_db.select(_db.borderSets)
-          ..where((s) => s.id.equals(area.setId)))
-        .getSingleOrNull();
+    final set = await (_db.select(
+      _db.borderSets,
+    )..where((s) => s.id.equals(area.setId))).getSingleOrNull();
     await (_db.delete(_db.borderAreas)..where((a) => a.id.equals(id))).go();
     if (set != null) await recolourBorderLayer(set.layerId);
   }
@@ -2074,9 +2173,9 @@ class Repository {
   /// "convert to freehand area" action, which needs the geometry rather than
   /// the summary row.
   Future<List<List<LatLng>>> borderAreaRings(String id) async {
-    final area = await (_db.select(_db.borderAreas)
-          ..where((a) => a.id.equals(id)))
-        .getSingleOrNull();
+    final area = await (_db.select(
+      _db.borderAreas,
+    )..where((a) => a.id.equals(id))).getSingleOrNull();
     return area == null ? const [] : decodeRings(area.rings);
   }
 
@@ -2099,8 +2198,9 @@ class Repository {
   /// adjacency constraints, and leaving the old colours would keep an
   /// unnecessary clash on screen.
   Future<void> deleteBorderSet(String id) async {
-    final set = await (_db.select(_db.borderSets)..where((s) => s.id.equals(id)))
-        .getSingleOrNull();
+    final set = await (_db.select(
+      _db.borderSets,
+    )..where((s) => s.id.equals(id))).getSingleOrNull();
     await (_db.delete(_db.borderSets)..where((s) => s.id.equals(id))).go();
     if (set != null) await recolourBorderLayer(set.layerId);
   }
@@ -2113,10 +2213,12 @@ class Repository {
   }) {
     return (_db.update(_db.layers)..where((l) => l.id.equals(layerId))).write(
       LayersCompanion(
-        borderFillAreas:
-            fillAreas == null ? const Value.absent() : Value(fillAreas),
-        borderShowNames:
-            showNames == null ? const Value.absent() : Value(showNames),
+        borderFillAreas: fillAreas == null
+            ? const Value.absent()
+            : Value(fillAreas),
+        borderShowNames: showNames == null
+            ? const Value.absent()
+            : Value(showNames),
       ),
     );
   }
@@ -2126,28 +2228,30 @@ class Repository {
   /// Watches the single settings row, emitting defaults when it doesn't exist
   /// yet (so callers never have to seed it before reading).
   Stream<AppSetting> watchSettings() {
-    return (_db.select(_db.appSettings)..where((s) => s.id.equals(1)))
-        .watch()
-        .map(
-          (rows) => rows.isEmpty
-              ? const AppSetting(
-                  id: 1,
-                  uncertaintyMeters: 500,
-                  transportOverlay: false,
-                  poiCategories: 0,
-                  borderLevels: 0,
-                  toolsExpanded: true,
-                  basemapVisible: true,
-                  basemapOpacity: 1.0,
-                  hintsEnabled: true,
-                )
-              : rows.first,
-        );
+    return (_db.select(
+      _db.appSettings,
+    )..where((s) => s.id.equals(1))).watch().map(
+      (rows) => rows.isEmpty
+          ? const AppSetting(
+              id: 1,
+              uncertaintyMeters: 500,
+              transportOverlay: false,
+              poiCategories: 0,
+              borderLevels: 0,
+              toolsExpanded: true,
+              basemapVisible: true,
+              basemapOpacity: 1.0,
+              hintsEnabled: true,
+            )
+          : rows.first,
+    );
   }
 
   /// Upserts the global uncertainty (metres) into the single settings row.
   Future<void> updateUncertainty(double meters) {
-    return _db.into(_db.appSettings).insertOnConflictUpdate(
+    return _db
+        .into(_db.appSettings)
+        .insertOnConflictUpdate(
           AppSettingsCompanion.insert(
             id: const Value(1),
             uncertaintyMeters: Value(meters),
@@ -2159,7 +2263,9 @@ class Repository {
   /// borders), so the next one starts with the one that was actually up rather
   /// than at whichever is currently swamped.
   Future<void> updateTransitEndpoint(String endpoint) {
-    return _db.into(_db.appSettings).insertOnConflictUpdate(
+    return _db
+        .into(_db.appSettings)
+        .insertOnConflictUpdate(
           AppSettingsCompanion.insert(
             id: const Value(1),
             transitEndpoint: Value(endpoint),
@@ -2172,21 +2278,24 @@ class Repository {
   ///
   /// `Value(null)` and "leave alone" are different companion states, so each
   /// setter names exactly the column it owns and nothing else moves.
-  Future<void> updateServiceOverride(
-    ServiceOverride which,
-    String? value,
-  ) {
+  Future<void> updateServiceOverride(ServiceOverride which, String? value) {
     final v = Value(
       value == null || value.trim().isEmpty ? null : value.trim(),
     );
-    return _db.into(_db.appSettings).insertOnConflictUpdate(
+    return _db
+        .into(_db.appSettings)
+        .insertOnConflictUpdate(
           AppSettingsCompanion.insert(
             id: const Value(1),
-            tileUrlOverride: which == ServiceOverride.tiles ? v : const Value.absent(),
-            overpassEndpointOverride:
-                which == ServiceOverride.overpass ? v : const Value.absent(),
-            nominatimHostOverride:
-                which == ServiceOverride.nominatim ? v : const Value.absent(),
+            tileUrlOverride: which == ServiceOverride.tiles
+                ? v
+                : const Value.absent(),
+            overpassEndpointOverride: which == ServiceOverride.overpass
+                ? v
+                : const Value.absent(),
+            nominatimHostOverride: which == ServiceOverride.nominatim
+                ? v
+                : const Value.absent(),
           ),
         );
   }
@@ -2203,18 +2312,20 @@ class Repository {
   /// would otherwise both read the same count and show one tip too many.
   Future<bool> noteHintShown(String key, {int limit = 3}) {
     return _db.transaction(() async {
-      final settings =
-          await (_db.select(_db.appSettings)..where((s) => s.id.equals(1)))
-              .getSingleOrNull();
+      final settings = await (_db.select(
+        _db.appSettings,
+      )..where((s) => s.id.equals(1))).getSingleOrNull();
       // No row yet means a fresh install, which is the case tips are *for*.
       if (settings != null && !settings.hintsEnabled) return false;
 
-      final row = await (_db.select(_db.uiHints)
-            ..where((h) => h.key.equals(key)))
-          .getSingleOrNull();
+      final row = await (_db.select(
+        _db.uiHints,
+      )..where((h) => h.key.equals(key))).getSingleOrNull();
       final shown = row?.shownCount ?? 0;
       if (shown >= limit) return false;
-      await _db.into(_db.uiHints).insertOnConflictUpdate(
+      await _db
+          .into(_db.uiHints)
+          .insertOnConflictUpdate(
             UiHintsCompanion.insert(key: key, shownCount: Value(shown + 1)),
           );
       return true;
@@ -2224,7 +2335,9 @@ class Repository {
   /// Turns the button explanations on or off for good — the *stop now* answer,
   /// for someone who does not want to wait out the remaining showings.
   Future<void> updateHintsEnabled({required bool enabled}) {
-    return _db.into(_db.appSettings).insertOnConflictUpdate(
+    return _db
+        .into(_db.appSettings)
+        .insertOnConflictUpdate(
           AppSettingsCompanion.insert(
             id: const Value(1),
             hintsEnabled: Value(enabled),
@@ -2241,7 +2354,9 @@ class Repository {
 
   /// Upserts the utility-FAB expand/collapse choice into the settings row.
   Future<void> updateToolsExpanded({required bool expanded}) {
-    return _db.into(_db.appSettings).insertOnConflictUpdate(
+    return _db
+        .into(_db.appSettings)
+        .insertOnConflictUpdate(
           AppSettingsCompanion.insert(
             id: const Value(1),
             toolsExpanded: Value(expanded),
@@ -2251,7 +2366,9 @@ class Repository {
 
   /// Upserts the base-map visibility toggle into the single settings row.
   Future<void> updateBasemapVisible({required bool visible}) {
-    return _db.into(_db.appSettings).insertOnConflictUpdate(
+    return _db
+        .into(_db.appSettings)
+        .insertOnConflictUpdate(
           AppSettingsCompanion.insert(
             id: const Value(1),
             basemapVisible: Value(visible),
@@ -2261,7 +2378,9 @@ class Repository {
 
   /// Upserts the base-map opacity (0–1) into the single settings row.
   Future<void> updateBasemapOpacity(double opacity) {
-    return _db.into(_db.appSettings).insertOnConflictUpdate(
+    return _db
+        .into(_db.appSettings)
+        .insertOnConflictUpdate(
           AppSettingsCompanion.insert(
             id: const Value(1),
             basemapOpacity: Value(opacity),
@@ -2271,7 +2390,9 @@ class Repository {
 
   /// Persists the last map camera so the app reopens on the same view.
   Future<void> saveCamera(double lat, double lng, double zoom) {
-    return _db.into(_db.appSettings).insertOnConflictUpdate(
+    return _db
+        .into(_db.appSettings)
+        .insertOnConflictUpdate(
           AppSettingsCompanion.insert(
             id: const Value(1),
             lastLat: Value(lat),
@@ -2312,9 +2433,9 @@ class Repository {
   /// Bumps the tile's last-used time so eviction keeps it — but at most once
   /// per [tileTouchIntervalMs]. See there for why.
   Future<Uint8List?> getTile(String url) async {
-    final row = await (_db.select(_db.tileCache)
-          ..where((t) => t.url.equals(url)))
-        .getSingleOrNull();
+    final row = await (_db.select(
+      _db.tileCache,
+    )..where((t) => t.url.equals(url))).getSingleOrNull();
     if (row == null) return null;
     final now = DateTime.now().millisecondsSinceEpoch;
     if (now - row.lastUsedAt >= tileTouchIntervalMs) {
@@ -2328,7 +2449,9 @@ class Repository {
   /// Inserts/updates the cached bytes for [url].
   Future<void> putTile(String url, Uint8List bytes, {String? etag}) {
     final now = DateTime.now().millisecondsSinceEpoch;
-    return _db.into(_db.tileCache).insertOnConflictUpdate(
+    return _db
+        .into(_db.tileCache)
+        .insertOnConflictUpdate(
           TileCacheCompanion.insert(
             url: url,
             bytes: bytes,
@@ -2342,19 +2465,21 @@ class Repository {
 
   /// True if [url] is already cached (used by prefetch to avoid refetching).
   Future<bool> hasTile(String url) async {
-    final row = await (_db.selectOnly(_db.tileCache)
-          ..addColumns([_db.tileCache.url])
-          ..where(_db.tileCache.url.equals(url))
-          ..limit(1))
-        .getSingleOrNull();
+    final row =
+        await (_db.selectOnly(_db.tileCache)
+              ..addColumns([_db.tileCache.url])
+              ..where(_db.tileCache.url.equals(url))
+              ..limit(1))
+            .getSingleOrNull();
     return row != null;
   }
 
   /// Total bytes currently held in the tile cache (for the Settings readout).
   Future<int> tileCacheBytes() async {
     final sum = _db.tileCache.sizeBytes.sum();
-    final row = await (_db.selectOnly(_db.tileCache)..addColumns([sum]))
-        .getSingle();
+    final row = await (_db.selectOnly(
+      _db.tileCache,
+    )..addColumns([sum])).getSingle();
     return row.read(sum) ?? 0;
   }
 
@@ -2392,8 +2517,9 @@ class Repository {
   /// looser one; if that ever becomes a real case, this needs to remember the
   /// in-flight target and chain a second run rather than join.
   Future<void> evictTilesDownTo(int maxBytes) {
-    return _evicting ??=
-        _evictTilesDownTo(maxBytes).whenComplete(() => _evicting = null);
+    return _evicting ??= _evictTilesDownTo(
+      maxBytes,
+    ).whenComplete(() => _evicting = null);
   }
 
   Future<void> _evictTilesDownTo(int maxBytes) async {
@@ -2406,10 +2532,11 @@ class Repository {
 
       // Oldest first, in batches, so a large eviction is not one enormous
       // statement.
-      final batch = await (_db.select(_db.tileCache)
-            ..orderBy([(t) => OrderingTerm(expression: t.lastUsedAt)])
-            ..limit(64))
-          .get();
+      final batch =
+          await (_db.select(_db.tileCache)
+                ..orderBy([(t) => OrderingTerm(expression: t.lastUsedAt)])
+                ..limit(64))
+              .get();
       if (batch.isEmpty) return;
 
       var running = total;
@@ -2493,12 +2620,10 @@ class Repository {
     // Only the folders the exported layers actually name: a per-layer export
     // of a layer at the root carries none, and a map with no folders writes a
     // file identical to what it wrote before folders existed.
-    final allFolders = await (_db.select(_db.folders)
-          ..orderBy([(f) => OrderingTerm(expression: f.sortOrder)]))
-        .get();
-    final namedFolders = {
-      for (final l in layers) ?l.folderId,
-    };
+    final allFolders = await (_db.select(
+      _db.folders,
+    )..orderBy([(f) => OrderingTerm(expression: f.sortOrder)])).get();
+    final namedFolders = {for (final l in layers) ?l.folderId};
     final folders = [
       for (final f in allFolders)
         if (namedFolders.contains(f.id))
@@ -2509,73 +2634,80 @@ class Repository {
           ),
     ];
     final folderNames = {for (final f in allFolders) f.id: f.name};
-    final circles = await (_db.select(_db.circles)
-          ..orderBy([
-            (t) => OrderingTerm(expression: t.zOrder),
-            (t) => OrderingTerm(expression: t.createdAt),
-            (t) => OrderingTerm(expression: t.id),
-          ])).get();
-    final subspaces = await (_db.select(_db.subspaces)
-          ..orderBy([
-            (t) => OrderingTerm(expression: t.zOrder),
-            (t) => OrderingTerm(expression: t.createdAt),
-            (t) => OrderingTerm(expression: t.id),
-          ])).get();
-    final subPoints = await (_db.select(_db.subspacePoints)
-          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
-        .get();
-    final freeLines = await (_db.select(_db.freeLines)
-          ..orderBy([
-            (t) => OrderingTerm(expression: t.zOrder),
-            (t) => OrderingTerm(expression: t.createdAt),
-            (t) => OrderingTerm(expression: t.id),
-          ])).get();
-    final flPoints = await (_db.select(_db.freeLinePoints)
-          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
-        .get();
-    final freeAreas = await (_db.select(_db.freeAreas)
-          ..orderBy([
-            (t) => OrderingTerm(expression: t.zOrder),
-            (t) => OrderingTerm(expression: t.createdAt),
-            (t) => OrderingTerm(expression: t.id),
-          ])).get();
-    final faPoints = await (_db.select(_db.freeAreaPoints)
-          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
-        .get();
-    final heightRegions = await (_db.select(_db.heightRegions)
-          ..orderBy([
-            (t) => OrderingTerm(expression: t.zOrder),
-            (t) => OrderingTerm(expression: t.createdAt),
-            (t) => OrderingTerm(expression: t.id),
-          ])).get();
-    final heightPolygons = await (_db.select(_db.heightPolygons)
-          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
-        .get();
-    final heightPolygonPoints = await (_db.select(_db.heightPolygonPoints)
-          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
-        .get();
-    final poiSets = await (_db.select(_db.poiSets)
-          ..orderBy([
-            (t) => OrderingTerm(expression: t.zOrder),
-            (t) => OrderingTerm(expression: t.createdAt),
-            (t) => OrderingTerm(expression: t.id),
-          ])).get();
-    final poiPoints = await (_db.select(_db.poiPoints)
-          ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
-        .get();
+    final circles =
+        await (_db.select(_db.circles)..orderBy([
+              (t) => OrderingTerm(expression: t.zOrder),
+              (t) => OrderingTerm(expression: t.createdAt),
+              (t) => OrderingTerm(expression: t.id),
+            ]))
+            .get();
+    final subspaces =
+        await (_db.select(_db.subspaces)..orderBy([
+              (t) => OrderingTerm(expression: t.zOrder),
+              (t) => OrderingTerm(expression: t.createdAt),
+              (t) => OrderingTerm(expression: t.id),
+            ]))
+            .get();
+    final subPoints = await (_db.select(
+      _db.subspacePoints,
+    )..orderBy([(p) => OrderingTerm(expression: p.sortOrder)])).get();
+    final freeLines =
+        await (_db.select(_db.freeLines)..orderBy([
+              (t) => OrderingTerm(expression: t.zOrder),
+              (t) => OrderingTerm(expression: t.createdAt),
+              (t) => OrderingTerm(expression: t.id),
+            ]))
+            .get();
+    final flPoints = await (_db.select(
+      _db.freeLinePoints,
+    )..orderBy([(p) => OrderingTerm(expression: p.sortOrder)])).get();
+    final freeAreas =
+        await (_db.select(_db.freeAreas)..orderBy([
+              (t) => OrderingTerm(expression: t.zOrder),
+              (t) => OrderingTerm(expression: t.createdAt),
+              (t) => OrderingTerm(expression: t.id),
+            ]))
+            .get();
+    final faPoints = await (_db.select(
+      _db.freeAreaPoints,
+    )..orderBy([(p) => OrderingTerm(expression: p.sortOrder)])).get();
+    final heightRegions =
+        await (_db.select(_db.heightRegions)..orderBy([
+              (t) => OrderingTerm(expression: t.zOrder),
+              (t) => OrderingTerm(expression: t.createdAt),
+              (t) => OrderingTerm(expression: t.id),
+            ]))
+            .get();
+    final heightPolygons = await (_db.select(
+      _db.heightPolygons,
+    )..orderBy([(p) => OrderingTerm(expression: p.sortOrder)])).get();
+    final heightPolygonPoints = await (_db.select(
+      _db.heightPolygonPoints,
+    )..orderBy([(p) => OrderingTerm(expression: p.sortOrder)])).get();
+    final poiSets =
+        await (_db.select(_db.poiSets)..orderBy([
+              (t) => OrderingTerm(expression: t.zOrder),
+              (t) => OrderingTerm(expression: t.createdAt),
+              (t) => OrderingTerm(expression: t.id),
+            ]))
+            .get();
+    final poiPoints = await (_db.select(
+      _db.poiPoints,
+    )..orderBy([(p) => OrderingTerm(expression: p.sortOrder)])).get();
     // Border geometry is scoped to the layers being exported, unlike every
     // table above: one state boundary is a ~3 MB ring blob, so pulling every
     // area in the database to export one layer would be the biggest read the
     // app makes, for nothing.
     final layerIds = [for (final l in layers) l.id];
-    final borderSets = await (_db.select(_db.borderSets)
-          ..where((s) => s.layerId.isIn(layerIds)))
-        .get();
+    final borderSets = await (_db.select(
+      _db.borderSets,
+    )..where((s) => s.layerId.isIn(layerIds))).get();
     final borderAreas = borderSets.isEmpty
         ? <BorderArea>[]
-        : await (_db.select(_db.borderAreas)
-              ..where((a) => a.setId.isIn([for (final s in borderSets) s.id])))
-            .get();
+        : await (_db.select(
+                _db.borderAreas,
+              )..where((a) => a.setId.isIn([for (final s in borderSets) s.id])))
+              .get();
 
     // The generated height fills, grouped region -> rings in one pass each.
     // A scan per region inside the layer loop would be O(regions x vertices),
@@ -2601,13 +2733,15 @@ class Repository {
         switch (type) {
           case 'circles':
             for (final c in circles.where((c) => c.layerId == layer.id)) {
-              objects.add(ExportObject(
-                kind: 'circle',
-                coords: [LatLng(c.centerLat, c.centerLng)],
-                radiusMeters: c.radiusMeters,
-                label: c.label,
-                colorArgb: c.colorArgb,
-              ));
+              objects.add(
+                ExportObject(
+                  kind: 'circle',
+                  coords: [LatLng(c.centerLat, c.centerLng)],
+                  radiusMeters: c.radiusMeters,
+                  label: c.label,
+                  colorArgb: c.colorArgb,
+                ),
+              );
             }
           case 'subspace':
             for (final s in subspaces.where((s) => s.layerId == layer.id)) {
@@ -2615,17 +2749,19 @@ class Repository {
               if (pts.isEmpty) continue;
               var mainIndex = pts.indexWhere((p) => p.isMain);
               if (mainIndex < 0) mainIndex = 0;
-              objects.add(ExportObject(
-                kind: 'subspace',
-                coords: [for (final p in pts) LatLng(p.lat, p.lng)],
-                mainIndex: mainIndex,
-                // Only when one is actually named — a list of nulls is bulk.
-                pointLabels: pts.any((p) => p.label != null)
-                    ? [for (final p in pts) p.label]
-                    : null,
-                label: s.label,
-                colorArgb: s.colorArgb,
-              ));
+              objects.add(
+                ExportObject(
+                  kind: 'subspace',
+                  coords: [for (final p in pts) LatLng(p.lat, p.lng)],
+                  mainIndex: mainIndex,
+                  // Only when one is actually named — a list of nulls is bulk.
+                  pointLabels: pts.any((p) => p.label != null)
+                      ? [for (final p in pts) p.label]
+                      : null,
+                  label: s.label,
+                  colorArgb: s.colorArgb,
+                ),
+              );
             }
           case 'freeline':
             for (final l in freeLines.where((l) => l.layerId == layer.id)) {
@@ -2633,49 +2769,55 @@ class Repository {
               // A point-less row has no geometry to write, and the encoders read
               // `coords.first` — the same guard subspace already makes.
               if (pts.isEmpty) continue;
-              objects.add(ExportObject(
-                kind: 'freeline',
-                coords: [for (final p in pts) LatLng(p.lat, p.lng)],
-                offsetMeters: l.offsetMeters,
-                inclusionLat: l.inclusionLat,
-                inclusionLng: l.inclusionLng,
-                inclusionRadiusMeters: l.inclusionRadiusMeters,
-                label: l.label,
-                colorArgb: l.colorArgb,
-              ));
+              objects.add(
+                ExportObject(
+                  kind: 'freeline',
+                  coords: [for (final p in pts) LatLng(p.lat, p.lng)],
+                  offsetMeters: l.offsetMeters,
+                  inclusionLat: l.inclusionLat,
+                  inclusionLng: l.inclusionLng,
+                  inclusionRadiusMeters: l.inclusionRadiusMeters,
+                  label: l.label,
+                  colorArgb: l.colorArgb,
+                ),
+              );
             }
           case 'freearea':
             for (final a in freeAreas.where((a) => a.layerId == layer.id)) {
               final pts = faPoints.where((p) => p.freeAreaId == a.id).toList();
               if (pts.isEmpty) continue;
-              objects.add(ExportObject(
-                kind: 'freearea',
-                coords: [for (final p in pts) LatLng(p.lat, p.lng)],
-                offsetMeters: a.offsetMeters,
-                label: a.label,
-                colorArgb: a.colorArgb,
-              ));
+              objects.add(
+                ExportObject(
+                  kind: 'freearea',
+                  coords: [for (final p in pts) LatLng(p.lat, p.lng)],
+                  offsetMeters: a.offsetMeters,
+                  label: a.label,
+                  colorArgb: a.colorArgb,
+                ),
+              );
             }
           case 'height':
             for (final r in heightRegions.where((r) => r.layerId == layer.id)) {
-              objects.add(ExportObject(
-                kind: 'height',
-                coords: [LatLng(r.centerLat, r.centerLng)],
-                radiusMeters: r.radiusMeters,
-                thresholdMeters: r.thresholdMeters,
-                aboveThreshold: r.aboveThreshold,
-                sampleZoom: r.sampleZoom,
-                // The fills are derived from terrain tiles, but regenerating
-                // them needs the network and can disagree with what the sender
-                // saw — so a generated region travels drawn. An ungenerated one
-                // carries neither key and still imports as ungenerated.
-                generated: r.generatedAt == null ? null : true,
-                heightRings: r.generatedAt == null
-                    ? null
-                    : (fillsOfRegion[r.id] ?? const <List<LatLng>>[]),
-                label: r.label,
-                colorArgb: r.colorArgb,
-              ));
+              objects.add(
+                ExportObject(
+                  kind: 'height',
+                  coords: [LatLng(r.centerLat, r.centerLng)],
+                  radiusMeters: r.radiusMeters,
+                  thresholdMeters: r.thresholdMeters,
+                  aboveThreshold: r.aboveThreshold,
+                  sampleZoom: r.sampleZoom,
+                  // The fills are derived from terrain tiles, but regenerating
+                  // them needs the network and can disagree with what the sender
+                  // saw — so a generated region travels drawn. An ungenerated one
+                  // carries neither key and still imports as ungenerated.
+                  generated: r.generatedAt == null ? null : true,
+                  heightRings: r.generatedAt == null
+                      ? null
+                      : (fillsOfRegion[r.id] ?? const <List<LatLng>>[]),
+                  label: r.label,
+                  colorArgb: r.colorArgb,
+                ),
+              );
             }
           case 'poi':
             // coords[0] is the set's centre (the box centre for a station
@@ -2693,52 +2835,56 @@ class Repository {
               final identified = pts.any((p) => p.osmId != null);
               final corrected = pts.any((p) => p.editedAt != null);
               final box = s.isStationImport;
-              objects.add(ExportObject(
-                kind: 'poi',
-                coords: [
-                  LatLng(s.centerLat, s.centerLng),
-                  for (final p in pts) LatLng(p.lat, p.lng),
-                ],
-                // A box set's radius is derived from its box on the way back
-                // in; writing it would be a second formula to keep equal.
-                radiusMeters: box ? null : s.radiusMeters,
-                categoryKey: s.categoryKey,
-                pointLabels: [for (final p in pts) p.name],
-                pointOsmIds:
-                    identified ? [for (final p in pts) p.osmId ?? 0] : null,
-                pointOsmTypes:
-                    identified ? [for (final p in pts) p.osmType] : null,
-                // What OSM said, for the points somebody has since corrected.
-                // Written only when the set holds at least one — so an import
-                // nobody touched exports byte-for-byte as it did before v31,
-                // and a corrected one cannot arrive elsewhere pretending to be
-                // what OSM returned.
-                pointOrigLat: corrected
-                    ? [for (final p in pts) p.origLat]
-                    : null,
-                pointOrigLng: corrected
-                    ? [for (final p in pts) p.origLng]
-                    : null,
-                pointOrigNames: corrected
-                    ? [for (final p in pts) p.origName]
-                    : null,
-                // Only a station import carries mode bits; every other kind
-                // would write a list of zeros.
-                pointModeMasks: box && pts.isNotEmpty
-                    ? [for (final p in pts) p.modeMask]
-                    : null,
-                // Written only for a hand-made category, so an ordinary import's
-                // GeoJSON is byte-for-byte what it was before v25.
-                manual: s.isManual ? true : null,
-                iconKey: s.iconKey,
-                bbox: s.bbox,
-                modeMask: box ? s.modeMask : null,
-                visibleModeMask: box ? s.visibleModeMask : null,
-                pending: s.isPending ? true : null,
-                errorMessage: s.lastError,
-                label: s.label,
-                colorArgb: s.colorArgb,
-              ));
+              objects.add(
+                ExportObject(
+                  kind: 'poi',
+                  coords: [
+                    LatLng(s.centerLat, s.centerLng),
+                    for (final p in pts) LatLng(p.lat, p.lng),
+                  ],
+                  // A box set's radius is derived from its box on the way back
+                  // in; writing it would be a second formula to keep equal.
+                  radiusMeters: box ? null : s.radiusMeters,
+                  categoryKey: s.categoryKey,
+                  pointLabels: [for (final p in pts) p.name],
+                  pointOsmIds: identified
+                      ? [for (final p in pts) p.osmId ?? 0]
+                      : null,
+                  pointOsmTypes: identified
+                      ? [for (final p in pts) p.osmType]
+                      : null,
+                  // What OSM said, for the points somebody has since corrected.
+                  // Written only when the set holds at least one — so an import
+                  // nobody touched exports byte-for-byte as it did before v31,
+                  // and a corrected one cannot arrive elsewhere pretending to be
+                  // what OSM returned.
+                  pointOrigLat: corrected
+                      ? [for (final p in pts) p.origLat]
+                      : null,
+                  pointOrigLng: corrected
+                      ? [for (final p in pts) p.origLng]
+                      : null,
+                  pointOrigNames: corrected
+                      ? [for (final p in pts) p.origName]
+                      : null,
+                  // Only a station import carries mode bits; every other kind
+                  // would write a list of zeros.
+                  pointModeMasks: box && pts.isNotEmpty
+                      ? [for (final p in pts) p.modeMask]
+                      : null,
+                  // Written only for a hand-made category, so an ordinary import's
+                  // GeoJSON is byte-for-byte what it was before v25.
+                  manual: s.isManual ? true : null,
+                  iconKey: s.iconKey,
+                  bbox: s.bbox,
+                  modeMask: box ? s.modeMask : null,
+                  visibleModeMask: box ? s.visibleModeMask : null,
+                  pending: s.isPending ? true : null,
+                  errorMessage: s.lastError,
+                  label: s.label,
+                  colorArgb: s.colorArgb,
+                ),
+              );
             }
           case 'borders':
             // One object per **area**, which is what the Elements list names and
@@ -2749,47 +2895,53 @@ class Repository {
               for (final a in borderAreas.where((a) => a.setId == s.id)) {
                 final rings = decodeRings(a.rings);
                 if (rings.isEmpty) continue;
-                objects.add(ExportObject(
-                  kind: 'borderarea',
-                  coords: rings.first,
-                  rings: rings,
-                  label: a.name,
-                  // 0 is the "no relation id" placeholder an id-less import was
-                  // stored with; writing it out would make every such area look
-                  // like the same OSM relation, and dedup would keep one.
-                  osmId: a.osmId == 0 ? null : a.osmId,
-                  adminLevel: s.adminLevel,
-                  setLabel: s.label,
-                  bbox: [s.south, s.west, s.north, s.east],
-                  colorIndex: a.colorIndex,
-                  labelLat: a.labelLat,
-                  labelLng: a.labelLng,
-                  wayIds: _decodeWayIds(a.wayIds),
-                  edited: a.editedAt == null ? null : true,
-                  colorArgb: a.colorArgb,
-                ));
+                objects.add(
+                  ExportObject(
+                    kind: 'borderarea',
+                    coords: rings.first,
+                    rings: rings,
+                    label: a.name,
+                    // 0 is the "no relation id" placeholder an id-less import was
+                    // stored with; writing it out would make every such area look
+                    // like the same OSM relation, and dedup would keep one.
+                    osmId: a.osmId == 0 ? null : a.osmId,
+                    adminLevel: s.adminLevel,
+                    setLabel: s.label,
+                    bbox: [s.south, s.west, s.north, s.east],
+                    colorIndex: a.colorIndex,
+                    labelLat: a.labelLat,
+                    labelLng: a.labelLng,
+                    wayIds: _decodeWayIds(a.wayIds),
+                    edited: a.editedAt == null ? null : true,
+                    colorArgb: a.colorArgb,
+                  ),
+                );
               }
             }
         }
       }
-      out.add(ExportLayer(
-        name: layer.name,
-        colorArgb: layer.colorArgb,
-        type: layer.type,
-        isInverted: layer.isInverted,
-        opacity: layer.opacity,
-        // Only a borders layer has these; every other type carries the column
-        // defaults, and writing them would put meaningless keys in the file.
-        borderLevel: layer.borderLevel,
-        borderFillAreas:
-            layer.type == 'borders' ? layer.borderFillAreas : null,
-        borderShowNames:
-            layer.type == 'borders' ? layer.borderShowNames : null,
-        // Only a hidden layer writes the key; shown is the default everywhere.
-        isVisible: layer.isVisible ? null : false,
-        folderName: folderNames[layer.folderId],
-        objects: objects,
-      ));
+      out.add(
+        ExportLayer(
+          name: layer.name,
+          colorArgb: layer.colorArgb,
+          type: layer.type,
+          isInverted: layer.isInverted,
+          opacity: layer.opacity,
+          // Only a borders layer has these; every other type carries the column
+          // defaults, and writing them would put meaningless keys in the file.
+          borderLevel: layer.borderLevel,
+          borderFillAreas: layer.type == 'borders'
+              ? layer.borderFillAreas
+              : null,
+          borderShowNames: layer.type == 'borders'
+              ? layer.borderShowNames
+              : null,
+          // Only a hidden layer writes the key; shown is the default everywhere.
+          isVisible: layer.isVisible ? null : false,
+          folderName: folderNames[layer.folderId],
+          objects: objects,
+        ),
+      );
     }
     return ExportData(out, folders: folders);
   }
@@ -2817,9 +2969,7 @@ class Repository {
     // name, which is all a file carries — and a name that clashes with a
     // folder already on the map joins it rather than making a second one with
     // the same name, which is what anyone reading the drawer would expect.
-    final existing = {
-      for (final f in await watchFolders().first) f.name: f.id,
-    };
+    final existing = {for (final f in await watchFolders().first) f.name: f.id};
     final folderIds = <String, String>{};
     for (final f in data.folders) {
       final id = existing[f.name] ?? await createFolder(name: f.name);
@@ -2878,8 +3028,10 @@ class Repository {
     ExportLayer layer, {
     bool simplify = true,
   }) {
-    return _db.undo
-        .group('Import', () => _mergeIntoLayer(layerId, layer, simplify));
+    return _db.undo.group(
+      'Import',
+      () => _mergeIntoLayer(layerId, layer, simplify),
+    );
   }
 
   Future<int> _mergeIntoLayer(
@@ -2887,9 +3039,9 @@ class Repository {
     ExportLayer layer,
     bool simplify,
   ) async {
-    final target = await (_db.select(_db.layers)
-          ..where((l) => l.id.equals(layerId)))
-        .getSingleOrNull();
+    final target = await (_db.select(
+      _db.layers,
+    )..where((l) => l.id.equals(layerId))).getSingleOrNull();
     if (target == null) throw ArgumentError('Layer no longer exists');
     // What matters is whether the target can *hold* what the file carries, not
     // whether the two layers are labelled the same. Checked against
@@ -2900,12 +3052,13 @@ class Repository {
         if (layerTypeForExportKind(o.kind) != null)
           layerTypeForExportKind(o.kind)!,
     };
-    final unheld =
-        kinds.where((t) => !layerTypeHolds(target.type, t)).toList()..sort();
+    final unheld = kinds.where((t) => !layerTypeHolds(target.type, t)).toList()
+      ..sort();
     if (unheld.isNotEmpty) {
       throw ArgumentError(
-          'That file holds ${unheld.join(', ')} objects, but the layer is '
-          '${target.type}');
+        'That file holds ${unheld.join(', ')} objects, but the layer is '
+        '${target.type}',
+      );
     }
     // Same rule [combineLayers] enforces: one borders layer holds one admin
     // level, because "no two neighbours share a colour" is only meaningful
@@ -2914,8 +3067,9 @@ class Repository {
         layer.borderLevel != null &&
         layer.borderLevel != target.borderLevel) {
       throw ArgumentError(
-          'That file holds admin level ${layer.borderLevel} areas, but '
-          '“${target.name}” holds level ${target.borderLevel}');
+        'That file holds admin level ${layer.borderLevel} areas, but '
+        '“${target.name}” holds level ${target.borderLevel}',
+      );
     }
     return _insertObjects(layerId, layer.objects, simplify);
   }
@@ -2947,7 +3101,10 @@ class Repository {
   /// A file without it leaves the element following its new layer, which is
   /// what an import into a differently-coloured layer should do.
   Future<void> _applyImportedColor(
-      ColoredElement kind, String id, int? argb) async {
+    ColoredElement kind,
+    String id,
+    int? argb,
+  ) async {
     if (argb != null) await setElementColor(kind, id, argb);
   }
 
@@ -3009,10 +3166,11 @@ class Repository {
           await updateFreeArea(aid, offsetMeters: o.offsetMeters);
         }
         await addFreeAreaPoints(
-            aid,
-            simplify
-                ? simplifyRing(o.coords, kImportSimplifyMeters, minPoints: 3)
-                : o.coords);
+          aid,
+          simplify
+              ? simplifyRing(o.coords, kImportSimplifyMeters, minPoints: 3)
+              : o.coords,
+        );
         await _applyImportedColor(ColoredElement.freeArea, aid, o.colorArgb);
       case 'height':
         final r = o.radiusMeters;
@@ -3037,7 +3195,11 @@ class Repository {
           await replaceHeightPolygons(hid, fills ?? const <List<LatLng>>[]);
           await markHeightGenerated(hid);
         }
-        await _applyImportedColor(ColoredElement.heightRegion, hid, o.colorArgb);
+        await _applyImportedColor(
+          ColoredElement.heightRegion,
+          hid,
+          o.colorArgb,
+        );
       case 'poi':
         if (o.coords.isEmpty) return false;
         final r = o.radiusMeters;
@@ -3050,8 +3212,8 @@ class Repository {
         final source = manual
             ? kPoiSourceManual
             : box != null
-                ? kPoiSourceBox
-                : kPoiSourceRadius;
+            ? kPoiSourceBox
+            : kPoiSourceRadius;
         // A search radius is what the set was fetched with, not what its POIs
         // are — so when a file doesn't carry a usable one, derive it from how
         // far the POIs actually reach. Dropping the set (and every POI in it)
@@ -3063,8 +3225,8 @@ class Repository {
         final radius = manual
             ? (r ?? 0)
             : (r != null && r.isFinite && r > 0)
-                ? r
-                : _coveringRadius(o.coords);
+            ? r
+            : _coveringRadius(o.coords);
         final sid = await createPoiSet(
           layerId: layerId,
           source: source,
@@ -3190,16 +3352,16 @@ class Repository {
     String layerId,
     List<ExportObject> areas,
   ) async {
-    final layer = await (_db.select(_db.layers)
-          ..where((l) => l.id.equals(layerId)))
-        .getSingleOrNull();
+    final layer = await (_db.select(
+      _db.layers,
+    )..where((l) => l.id.equals(layerId))).getSingleOrNull();
     if (layer == null) return 0;
     var added = 0;
     await _db.transaction(() async {
       final seen = await _borderOsmIdsInLayer(layerId);
-      final existing = await (_db.select(_db.borderSets)
-            ..where((x) => x.layerId.equals(layerId)))
-          .get();
+      final existing = await (_db.select(
+        _db.borderSets,
+      )..where((x) => x.layerId.equals(layerId))).get();
       // Set key -> (id, areas so far, points so far). The counts are
       // denormalised onto the set row, so a reused set has to be topped up
       // rather than overwritten.
@@ -3227,7 +3389,9 @@ class Repository {
         var set = sets[key];
         if (set == null) {
           set = (id: _uuid.v4(), areas: 0, points: 0);
-          await _db.into(_db.borderSets).insert(
+          await _db
+              .into(_db.borderSets)
+              .insert(
                 BorderSetsCompanion.insert(
                   id: set.id,
                   layerId: layerId,
@@ -3244,30 +3408,35 @@ class Repository {
         final points = rings.fold(0, (a, r) => a + r.length);
         final id = _uuid.v4();
         final extent = _extent(rings.expand((r) => r));
-        rows.add(BorderAreasCompanion.insert(
-          id: id,
-          setId: set.id,
-          // A file without a relation id still imports; it simply sits outside
-          // the dedup check, exactly as an unidentified POI does.
-          osmId: osmId ?? 0,
-          name: Value(o.label),
-          colorIndex: Value(o.colorIndex ?? 0),
-          south: extent[0],
-          west: extent[1],
-          north: extent[2],
-          east: extent[3],
-          labelLat: o.labelLat ?? (extent[0] + extent[2]) / 2,
-          labelLng: o.labelLng ?? (extent[1] + extent[3]) / 2,
-          pointCount: points,
-          rings: encodeRings(rings),
-          wayIds: jsonEncode(o.wayIds ?? const <int>[]),
-          // An outline the sender reshaped stays flagged here: it is still not
-          // what OSM says, and the receiver's own re-import dedup will keep it.
-          editedAt: Value(o.edited == true ? DateTime.now() : null),
-        ));
+        rows.add(
+          BorderAreasCompanion.insert(
+            id: id,
+            setId: set.id,
+            // A file without a relation id still imports; it simply sits outside
+            // the dedup check, exactly as an unidentified POI does.
+            osmId: osmId ?? 0,
+            name: Value(o.label),
+            colorIndex: Value(o.colorIndex ?? 0),
+            south: extent[0],
+            west: extent[1],
+            north: extent[2],
+            east: extent[3],
+            labelLat: o.labelLat ?? (extent[0] + extent[2]) / 2,
+            labelLng: o.labelLng ?? (extent[1] + extent[3]) / 2,
+            pointCount: points,
+            rings: encodeRings(rings),
+            wayIds: jsonEncode(o.wayIds ?? const <int>[]),
+            // An outline the sender reshaped stays flagged here: it is still not
+            // what OSM says, and the receiver's own re-import dedup will keep it.
+            editedAt: Value(o.edited == true ? DateTime.now() : null),
+          ),
+        );
         if (o.colorArgb != null) overrides[id] = o.colorArgb!;
-        sets[key] =
-            (id: set.id, areas: set.areas + 1, points: set.points + points);
+        sets[key] = (
+          id: set.id,
+          areas: set.areas + 1,
+          points: set.points + points,
+        );
         added++;
       }
       await _db.batch((b) {
@@ -3304,8 +3473,7 @@ class Repository {
   /// Identity of the import an area belongs to: its admin level plus the box it
   /// was fetched over, rounded so a float round-trip through JSON still
   /// matches.
-  String _borderSetKey(
-          String level, double s, double w, double n, double e) =>
+  String _borderSetKey(String level, double s, double w, double n, double e) =>
       '$level/${s.toStringAsFixed(6)}/${w.toStringAsFixed(6)}/'
       '${n.toStringAsFixed(6)}/${e.toStringAsFixed(6)}';
 
@@ -3326,13 +3494,14 @@ class Repository {
       // this the first uncertainty change after a wipe is an INSERT, which the
       // journal's `AFTER UPDATE OF` trigger never sees, and that one change
       // would silently not be undoable.
-      await _db.into(_db.appSettings).insertOnConflictUpdate(
-            const AppSettingsCompanion(id: Value(1)),
-          );
-      final existing = await (_db.select(_db.layers)
-            ..orderBy([(l) => OrderingTerm(expression: l.sortOrder)])
-            ..limit(1))
-          .getSingleOrNull();
+      await _db
+          .into(_db.appSettings)
+          .insertOnConflictUpdate(const AppSettingsCompanion(id: Value(1)));
+      final existing =
+          await (_db.select(_db.layers)
+                ..orderBy([(l) => OrderingTerm(expression: l.sortOrder)])
+                ..limit(1))
+              .getSingleOrNull();
       if (existing != null) return existing.id;
       return createLayer(name: 'Circles 1', colorArgb: kDefaultLayerColor);
     });
@@ -3406,7 +3575,8 @@ enum ColoredElement {
   /// the editors' colour swatch) must come in this way instead. Takes the
   /// enum's `name` rather than the enum itself so `data/` need not import
   /// `state/`.
-  static ColoredElement? forObjectKindName(String kindName) => switch (kindName) {
+  static ColoredElement? forObjectKindName(String kindName) =>
+      switch (kindName) {
         'circle' => ColoredElement.circle,
         'subspace' => ColoredElement.subspace,
         'freeLine' => ColoredElement.freeLine,

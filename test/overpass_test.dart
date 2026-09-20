@@ -20,8 +20,7 @@ import 'package:http/testing.dart';
 import 'package:zonecraft/data/overpass.dart';
 
 void main() {
-  PoiCategory cat(String key) =>
-      poiCategories.firstWhere((c) => c.key == key);
+  PoiCategory cat(String key) => poiCategories.firstWhere((c) => c.key == key);
 
   group('category bitmask', () {
     test('mask round-trips through poiMaskWith / poiCategoriesFromMask', () {
@@ -87,8 +86,10 @@ void main() {
 
     test('returns empty on malformed JSON instead of throwing', () {
       expect(parseOverpassResponse('not json', poiCategories), isEmpty);
-      expect(parseOverpassResponse('{"elements":"oops"}', poiCategories),
-          isEmpty);
+      expect(
+        parseOverpassResponse('{"elements":"oops"}', poiCategories),
+        isEmpty,
+      );
     });
 
     test('captures the OSM name tag (trimmed), null when absent/blank', () {
@@ -143,8 +144,7 @@ void main() {
         at(0.001, 0), // ~111 m
         at(0.005, 0), // ~555 m
       ];
-      final res =
-          poisWithinRadius(here.lat, here.lng, 600, pois);
+      final res = poisWithinRadius(here.lat, here.lng, 600, pois);
       expect(res.map((p) => p.lat), [0.001, 0.005]); // 1110 m dropped
     });
 
@@ -158,10 +158,12 @@ void main() {
 
   group('fetchPois', () {
     test('returns the parsed list on HTTP 200', () async {
-      final client = MockClient((_) async => http.Response(
-            '{"elements":[{"type":"node","lat":1,"lon":2,"tags":{"amenity":"bench"}}]}',
-            200,
-          ));
+      final client = MockClient(
+        (_) async => http.Response(
+          '{"elements":[{"type":"node","lat":1,"lon":2,"tags":{"amenity":"bench"}}]}',
+          200,
+        ),
+      );
       final r = await fetchPois(
         south: 0,
         west: 0,
@@ -190,34 +192,44 @@ void main() {
       expect(r.message, contains('400'));
     });
 
-    test('failing over is the transport\'s job, not the caller\'s', () async {
-      // The first instance rejects fast (transient), the next answers — the POI
-      // import gets the same failover transit and borders have.
-      var call = 0;
-      final client = MockClient((_) async {
-        call++;
-        return call <= 2
-            ? http.Response('busy', 504)
-            : http.Response(
-                '{"elements":[{"type":"node","lat":1,"lon":2,'
-                '"tags":{"amenity":"bench"}}]}',
-                200);
-      });
+    test(
+      'failing over is the transport\'s job, not the caller\'s',
+      () async {
+        // The first instance rejects fast (transient), the next answers — the POI
+        // import gets the same failover transit and borders have.
+        var call = 0;
+        final client = MockClient((_) async {
+          call++;
+          return call <= 2
+              ? http.Response('busy', 504)
+              : http.Response(
+                  '{"elements":[{"type":"node","lat":1,"lon":2,'
+                  '"tags":{"amenity":"bench"}}]}',
+                  200,
+                );
+        });
+        final r = await fetchPois(
+          south: 0,
+          west: 0,
+          north: 1,
+          east: 1,
+          categories: [cat('bench')],
+          client: client,
+        );
+        expect(r.ok, isTrue);
+        expect(r.value!.single.categoryKey, 'bench');
+      },
+      timeout: const Timeout(Duration(seconds: 30)),
+    );
+
+    test('short-circuits to empty when no categories are enabled', () async {
       final r = await fetchPois(
         south: 0,
         west: 0,
         north: 1,
         east: 1,
-        categories: [cat('bench')],
-        client: client,
+        categories: const [],
       );
-      expect(r.ok, isTrue);
-      expect(r.value!.single.categoryKey, 'bench');
-    }, timeout: const Timeout(Duration(seconds: 30)));
-
-    test('short-circuits to empty when no categories are enabled', () async {
-      final r = await fetchPois(
-          south: 0, west: 0, north: 1, east: 1, categories: const []);
       expect(r.ok, isTrue);
       expect(r.value, isEmpty);
     });
@@ -242,7 +254,12 @@ void main() {
     test('round-trips the OSM identity, and tolerates it being absent', () {
       const pois = [
         PoiResult(
-            lat: 1, lng: 2, categoryKey: 'cafe', osmType: 'way', osmId: 42),
+          lat: 1,
+          lng: 2,
+          categoryKey: 'cafe',
+          osmType: 'way',
+          osmId: 42,
+        ),
         PoiResult(lat: 3, lng: 4, categoryKey: 'cafe'),
       ];
       final back = decodePoiResults(encodePoiResults(pois));
@@ -255,7 +272,8 @@ void main() {
     test('a cache entry written before v21 still decodes', () {
       // The identity keys are simply absent from older payloads.
       final back = decodePoiResults(
-          '[{"lat":48.1,"lng":11.5,"k":"cafe","n":"Tati"}]');
+        '[{"lat":48.1,"lng":11.5,"k":"cafe","n":"Tati"}]',
+      );
       expect(back, hasLength(1));
       expect(back.single.name, 'Tati');
       expect(back.single.osmId, isNull);

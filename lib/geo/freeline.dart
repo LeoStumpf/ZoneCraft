@@ -36,8 +36,8 @@ import 'package:latlong2/latlong.dart';
 /// filled side before any of this.
 class FreeLineRegion {
   const FreeLineRegion(this.fillRings, this.boundaries)
-      : missesDisk = false,
-        centreOnRight = false;
+    : missesDisk = false,
+      centreOnRight = false;
 
   /// Even-odd cut rings (one per run) → the filled side when XOR'd ∩ disk. Always
   /// **offset-free**, so the even-odd fill stays simple: a signed offset is
@@ -60,9 +60,9 @@ class FreeLineRegion {
   final bool centreOnRight;
 
   const FreeLineRegion.miss({required this.centreOnRight})
-      : fillRings = const [],
-        boundaries = const [],
-        missesDisk = true;
+    : fillRings = const [],
+      boundaries = const [],
+      missesDisk = true;
 }
 
 /// A 2-D vector in a local tangent plane (metres east/north of the circle
@@ -103,13 +103,13 @@ FreeLineRegion freeLineDiskRegion({
   const mPerDegLat = 111320.0;
   final mPerDegLng = 111320.0 * cos(center.latitude * pi / 180);
   _V toPlane(LatLng p) => _V(
-        (p.longitude - center.longitude) * mPerDegLng,
-        (p.latitude - center.latitude) * mPerDegLat,
-      );
+    (p.longitude - center.longitude) * mPerDegLng,
+    (p.latitude - center.latitude) * mPerDegLat,
+  );
   LatLng toLatLng(_V v) => LatLng(
-        center.latitude + v.y / mPerDegLat,
-        center.longitude + v.x / mPerDegLng,
-      );
+    center.latitude + v.y / mPerDegLat,
+    center.longitude + v.x / mPerDegLng,
+  );
 
   final r = radiusMeters;
   final p = [for (final q in pts) toPlane(q)];
@@ -184,7 +184,9 @@ List<List<_V>> _cutRuns(List<_V> line, double r, double jumpLen) {
     var cur = <_V>[];
     var startCross = false; // current run opened at a boundary crossing
     void flush({required bool endCross}) {
-      out.addAll(_finishRun(cur, startCross, endCross, trueStart, trueEnd, ext));
+      out.addAll(
+        _finishRun(cur, startCross, endCross, trueStart, trueEnd, ext),
+      );
       cur = <_V>[];
     }
 
@@ -228,8 +230,14 @@ List<List<_V>> _cutRuns(List<_V> line, double r, double jumpLen) {
 /// Validates and finishes one clipped run. Drops it unless each end is a disk
 /// crossing or a true line endpoint; extends dangling true-endpoint ends past
 /// the disk so the cut spans it.
-List<List<_V>> _finishRun(List<_V> cur, bool startCross, bool endCross,
-    bool trueStart, bool trueEnd, double ext) {
+List<List<_V>> _finishRun(
+  List<_V> cur,
+  bool startCross,
+  bool endCross,
+  bool trueStart,
+  bool trueEnd,
+  double ext,
+) {
   if (cur.length < 2) return const [];
   if (!(startCross || trueStart)) return const []; // stray fragment start
   if (!(endCross || trueEnd)) return const []; // stray fragment end
@@ -255,11 +263,11 @@ List<_V> _cutRing(List<_V> run, double r) {
   final angStart = atan2(ep.first.y, ep.first.x);
 
   List<_V> closed({required bool ccw}) => <_V>[
-        ...ep,
-        _V(big * cos(angEnd), big * sin(angEnd)),
-        ..._arc(angEnd, angStart, big, ccw),
-        _V(big * cos(angStart), big * sin(angStart)),
-      ];
+    ...ep,
+    _V(big * cos(angEnd), big * sin(angEnd)),
+    ..._arc(angEnd, angStart, big, ccw),
+    _V(big * cos(angStart), big * sin(angStart)),
+  ];
 
   // Pick the closure side so the run's right-hand side is the even-odd interior.
   final probe = _rightProbe(ep, r);
@@ -359,7 +367,8 @@ bool _contains(List<_V> poly, _V q) {
   for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
     final xi = poly[i].x, yi = poly[i].y;
     final xj = poly[j].x, yj = poly[j].y;
-    final intersect = (yi > q.y) != (yj > q.y) &&
+    final intersect =
+        (yi > q.y) != (yj > q.y) &&
         q.x < (xj - xi) * (q.y - yi) / (yj - yi) + xi;
     if (intersect) hit = !hit;
   }

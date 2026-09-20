@@ -78,9 +78,9 @@ ResolvedArea resolveAreaGeometry(
   if (mPerDegLon == 0) return const ResolvedArea(core: [], bandEdge: []);
 
   Offset toPlane(LatLng p) => Offset(
-        (p.longitude - lon0) * mPerDegLon,
-        (p.latitude - lat0) * mPerDegLat,
-      );
+    (p.longitude - lon0) * mPerDegLon,
+    (p.latitude - lat0) * mPerDegLat,
+  );
   LatLng fromPlane(Offset o) =>
       LatLng(lat0 + o.dy / mPerDegLat, lon0 + o.dx / mPerDegLon);
   final base = [for (final p in clean) toPlane(p)];
@@ -95,8 +95,8 @@ ResolvedArea resolveAreaGeometry(
   final bandEdge = bandMeters <= 0
       ? const <List<LatLng>>[]
       : (bandEdgeOffset == 0
-          ? [List<LatLng>.of(clean)]
-          : _offsetContours(base, bandEdgeOffset, fromPlane));
+            ? [List<LatLng>.of(clean)]
+            : _offsetContours(base, bandEdgeOffset, fromPlane));
 
   return ResolvedArea(core: core, bandEdge: bandEdge);
 }
@@ -212,7 +212,11 @@ class AreaGeometryCache {
   }
 
   String _signature(
-      FreeArea area, List<FreeAreaPoint> points, double band, bool inverted) {
+    FreeArea area,
+    List<FreeAreaPoint> points,
+    double band,
+    bool inverted,
+  ) {
     var h = points.length;
     for (final p in points) {
       h = 0x1fffffff & (h * 31 + p.lat.hashCode);

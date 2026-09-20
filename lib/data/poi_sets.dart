@@ -40,9 +40,8 @@ extension PoiSetKind on PoiSet {
   bool get isPending => isImport && fetchedAt == null;
 
   /// The imported box of a station import, or null on the other kinds.
-  List<double>? get bbox => isStationImport && south != null
-      ? [south!, west!, north!, east!]
-      : null;
+  List<double>? get bbox =>
+      isStationImport && south != null ? [south!, west!, north!, east!] : null;
 }
 
 /// **The one drawn == tappable predicate for a POI marker.** `poi_layer`

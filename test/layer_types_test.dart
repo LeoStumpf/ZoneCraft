@@ -22,22 +22,21 @@ import 'package:zonecraft/data/serialization.dart'
 
 void main() {
   Layer layer(String type) => Layer(
-        id: 'l',
-        name: 'L',
-        colorArgb: 1,
-        isVisible: true,
-        sortOrder: 0,
-        type: type,
-        isInverted: false,
-        opacity: 1,
-        borderFillAreas: false,
-        borderShowNames: false,
-        createdAt: DateTime(2026),
-      );
+    id: 'l',
+    name: 'L',
+    colorArgb: 1,
+    isVisible: true,
+    sortOrder: 0,
+    type: type,
+    isInverted: false,
+    opacity: 1,
+    borderFillAreas: false,
+    borderShowNames: false,
+    createdAt: DateTime(2026),
+  );
 
   /// The seven object types, i.e. everything except `mixed`.
-  final objectTypes =
-      kAllLayerTypes.toList();
+  final objectTypes = kAllLayerTypes.toList();
 
   test('the catalogue is complete and has no duplicates', () {
     expect(kAllLayerTypes.toSet().length, kAllLayerTypes.length);
@@ -93,8 +92,11 @@ void main() {
       for (final lt in kAllLayerTypes) {
         final held = layerContentTypes(layer(lt));
         for (final ot in objectTypes) {
-          expect(held.contains(ot), layerHolds(layer(lt), ot),
-              reason: '"$lt" vs "$ot"');
+          expect(
+            held.contains(ot),
+            layerHolds(layer(lt), ot),
+            reason: '"$lt" vs "$ot"',
+          );
         }
       }
     });
@@ -133,19 +135,28 @@ void main() {
       expect(reachable, isNot(contains(null)));
     });
 
-    test('the retired v1/v2 kinds and layer types translate, track is dropped',
-        () {
-      // A file written before v27 still has to open. The kinds are mapped by
-      // `_featureToObject`; this is the layer-type half of the same promise.
-      expect(layerTypeForExportKind('plane'), isNull,
-          reason: 'the reader translates it before this is consulted');
-      expect(legacyLayerType('planes'), kSubspace);
-      expect(legacyLayerType('transit'), kPoi);
-      expect(legacyLayerType('track'), isNull);
-      for (final t in kAllLayerTypes) {
-        expect(legacyLayerType(t), t, reason: 'today\'s types are themselves');
-      }
-    });
+    test(
+      'the retired v1/v2 kinds and layer types translate, track is dropped',
+      () {
+        // A file written before v27 still has to open. The kinds are mapped by
+        // `_featureToObject`; this is the layer-type half of the same promise.
+        expect(
+          layerTypeForExportKind('plane'),
+          isNull,
+          reason: 'the reader translates it before this is consulted',
+        );
+        expect(legacyLayerType('planes'), kSubspace);
+        expect(legacyLayerType('transit'), kPoi);
+        expect(legacyLayerType('track'), isNull);
+        for (final t in kAllLayerTypes) {
+          expect(
+            legacyLayerType(t),
+            t,
+            reason: 'today\'s types are themselves',
+          );
+        }
+      },
+    );
 
     test('an unknown kind maps to null rather than guessing', () {
       expect(layerTypeForExportKind('somethingelse'), isNull);

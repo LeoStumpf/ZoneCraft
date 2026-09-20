@@ -71,7 +71,8 @@ class LayersDrawer extends ConsumerWidget {
     final borderAreas =
         ref.watch(borderAreasProvider).asData?.value ?? const <BorderArea>[];
     final selected = ref.watch(activeLayerProvider);
-    final folders = ref.watch(foldersProvider).asData?.value ?? const <Folder>[];
+    final folders =
+        ref.watch(foldersProvider).asData?.value ?? const <Folder>[];
     final repo = ref.read(repositoryProvider);
 
     // The drawer gets its own messenger: a Scaffold draws its drawer *above*
@@ -204,7 +205,9 @@ class LayersDrawer extends ConsumerWidget {
                                 child: ListTile(
                                   dense: true,
                                   contentPadding: EdgeInsets.zero,
-                                  leading: Icon(Icons.create_new_folder_outlined),
+                                  leading: Icon(
+                                    Icons.create_new_folder_outlined,
+                                  ),
                                   title: Text('Folder'),
                                   subtitle: Text(
                                     'Group layers to hide or invert together',
@@ -258,8 +261,11 @@ class LayersDrawer extends ConsumerWidget {
                         // it belongs to — and returns the list unchanged when
                         // nothing moved, which is the signal to skip the write.
                         onReorderItem: (oldIndex, newIndex) {
-                          final moved =
-                              moveDrawerRows(rows, oldIndex, newIndex);
+                          final moved = moveDrawerRows(
+                            rows,
+                            oldIndex,
+                            newIndex,
+                          );
                           if (identical(moved, rows)) return;
                           unawaited(repo.reorderTree(treeWrites(moved)));
                         },
@@ -275,9 +281,11 @@ class LayersDrawer extends ConsumerWidget {
                                 elementCount: row.layers
                                     .map(countOf)
                                     .fold(0, (a, b) => a + b),
-                                canInvert: row.layers.any((l) =>
-                                    kInvertibleTypes.contains(l.type) &&
-                                    countOf(l) > 0),
+                                canInvert: row.layers.any(
+                                  (l) =>
+                                      kInvertibleTypes.contains(l.type) &&
+                                      countOf(l) > 0,
+                                ),
                               );
                             case LayerLineRow():
                               return _LayerTile(
@@ -320,13 +328,19 @@ class LayersDrawer extends ConsumerWidget {
                     // has written to is a row explaining a feature, and the
                     // drawer is not where features are explained — the editor
                     // that offers the report is.
-                    if (ref.watch(osmReportsProvider).asData?.value.isNotEmpty
-                        ?? false)
+                    if (ref
+                            .watch(osmReportsProvider)
+                            .asData
+                            ?.value
+                            .isNotEmpty ??
+                        false)
                       ListTile(
                         leading: Badge(
                           isLabelVisible:
                               ref.watch(pendingOsmReportsProvider) > 0,
-                          label: Text('${ref.watch(pendingOsmReportsProvider)}'),
+                          label: Text(
+                            '${ref.watch(pendingOsmReportsProvider)}',
+                          ),
                           child: const Icon(Icons.volunteer_activism_outlined),
                         ),
                         title: const Text('OpenStreetMap outbox'),
@@ -612,7 +626,9 @@ class _LayerTile extends ConsumerWidget {
     final drawnInverted = layer.isInverted != (folder?.isInverted ?? false);
     if (drawnInverted) {
       subtitle.write(
-        folder != null && folder!.isInverted ? ' · inverted (folder)' : ' · inverted',
+        folder != null && folder!.isInverted
+            ? ' · inverted (folder)'
+            : ' · inverted',
       );
     }
     if (!layer.isVisible) {
@@ -650,10 +666,7 @@ class _LayerTile extends ConsumerWidget {
       // A member of a folder is indented, which is the only thing saying it is
       // in one — and the amount is small for the same reason: the room is not
       // there to spend.
-      contentPadding: EdgeInsets.only(
-        left: folder == null ? 4 : 20,
-        right: 4,
-      ),
+      contentPadding: EdgeInsets.only(left: folder == null ? 4 : 20, right: 4),
       horizontalTitleGap: 4,
       minLeadingWidth: 36,
       // Tap to make active; tap the active layer again to have no active layer.

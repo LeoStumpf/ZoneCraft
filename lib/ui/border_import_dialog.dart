@@ -130,8 +130,9 @@ class _BorderImportSheetState extends State<BorderImportSheet> {
     for (final c in [_south, _west, _north, _east]) {
       c.addListener(_boxChanged);
     }
-    WidgetsBinding.instance
-        .addPostFrameCallback((_) => widget.onPreview(_boxOrNull()));
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => widget.onPreview(_boxOrNull()),
+    );
   }
 
   void _boxChanged() {
@@ -215,78 +216,80 @@ class _BorderImportSheetState extends State<BorderImportSheet> {
           ),
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text('Import borders',
-                        style: theme.textTheme.titleMedium),
-                  ),
-                  IconButton(
-                    tooltip: 'Cancel',
-                    icon: const Icon(Icons.close),
-                    onPressed: () => widget.onDone(null),
-                  ),
-                ],
-              ),
-              Text('Area', style: theme.textTheme.labelLarge),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  _coord(_south, 'South', true),
-                  const SizedBox(width: 8),
-                  _coord(_north, 'North', true),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  _coord(_west, 'West', false),
-                  const SizedBox(width: 8),
-                  _coord(_east, 'East', false),
-                ],
-              ),
-              const SizedBox(height: 8),
-              _sizeLine(theme),
-              const SizedBox(height: 16),
-              Text('Level', style: theme.textTheme.labelLarge),
-              const SizedBox(height: 4),
-              ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.public),
-                title: Text(level.label),
-                subtitle: Text(level.blurb),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Every boundary the box touches is downloaded and kept whole, '
-                'so an area can reach well past the box you drew. The box '
-                'decides what gets fetched, not what you end up with.',
-                style: theme.textTheme.bodySmall,
-              ),
-              const SizedBox(height: 8),
-              _costLine(theme),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => widget.onDone(null),
-                    child: const Text('Cancel'),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    onPressed: _canImport ? _submit : null,
-                    child: const Text('Import'),
-                  ),
-                ],
-              ),
-            ],
-          ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Import borders',
+                        style: theme.textTheme.titleMedium,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Cancel',
+                      icon: const Icon(Icons.close),
+                      onPressed: () => widget.onDone(null),
+                    ),
+                  ],
+                ),
+                Text('Area', style: theme.textTheme.labelLarge),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    _coord(_south, 'South', true),
+                    const SizedBox(width: 8),
+                    _coord(_north, 'North', true),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    _coord(_west, 'West', false),
+                    const SizedBox(width: 8),
+                    _coord(_east, 'East', false),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                _sizeLine(theme),
+                const SizedBox(height: 16),
+                Text('Level', style: theme.textTheme.labelLarge),
+                const SizedBox(height: 4),
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.public),
+                  title: Text(level.label),
+                  subtitle: Text(level.blurb),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Every boundary the box touches is downloaded and kept whole, '
+                  'so an area can reach well past the box you drew. The box '
+                  'decides what gets fetched, not what you end up with.',
+                  style: theme.textTheme.bodySmall,
+                ),
+                const SizedBox(height: 8),
+                _costLine(theme),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => widget.onDone(null),
+                      child: const Text('Cancel'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: _canImport ? _submit : null,
+                      child: const Text('Import'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

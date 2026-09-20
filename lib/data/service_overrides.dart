@@ -44,7 +44,8 @@ enum ServiceOverride {
   tiles(
     label: 'Map tiles',
     hint: 'https://tiles.example.org/{z}/{x}/{y}.png',
-    help: 'A {z}/{x}/{y} template. Offline downloading stays off whatever you '
+    help:
+        'A {z}/{x}/{y} template. Offline downloading stays off whatever you '
         'put here.',
   ),
 
@@ -52,7 +53,8 @@ enum ServiceOverride {
   overpass(
     label: 'Overpass imports',
     hint: 'https://overpass.example.org/api/interpreter',
-    help: 'Tried first; the public instances stay as a fallback. This is the '
+    help:
+        'Tried first; the public instances stay as a fallback. This is the '
         'one that matters — a border import can pull tens of megabytes off a '
         'donated server.',
   ),
@@ -82,10 +84,10 @@ enum ServiceOverride {
   /// What the app uses when this override is unset — shown so that "empty"
   /// reads as a real answer rather than a missing one.
   String get builtInDefault => switch (this) {
-        ServiceOverride.tiles => TileSource.configured.urlTemplate,
-        ServiceOverride.overpass => overpassEndpoints.first,
-        ServiceOverride.nominatim => defaultNominatimHost,
-      };
+    ServiceOverride.tiles => TileSource.configured.urlTemplate,
+    ServiceOverride.overpass => overpassEndpoints.first,
+    ServiceOverride.nominatim => defaultNominatimHost,
+  };
 
   /// Null when [value] is usable, otherwise why it is not.
   ///

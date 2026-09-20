@@ -262,8 +262,7 @@ class _OsmReportSheetState extends ConsumerState<_OsmReportSheet> {
                 ChoiceChip(
                   label: Text(kind.label),
                   selected: _kind == kind,
-                  onSelected:
-                      _sending ? null : (_) => _pickKind(kind),
+                  onSelected: _sending ? null : (_) => _pickKind(kind),
                 ),
             ],
           ),
@@ -305,15 +304,17 @@ class _OsmReportSheetState extends ConsumerState<_OsmReportSheet> {
           'This goes to OpenStreetMap’s volunteer mappers. It is public and '
           'permanent, and it is for map data only — not for feedback about '
           'ZoneCraft. Please don’t include personal information.',
-          style: theme.textTheme.bodySmall
-              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
         ),
         if (!osmApiIsLive) ...[
           const SizedBox(height: 8),
           Text(
             'This build sends to $osmApiHost, not to OpenStreetMap itself.',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.tertiary),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.tertiary,
+            ),
           ),
         ],
         if (sent >= kOsmReportsSoftCapPerDay && blocked == null) ...[
@@ -322,24 +323,27 @@ class _OsmReportSheetState extends ConsumerState<_OsmReportSheet> {
             'You have sent $sent reports today. OpenStreetMap limits anonymous '
             'reports — beyond a handful a day, saving them and exporting the '
             'file is the kinder route.',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.tertiary),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.tertiary,
+            ),
           ),
         ],
         if (_error != null) ...[
           const SizedBox(height: 8),
           Text(
             '$_error\n\nIt is saved in your outbox either way.',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.error),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.error,
+            ),
           ),
         ],
         if (blocked != null && _text.text.trim().isNotEmpty) ...[
           const SizedBox(height: 8),
           Text(
             blocked,
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
         const SizedBox(height: 12),
@@ -362,8 +366,9 @@ class _OsmReportSheetState extends ConsumerState<_OsmReportSheet> {
                 label: const Text('Copy'),
               ),
               OutlinedButton.icon(
-                onPressed:
-                    _text.text.trim().isEmpty ? null : () => unawaited(_save()),
+                onPressed: _text.text.trim().isEmpty
+                    ? null
+                    : () => unawaited(_save()),
                 icon: const Icon(Icons.inbox_outlined, size: 18),
                 label: const Text('Save for later'),
               ),

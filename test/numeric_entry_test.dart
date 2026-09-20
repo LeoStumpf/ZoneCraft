@@ -79,23 +79,23 @@ void main() {
   );
 
   Widget circleSheet({double radius = 191913.8}) => CircleEditorSheet(
-        circle: Circle(
-          id: 'c1',
-          layerId: 'L',
-          centerLat: 48.137154,
-          centerLng: 11.575382,
-          radiusMeters: radius,
-          createdAt: DateTime(2026),
-          colorShade: 0,
-          zOrder: 0,
-        ),
-        layers: [layer],
-      );
+    circle: Circle(
+      id: 'c1',
+      layerId: 'L',
+      centerLat: 48.137154,
+      centerLng: 11.575382,
+      radiusMeters: radius,
+      createdAt: DateTime(2026),
+      colorShade: 0,
+      zOrder: 0,
+    ),
+    layers: [layer],
+  );
 
   Finder radiusField() => find.ancestor(
-        of: find.text('Radius (m)'),
-        matching: find.byType(TextField),
-      );
+    of: find.text('Radius (m)'),
+    matching: find.byType(TextField),
+  );
 
   String textOf(WidgetTester tester, Finder f) =>
       tester.widget<TextField>(f).controller!.text;
@@ -134,23 +134,28 @@ void main() {
       expect(repo.calls, isEmpty);
     });
 
-    testWidgets('dragging the slider writes the field, even while it has focus',
-        (tester) async {
-      await pump(tester, circleSheet(radius: 1000));
-      await tester.tap(radiusField());
-      await tester.pump();
-      expect(tester.widget<TextField>(radiusField()).focusNode!.hasFocus, isTrue);
+    testWidgets(
+      'dragging the slider writes the field, even while it has focus',
+      (tester) async {
+        await pump(tester, circleSheet(radius: 1000));
+        await tester.tap(radiusField());
+        await tester.pump();
+        expect(
+          tester.widget<TextField>(radiusField()).focusNode!.hasFocus,
+          isTrue,
+        );
 
-      await tester.drag(find.byType(Slider), const Offset(60, 0));
-      await tester.pump();
+        await tester.drag(find.byType(Slider), const Offset(60, 0));
+        await tester.pump();
 
-      final shown = double.parse(textOf(tester, radiusField()));
-      expect(shown, greaterThan(1000));
-      // What the field shows is what was stored: the slider rounds to whole
-      // metres precisely so the two can agree.
-      expect(repo.calls.last, 'updateCircle c1 radius=$shown');
-      expect(shown, shown.roundToDouble());
-    });
+        final shown = double.parse(textOf(tester, radiusField()));
+        expect(shown, greaterThan(1000));
+        // What the field shows is what was stored: the slider rounds to whole
+        // metres precisely so the two can agree.
+        expect(repo.calls.last, 'updateCircle c1 radius=$shown');
+        expect(shown, shown.roundToDouble());
+      },
+    );
   });
 
   group('opacity dialog', () {
@@ -187,8 +192,9 @@ void main() {
       expect(applied, closeTo(0.33, 1e-9));
     });
 
-    testWidgets('out-of-range typing is clamped, not stored raw',
-        (tester) async {
+    testWidgets('out-of-range typing is clamped, not stored raw', (
+      tester,
+    ) async {
       final applied = await openAndEdit(tester, (t) async {
         await t.enterText(find.byType(TextField), '400');
         await t.pump();
@@ -223,8 +229,12 @@ class _RecordingRepository extends Repository {
     String? layerId,
     Value<String?> label = const Value.absent(),
   }) async {
-    if (radiusMeters != null) calls.add('updateCircle $id radius=$radiusMeters');
-    if (centerLat != null) calls.add('updateCircle $id centre=$centerLat,$centerLng');
+    if (radiusMeters != null) {
+      calls.add('updateCircle $id radius=$radiusMeters');
+    }
+    if (centerLat != null) {
+      calls.add('updateCircle $id centre=$centerLat,$centerLng');
+    }
     if (layerId != null) calls.add('updateCircle $id layer=$layerId');
     if (label.present) calls.add('updateCircle $id label=${label.value}');
   }

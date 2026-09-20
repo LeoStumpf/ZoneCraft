@@ -48,13 +48,15 @@ void main() {
       expect(list, hasLength(overpassEndpoints.length + 1));
     });
 
-    test('does not list an endpoint twice when the override is a public one',
-        () {
-      overpassEndpointOverride = overpassEndpoints.last;
-      final list = overpassEndpointList();
-      expect(list.first, overpassEndpoints.last);
-      expect(list.toSet(), hasLength(list.length));
-    });
+    test(
+      'does not list an endpoint twice when the override is a public one',
+      () {
+        overpassEndpointOverride = overpassEndpoints.last;
+        final list = overpassEndpointList();
+        expect(list.first, overpassEndpoints.last);
+        expect(list.toSet(), hasLength(list.length));
+      },
+    );
 
     test('blank means unset, not an empty endpoint', () {
       overpassEndpointOverride = '   ';

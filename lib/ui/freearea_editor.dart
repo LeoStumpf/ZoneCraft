@@ -290,11 +290,14 @@ class _FreeAreaEditorSheetState extends ConsumerState<FreeAreaEditorSheet> {
             onChanged: (s) {
               final ll = parseLatLng(s);
               if (ll != null) {
-                logAsyncFailure(_repo.updateFreeAreaPoint(
+                logAsyncFailure(
+                  _repo.updateFreeAreaPoint(
                     p.id,
                     lat: ll.latitude,
                     lng: ll.longitude,
-                  ), 'Moving the point');
+                  ),
+                  'Moving the point',
+                );
               }
             },
           ),
@@ -349,13 +352,17 @@ class _FreeAreaEditorSheetState extends ConsumerState<FreeAreaEditorSheet> {
               case 'up':
                 logAsyncFailure(
                   _repo.swapFreeAreaPointOrder(
-                      p.id, widget.points[index - 1].id),
+                    p.id,
+                    widget.points[index - 1].id,
+                  ),
                   'Reordering the points',
                 );
               case 'down':
                 logAsyncFailure(
                   _repo.swapFreeAreaPointOrder(
-                      p.id, widget.points[index + 1].id),
+                    p.id,
+                    widget.points[index + 1].id,
+                  ),
                   'Reordering the points',
                 );
               case 'remove':

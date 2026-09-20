@@ -206,7 +206,6 @@ class Circles extends Table {
   /// already meant, now said out loud instead of inferred.
   IntColumn get zOrder => integer().withDefault(const Constant(0))();
 
-
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -246,7 +245,6 @@ class Subspaces extends Table {
   /// already meant, now said out loud instead of inferred.
   IntColumn get zOrder => integer().withDefault(const Constant(0))();
 
-
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -261,6 +259,7 @@ class SubspacePoints extends Table {
   RealColumn get lng => real()();
   IntColumn get sortOrder => integer()();
   BoolColumn get isMain => boolean().withDefault(const Constant(false))();
+
   /// Optional name, e.g. the OSM `name` of an imported POI.
   TextColumn get label => text().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
@@ -316,7 +315,6 @@ class FreeLines extends Table {
   /// element lands on top — which is what "the newest element wins an overlap"
   /// already meant, now said out loud instead of inferred.
   IntColumn get zOrder => integer().withDefault(const Constant(0))();
-
 
   @override
   Set<Column> get primaryKey => {id};
@@ -376,7 +374,6 @@ class FreeAreas extends Table {
   /// already meant, now said out loud instead of inferred.
   IntColumn get zOrder => integer().withDefault(const Constant(0))();
 
-
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -413,7 +410,8 @@ class HeightRegions extends Table {
   RealColumn get thresholdMeters => real().withDefault(const Constant(0))();
 
   /// True = fill terrain above the threshold; false = below.
-  BoolColumn get aboveThreshold => boolean().withDefault(const Constant(true))();
+  BoolColumn get aboveThreshold =>
+      boolean().withDefault(const Constant(true))();
 
   /// Slippy zoom of the terrain tiles sampled when generating (12–14).
   IntColumn get sampleZoom => integer().withDefault(const Constant(13))();
@@ -446,7 +444,6 @@ class HeightRegions extends Table {
   /// element lands on top — which is what "the newest element wins an overlap"
   /// already meant, now said out loud instead of inferred.
   IntColumn get zOrder => integer().withDefault(const Constant(0))();
-
 
   @override
   Set<Column> get primaryKey => {id};
@@ -740,6 +737,7 @@ class BorderAreas extends Table {
   TextColumn get wayIds => text()();
 
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
   /// Per-area colour override (v22). Null = the layer's own rule: the
   /// neighbour-distinct palette entry at [colorIndex] when "Colour areas" is
   /// on, the layer colour otherwise. Set = this exact colour, either way.
@@ -758,7 +756,6 @@ class BorderAreas extends Table {
   /// for is not a trade worth making — "Convert to freehand area" exists for
   /// people who want an editable copy alongside the snapshot.
   DateTimeColumn get editedAt => dateTime().nullable()();
-
 
   @override
   Set<Column> get primaryKey => {id};
@@ -827,8 +824,7 @@ class AppSettings extends Table {
   IntColumn get id => integer().withDefault(const Constant(1))();
 
   /// Global measurement uncertainty in metres; rendered as a lighter band.
-  RealColumn get uncertaintyMeters =>
-      real().withDefault(const Constant(500))();
+  RealColumn get uncertaintyMeters => real().withDefault(const Constant(500))();
 
   /// Last map camera, restored on launch. Null until the user has moved the map.
   RealColumn get lastLat => real().nullable()();
@@ -855,8 +851,7 @@ class AppSettings extends Table {
 
   /// Whether the right-side utility FABs are shown (vs. collapsed behind the
   /// expand/hide toggle). Persisted so the choice survives a relaunch.
-  BoolColumn get toolsExpanded =>
-      boolean().withDefault(const Constant(true))();
+  BoolColumn get toolsExpanded => boolean().withDefault(const Constant(true))();
 
   /// Whether the base OSM tile layer is drawn. The base map behaves like a
   /// pinned bottom "layer": it can be hidden (this flag) but never deleted.
@@ -1042,545 +1037,544 @@ class AppDatabase extends _$AppDatabase {
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-        onCreate: (m) => m.createAll(),
-        onUpgrade: (m, from, to) async {
-          if (from < 2) {
-            await m.addColumn(layers, layers.type);
-            await m.addColumn(layers, layers.isInverted);
-            // `planes` was created here until v27 folded the type into
-            // `subspace`. A v1 database has no planes to carry across, so the
-            // table is simply never built; v27 copies only when `from >= 2`.
-            await m.createTable(appSettings);
-          }
-          if (from < 3) {
-            await m.addColumn(appSettings, appSettings.lastLat);
-            await m.addColumn(appSettings, appSettings.lastLng);
-            await m.addColumn(appSettings, appSettings.lastZoom);
-          }
-          if (from < 4) {
-            // New default uncertainty is 500 m. Bump an existing row that is
-            // still on the old default of 0 (the column default only governs
-            // freshly inserted rows). A user who deliberately chose 0 is reset
-            // to 500 — accepted as a one-tap change.
+    onCreate: (m) => m.createAll(),
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        await m.addColumn(layers, layers.type);
+        await m.addColumn(layers, layers.isInverted);
+        // `planes` was created here until v27 folded the type into
+        // `subspace`. A v1 database has no planes to carry across, so the
+        // table is simply never built; v27 copies only when `from >= 2`.
+        await m.createTable(appSettings);
+      }
+      if (from < 3) {
+        await m.addColumn(appSettings, appSettings.lastLat);
+        await m.addColumn(appSettings, appSettings.lastLng);
+        await m.addColumn(appSettings, appSettings.lastZoom);
+      }
+      if (from < 4) {
+        // New default uncertainty is 500 m. Bump an existing row that is
+        // still on the old default of 0 (the column default only governs
+        // freshly inserted rows). A user who deliberately chose 0 is reset
+        // to 500 — accepted as a one-tap change.
+        await customStatement(
+          'UPDATE app_settings SET uncertainty_meters = 500 '
+          'WHERE uncertainty_meters = 0',
+        );
+      }
+      if (from < 5) {
+        await m.createTable(subspaces);
+        await m.createTable(subspacePoints);
+      }
+      if (from < 6) {
+        await m.addColumn(appSettings, appSettings.transportOverlay);
+      }
+      if (from < 7) {
+        await m.addColumn(appSettings, appSettings.poiCategories);
+      }
+      if (from < 8) {
+        await m.addColumn(appSettings, appSettings.borderLevels);
+      }
+      if (from < 9) {
+        await m.createTable(freeLines);
+        await m.createTable(freeLinePoints);
+        await m.createTable(freeAreas);
+        await m.createTable(freeAreaPoints);
+      }
+      if (from < 10) {
+        await m.createTable(tileCache);
+        await m.createTable(overpassCache);
+      }
+      if (from < 11) {
+        await m.createTable(heightRegions);
+        await m.createTable(heightPolygons);
+        await m.createTable(heightPolygonPoints);
+      }
+      if (from < 12) {
+        await m.addColumn(appSettings, appSettings.toolsExpanded);
+      }
+      if (from < 13) {
+        await m.addColumn(subspacePoints, subspacePoints.label);
+      }
+      if (from < 14) {
+        await m.addColumn(freeLines, freeLines.inclusionLat);
+        await m.addColumn(freeLines, freeLines.inclusionLng);
+        await m.addColumn(freeLines, freeLines.inclusionRadiusMeters);
+      }
+      if (from < 15) {
+        await m.createTable(poiSets);
+        await m.createTable(poiPoints);
+      }
+      if (from < 16) {
+        await m.addColumn(layers, layers.opacity);
+        await m.addColumn(appSettings, appSettings.basemapVisible);
+        await m.addColumn(appSettings, appSettings.basemapOpacity);
+      }
+      if (from < 17) {
+        // v16 stored `opacity` as a *multiplier* of the built-in fill
+        // translucency (1.0 = the default look). v17 makes `opacity` the
+        // fill opacity itself (1.0 = fully opaque, hiding the map).
+        // Rescale existing region layers so they look unchanged; POI
+        // layers use opacity as marker opacity (same in both), so skip them.
+        await customStatement(
+          'UPDATE layers SET opacity = opacity * '
+          '$kDefaultRegionLayerOpacity '
+          "WHERE type != 'poi'",
+        );
+      }
+      if (from < 18) {
+        // v18 introduced the `transit` layer type; v19 reshaped it, so its
+        // tables are created once in the v19 block below.
+      }
+      if (from < 19) {
+        // Transit became **stations only**: route geometry is not
+        // obtainable from the public API at any useful scale (see
+        // data/transit.dart), so the three route tables go, and the two
+        // survivors change shape — `fetched_at` becomes nullable to mean
+        // "not imported yet", which SQLite cannot relax in place.
+        //
+        // So the transit tables are dropped and recreated rather than
+        // altered. This DOES discard a v18 transit import — deliberately:
+        // the v18 model is the one being abandoned, and re-importing is now
+        // the cheap path (a whole city in seconds, where geometry never
+        // worked at all). Nothing outside `transit_*` is touched.
+        for (final t in const [
+          'transit_route_stops',
+          'transit_route_parts',
+          'transit_routes',
+          'transit_stops',
+          'transit_sets',
+        ]) {
+          await customStatement('DROP TABLE IF EXISTS $t');
+        }
+        // The two survivors were created here until v27 merged them into
+        // `poi_sets`/`poi_points`; a database this old has no stations to
+        // carry, so v27 copies only when `from >= 19`.
+        await m.addColumn(appSettings, appSettings.transitEndpoint);
+      }
+      if (from < 20) {
+        // The `borders` layer type, replacing the two Settings overlays.
+        // `AppSettings.transportOverlay` and `.borderLevels` become dead
+        // columns rather than being dropped — the same treatment
+        // `poiCategories` got when the POI layer type replaced *its*
+        // overlay. Nothing reads them; nothing needs migrating out of them.
+        await m.addColumn(layers, layers.borderLevel);
+        await m.addColumn(layers, layers.borderFillAreas);
+        await m.addColumn(layers, layers.borderShowNames);
+        await m.createTable(borderSets);
+        await m.createTable(borderAreas);
+      }
+      if (from < 21) {
+        // POIs gain the OSM identity they never stored, so re-importing
+        // overlapping ground stops duplicating them. Transit and borders
+        // already had `osm_id` — they just weren't consulting it.
+        //
+        // Existing rows stay null: the id wasn't dropped on the way in, it
+        // was never requested from Overpass, so there is nothing to
+        // backfill from. They keep working and are simply invisible to
+        // dedup, which is the honest outcome — guessing identity from
+        // coordinates would silently merge two genuinely different POIs
+        // that share a doorway.
+        await m.addColumn(poiPoints, poiPoints.osmType);
+        await m.addColumn(poiPoints, poiPoints.osmId);
+      }
+      if (from < 22) {
+        // Per-element colours. Every existing row keeps `color_argb` null
+        // and `color_shade` 0, and shade 0 *is* the layer colour, so an
+        // upgraded map renders pixel-identically until the user adds or
+        // recolours something. Only new elements start taking shades.
+        await m.addColumn(circles, circles.colorArgb);
+        await m.addColumn(circles, circles.colorShade);
+        // `planes` and `transit_sets` are gone in v27, but the copy there
+        // reads these columns, so a database that still has the tables
+        // gets them by raw SQL (the Dart table classes no longer exist).
+        if (from >= 2) {
+          await customStatement(
+            'ALTER TABLE planes ADD COLUMN color_argb INTEGER NULL',
+          );
+          await customStatement(
+            'ALTER TABLE planes ADD COLUMN color_shade INTEGER '
+            'NOT NULL DEFAULT 0',
+          );
+        }
+        await m.addColumn(subspaces, subspaces.colorArgb);
+        await m.addColumn(subspaces, subspaces.colorShade);
+        await m.addColumn(freeLines, freeLines.colorArgb);
+        await m.addColumn(freeLines, freeLines.colorShade);
+        await m.addColumn(freeAreas, freeAreas.colorArgb);
+        await m.addColumn(freeAreas, freeAreas.colorShade);
+        await m.addColumn(heightRegions, heightRegions.colorArgb);
+        await m.addColumn(heightRegions, heightRegions.colorShade);
+        await m.addColumn(poiSets, poiSets.colorArgb);
+        await m.addColumn(poiSets, poiSets.colorShade);
+        if (from >= 19) {
+          await customStatement(
+            'ALTER TABLE transit_sets ADD COLUMN color_argb INTEGER NULL',
+          );
+          await customStatement(
+            'ALTER TABLE transit_sets ADD COLUMN color_shade INTEGER '
+            'NOT NULL DEFAULT 0',
+          );
+        }
+        await m.addColumn(borderAreas, borderAreas.colorArgb);
+      }
+      if (from < 23) {
+        // Border outlines became reshapeable. Every existing area is by
+        // definition untouched OSM geometry, so `edited_at` starts null —
+        // which is exactly what the column means.
+        await m.addColumn(borderAreas, borderAreas.editedAt);
+      }
+      if (from < 24) {
+        // The `track` type (recorded GPS lines) was added here and removed
+        // in v27. Its tables and the two `layers` columns are no longer
+        // created on the way up: v27 drops them wherever they exist.
+      }
+      if (from < 25) {
+        // Hand-placed POIs. Every existing set is an Overpass import by
+        // definition, so `is_manual` starts false and `icon_key` null —
+        // which is exactly what those columns mean for an import.
+        // `is_manual` was added here and folded into `source` in v27; a
+        // database this old has no manual sets, and `source` defaults to
+        // radius, so only `icon_key` is still added.
+        await m.addColumn(poiSets, poiSets.iconKey);
+      }
+      if (from < 26) {
+        // Per-element draw order. Existing maps must render pixel-for-pixel
+        // as they did, so every row is backfilled with the order it already
+        // paints in: the region painter groups by colour and orders the
+        // groups by `color_shade` (the per-layer creation counter), so
+        // ranking each layer's rows by (color_shade, created_at, id)
+        // reproduces exactly today's stack. Where several elements share a
+        // colour they union flat, so any total order over *them* is a new
+        // fact rather than a changed one.
+        // `createTable` in an earlier block builds **today's** table, so a
+        // table this upgrade run has just created already has the column
+        // and adding it again is a hard SQL error. Each add is therefore
+        // guarded by the version its table was introduced in: at or above
+        // it, the table came from the old database and needs the column;
+        // below it, `createTable` above already put it there.
+        await m.addColumn(circles, circles.zOrder); // in the first schema
+        if (from >= 2) {
+          await customStatement(
+            'ALTER TABLE planes ADD COLUMN z_order INTEGER '
+            'NOT NULL DEFAULT 0',
+          );
+        }
+        if (from >= 5) await m.addColumn(subspaces, subspaces.zOrder);
+        if (from >= 9) await m.addColumn(freeLines, freeLines.zOrder);
+        if (from >= 9) await m.addColumn(freeAreas, freeAreas.zOrder);
+        if (from >= 11) {
+          await m.addColumn(heightRegions, heightRegions.zOrder);
+        }
+        if (from >= 15) await m.addColumn(poiSets, poiSets.zOrder);
+        if (from >= 19) {
+          await customStatement(
+            'ALTER TABLE transit_sets ADD COLUMN z_order INTEGER '
+            'NOT NULL DEFAULT 0',
+          );
+        }
+        // `planes` and `transit_sets` are ranked too, although v27 drops
+        // them: the copy there carries `z_order` across, so the order a
+        // plane or a station import painted in survives the fold.
+        for (final table in [
+          'circles',
+          if (from >= 2) 'planes',
+          'subspaces',
+          'free_lines',
+          'free_areas',
+          'height_regions',
+          'poi_sets',
+          if (from >= 19) 'transit_sets',
+        ]) {
+          // A correlated count is O(n^2) in a layer's element count, which
+          // is tens — not the thousands a *point* table holds. These are
+          // element tables only.
+          await customStatement(
+            'UPDATE $table SET z_order = ('
+            'SELECT COUNT(*) FROM $table o '
+            'WHERE o.layer_id = $table.layer_id AND ('
+            'o.color_shade < $table.color_shade OR '
+            '(o.color_shade = $table.color_shade AND '
+            'o.created_at < $table.created_at) OR '
+            '(o.color_shade = $table.color_shade AND '
+            'o.created_at = $table.created_at AND o.id < $table.id)))',
+          );
+        }
+      }
+      if (from < 27) {
+        // Ten object types became seven. Nothing is silently lost except
+        // `track`, which the user chose to drop:
+        //
+        // * `planes` -> `subspace`. A plane *is* the two-point subspace
+        //   (`sphericalCell(main, [far])`), so each row becomes a subspace
+        //   with two points, the near side as main. Ids are kept (the
+        //   plane id is the subspace id) and z is lifted above the layer's
+        //   existing subspaces so the two stacks concatenate.
+        // * `transit` -> `poi`. Station imports become box-sourced POI
+        //   sets, stations become points with a `mode_mask`; ids kept.
+        //   A pending/failed import stays a pending row.
+        // * `track` is gone: tables, layer rows and the two `layers`
+        //   columns. FKs are off during migration, so the layer delete
+        //   cascades nothing — the child tables are dropped regardless.
+        //
+        // Every raw statement names only columns that exist on *every*
+        // database old enough to have the table: the guards above put the
+        // v22/v26 columns on `planes`/`transit_sets` by raw SQL.
+        if (from >= 2) {
+          await customStatement(
+            'INSERT INTO subspaces '
+            '(id, layer_id, label, created_at, color_argb, color_shade, '
+            'z_order) '
+            'SELECT p.id, p.layer_id, p.label, p.created_at, p.color_argb, '
+            'p.color_shade, p.z_order + (SELECT COALESCE(MAX(s.z_order), '
+            '-1) + 1 FROM subspaces s WHERE s.layer_id = p.layer_id) '
+            'FROM planes p',
+          );
+          await customStatement(
+            'INSERT INTO subspace_points '
+            '(id, subspace_id, lat, lng, sort_order, is_main, label, '
+            'created_at) '
+            "SELECT p.id || '-a', p.id, "
+            'CASE WHEN p.near_a THEN p.a_lat ELSE p.b_lat END, '
+            'CASE WHEN p.near_a THEN p.a_lng ELSE p.b_lng END, '
+            '0, 1, NULL, p.created_at FROM planes p',
+          );
+          await customStatement(
+            'INSERT INTO subspace_points '
+            '(id, subspace_id, lat, lng, sort_order, is_main, label, '
+            'created_at) '
+            "SELECT p.id || '-b', p.id, "
+            'CASE WHEN p.near_a THEN p.b_lat ELSE p.a_lat END, '
+            'CASE WHEN p.near_a THEN p.b_lng ELSE p.a_lng END, '
+            '1, 0, NULL, p.created_at FROM planes p',
+          );
+          await customStatement(
+            "UPDATE layers SET type = 'subspace' WHERE type = 'planes'",
+          );
+          await customStatement('DROP TABLE planes');
+        }
+
+        // The POI tables grow what a station import needs. Guarded like
+        // v26: below v15 `createTable` already built today's shape.
+        if (from >= 15) {
+          await m.addColumn(poiSets, poiSets.source);
+          await m.addColumn(poiSets, poiSets.south);
+          await m.addColumn(poiSets, poiSets.west);
+          await m.addColumn(poiSets, poiSets.north);
+          await m.addColumn(poiSets, poiSets.east);
+          await m.addColumn(poiSets, poiSets.modeMask);
+          await m.addColumn(poiSets, poiSets.visibleModeMask);
+          await m.addColumn(poiSets, poiSets.fetchedAt);
+          await m.addColumn(poiSets, poiSets.lastError);
+          await m.addColumn(poiPoints, poiPoints.modeMask);
+        }
+        if (from >= 25) {
+          await customStatement(
+            "UPDATE poi_sets SET source = '$kPoiSourceManual' "
+            'WHERE is_manual = 1',
+          );
+          await m.dropColumn(poiSets, 'is_manual');
+        }
+        // A radius set was only ever created *after* a successful fetch,
+        // so its creation instant is its fetch instant. Without this every
+        // existing import would come up as a retry row.
+        await customStatement(
+          'UPDATE poi_sets SET fetched_at = created_at '
+          "WHERE source = '$kPoiSourceRadius'",
+        );
+
+        if (from >= 19) {
+          await customStatement(
+            'INSERT INTO poi_sets '
+            '(id, layer_id, category_key, center_lat, center_lng, '
+            'radius_meters, label, created_at, color_argb, color_shade, '
+            'z_order, icon_key, source, south, west, north, east, '
+            'mode_mask, visible_mode_mask, fetched_at, last_error) '
+            "SELECT t.id, t.layer_id, '$kTransitStationCategoryKey', "
+            '(t.south + t.north) / 2.0, (t.west + t.east) / 2.0, 0, '
+            't.label, t.created_at, t.color_argb, t.color_shade, '
+            't.z_order + (SELECT COALESCE(MAX(s.z_order), -1) + 1 '
+            'FROM poi_sets s WHERE s.layer_id = t.layer_id), '
+            "NULL, '$kPoiSourceBox', t.south, t.west, t.north, t.east, "
+            't.mode_mask, t.visible_mode_mask, t.fetched_at, t.last_error '
+            'FROM transit_sets t',
+          );
+          // The covering radius is derived in Dart, by the same helper
+          // the repository uses for a new box set, so the database and
+          // the app agree by construction rather than by two formulas.
+          final boxes = await customSelect(
+            'SELECT id, south, west, north, east FROM poi_sets '
+            "WHERE source = '$kPoiSourceBox'",
+          ).get();
+          for (final b in boxes) {
+            final r = boxCoveringRadiusMeters(
+              south: b.read<double>('south'),
+              west: b.read<double>('west'),
+              north: b.read<double>('north'),
+              east: b.read<double>('east'),
+            );
             await customStatement(
-              'UPDATE app_settings SET uncertainty_meters = 500 '
-              'WHERE uncertainty_meters = 0',
+              'UPDATE poi_sets SET radius_meters = $r '
+              "WHERE id = '${b.read<String>('id')}'",
             );
           }
-          if (from < 5) {
-            await m.createTable(subspaces);
-            await m.createTable(subspacePoints);
+          // A station's `osm_id` of 0 was the "no identity" placeholder;
+          // as a POI that is a NULL id (the `osmKey` rule).
+          await customStatement(
+            'INSERT INTO poi_points '
+            '(id, poi_set_id, lat, lng, name, sort_order, created_at, '
+            'osm_type, osm_id, mode_mask) '
+            'SELECT x.id, x.set_id, x.lat, x.lng, x.name, '
+            'ROW_NUMBER() OVER (PARTITION BY x.set_id '
+            'ORDER BY x.created_at, x.rowid) - 1, '
+            "x.created_at, 'node', "
+            'CASE WHEN x.osm_id = 0 THEN NULL ELSE x.osm_id END, '
+            'x.mode_mask FROM transit_stops x',
+          );
+          await customStatement(
+            "UPDATE layers SET type = 'poi' WHERE type = 'transit'",
+          );
+          await customStatement('DROP TABLE transit_stops');
+          await customStatement('DROP TABLE transit_sets');
+        }
+
+        await customStatement('DROP TABLE IF EXISTS track_points');
+        await customStatement('DROP TABLE IF EXISTS tracks');
+        await customStatement("DELETE FROM layers WHERE type = 'track'");
+        if (from >= 24) {
+          await m.dropColumn(layers, 'track_stroke_width');
+          await m.dropColumn(layers, 'track_min_distance_meters');
+        }
+      }
+      if (from < 28) {
+        // Somewhere to point the app when a donated service asks to be
+        // left alone, or when its user runs their own. All three are null
+        // for every existing database, which reads as "whatever this build
+        // ships with" — so nothing about an upgraded map changes.
+        await m.addColumn(appSettings, appSettings.tileUrlOverride);
+        await m.addColumn(appSettings, appSettings.overpassEndpointOverride);
+        await m.addColumn(appSettings, appSettings.nominatimHostOverride);
+      }
+      if (from < 29) {
+        // The map started explaining its own buttons. An upgraded database
+        // has shown no tips, so the table starts empty and every tip is
+        // owed its full run — which is right: the buttons are no more
+        // labelled on an old map than a new one.
+        await m.createTable(uiHints);
+        await m.addColumn(appSettings, appSettings.hintsEnabled);
+      }
+      if (from < 30) {
+        // The `mixed` layer is gone; folders group layers instead.
+        //
+        // It grouped by destroying what it grouped — everything merged in
+        // lost its own colour, opacity and invert, and could never be
+        // taken out again. A folder leaves them layers. So every mixed
+        // layer is split back into the layers it swallowed, one per kind
+        // it actually holds, and a folder is made only when that is more
+        // than one: a mixed layer that ended up holding a single kind was
+        // only ever a layer of that kind wearing the wrong label.
+        //
+        // The order is [kMixedContentTypes], which is the order the mixed
+        // painter drew those kinds in — so the split stacks the way the
+        // layer looked, rather than the way the tables happen to be listed.
+        await m.createTable(folders);
+        await m.addColumn(layers, layers.folderId);
+        final mixed = await customSelect(
+          'SELECT id, name, color_argb, is_visible, is_inverted, opacity, '
+          "sort_order, created_at FROM layers WHERE type = 'mixed'",
+        ).get();
+        for (final row in mixed) {
+          final id = row.read<String>('id');
+          // Which kinds it actually holds. Every one of these tables exists
+          // on any database that reaches this block: the earlier blocks in
+          // this same upgrade have already created them.
+          final present = <String>[];
+          for (final entry in kMixedSplitTables.entries) {
+            final n = await customSelect(
+              'SELECT COUNT(*) AS n FROM ${entry.value} WHERE layer_id = ?',
+              variables: [Variable<String>(id)],
+            ).getSingle();
+            if (n.read<int>('n') > 0) present.add(entry.key);
           }
-          if (from < 6) {
-            await m.addColumn(appSettings, appSettings.transportOverlay);
+          // Nothing in it, or one kind: it *is* a layer of that kind. An
+          // empty one becomes the default type rather than a folder holding
+          // nothing.
+          if (present.length < 2) {
+            await customStatement('UPDATE layers SET type = ? WHERE id = ?', [
+              present.isEmpty ? 'circles' : present.first,
+              id,
+            ]);
+            continue;
           }
-          if (from < 7) {
-            await m.addColumn(appSettings, appSettings.poiCategories);
-          }
-          if (from < 8) {
-            await m.addColumn(appSettings, appSettings.borderLevels);
-          }
-          if (from < 9) {
-            await m.createTable(freeLines);
-            await m.createTable(freeLinePoints);
-            await m.createTable(freeAreas);
-            await m.createTable(freeAreaPoints);
-          }
-          if (from < 10) {
-            await m.createTable(tileCache);
-            await m.createTable(overpassCache);
-          }
-          if (from < 11) {
-            await m.createTable(heightRegions);
-            await m.createTable(heightPolygons);
-            await m.createTable(heightPolygonPoints);
-          }
-          if (from < 12) {
-            await m.addColumn(appSettings, appSettings.toolsExpanded);
-          }
-          if (from < 13) {
-            await m.addColumn(subspacePoints, subspacePoints.label);
-          }
-          if (from < 14) {
-            await m.addColumn(freeLines, freeLines.inclusionLat);
-            await m.addColumn(freeLines, freeLines.inclusionLng);
-            await m.addColumn(freeLines, freeLines.inclusionRadiusMeters);
-          }
-          if (from < 15) {
-            await m.createTable(poiSets);
-            await m.createTable(poiPoints);
-          }
-          if (from < 16) {
-            await m.addColumn(layers, layers.opacity);
-            await m.addColumn(appSettings, appSettings.basemapVisible);
-            await m.addColumn(appSettings, appSettings.basemapOpacity);
-          }
-          if (from < 17) {
-            // v16 stored `opacity` as a *multiplier* of the built-in fill
-            // translucency (1.0 = the default look). v17 makes `opacity` the
-            // fill opacity itself (1.0 = fully opaque, hiding the map).
-            // Rescale existing region layers so they look unchanged; POI
-            // layers use opacity as marker opacity (same in both), so skip them.
+          // Several kinds: a folder in the mixed layer's place, carrying
+          // its name, its visibility and its invert — the flag means the
+          // same thing on a folder (flip every member), and the members are
+          // therefore created un-inverted.
+          final folderId = '$id-folder';
+          await customStatement(
+            'INSERT INTO folders (id, name, sort_order, is_visible, '
+            'is_inverted, is_collapsed, created_at) '
+            'VALUES (?, ?, ?, ?, ?, 0, ?)',
+            [
+              folderId,
+              row.read<String>('name'),
+              row.read<int>('sort_order'),
+              row.read<int>('is_visible'),
+              row.read<int>('is_inverted'),
+              row.read<int>('created_at'),
+            ],
+          );
+          for (var i = 0; i < present.length; i++) {
+            final type = present[i];
+            final childId = '$id-$type';
             await customStatement(
-              'UPDATE layers SET opacity = opacity * '
-              '$kDefaultRegionLayerOpacity '
-              "WHERE type != 'poi'",
+              'INSERT INTO layers (id, name, color_argb, is_visible, '
+              'sort_order, type, is_inverted, opacity, border_fill_areas, '
+              'border_show_names, folder_id, created_at) '
+              'VALUES (?, ?, ?, 1, ?, ?, 0, ?, 0, 0, ?, ?)',
+              [
+                childId,
+                '${row.read<String>('name')} (${layerTypeNoun(type)})',
+                row.read<int>('color_argb'),
+                i,
+                type,
+                row.read<double>('opacity'),
+                folderId,
+                row.read<int>('created_at'),
+              ],
+            );
+            await customStatement(
+              'UPDATE ${kMixedSplitTables[type]} SET layer_id = ? '
+              'WHERE layer_id = ?',
+              [childId, id],
             );
           }
-          if (from < 18) {
-            // v18 introduced the `transit` layer type; v19 reshaped it, so its
-            // tables are created once in the v19 block below.
-          }
-          if (from < 19) {
-            // Transit became **stations only**: route geometry is not
-            // obtainable from the public API at any useful scale (see
-            // data/transit.dart), so the three route tables go, and the two
-            // survivors change shape — `fetched_at` becomes nullable to mean
-            // "not imported yet", which SQLite cannot relax in place.
-            //
-            // So the transit tables are dropped and recreated rather than
-            // altered. This DOES discard a v18 transit import — deliberately:
-            // the v18 model is the one being abandoned, and re-importing is now
-            // the cheap path (a whole city in seconds, where geometry never
-            // worked at all). Nothing outside `transit_*` is touched.
-            for (final t in const [
-              'transit_route_stops',
-              'transit_route_parts',
-              'transit_routes',
-              'transit_stops',
-              'transit_sets',
-            ]) {
-              await customStatement('DROP TABLE IF EXISTS $t');
-            }
-            // The two survivors were created here until v27 merged them into
-            // `poi_sets`/`poi_points`; a database this old has no stations to
-            // carry, so v27 copies only when `from >= 19`.
-            await m.addColumn(appSettings, appSettings.transitEndpoint);
-          }
-          if (from < 20) {
-            // The `borders` layer type, replacing the two Settings overlays.
-            // `AppSettings.transportOverlay` and `.borderLevels` become dead
-            // columns rather than being dropped — the same treatment
-            // `poiCategories` got when the POI layer type replaced *its*
-            // overlay. Nothing reads them; nothing needs migrating out of them.
-            await m.addColumn(layers, layers.borderLevel);
-            await m.addColumn(layers, layers.borderFillAreas);
-            await m.addColumn(layers, layers.borderShowNames);
-            await m.createTable(borderSets);
-            await m.createTable(borderAreas);
-          }
-          if (from < 21) {
-            // POIs gain the OSM identity they never stored, so re-importing
-            // overlapping ground stops duplicating them. Transit and borders
-            // already had `osm_id` — they just weren't consulting it.
-            //
-            // Existing rows stay null: the id wasn't dropped on the way in, it
-            // was never requested from Overpass, so there is nothing to
-            // backfill from. They keep working and are simply invisible to
-            // dedup, which is the honest outcome — guessing identity from
-            // coordinates would silently merge two genuinely different POIs
-            // that share a doorway.
-            await m.addColumn(poiPoints, poiPoints.osmType);
-            await m.addColumn(poiPoints, poiPoints.osmId);
-          }
-          if (from < 22) {
-            // Per-element colours. Every existing row keeps `color_argb` null
-            // and `color_shade` 0, and shade 0 *is* the layer colour, so an
-            // upgraded map renders pixel-identically until the user adds or
-            // recolours something. Only new elements start taking shades.
-            await m.addColumn(circles, circles.colorArgb);
-            await m.addColumn(circles, circles.colorShade);
-            // `planes` and `transit_sets` are gone in v27, but the copy there
-            // reads these columns, so a database that still has the tables
-            // gets them by raw SQL (the Dart table classes no longer exist).
-            if (from >= 2) {
-              await customStatement(
-                'ALTER TABLE planes ADD COLUMN color_argb INTEGER NULL',
-              );
-              await customStatement(
-                'ALTER TABLE planes ADD COLUMN color_shade INTEGER '
-                'NOT NULL DEFAULT 0',
-              );
-            }
-            await m.addColumn(subspaces, subspaces.colorArgb);
-            await m.addColumn(subspaces, subspaces.colorShade);
-            await m.addColumn(freeLines, freeLines.colorArgb);
-            await m.addColumn(freeLines, freeLines.colorShade);
-            await m.addColumn(freeAreas, freeAreas.colorArgb);
-            await m.addColumn(freeAreas, freeAreas.colorShade);
-            await m.addColumn(heightRegions, heightRegions.colorArgb);
-            await m.addColumn(heightRegions, heightRegions.colorShade);
-            await m.addColumn(poiSets, poiSets.colorArgb);
-            await m.addColumn(poiSets, poiSets.colorShade);
-            if (from >= 19) {
-              await customStatement(
-                'ALTER TABLE transit_sets ADD COLUMN color_argb INTEGER NULL',
-              );
-              await customStatement(
-                'ALTER TABLE transit_sets ADD COLUMN color_shade INTEGER '
-                'NOT NULL DEFAULT 0',
-              );
-            }
-            await m.addColumn(borderAreas, borderAreas.colorArgb);
-          }
-          if (from < 23) {
-            // Border outlines became reshapeable. Every existing area is by
-            // definition untouched OSM geometry, so `edited_at` starts null —
-            // which is exactly what the column means.
-            await m.addColumn(borderAreas, borderAreas.editedAt);
-          }
-          if (from < 24) {
-            // The `track` type (recorded GPS lines) was added here and removed
-            // in v27. Its tables and the two `layers` columns are no longer
-            // created on the way up: v27 drops them wherever they exist.
-          }
-          if (from < 25) {
-            // Hand-placed POIs. Every existing set is an Overpass import by
-            // definition, so `is_manual` starts false and `icon_key` null —
-            // which is exactly what those columns mean for an import.
-            // `is_manual` was added here and folded into `source` in v27; a
-            // database this old has no manual sets, and `source` defaults to
-            // radius, so only `icon_key` is still added.
-            await m.addColumn(poiSets, poiSets.iconKey);
-          }
-          if (from < 26) {
-            // Per-element draw order. Existing maps must render pixel-for-pixel
-            // as they did, so every row is backfilled with the order it already
-            // paints in: the region painter groups by colour and orders the
-            // groups by `color_shade` (the per-layer creation counter), so
-            // ranking each layer's rows by (color_shade, created_at, id)
-            // reproduces exactly today's stack. Where several elements share a
-            // colour they union flat, so any total order over *them* is a new
-            // fact rather than a changed one.
-            // `createTable` in an earlier block builds **today's** table, so a
-            // table this upgrade run has just created already has the column
-            // and adding it again is a hard SQL error. Each add is therefore
-            // guarded by the version its table was introduced in: at or above
-            // it, the table came from the old database and needs the column;
-            // below it, `createTable` above already put it there.
-            await m.addColumn(circles, circles.zOrder); // in the first schema
-            if (from >= 2) {
-              await customStatement(
-                'ALTER TABLE planes ADD COLUMN z_order INTEGER '
-                'NOT NULL DEFAULT 0',
-              );
-            }
-            if (from >= 5) await m.addColumn(subspaces, subspaces.zOrder);
-            if (from >= 9) await m.addColumn(freeLines, freeLines.zOrder);
-            if (from >= 9) await m.addColumn(freeAreas, freeAreas.zOrder);
-            if (from >= 11) {
-              await m.addColumn(heightRegions, heightRegions.zOrder);
-            }
-            if (from >= 15) await m.addColumn(poiSets, poiSets.zOrder);
-            if (from >= 19) {
-              await customStatement(
-                'ALTER TABLE transit_sets ADD COLUMN z_order INTEGER '
-                'NOT NULL DEFAULT 0',
-              );
-            }
-            // `planes` and `transit_sets` are ranked too, although v27 drops
-            // them: the copy there carries `z_order` across, so the order a
-            // plane or a station import painted in survives the fold.
-            for (final table in [
-              'circles',
-              if (from >= 2) 'planes',
-              'subspaces',
-              'free_lines',
-              'free_areas',
-              'height_regions',
-              'poi_sets',
-              if (from >= 19) 'transit_sets',
-            ]) {
-              // A correlated count is O(n^2) in a layer's element count, which
-              // is tens — not the thousands a *point* table holds. These are
-              // element tables only.
-              await customStatement(
-                'UPDATE $table SET z_order = ('
-                'SELECT COUNT(*) FROM $table o '
-                'WHERE o.layer_id = $table.layer_id AND ('
-                'o.color_shade < $table.color_shade OR '
-                '(o.color_shade = $table.color_shade AND '
-                'o.created_at < $table.created_at) OR '
-                '(o.color_shade = $table.color_shade AND '
-                'o.created_at = $table.created_at AND o.id < $table.id)))',
-              );
-            }
-          }
-          if (from < 27) {
-            // Ten object types became seven. Nothing is silently lost except
-            // `track`, which the user chose to drop:
-            //
-            // * `planes` -> `subspace`. A plane *is* the two-point subspace
-            //   (`sphericalCell(main, [far])`), so each row becomes a subspace
-            //   with two points, the near side as main. Ids are kept (the
-            //   plane id is the subspace id) and z is lifted above the layer's
-            //   existing subspaces so the two stacks concatenate.
-            // * `transit` -> `poi`. Station imports become box-sourced POI
-            //   sets, stations become points with a `mode_mask`; ids kept.
-            //   A pending/failed import stays a pending row.
-            // * `track` is gone: tables, layer rows and the two `layers`
-            //   columns. FKs are off during migration, so the layer delete
-            //   cascades nothing — the child tables are dropped regardless.
-            //
-            // Every raw statement names only columns that exist on *every*
-            // database old enough to have the table: the guards above put the
-            // v22/v26 columns on `planes`/`transit_sets` by raw SQL.
-            if (from >= 2) {
-              await customStatement(
-                'INSERT INTO subspaces '
-                '(id, layer_id, label, created_at, color_argb, color_shade, '
-                'z_order) '
-                'SELECT p.id, p.layer_id, p.label, p.created_at, p.color_argb, '
-                'p.color_shade, p.z_order + (SELECT COALESCE(MAX(s.z_order), '
-                '-1) + 1 FROM subspaces s WHERE s.layer_id = p.layer_id) '
-                'FROM planes p',
-              );
-              await customStatement(
-                'INSERT INTO subspace_points '
-                '(id, subspace_id, lat, lng, sort_order, is_main, label, '
-                'created_at) '
-                "SELECT p.id || '-a', p.id, "
-                'CASE WHEN p.near_a THEN p.a_lat ELSE p.b_lat END, '
-                'CASE WHEN p.near_a THEN p.a_lng ELSE p.b_lng END, '
-                '0, 1, NULL, p.created_at FROM planes p',
-              );
-              await customStatement(
-                'INSERT INTO subspace_points '
-                '(id, subspace_id, lat, lng, sort_order, is_main, label, '
-                'created_at) '
-                "SELECT p.id || '-b', p.id, "
-                'CASE WHEN p.near_a THEN p.b_lat ELSE p.a_lat END, '
-                'CASE WHEN p.near_a THEN p.b_lng ELSE p.a_lng END, '
-                '1, 0, NULL, p.created_at FROM planes p',
-              );
-              await customStatement(
-                "UPDATE layers SET type = 'subspace' WHERE type = 'planes'",
-              );
-              await customStatement('DROP TABLE planes');
-            }
-
-            // The POI tables grow what a station import needs. Guarded like
-            // v26: below v15 `createTable` already built today's shape.
-            if (from >= 15) {
-              await m.addColumn(poiSets, poiSets.source);
-              await m.addColumn(poiSets, poiSets.south);
-              await m.addColumn(poiSets, poiSets.west);
-              await m.addColumn(poiSets, poiSets.north);
-              await m.addColumn(poiSets, poiSets.east);
-              await m.addColumn(poiSets, poiSets.modeMask);
-              await m.addColumn(poiSets, poiSets.visibleModeMask);
-              await m.addColumn(poiSets, poiSets.fetchedAt);
-              await m.addColumn(poiSets, poiSets.lastError);
-              await m.addColumn(poiPoints, poiPoints.modeMask);
-            }
-            if (from >= 25) {
-              await customStatement(
-                "UPDATE poi_sets SET source = '$kPoiSourceManual' "
-                'WHERE is_manual = 1',
-              );
-              await m.dropColumn(poiSets, 'is_manual');
-            }
-            // A radius set was only ever created *after* a successful fetch,
-            // so its creation instant is its fetch instant. Without this every
-            // existing import would come up as a retry row.
-            await customStatement(
-              'UPDATE poi_sets SET fetched_at = created_at '
-              "WHERE source = '$kPoiSourceRadius'",
-            );
-
-            if (from >= 19) {
-              await customStatement(
-                'INSERT INTO poi_sets '
-                '(id, layer_id, category_key, center_lat, center_lng, '
-                'radius_meters, label, created_at, color_argb, color_shade, '
-                'z_order, icon_key, source, south, west, north, east, '
-                'mode_mask, visible_mode_mask, fetched_at, last_error) '
-                "SELECT t.id, t.layer_id, '$kTransitStationCategoryKey', "
-                '(t.south + t.north) / 2.0, (t.west + t.east) / 2.0, 0, '
-                't.label, t.created_at, t.color_argb, t.color_shade, '
-                't.z_order + (SELECT COALESCE(MAX(s.z_order), -1) + 1 '
-                'FROM poi_sets s WHERE s.layer_id = t.layer_id), '
-                "NULL, '$kPoiSourceBox', t.south, t.west, t.north, t.east, "
-                't.mode_mask, t.visible_mode_mask, t.fetched_at, t.last_error '
-                'FROM transit_sets t',
-              );
-              // The covering radius is derived in Dart, by the same helper
-              // the repository uses for a new box set, so the database and
-              // the app agree by construction rather than by two formulas.
-              final boxes = await customSelect(
-                'SELECT id, south, west, north, east FROM poi_sets '
-                "WHERE source = '$kPoiSourceBox'",
-              ).get();
-              for (final b in boxes) {
-                final r = boxCoveringRadiusMeters(
-                  south: b.read<double>('south'),
-                  west: b.read<double>('west'),
-                  north: b.read<double>('north'),
-                  east: b.read<double>('east'),
-                );
-                await customStatement(
-                  'UPDATE poi_sets SET radius_meters = $r '
-                  "WHERE id = '${b.read<String>('id')}'",
-                );
-              }
-              // A station's `osm_id` of 0 was the "no identity" placeholder;
-              // as a POI that is a NULL id (the `osmKey` rule).
-              await customStatement(
-                'INSERT INTO poi_points '
-                '(id, poi_set_id, lat, lng, name, sort_order, created_at, '
-                'osm_type, osm_id, mode_mask) '
-                'SELECT x.id, x.set_id, x.lat, x.lng, x.name, '
-                'ROW_NUMBER() OVER (PARTITION BY x.set_id '
-                'ORDER BY x.created_at, x.rowid) - 1, '
-                "x.created_at, 'node', "
-                'CASE WHEN x.osm_id = 0 THEN NULL ELSE x.osm_id END, '
-                'x.mode_mask FROM transit_stops x',
-              );
-              await customStatement(
-                "UPDATE layers SET type = 'poi' WHERE type = 'transit'",
-              );
-              await customStatement('DROP TABLE transit_stops');
-              await customStatement('DROP TABLE transit_sets');
-            }
-
-            await customStatement('DROP TABLE IF EXISTS track_points');
-            await customStatement('DROP TABLE IF EXISTS tracks');
-            await customStatement("DELETE FROM layers WHERE type = 'track'");
-            if (from >= 24) {
-              await m.dropColumn(layers, 'track_stroke_width');
-              await m.dropColumn(layers, 'track_min_distance_meters');
-            }
-          }
-          if (from < 28) {
-            // Somewhere to point the app when a donated service asks to be
-            // left alone, or when its user runs their own. All three are null
-            // for every existing database, which reads as "whatever this build
-            // ships with" — so nothing about an upgraded map changes.
-            await m.addColumn(appSettings, appSettings.tileUrlOverride);
-            await m.addColumn(
-                appSettings, appSettings.overpassEndpointOverride);
-            await m.addColumn(appSettings, appSettings.nominatimHostOverride);
-          }
-          if (from < 29) {
-            // The map started explaining its own buttons. An upgraded database
-            // has shown no tips, so the table starts empty and every tip is
-            // owed its full run — which is right: the buttons are no more
-            // labelled on an old map than a new one.
-            await m.createTable(uiHints);
-            await m.addColumn(appSettings, appSettings.hintsEnabled);
-          }
-          if (from < 30) {
-            // The `mixed` layer is gone; folders group layers instead.
-            //
-            // It grouped by destroying what it grouped — everything merged in
-            // lost its own colour, opacity and invert, and could never be
-            // taken out again. A folder leaves them layers. So every mixed
-            // layer is split back into the layers it swallowed, one per kind
-            // it actually holds, and a folder is made only when that is more
-            // than one: a mixed layer that ended up holding a single kind was
-            // only ever a layer of that kind wearing the wrong label.
-            //
-            // The order is [kMixedContentTypes], which is the order the mixed
-            // painter drew those kinds in — so the split stacks the way the
-            // layer looked, rather than the way the tables happen to be listed.
-            await m.createTable(folders);
-            await m.addColumn(layers, layers.folderId);
-            final mixed = await customSelect(
-              'SELECT id, name, color_argb, is_visible, is_inverted, opacity, '
-              "sort_order, created_at FROM layers WHERE type = 'mixed'",
-            ).get();
-            for (final row in mixed) {
-              final id = row.read<String>('id');
-              // Which kinds it actually holds. Every one of these tables exists
-              // on any database that reaches this block: the earlier blocks in
-              // this same upgrade have already created them.
-              final present = <String>[];
-              for (final entry in kMixedSplitTables.entries) {
-                final n = await customSelect(
-                  'SELECT COUNT(*) AS n FROM ${entry.value} WHERE layer_id = ?',
-                  variables: [Variable<String>(id)],
-                ).getSingle();
-                if (n.read<int>('n') > 0) present.add(entry.key);
-              }
-              // Nothing in it, or one kind: it *is* a layer of that kind. An
-              // empty one becomes the default type rather than a folder holding
-              // nothing.
-              if (present.length < 2) {
-                await customStatement(
-                  'UPDATE layers SET type = ? WHERE id = ?',
-                  [present.isEmpty ? 'circles' : present.first, id],
-                );
-                continue;
-              }
-              // Several kinds: a folder in the mixed layer's place, carrying
-              // its name, its visibility and its invert — the flag means the
-              // same thing on a folder (flip every member), and the members are
-              // therefore created un-inverted.
-              final folderId = '$id-folder';
-              await customStatement(
-                'INSERT INTO folders (id, name, sort_order, is_visible, '
-                'is_inverted, is_collapsed, created_at) '
-                'VALUES (?, ?, ?, ?, ?, 0, ?)',
-                [
-                  folderId,
-                  row.read<String>('name'),
-                  row.read<int>('sort_order'),
-                  row.read<int>('is_visible'),
-                  row.read<int>('is_inverted'),
-                  row.read<int>('created_at'),
-                ],
-              );
-              for (var i = 0; i < present.length; i++) {
-                final type = present[i];
-                final childId = '$id-$type';
-                await customStatement(
-                  'INSERT INTO layers (id, name, color_argb, is_visible, '
-                  'sort_order, type, is_inverted, opacity, border_fill_areas, '
-                  'border_show_names, folder_id, created_at) '
-                  'VALUES (?, ?, ?, 1, ?, ?, 0, ?, 0, 0, ?, ?)',
-                  [
-                    childId,
-                    '${row.read<String>('name')} (${layerTypeNoun(type)})',
-                    row.read<int>('color_argb'),
-                    i,
-                    type,
-                    row.read<double>('opacity'),
-                    folderId,
-                    row.read<int>('created_at'),
-                  ],
-                );
-                await customStatement(
-                  'UPDATE ${kMixedSplitTables[type]} SET layer_id = ? '
-                  'WHERE layer_id = ?',
-                  [childId, id],
-                );
-              }
-              // Every row it held now hangs off a child, so this takes nothing
-              // with it — and foreign keys are off during a migration anyway.
-              await customStatement('DELETE FROM layers WHERE id = ?', [id]);
-            }
-          }
-          if (from < 31) {
-            // An imported POI may now be corrected by hand, and the correction
-            // may be offered back to OSM as a note.
-            //
-            // All four columns are null on every existing row, which reads as
-            // "untouched — this is exactly what the import returned", and that
-            // is true: until this version there was no way to change one.
-            await m.addColumn(poiPoints, poiPoints.editedAt);
-            await m.addColumn(poiPoints, poiPoints.origLat);
-            await m.addColumn(poiPoints, poiPoints.origLng);
-            await m.addColumn(poiPoints, poiPoints.origName);
-            await m.createTable(osmReports);
-          }
-        },
-        beforeOpen: (details) async {
-          // Required for the element -> Layers ON DELETE CASCADE to fire.
-          await customStatement('PRAGMA foreign_keys = ON');
-          // ...and, because they fire *inside* SQLite where no Dart code sees
-          // what a cascade removed, the undo journal has to be installed here
-          // too: it is the only thing that records it.
-          await undo.install();
-        },
-      );
+          // Every row it held now hangs off a child, so this takes nothing
+          // with it — and foreign keys are off during a migration anyway.
+          await customStatement('DELETE FROM layers WHERE id = ?', [id]);
+        }
+      }
+      if (from < 31) {
+        // An imported POI may now be corrected by hand, and the correction
+        // may be offered back to OSM as a note.
+        //
+        // All four columns are null on every existing row, which reads as
+        // "untouched — this is exactly what the import returned", and that
+        // is true: until this version there was no way to change one.
+        await m.addColumn(poiPoints, poiPoints.editedAt);
+        await m.addColumn(poiPoints, poiPoints.origLat);
+        await m.addColumn(poiPoints, poiPoints.origLng);
+        await m.addColumn(poiPoints, poiPoints.origName);
+        await m.createTable(osmReports);
+      }
+    },
+    beforeOpen: (details) async {
+      // Required for the element -> Layers ON DELETE CASCADE to fire.
+      await customStatement('PRAGMA foreign_keys = ON');
+      // ...and, because they fire *inside* SQLite where no Dart code sees
+      // what a cascade removed, the undo journal has to be installed here
+      // too: it is the only thing that records it.
+      await undo.install();
+    },
+  );
 }

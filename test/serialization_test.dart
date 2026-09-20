@@ -22,161 +22,165 @@ import 'package:zonecraft/data/serialization.dart';
 
 void main() {
   ExportData sample() => ExportData([
-        ExportLayer(
-          name: 'Circles',
-          colorArgb: 0xFF2196F3,
-          type: 'circles',
-          isInverted: false,
-          objects: const [
-            ExportObject(
-              kind: 'circle',
-              coords: [LatLng(52.5, 13.4)],
-              radiusMeters: 1500,
-              label: 'home',
-            ),
+    ExportLayer(
+      name: 'Circles',
+      colorArgb: 0xFF2196F3,
+      type: 'circles',
+      isInverted: false,
+      objects: const [
+        ExportObject(
+          kind: 'circle',
+          coords: [LatLng(52.5, 13.4)],
+          radiusMeters: 1500,
+          label: 'home',
+        ),
+      ],
+    ),
+    ExportLayer(
+      name: 'Nearer',
+      colorArgb: 0xFFEF5350,
+      type: 'subspace',
+      isInverted: true,
+      objects: const [
+        // A two-point subspace: what a `plane` became in v27.
+        ExportObject(
+          kind: 'subspace',
+          coords: [LatLng(52.4, 13.3), LatLng(52.6, 13.5)],
+          mainIndex: 1,
+        ),
+      ],
+    ),
+    ExportLayer(
+      name: 'Subspaces',
+      colorArgb: 0xFF66BB6A,
+      type: 'subspace',
+      isInverted: false,
+      objects: const [
+        ExportObject(
+          kind: 'subspace',
+          coords: [LatLng(0, 0), LatLng(0, 1), LatLng(1, 0)],
+          mainIndex: 2,
+          pointLabels: ['west', null, 'mine'],
+        ),
+      ],
+    ),
+    ExportLayer(
+      name: 'Lines',
+      colorArgb: 0xFFAB47BC,
+      type: 'freeline',
+      isInverted: false,
+      objects: const [
+        ExportObject(
+          kind: 'freeline',
+          coords: [LatLng(10, 10), LatLng(11, 11), LatLng(12, 10)],
+          offsetMeters: -250,
+          // The circle that bounds the line to a half-disk: stored per
+          // line, and silently absent from this file for a long time.
+          inclusionLat: 11,
+          inclusionLng: 10.5,
+          inclusionRadiusMeters: 12000,
+          colorArgb: 0xFF00FF00,
+        ),
+      ],
+    ),
+    ExportLayer(
+      name: 'Areas',
+      colorArgb: 0xFFFFA726,
+      type: 'freearea',
+      isInverted: false,
+      objects: const [
+        ExportObject(
+          kind: 'freearea',
+          coords: [LatLng(0, 0), LatLng(0, 2), LatLng(2, 2), LatLng(2, 0)],
+          offsetMeters: 300,
+        ),
+      ],
+    ),
+    ExportLayer(
+      name: 'POIs',
+      colorArgb: 0xFF00ACC1,
+      type: 'poi',
+      isInverted: false,
+      objects: const [
+        ExportObject(
+          kind: 'poi',
+          // coords[0] = search centre, then the POIs themselves.
+          coords: [
+            LatLng(48.1, 11.5),
+            LatLng(48.11, 11.51),
+            LatLng(48.09, 11.49),
+          ],
+          radiusMeters: 2000,
+          categoryKey: 'cafe',
+          pointLabels: ['Café A', null],
+          pointOsmIds: [240109189, 0],
+          pointOsmTypes: ['node', null],
+          label: 'Cafés',
+        ),
+      ],
+    ),
+    ExportLayer(
+      name: 'Height',
+      colorArgb: 0xFF8D6E63,
+      type: 'height',
+      isInverted: false,
+      // Hidden — the one layer attribute that used to be left behind.
+      isVisible: false,
+      objects: const [
+        ExportObject(
+          kind: 'height',
+          coords: [LatLng(47.42, 10.98)],
+          radiusMeters: 12000,
+          thresholdMeters: 1850.5,
+          aboveThreshold: false,
+          sampleZoom: 14,
+          // The generated fill: what the layer actually draws, and what an
+          // export used to leave behind so the layer came back blank.
+          generated: true,
+          heightRings: [
+            [LatLng(47.4, 10.9), LatLng(47.45, 10.9), LatLng(47.45, 11.0)],
           ],
         ),
-        ExportLayer(
-          name: 'Nearer',
-          colorArgb: 0xFFEF5350,
-          type: 'subspace',
-          isInverted: true,
-          objects: const [
-            // A two-point subspace: what a `plane` became in v27.
-            ExportObject(
-              kind: 'subspace',
-              coords: [LatLng(52.4, 13.3), LatLng(52.6, 13.5)],
-              mainIndex: 1,
-            ),
-          ],
+      ],
+    ),
+    ExportLayer(
+      name: 'Stations',
+      colorArgb: 0xFF7E57C2,
+      type: 'poi',
+      isInverted: false,
+      objects: const [
+        // A station import: a box-sourced POI set. coords[0] is the box
+        // centre; the stations carry mode bits.
+        ExportObject(
+          kind: 'poi',
+          coords: [LatLng(48.15, 11.55), LatLng(48.14, 11.46)],
+          categoryKey: 'transit_station',
+          pointLabels: ['Pasing Bahnhof'],
+          pointOsmIds: [1],
+          pointOsmTypes: ['node'],
+          pointModeMasks: [3],
+          bbox: [48.0, 11.3, 48.3, 11.8],
+          modeMask: 7,
+          visibleModeMask: 3,
+          label: 'München',
         ),
-        ExportLayer(
-          name: 'Subspaces',
-          colorArgb: 0xFF66BB6A,
-          type: 'subspace',
-          isInverted: false,
-          objects: const [
-            ExportObject(
-              kind: 'subspace',
-              coords: [LatLng(0, 0), LatLng(0, 1), LatLng(1, 0)],
-              mainIndex: 2,
-              pointLabels: ['west', null, 'mine'],
-            ),
-          ],
+        // An import that never succeeded: no stations, but still a retry
+        // row on the layer, so it has to survive the trip.
+        ExportObject(
+          kind: 'poi',
+          coords: [LatLng(49.25, 12.25)],
+          categoryKey: 'transit_station',
+          pointLabels: [],
+          bbox: [49.0, 12.0, 49.5, 12.5],
+          modeMask: 1,
+          visibleModeMask: -1,
+          pending: true,
+          errorMessage: 'Overpass was busy',
+          label: 'Regensburg',
         ),
-        ExportLayer(
-          name: 'Lines',
-          colorArgb: 0xFFAB47BC,
-          type: 'freeline',
-          isInverted: false,
-          objects: const [
-            ExportObject(
-              kind: 'freeline',
-              coords: [LatLng(10, 10), LatLng(11, 11), LatLng(12, 10)],
-              offsetMeters: -250,
-              // The circle that bounds the line to a half-disk: stored per
-              // line, and silently absent from this file for a long time.
-              inclusionLat: 11,
-              inclusionLng: 10.5,
-              inclusionRadiusMeters: 12000,
-              colorArgb: 0xFF00FF00,
-            ),
-          ],
-        ),
-        ExportLayer(
-          name: 'Areas',
-          colorArgb: 0xFFFFA726,
-          type: 'freearea',
-          isInverted: false,
-          objects: const [
-            ExportObject(
-              kind: 'freearea',
-              coords: [LatLng(0, 0), LatLng(0, 2), LatLng(2, 2), LatLng(2, 0)],
-              offsetMeters: 300,
-            ),
-          ],
-        ),
-        ExportLayer(
-          name: 'POIs',
-          colorArgb: 0xFF00ACC1,
-          type: 'poi',
-          isInverted: false,
-          objects: const [
-            ExportObject(
-              kind: 'poi',
-              // coords[0] = search centre, then the POIs themselves.
-              coords: [LatLng(48.1, 11.5), LatLng(48.11, 11.51), LatLng(48.09, 11.49)],
-              radiusMeters: 2000,
-              categoryKey: 'cafe',
-              pointLabels: ['Café A', null],
-              pointOsmIds: [240109189, 0],
-              pointOsmTypes: ['node', null],
-              label: 'Cafés',
-            ),
-          ],
-        ),
-        ExportLayer(
-          name: 'Height',
-          colorArgb: 0xFF8D6E63,
-          type: 'height',
-          isInverted: false,
-          // Hidden — the one layer attribute that used to be left behind.
-          isVisible: false,
-          objects: const [
-            ExportObject(
-              kind: 'height',
-              coords: [LatLng(47.42, 10.98)],
-              radiusMeters: 12000,
-              thresholdMeters: 1850.5,
-              aboveThreshold: false,
-              sampleZoom: 14,
-              // The generated fill: what the layer actually draws, and what an
-              // export used to leave behind so the layer came back blank.
-              generated: true,
-              heightRings: [
-                [LatLng(47.4, 10.9), LatLng(47.45, 10.9), LatLng(47.45, 11.0)],
-              ],
-            ),
-          ],
-        ),
-        ExportLayer(
-          name: 'Stations',
-          colorArgb: 0xFF7E57C2,
-          type: 'poi',
-          isInverted: false,
-          objects: const [
-            // A station import: a box-sourced POI set. coords[0] is the box
-            // centre; the stations carry mode bits.
-            ExportObject(
-              kind: 'poi',
-              coords: [LatLng(48.15, 11.55), LatLng(48.14, 11.46)],
-              categoryKey: 'transit_station',
-              pointLabels: ['Pasing Bahnhof'],
-              pointOsmIds: [1],
-              pointOsmTypes: ['node'],
-              pointModeMasks: [3],
-              bbox: [48.0, 11.3, 48.3, 11.8],
-              modeMask: 7,
-              visibleModeMask: 3,
-              label: 'München',
-            ),
-            // An import that never succeeded: no stations, but still a retry
-            // row on the layer, so it has to survive the trip.
-            ExportObject(
-              kind: 'poi',
-              coords: [LatLng(49.25, 12.25)],
-              categoryKey: 'transit_station',
-              pointLabels: [],
-              bbox: [49.0, 12.0, 49.5, 12.5],
-              modeMask: 1,
-              visibleModeMask: -1,
-              pending: true,
-              errorMessage: 'Overpass was busy',
-              label: 'Regensburg',
-            ),
-          ],
-        ),
-      ]);
+      ],
+    ),
+  ]);
 
   void expectSamePoints(List<LatLng>? a, List<LatLng>? b, String what) {
     if (a == null || b == null) {
@@ -191,7 +195,10 @@ void main() {
   }
 
   void expectSameRings(
-      List<List<LatLng>>? a, List<List<LatLng>>? b, String what) {
+    List<List<LatLng>>? a,
+    List<List<LatLng>>? b,
+    String what,
+  ) {
     if (a == null || b == null) {
       expect(b, a, reason: what);
       return;
@@ -285,12 +292,25 @@ void main() {
       'zonecraft': {
         'version': 2,
         'layers': [
-          {'name': 'Planes', 'colorArgb': 1, 'type': 'planes',
-            'isInverted': false},
-          {'name': 'Walk', 'colorArgb': 2, 'type': 'track',
-            'isInverted': false, 'trackStrokeWidth': 7.5},
-          {'name': 'Transit', 'colorArgb': 3, 'type': 'transit',
-            'isInverted': false},
+          {
+            'name': 'Planes',
+            'colorArgb': 1,
+            'type': 'planes',
+            'isInverted': false,
+          },
+          {
+            'name': 'Walk',
+            'colorArgb': 2,
+            'type': 'track',
+            'isInverted': false,
+            'trackStrokeWidth': 7.5,
+          },
+          {
+            'name': 'Transit',
+            'colorArgb': 3,
+            'type': 'transit',
+            'isInverted': false,
+          },
         ],
       },
       'features': [
@@ -299,7 +319,10 @@ void main() {
           'properties': {'kind': 'plane', 'zonecraftLayer': 0, 'nearA': false},
           'geometry': {
             'type': 'LineString',
-            'coordinates': [[11.0, 48.0], [11.4, 48.2]],
+            'coordinates': [
+              [11.0, 48.0],
+              [11.4, 48.2],
+            ],
           },
         },
         {
@@ -307,7 +330,12 @@ void main() {
           'properties': {'kind': 'track', 'zonecraftLayer': 1},
           'geometry': {
             'type': 'MultiLineString',
-            'coordinates': [[[11.5, 48.1], [11.51, 48.11]]],
+            'coordinates': [
+              [
+                [11.5, 48.1],
+                [11.51, 48.11],
+              ],
+            ],
           },
         },
         {
@@ -324,7 +352,12 @@ void main() {
             'modeMask': 7,
             'visibleModeMask': 3,
           },
-          'geometry': {'type': 'MultiPoint', 'coordinates': [[11.46, 48.14]]},
+          'geometry': {
+            'type': 'MultiPoint',
+            'coordinates': [
+              [11.46, 48.14],
+            ],
+          },
         },
         {
           'type': 'Feature',
@@ -346,15 +379,23 @@ void main() {
             'pointOsmIds': [7],
           },
           // No bbox: the box is derived from the stations themselves.
-          'geometry': {'type': 'MultiPoint', 'coordinates': [[11.0, 48.0]]},
+          'geometry': {
+            'type': 'MultiPoint',
+            'coordinates': [
+              [11.0, 48.0],
+            ],
+          },
         },
       ],
     };
 
     test('planes and transit translate, track is dropped with its layer', () {
       final data = importFromGeoJson(jsonEncode(v2))!;
-      expect(data.layers.map((l) => l.type), ['subspace', 'poi'],
-          reason: 'the track layer is gone, and the indices closed up');
+      expect(
+        data.layers.map((l) => l.type),
+        ['subspace', 'poi'],
+        reason: 'the track layer is gone, and the indices closed up',
+      );
       expect(data.layers.map((l) => l.name), ['Planes', 'Transit']);
 
       final sub = data.layers[0].objects.single;
@@ -382,8 +423,12 @@ void main() {
       expect(pending.coords, hasLength(1), reason: 'just the box centre');
 
       final boxless = sets[2];
-      expect(boxless.bbox, [48.0, 11.0, 48.0, 11.0],
-          reason: 'derived from its one station');
+      expect(boxless.bbox, [
+        48.0,
+        11.0,
+        48.0,
+        11.0,
+      ], reason: 'derived from its one station');
       expect(boxless.pointOsmTypes, ['node']);
     });
   });
@@ -465,7 +510,11 @@ void main() {
       expect(o.labelLat, 0.4);
       expect(o.wayIds, [7, 8]);
       expect(o.rings, hasLength(1));
-      expect(o.rings!.single, hasLength(3), reason: 'the closing vertex is dropped');
+      expect(
+        o.rings!.single,
+        hasLength(3),
+        reason: 'the closing vertex is dropped',
+      );
     });
 
     test('a reshaped outline travels as edited, an untouched one silently', () {
@@ -473,25 +522,25 @@ void main() {
       // says" on the receiving device — where re-import dedup then keeps this
       // version, which is exactly where it would matter.
       ExportData dataWith({bool? edited}) => ExportData([
-            ExportLayer(
-              name: 'Districts',
-              colorArgb: 0xFF00FF00,
-              type: 'borders',
-              isInverted: false,
-              borderLevel: '9',
-              objects: [
-                ExportObject(
-                  kind: 'borderarea',
-                  coords: const [LatLng(0, 0), LatLng(0, 1), LatLng(1, 1)],
-                  rings: const [
-                    [LatLng(0, 0), LatLng(0, 1), LatLng(1, 1)],
-                  ],
-                  osmId: 42,
-                  edited: edited,
-                ),
+        ExportLayer(
+          name: 'Districts',
+          colorArgb: 0xFF00FF00,
+          type: 'borders',
+          isInverted: false,
+          borderLevel: '9',
+          objects: [
+            ExportObject(
+              kind: 'borderarea',
+              coords: const [LatLng(0, 0), LatLng(0, 1), LatLng(1, 1)],
+              rings: const [
+                [LatLng(0, 0), LatLng(0, 1), LatLng(1, 1)],
               ],
+              osmId: 42,
+              edited: edited,
             ),
-          ]);
+          ],
+        ),
+      ]);
 
       final json = exportToGeoJson(dataWith(edited: true));
       expect(json, contains('"edited"'));
@@ -511,10 +560,19 @@ void main() {
     });
 
     test('a hole and an exclave survive as separate rings', () {
-      const outer = [LatLng(0, 0), LatLng(0, 10), LatLng(10, 10), LatLng(10, 0)];
+      const outer = [
+        LatLng(0, 0),
+        LatLng(0, 10),
+        LatLng(10, 10),
+        LatLng(10, 0),
+      ];
       const hole = [LatLng(2, 2), LatLng(2, 4), LatLng(4, 4), LatLng(4, 2)];
-      const exclave =
-          [LatLng(20, 20), LatLng(20, 21), LatLng(21, 21), LatLng(21, 20)];
+      const exclave = [
+        LatLng(20, 20),
+        LatLng(20, 21),
+        LatLng(21, 21),
+        LatLng(21, 20),
+      ];
       final data = ExportData([
         const ExportLayer(
           name: 'B',
@@ -535,7 +593,9 @@ void main() {
       final json = exportToGeoJson(data);
       // GeoJSON has to say which ring is a hole; the stored form does not.
       expect(json, contains('MultiPolygon'));
-      final rings = importFromGeoJson(json)!.layers.single.objects.single.rings!;
+      final rings = importFromGeoJson(
+        json,
+      )!.layers.single.objects.single.rings!;
       expect(rings, hasLength(3));
       expect(rings[0], outer);
       expect(rings[1], hole);
@@ -551,7 +611,10 @@ void main() {
           isInverted: false,
           objects: [
             ExportObject(
-                kind: 'circle', coords: [LatLng(0, 0)], radiusMeters: 100),
+              kind: 'circle',
+              coords: [LatLng(0, 0)],
+              radiusMeters: 100,
+            ),
           ],
         ),
       ]);

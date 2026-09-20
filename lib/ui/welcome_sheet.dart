@@ -67,7 +67,10 @@ class _WelcomeSheet extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Welcome to ZoneCraft', style: theme.textTheme.headlineSmall),
+              Text(
+                'Welcome to ZoneCraft',
+                style: theme.textTheme.headlineSmall,
+              ),
               const SizedBox(height: 12),
               Text(
                 'ZoneCraft turns a map into a deduction board. Each thing you '
@@ -81,25 +84,29 @@ class _WelcomeSheet extends StatelessWidget {
               const SizedBox(height: 8),
               const _Step(
                 icon: Icons.circle_outlined,
-                text: '“They are within 2 km of the station.” Add a circle '
+                text:
+                    '“They are within 2 km of the station.” Add a circle '
                     'there and set its radius.',
               ),
               const _Step(
                 icon: Icons.flip_to_back,
-                text: '“No, they are not.” Press Fill outside — now the zone '
+                text:
+                    '“No, they are not.” Press Fill outside — now the zone '
                     'is everywhere except that circle.',
               ),
               const _Step(
                 icon: Icons.layers_outlined,
-                text: 'Add a layer per answer. Where the colours overlap is '
+                text:
+                    'Add a layer per answer. Where the colours overlap is '
                     'what is left.',
               ),
               const SizedBox(height: 20),
               Text(
                 'Everything stays on this phone. There is no account, and '
                 'nothing is uploaded.',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.outline),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.outline,
+                ),
               ),
               const SizedBox(height: 20),
               Row(
@@ -134,8 +141,9 @@ class _WelcomeSheet extends StatelessWidget {
               Text(
                 'You can read this again from Settings → Show all tips '
                 'again.',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.outline),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.outline,
+                ),
               ),
             ],
           ),

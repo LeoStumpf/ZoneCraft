@@ -106,8 +106,10 @@ List<LatLng> _inset(List<LatLng> p, double d) {
 /// The perpendicular of edge `a→b` that points toward [centroid] (degrees).
 double _inwardBearing(LatLng a, LatLng b, LatLng centroid) {
   final edge = _distance.bearing(a, b);
-  final mid = LatLng((a.latitude + b.latitude) / 2,
-      (a.longitude + b.longitude) / 2);
+  final mid = LatLng(
+    (a.latitude + b.latitude) / 2,
+    (a.longitude + b.longitude) / 2,
+  );
   final left = edge - 90;
   final pLeft = _off(mid, 1, left);
   final pRight = _off(mid, 1, edge + 90);

@@ -553,6 +553,5 @@ void main() {
       );
       expect(hits.map((h) => h.ref.kind).toSet(), {ObjectKind.circle});
     });
-
   });
 }

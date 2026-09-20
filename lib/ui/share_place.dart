@@ -182,7 +182,6 @@ class ReceivedPlaceSheet extends StatelessWidget {
   }
 }
 
-
 /// Asks for an optional name before sharing [point].
 ///
 /// Returns null when cancelled, [point] unchanged when skipped, and a renamed
@@ -191,11 +190,10 @@ class ReceivedPlaceSheet extends StatelessWidget {
 Future<SharedPoint?> showShareNameDialog(
   BuildContext context,
   SharedPoint point,
-) =>
-    showDialog<SharedPoint>(
-      context: context,
-      builder: (ctx) => _ShareNameDialog(point: point),
-    );
+) => showDialog<SharedPoint>(
+  context: context,
+  builder: (ctx) => _ShareNameDialog(point: point),
+);
 
 class _ShareNameDialog extends StatefulWidget {
   const _ShareNameDialog({required this.point});

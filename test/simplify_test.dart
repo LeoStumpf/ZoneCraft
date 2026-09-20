@@ -26,7 +26,9 @@ void main() {
     test('collinear points on a meridian collapse to the two endpoints', () {
       // A meridian (constant lng) is a great circle, so every interior point has
       // zero cross-track distance and must be dropped at any positive tolerance.
-      final line = [for (var i = 0; i <= 20; i++) LatLng(48.0 + i * 0.001, 11.0)];
+      final line = [
+        for (var i = 0; i <= 20; i++) LatLng(48.0 + i * 0.001, 11.0),
+      ];
       final s = simplifyLine(line, 5);
       expect(s, hasLength(2));
       expect(s.first, line.first);
@@ -48,7 +50,10 @@ void main() {
     });
 
     test('endpoints are always preserved', () {
-      final line = [for (var i = 0; i <= 30; i++) LatLng(48.0 + i * 0.0005, 11.0 + i * 0.0005)];
+      final line = [
+        for (var i = 0; i <= 30; i++)
+          LatLng(48.0 + i * 0.0005, 11.0 + i * 0.0005),
+      ];
       final s = simplifyLine(line, 25);
       expect(s.first, line.first);
       expect(s.last, line.last);
@@ -78,10 +83,12 @@ void main() {
         final c0 = corners[e];
         final c1 = corners[(e + 1) % 4];
         for (var k = 0; k < 5; k++) {
-          ring.add(LatLng(
-            c0.latitude + (c1.latitude - c0.latitude) * k / 5,
-            c0.longitude + (c1.longitude - c0.longitude) * k / 5,
-          ));
+          ring.add(
+            LatLng(
+              c0.latitude + (c1.latitude - c0.latitude) * k / 5,
+              c0.longitude + (c1.longitude - c0.longitude) * k / 5,
+            ),
+          );
         }
       }
       return closed ? [...ring, ring.first] : ring;
@@ -96,8 +103,11 @@ void main() {
         LatLng(48.02, 11.02),
         LatLng(48.02, 11.00),
       ]) {
-        expect(s.any((p) => p.latitude == c.latitude && p.longitude == c.longitude),
-            isTrue, reason: 'corner $c missing');
+        expect(
+          s.any((p) => p.latitude == c.latitude && p.longitude == c.longitude),
+          isTrue,
+          reason: 'corner $c missing',
+        );
       }
     });
 

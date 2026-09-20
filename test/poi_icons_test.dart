@@ -45,22 +45,25 @@ void main() {
     });
   });
 
-  PoiSet set({String categoryKey = 'cafe', String? iconKey, bool manual = false}) =>
-      PoiSet(
-        id: 's',
-        layerId: 'l',
-        categoryKey: categoryKey,
-        centerLat: 48.1,
-        centerLng: 11.5,
-        radiusMeters: manual ? 0 : 800,
-        createdAt: DateTime(2026),
-        colorShade: 0,
-        source: manual ? kPoiSourceManual : kPoiSourceRadius,
-        iconKey: iconKey,
-        zOrder: 0,
-        modeMask: 0,
-        visibleModeMask: -1,
-      );
+  PoiSet set({
+    String categoryKey = 'cafe',
+    String? iconKey,
+    bool manual = false,
+  }) => PoiSet(
+    id: 's',
+    layerId: 'l',
+    categoryKey: categoryKey,
+    centerLat: 48.1,
+    centerLng: 11.5,
+    radiusMeters: manual ? 0 : 800,
+    createdAt: DateTime(2026),
+    colorShade: 0,
+    source: manual ? kPoiSourceManual : kPoiSourceRadius,
+    iconKey: iconKey,
+    zOrder: 0,
+    modeMask: 0,
+    visibleModeMask: -1,
+  );
 
   group('the catalogue', () {
     test('every key is unique across groups', () {
@@ -94,8 +97,9 @@ void main() {
       // The category dialog offers a shortcut only for categories whose key is
       // in the catalogue; if that intersection were empty the row would render
       // as a mysterious blank.
-      final shared =
-          poiCategories.where((c) => poiIcons.containsKey(c.key)).toList();
+      final shared = poiCategories
+          .where((c) => poiIcons.containsKey(c.key))
+          .toList();
       expect(shared, isNotEmpty);
       for (final c in shared) {
         expect(poiIcons[c.key], isNotNull);
@@ -126,8 +130,10 @@ void main() {
         poiSetIcon(set(manual: true, iconKey: 'no-such-icon')),
         Icons.place_outlined,
       );
-      expect(poiSetIcon(set(categoryKey: 'no-such-category')),
-          Icons.place_outlined);
+      expect(
+        poiSetIcon(set(categoryKey: 'no-such-category')),
+        Icons.place_outlined,
+      );
     });
   });
 }

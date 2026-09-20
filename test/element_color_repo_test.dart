@@ -33,12 +33,13 @@ void main() {
 
   tearDown(() async => db.close());
 
-  Future<String> circle(String layerId, {double lat = 48.1}) => repo.createCircle(
-    layerId: layerId,
-    centerLat: lat,
-    centerLng: 11.5,
-    radiusMeters: 500,
-  );
+  Future<String> circle(String layerId, {double lat = 48.1}) =>
+      repo.createCircle(
+        layerId: layerId,
+        centerLat: lat,
+        centerLng: 11.5,
+        radiusMeters: 500,
+      );
 
   test('shades are handed out in creation order, per layer', () async {
     final a = await repo.createLayer(name: 'A', colorArgb: 0xFF43A047);
@@ -61,10 +62,7 @@ void main() {
     final ids = [for (var i = 0; i < 3; i++) await circle(layer)];
     await repo.deleteCircle(ids[1]);
     final rows = await db.select(db.circles).get();
-    expect(
-      {for (final c in rows) c.id: c.colorShade},
-      {ids[0]: 0, ids[2]: 2},
-    );
+    expect({for (final c in rows) c.id: c.colorShade}, {ids[0]: 0, ids[2]: 2});
     // …and the next element still gets a slot of its own.
     final fourth = await circle(layer);
     final after = await db.select(db.circles).get();

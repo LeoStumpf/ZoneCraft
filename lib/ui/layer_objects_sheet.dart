@@ -54,21 +54,19 @@ enum ElementAction {
 }
 
 class ElementResult {
-  const ElementResult(this.action, this.target)
-      : request = null,
-        points = null;
+  const ElementResult(this.action, this.target) : request = null, points = null;
 
   const ElementResult.request(MapRequest this.request)
-      : action = ElementAction.request,
-        target = null,
-        points = null;
+    : action = ElementAction.request,
+      target = null,
+      points = null;
 
   /// Frame [points] — a POI type group's "Zoom to", which has no one object
   /// behind it.
   const ElementResult.focus(List<LatLng> this.points)
-      : action = ElementAction.zoom,
-        target = null,
-        request = null;
+    : action = ElementAction.zoom,
+      target = null,
+      request = null;
 
   final ElementAction action;
 
@@ -197,7 +195,9 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
     // capability: every POI layer *could* hold a station import, and gating on
     // that alone put station counts above a layer of cafés.
     final hasStations = groups.any((g) => g.kind == PoiGroupKind.station);
-    final tally = hasStations ? ref.watch(transitTallyProvider(layer.id)) : null;
+    final tally = hasStations
+        ? ref.watch(transitTallyProvider(layer.id))
+        : null;
     // Read once here, not per row: a station import is thousands of rows.
     final selectedIds = watchSelectedIds(ref);
 
@@ -229,7 +229,8 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
     } else if (layer.type == kPoi) {
       count = _plural(model.poiCount, 'POI');
     } else if (model.poiCount > 0) {
-      count = '${_plural(elements, 'element')} · ${_plural(model.poiCount, 'POI')}';
+      count =
+          '${_plural(elements, 'element')} · ${_plural(model.poiCount, 'POI')}';
     } else {
       count = _plural(elements, 'element');
     }
@@ -414,7 +415,9 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
           if (mode != null && tallyVisible != null && tallySetIds != null)
             Checkbox(
               value: tallyVisible & mode.bit != 0,
-              onChanged: (v) => ref.read(repositoryProvider).setPoiVisibleModes(
+              onChanged: (v) => ref
+                  .read(repositoryProvider)
+                  .setPoiVisibleModes(
                     tallySetIds.toList(),
                     transitMaskWith(tallyVisible, mode, on: v ?? false),
                   ),

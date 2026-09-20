@@ -323,11 +323,14 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
             onChanged: (s) {
               final ll = parseLatLng(s);
               if (ll != null) {
-                logAsyncFailure(_repo.updateSubspacePoint(
+                logAsyncFailure(
+                  _repo.updateSubspacePoint(
                     p.id,
                     lat: ll.latitude,
                     lng: ll.longitude,
-                  ), 'Moving the point');
+                  ),
+                  'Moving the point',
+                );
               }
             },
           ),

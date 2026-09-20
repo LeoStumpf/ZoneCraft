@@ -81,9 +81,9 @@ class CachedTileProvider extends TileProvider {
         await _repo.putTile(url, resp.bodyBytes);
         return true;
       }
-    // Every way this can fail — offline, rate-limited, socket reset, unwritable
-    // cache — means the same thing: the tile is not cached. The map still draws.
-    // ignore: avoid_catches_without_on_clauses
+      // Every way this can fail — offline, rate-limited, socket reset, unwritable
+      // cache — means the same thing: the tile is not cached. The map still draws.
+      // ignore: avoid_catches_without_on_clauses
     } catch (_) {
       // Offline / rate-limited / server error: silently skip.
     }
@@ -130,9 +130,9 @@ class _CachedTileImage extends ImageProvider<_CachedTileImage> {
     if (cached != null && cached.isNotEmpty) {
       try {
         return await decodeBytes(cached);
-      // A corrupt cache entry can fail to decode in any number of ways, and all of
-      // them mean refetch.
-      // ignore: avoid_catches_without_on_clauses
+        // A corrupt cache entry can fail to decode in any number of ways, and all of
+        // them mean refetch.
+        // ignore: avoid_catches_without_on_clauses
       } catch (_) {
         // Corrupt cache entry: fall through and refetch.
       }
@@ -150,9 +150,9 @@ class _CachedTileImage extends ImageProvider<_CachedTileImage> {
       resp = await client
           .get(Uri.parse(url), headers: headers)
           .timeout(CachedTileProvider.fetchTimeout);
-    // Offline, timeout, socket reset: the tile is simply not available, which
-    // is what the throw below already means to flutter_map.
-    // ignore: avoid_catches_without_on_clauses
+      // Offline, timeout, socket reset: the tile is simply not available, which
+      // is what the throw below already means to flutter_map.
+      // ignore: avoid_catches_without_on_clauses
     } catch (_) {
       health?.report();
       rethrow;
@@ -166,9 +166,11 @@ class _CachedTileImage extends ImageProvider<_CachedTileImage> {
     }
     final bytes = resp.bodyBytes;
     // Fire-and-forget the writes so decoding isn't blocked on disk I/O.
-    unawaited(repo.putTile(url, bytes).then(
-          (_) => repo.evictTilesDownTo(CachedTileProvider.maxCacheBytes),
-        ));
+    unawaited(
+      repo
+          .putTile(url, bytes)
+          .then((_) => repo.evictTilesDownTo(CachedTileProvider.maxCacheBytes)),
+    );
     return decodeBytes(bytes);
   }
 

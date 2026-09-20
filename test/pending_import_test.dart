@@ -28,23 +28,25 @@ import 'package:zonecraft/state/import_preview.dart';
 /// are easy to lose, a circle (a centre and a radius, not an outline) and a
 /// border area (whose `coords` is only its *first* ring).
 ExportLayer _layer(String type, List<ExportObject> objects) => ExportLayer(
-      name: type,
-      colorArgb: 0xFF112233,
-      type: type,
-      isInverted: false,
-      objects: objects,
-    );
+  name: type,
+  colorArgb: 0xFF112233,
+  type: type,
+  isInverted: false,
+  objects: objects,
+);
 
 void main() {
   test('a line becomes a run the map can trace', () {
-    final p = previewOf(ExportData([
-      _layer('freeline', [
-        ExportObject(
-          kind: 'freeline',
-          coords: [const LatLng(48.1, 11.5), const LatLng(48.2, 11.7)],
-        ),
+    final p = previewOf(
+      ExportData([
+        _layer('freeline', [
+          ExportObject(
+            kind: 'freeline',
+            coords: [const LatLng(48.1, 11.5), const LatLng(48.2, 11.7)],
+          ),
+        ]),
       ]),
-    ]));
+    );
 
     expect(p, isNotNull);
     expect(p!.lines, hasLength(1));
@@ -56,15 +58,17 @@ void main() {
   // A circle stores one point and a radius. Tracing its `coords` would draw a
   // single pixel, and boxing them would zoom the camera onto its own centre.
   test('a circle keeps its radius, and the box makes room for it', () {
-    final p = previewOf(ExportData([
-      _layer('circles', [
-        ExportObject(
-          kind: 'circle',
-          coords: [const LatLng(48.0, 11.0)],
-          radiusMeters: 5000,
-        ),
+    final p = previewOf(
+      ExportData([
+        _layer('circles', [
+          ExportObject(
+            kind: 'circle',
+            coords: [const LatLng(48.0, 11.0)],
+            radiusMeters: 5000,
+          ),
+        ]),
       ]),
-    ]));
+    );
 
     expect(p, isNotNull);
     expect(p!.circles, hasLength(1));
@@ -88,30 +92,38 @@ void main() {
       const LatLng(48.10, 11.10),
       const LatLng(48.05, 11.05),
     ];
-    final p = previewOf(ExportData([
-      _layer('borders', [
-        ExportObject(kind: 'borderarea', coords: outer, rings: [outer, hole]),
+    final p = previewOf(
+      ExportData([
+        _layer('borders', [
+          ExportObject(kind: 'borderarea', coords: outer, rings: [outer, hole]),
+        ]),
       ]),
-    ]));
+    );
 
     expect(p!.lines, hasLength(2));
   });
 
   test('several layers are counted in the summary', () {
-    final p = previewOf(ExportData([
-      _layer('freeline', [
-        ExportObject(
-          kind: 'freeline',
-          coords: [const LatLng(1, 1), const LatLng(2, 2)],
-        ),
+    final p = previewOf(
+      ExportData([
+        _layer('freeline', [
+          ExportObject(
+            kind: 'freeline',
+            coords: [const LatLng(1, 1), const LatLng(2, 2)],
+          ),
+        ]),
+        _layer('freearea', [
+          ExportObject(
+            kind: 'freearea',
+            coords: [
+              const LatLng(3, 3),
+              const LatLng(4, 4),
+              const LatLng(5, 5),
+            ],
+          ),
+        ]),
       ]),
-      _layer('freearea', [
-        ExportObject(
-          kind: 'freearea',
-          coords: [const LatLng(3, 3), const LatLng(4, 4), const LatLng(5, 5)],
-        ),
-      ]),
-    ]));
+    );
 
     expect(p!.summary, '2 layers · 2 objects');
   });
@@ -120,21 +132,20 @@ void main() {
   // skip the question, which is what a null preview tells the caller to do.
   test('a file with no drawable geometry previews as null', () {
     expect(previewOf(const ExportData([])), isNull);
-    expect(
-      previewOf(ExportData([_layer('freeline', const [])])),
-      isNull,
-    );
+    expect(previewOf(ExportData([_layer('freeline', const [])])), isNull);
   });
 
   test('the decision resolves once, and only once', () async {
-    final p = previewOf(ExportData([
-      _layer('freeline', [
-        ExportObject(
-          kind: 'freeline',
-          coords: [const LatLng(1, 1), const LatLng(2, 2)],
-        ),
+    final p = previewOf(
+      ExportData([
+        _layer('freeline', [
+          ExportObject(
+            kind: 'freeline',
+            coords: [const LatLng(1, 1), const LatLng(2, 2)],
+          ),
+        ]),
       ]),
-    ]))!;
+    )!;
 
     p.answer(keep: true);
     p.answer(keep: false); // a second tap must not throw on a used Completer

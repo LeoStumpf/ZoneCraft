@@ -175,8 +175,9 @@ class _TransitImportSheetState extends State<TransitImportSheet> {
       c.addListener(_boxChanged);
     }
     _modes = recommendedImportModes(_diagonal);
-    WidgetsBinding.instance
-        .addPostFrameCallback((_) => widget.onPreview(_boxOrNull()));
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => widget.onPreview(_boxOrNull()),
+    );
   }
 
   /// The box as typed, or null while it is not a usable one. Deliberately the
@@ -275,106 +276,108 @@ class _TransitImportSheetState extends State<TransitImportSheet> {
           ),
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text('Import transit stations',
-                        style: theme.textTheme.titleMedium),
-                  ),
-                  IconButton(
-                    tooltip: 'Cancel',
-                    icon: const Icon(Icons.close),
-                    onPressed: () => widget.onDone(null),
-                  ),
-                ],
-              ),
-              Text('Area', style: theme.textTheme.labelLarge),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  _coord(_south, 'South', true),
-                  const SizedBox(width: 8),
-                  _coord(_north, 'North', true),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  _coord(_west, 'West', false),
-                  const SizedBox(width: 8),
-                  _coord(_east, 'East', false),
-                ],
-              ),
-              const SizedBox(height: 8),
-              _sizeLine(theme),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'What to import',
-                      style: theme.textTheme.labelLarge,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Import transit stations',
+                        style: theme.textTheme.titleMedium,
+                      ),
                     ),
-                  ),
-                  if (_chosen && _modes != _recommended)
+                    IconButton(
+                      tooltip: 'Cancel',
+                      icon: const Icon(Icons.close),
+                      onPressed: () => widget.onDone(null),
+                    ),
+                  ],
+                ),
+                Text('Area', style: theme.textTheme.labelLarge),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    _coord(_south, 'South', true),
+                    const SizedBox(width: 8),
+                    _coord(_north, 'North', true),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    _coord(_west, 'West', false),
+                    const SizedBox(width: 8),
+                    _coord(_east, 'East', false),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                _sizeLine(theme),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'What to import',
+                        style: theme.textTheme.labelLarge,
+                      ),
+                    ),
+                    if (_chosen && _modes != _recommended)
+                      TextButton(
+                        onPressed: () => setState(() {
+                          _chosen = false;
+                          _modes = _recommended;
+                        }),
+                        child: const Text('Recommended'),
+                      ),
+                  ],
+                ),
+                Text(
+                  'Only the ticked types are fetched, and only what is fetched is '
+                  'stored. Fewer types means a much smaller query — over a whole '
+                  'state, bus stops are 25× the data of train stops and never '
+                  'arrive.',
+                  style: theme.textTheme.bodySmall,
+                ),
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 8,
+                  children: [
                     TextButton(
-                      onPressed: () => setState(() {
-                        _chosen = false;
-                        _modes = _recommended;
-                      }),
-                      child: const Text('Recommended'),
+                      onPressed: () => _setModes(transitAllModesMask),
+                      child: const Text('All'),
                     ),
-                ],
-              ),
-              Text(
-                'Only the ticked types are fetched, and only what is fetched is '
-                'stored. Fewer types means a much smaller query — over a whole '
-                'state, bus stops are 25× the data of train stops and never '
-                'arrive.',
-                style: theme.textTheme.bodySmall,
-              ),
-              const SizedBox(height: 4),
-              Wrap(
-                spacing: 8,
-                children: [
-                  TextButton(
-                    onPressed: () => _setModes(transitAllModesMask),
-                    child: const Text('All'),
-                  ),
-                  TextButton(
-                    onPressed: () => _setModes(transitRailMask),
-                    child: const Text('Rail only'),
-                  ),
-                  TextButton(
-                    onPressed: () =>
-                        _setModes(transitModeByKey('train')?.bit ?? 0),
-                    child: const Text('Train only'),
-                  ),
-                ],
-              ),
-              for (final m in transitModes) _modeTile(theme, m),
-              _modesLine(theme),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => widget.onDone(null),
-                    child: const Text('Cancel'),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    onPressed: _canImport ? _submit : null,
-                    child: const Text('Import'),
-                  ),
-                ],
-              ),
-            ],
-          ),
+                    TextButton(
+                      onPressed: () => _setModes(transitRailMask),
+                      child: const Text('Rail only'),
+                    ),
+                    TextButton(
+                      onPressed: () =>
+                          _setModes(transitModeByKey('train')?.bit ?? 0),
+                      child: const Text('Train only'),
+                    ),
+                  ],
+                ),
+                for (final m in transitModes) _modeTile(theme, m),
+                _modesLine(theme),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => widget.onDone(null),
+                      child: const Text('Cancel'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: _canImport ? _submit : null,
+                      child: const Text('Import'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

@@ -80,8 +80,9 @@ void main() {
     body(captured, container);
   }
 
-  testWidgets('every kind has a provider that actually receives the id',
-      (tester) async {
+  testWidgets('every kind has a provider that actually receives the id', (
+    tester,
+  ) async {
     await withRef(tester, (ref, container) {
       for (final entry in providerOf.entries) {
         selectObject(ref, entry.key, 'id-${entry.key.name}');
@@ -94,9 +95,13 @@ void main() {
     });
   });
 
-  testWidgets('the enum is fully covered — no kind is missing above',
-      (tester) async {
-    expect(providerOf.keys.toSet().union(unselectable), ObjectKind.values.toSet());
+  testWidgets('the enum is fully covered — no kind is missing above', (
+    tester,
+  ) async {
+    expect(
+      providerOf.keys.toSet().union(unselectable),
+      ObjectKind.values.toSet(),
+    );
     expect(providerOf.keys.toSet().intersection(unselectable), isEmpty);
   });
 
@@ -128,8 +133,9 @@ void main() {
     });
   });
 
-  testWidgets('clearSelection also disarms the border reshape mode',
-      (tester) async {
+  testWidgets('clearSelection also disarms the border reshape mode', (
+    tester,
+  ) async {
     // Reshaping is the one selection-scoped mode that writes to a read-only
     // OSM snapshot, so leaving it armed after the area is deselected would put
     // handles on whatever gets selected next.
@@ -142,19 +148,24 @@ void main() {
     });
   });
 
-  testWidgets('selecting an object leaves edit mode alone but drops the others',
-      (tester) async {
-    await withRef(tester, (ref, container) {
-      ref.read(mapModeProvider.notifier).set(MapMode.edit);
-      selectObject(ref, ObjectKind.borderArea, 'a1');
-      expect(container.read(mapModeProvider), MapMode.edit,
-          reason: 'editing the object is now the job');
+  testWidgets(
+    'selecting an object leaves edit mode alone but drops the others',
+    (tester) async {
+      await withRef(tester, (ref, container) {
+        ref.read(mapModeProvider.notifier).set(MapMode.edit);
+        selectObject(ref, ObjectKind.borderArea, 'a1');
+        expect(
+          container.read(mapModeProvider),
+          MapMode.edit,
+          reason: 'editing the object is now the job',
+        );
 
-      ref.read(mapModeProvider.notifier).set(MapMode.add);
-      selectObject(ref, ObjectKind.poiPoint, 's1');
-      expect(container.read(mapModeProvider), MapMode.view);
-    });
-  });
+        ref.read(mapModeProvider.notifier).set(MapMode.add);
+        selectObject(ref, ObjectKind.poiPoint, 's1');
+        expect(container.read(mapModeProvider), MapMode.view);
+      });
+    },
+  );
 
   group('ObjectKind', () {
     test('every kind names a layer type that exists', () {
@@ -179,16 +190,18 @@ void main() {
         expect(ObjectKind.forLayerType(k.layerType), k, reason: k.name);
       }
       expect(ObjectKind.forLayerType('poi'), ObjectKind.poiSet);
-      expect(ObjectKind.forLayerType('transit'), isNull,
-          reason: 'v27 folded transit into poi; the type no longer exists');
+      expect(
+        ObjectKind.forLayerType('transit'),
+        isNull,
+        reason: 'v27 folded transit into poi; the type no longer exists',
+      );
       expect(ObjectKind.forLayerType('nope'), isNull);
     });
 
     test('exactly the imported point kind is not an element', () {
-      expect(
-        ObjectKind.values.where((k) => !k.isElement).toSet(),
-        {ObjectKind.poiPoint},
-      );
+      expect(ObjectKind.values.where((k) => !k.isElement).toSet(), {
+        ObjectKind.poiPoint,
+      });
     });
 
     test('every kind has an editor', () {
@@ -207,8 +220,11 @@ void main() {
       // stayed there, because a row knows what it is and a layer type is one
       // lookup further away.
       for (final k in ObjectKind.values.where((k) => k.isElement)) {
-        expect(ColoredElement.forObjectKindName(k.name), isNotNull,
-            reason: k.name);
+        expect(
+          ColoredElement.forObjectKindName(k.name),
+          isNotNull,
+          reason: k.name,
+        );
       }
     });
   });

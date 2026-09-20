@@ -72,10 +72,12 @@ List<ScreenCluster> clusterOffsets(List<Offset> points, double radius) {
       sx += points[m].dx;
       sy += points[m].dy;
     }
-    out.add(ScreenCluster(
-      indices: members,
-      center: Offset(sx / members.length, sy / members.length),
-    ));
+    out.add(
+      ScreenCluster(
+        indices: members,
+        center: Offset(sx / members.length, sy / members.length),
+      ),
+    );
   }
   return out;
 }

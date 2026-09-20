@@ -102,8 +102,11 @@ void main() {
 
     await repo.evictTilesDownTo(150);
 
-    expect(await repo.getTile('tile0'), isNotNull,
-        reason: 'just used, so it should be the last to go');
+    expect(
+      await repo.getTile('tile0'),
+      isNotNull,
+      reason: 'just used, so it should be the last to go',
+    );
     expect(await repo.getTile('tile1'), isNull);
   });
 
@@ -118,26 +121,32 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 20));
       await repo.getTile('a');
 
-      expect(await stampOf('a'), before,
-          reason: 'within the touch interval, so no write');
-    });
-
-    test('a stale tile is re-stamped, or LRU would stop meaning anything',
-        () async {
-      await repo.putTile('a', bytesOf(100));
-      // Backdate past the interval — the same thing a week of not looking at
-      // this part of the map would do.
-      final old = DateTime.now().millisecondsSinceEpoch -
-          Repository.tileTouchIntervalMs -
-          1000;
-      await db.customStatement(
-        'UPDATE tile_cache SET last_used_at = ? WHERE url = ?',
-        [old, 'a'],
+      expect(
+        await stampOf('a'),
+        before,
+        reason: 'within the touch interval, so no write',
       );
-
-      await repo.getTile('a');
-      expect(await stampOf('a'), greaterThan(old));
     });
+
+    test(
+      'a stale tile is re-stamped, or LRU would stop meaning anything',
+      () async {
+        await repo.putTile('a', bytesOf(100));
+        // Backdate past the interval — the same thing a week of not looking at
+        // this part of the map would do.
+        final old =
+            DateTime.now().millisecondsSinceEpoch -
+            Repository.tileTouchIntervalMs -
+            1000;
+        await db.customStatement(
+          'UPDATE tile_cache SET last_used_at = ? WHERE url = ?',
+          [old, 'a'],
+        );
+
+        await repo.getTile('a');
+        expect(await stampOf('a'), greaterThan(old));
+      },
+    );
 
     test('the bytes come back either way', () async {
       await repo.putTile('a', bytesOf(7));
@@ -160,18 +169,20 @@ void main() {
       return Future.wait([a, b]);
     });
 
-    test('a later call starts a fresh run once the first has finished',
-        () async {
-      for (var i = 0; i < 10; i++) {
-        await repo.putTile('tile$i', bytesOf(100));
-      }
-      await repo.evictTilesDownTo(800);
-      expect(await repo.tileCacheBytes(), lessThanOrEqualTo(800));
+    test(
+      'a later call starts a fresh run once the first has finished',
+      () async {
+        for (var i = 0; i < 10; i++) {
+          await repo.putTile('tile$i', bytesOf(100));
+        }
+        await repo.evictTilesDownTo(800);
+        expect(await repo.tileCacheBytes(), lessThanOrEqualTo(800));
 
-      // Not joined to the finished one — it has to do real work.
-      await repo.evictTilesDownTo(300);
-      expect(await repo.tileCacheBytes(), lessThanOrEqualTo(300));
-    });
+        // Not joined to the finished one — it has to do real work.
+        await repo.evictTilesDownTo(300);
+        expect(await repo.tileCacheBytes(), lessThanOrEqualTo(300));
+      },
+    );
 
     test('ten racing calls leave the cache at the cap, not empty', () async {
       for (var i = 0; i < 20; i++) {
@@ -202,8 +213,11 @@ void main() {
 
       final left = await repo.tileCacheBytes();
       expect(left, lessThanOrEqualTo(5000));
-      expect(left, greaterThan(4800),
-          reason: 'several batches, and it still stopped at the cap');
+      expect(
+        left,
+        greaterThan(4800),
+        reason: 'several batches, and it still stopped at the cap',
+      );
     });
 
     test('a cap of zero empties it rather than looping forever', () async {

@@ -70,12 +70,7 @@ const kMixedContentTypes = <String>[
 /// do anything, and a combined layer may hold none of it while still holding
 /// plenty: counting *any* element lit the toggle on a layer of nothing but POI
 /// markers, and pressing it wrote `isInverted` and left the map untouched.
-const kInvertibleTypes = <String>[
-  kCircles,
-  kSubspace,
-  kFreeLine,
-  kFreeArea,
-];
+const kInvertibleTypes = <String>[kCircles, kSubspace, kFreeLine, kFreeArea];
 
 /// Every type a *layer* can be. Used by the new-layer picker and by tests that
 /// want to be exhaustive.
@@ -106,8 +101,7 @@ bool layerHolds(Layer layer, String type) => layerTypeHolds(layer.type, type);
 bool layerTypeHolds(String layerType, String type) => layerType == type;
 
 /// The types [layer] may hold, in draw order — one, since v30.
-List<String> layerContentTypes(Layer layer) =>
-    layerContentTypesOf(layer.type);
+List<String> layerContentTypes(Layer layer) => layerContentTypesOf(layer.type);
 
 /// [layerContentTypes] on a bare type string.
 List<String> layerContentTypesOf(String layerType) => <String>[layerType];

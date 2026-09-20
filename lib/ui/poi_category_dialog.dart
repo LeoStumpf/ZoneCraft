@@ -79,8 +79,10 @@ class _PoiCategoryDialogState extends State<_PoiCategoryDialog> {
   /// The built-in categories, offered as a shortcut: picking "Cafés" fills in
   /// the name and the matching catalogue icon in one tap. Only the ones whose
   /// key exists in the catalogue are listed — the rest have no icon to copy.
-  List<PoiCategory> get _shortcuts =>
-      [for (final c in poiCategories) if (poiIcons.containsKey(c.key)) c];
+  List<PoiCategory> get _shortcuts => [
+    for (final c in poiCategories)
+      if (poiIcons.containsKey(c.key)) c,
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -164,12 +166,9 @@ class _PoiCategoryDialogState extends State<_PoiCategoryDialog> {
           onPressed: _name.text.trim().isEmpty
               ? null
               : () => Navigator.pop(
-                    context,
-                    PoiCategoryChoice(
-                      name: _name.text.trim(),
-                      iconKey: _iconKey,
-                    ),
-                  ),
+                  context,
+                  PoiCategoryChoice(name: _name.text.trim(), iconKey: _iconKey),
+                ),
           child: Text(editing ? 'Save' : 'Create'),
         ),
       ],

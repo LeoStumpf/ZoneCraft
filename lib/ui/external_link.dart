@@ -40,9 +40,9 @@ Future<bool> openExternalUrl(
   var opened = false;
   try {
     opened = await launchUrl(url, mode: LaunchMode.externalApplication);
-  // A missing browser and a refusing one both mean the link did not open, and
-  // the fallback is the same either way.
-  // ignore: avoid_catches_without_on_clauses
+    // A missing browser and a refusing one both mean the link did not open, and
+    // the fallback is the same either way.
+    // ignore: avoid_catches_without_on_clauses
   } catch (_) {
     opened = false;
   }
@@ -63,8 +63,8 @@ Future<bool> openExternalUrl(
 Future<bool> canLaunchExternalUrl(Uri url) async {
   try {
     return await canLaunchUrl(url);
-  // No platform implementation: treat as "cannot", which is the safe answer.
-  // ignore: avoid_catches_without_on_clauses
+    // No platform implementation: treat as "cannot", which is the safe answer.
+    // ignore: avoid_catches_without_on_clauses
   } catch (_) {
     return false;
   }
@@ -75,8 +75,9 @@ Future<bool> canLaunchExternalUrl(Uri url) async {
 /// The ODbL attribution guideline asks for a route to the origin and licence of
 /// the data when the attribution text does not spell them out — which a credit
 /// short enough to sit in a map corner never does.
-final Uri osmCopyrightUrl =
-    Uri.parse('https://www.openstreetmap.org/copyright');
+final Uri osmCopyrightUrl = Uri.parse(
+  'https://www.openstreetmap.org/copyright',
+);
 
 /// Where the map's elevation credit points: the per-source attribution list the
 /// Terrain Tiles dataset requires be honoured wherever its data is displayed.

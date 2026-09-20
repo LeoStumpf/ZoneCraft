@@ -102,8 +102,8 @@ class _Button extends StatelessWidget {
         onPressed: reason == null
             ? onPressed
             : () => ScaffoldMessenger.of(context)
-              ..clearSnackBars()
-              ..showSnackBar(SnackBar(content: Text(reason))),
+                ..clearSnackBars()
+                ..showSnackBar(SnackBar(content: Text(reason))),
       ),
     );
   }

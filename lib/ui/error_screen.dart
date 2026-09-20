@@ -51,8 +51,11 @@ class AppErrorWidget extends StatelessWidget {
             title: 'Something went wrong',
             message: details.exceptionAsString(),
             report: () {
-              ErrorLog.instance
-                  .record(details.exception, details.stack, context: 'Drawing');
+              ErrorLog.instance.record(
+                details.exception,
+                details.stack,
+                context: 'Drawing',
+              );
               return ErrorLog.instance.asReport();
             },
           ),
@@ -69,11 +72,7 @@ class AppErrorWidget extends StatelessWidget {
 /// is that their work is gone. It is almost never gone — so that sentence goes
 /// first, above the technical detail.
 class DataUnavailableScreen extends StatelessWidget {
-  const DataUnavailableScreen({
-    required this.error,
-    this.onRetry,
-    super.key,
-  });
+  const DataUnavailableScreen({required this.error, this.onRetry, super.key});
 
   final Object error;
   final VoidCallback? onRetry;
@@ -84,7 +83,8 @@ class DataUnavailableScreen extends StatelessWidget {
       body: SafeArea(
         child: _ErrorBody(
           title: 'Your map could not be loaded',
-          lead: 'Your data has not been deleted. ZoneCraft could not open its '
+          lead:
+              'Your data has not been deleted. ZoneCraft could not open its '
               'database this time — the file is still on your device.\n\n'
               'Please do not reinstall or use "Clear all data": both would '
               'remove what is still there. Send the details below instead.',
@@ -123,29 +123,37 @@ class DatabaseRecoveredScreen extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
           children: [
-            Icon(Icons.restore_page_outlined,
-                size: 40, color: theme.colorScheme.primary),
+            Icon(
+              Icons.restore_page_outlined,
+              size: 40,
+              color: theme.colorScheme.primary,
+            ),
             const SizedBox(height: 16),
-            Text('ZoneCraft started with an empty map',
-                style: theme.textTheme.headlineSmall),
+            Text(
+              'ZoneCraft started with an empty map',
+              style: theme.textTheme.headlineSmall,
+            ),
             const SizedBox(height: 12),
             Text(
               path == null
                   ? 'Your saved map could not be opened this time, so ZoneCraft '
-                      'has started fresh. The old data was left where it was.'
+                        'has started fresh. The old data was left where it was.'
                   : 'Your saved map could not be opened this time. Rather than '
-                      'delete it, ZoneCraft moved it aside and started fresh — '
-                      'so what you see now is empty, but your old file still '
-                      'exists.',
+                        'delete it, ZoneCraft moved it aside and started fresh — '
+                        'so what you see now is empty, but your old file still '
+                        'exists.',
               style: theme.textTheme.bodyMedium,
             ),
             if (path != null) ...[
               const SizedBox(height: 16),
               Text('It is here:', style: theme.textTheme.labelLarge),
               const SizedBox(height: 4),
-              SelectableText(path,
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(fontFamily: 'monospace')),
+              SelectableText(
+                path,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontFamily: 'monospace',
+                ),
+              ),
             ],
             const SizedBox(height: 16),
             Text(
@@ -160,7 +168,8 @@ class DatabaseRecoveredScreen extends StatelessWidget {
                 final messenger = ScaffoldMessenger.maybeOf(context);
                 await Clipboard.setData(
                   ClipboardData(
-                    text: '${ErrorLog.instance.asReport()}\n\n'
+                    text:
+                        '${ErrorLog.instance.asReport()}\n\n'
                         'Old database: ${path ?? "not moved"}',
                   ),
                 );
@@ -244,9 +253,9 @@ class _ErrorBody extends StatelessWidget {
             onPressed: () async {
               await Clipboard.setData(ClipboardData(text: report()));
               if (!context.mounted) return;
-              ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-                const SnackBar(content: Text('Details copied')),
-              );
+              ScaffoldMessenger.maybeOf(
+                context,
+              )?.showSnackBar(const SnackBar(content: Text('Details copied')));
             },
             icon: const Icon(Icons.copy_all_outlined),
             label: const Text('Copy details'),
@@ -295,13 +304,11 @@ class _ErrorLogScreenState extends State<ErrorLogScreen> {
               tooltip: 'Copy all',
               icon: const Icon(Icons.copy_all_outlined),
               onPressed: () async {
-                await Clipboard.setData(
-                  ClipboardData(text: log.asReport()),
-                );
+                await Clipboard.setData(ClipboardData(text: log.asReport()));
                 if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Details copied')),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(const SnackBar(content: Text('Details copied')));
               },
             ),
         ],
@@ -317,8 +324,9 @@ class _ErrorLogScreenState extends State<ErrorLogScreen> {
                 child: Text(
                   'Nothing has gone wrong since the app started.',
                   textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyMedium
-                      ?.copyWith(color: theme.colorScheme.outline),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.outline,
+                  ),
                 ),
               ),
             );
@@ -333,8 +341,9 @@ class _ErrorLogScreenState extends State<ErrorLogScreen> {
                   'These are kept in memory for this run only. They are never '
                   'written to disk and never sent anywhere — copy one into an '
                   'email or an issue if you want the author to see it.',
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.outline),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.outline,
+                  ),
                 );
               }
               final e = entries[i - 1];
@@ -344,14 +353,16 @@ class _ErrorLogScreenState extends State<ErrorLogScreen> {
                 title: Text(e.summary, style: theme.textTheme.bodyMedium),
                 subtitle: Text(
                   e.when.toIso8601String(),
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.outline),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.outline,
+                  ),
                 ),
                 children: [
                   SelectableText(
                     e.asReport(),
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(fontFamily: 'monospace'),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontFamily: 'monospace',
+                    ),
                   ),
                 ],
               );

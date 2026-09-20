@@ -122,8 +122,10 @@ class _PoiSetEditorSheetState extends ConsumerState<PoiSetEditorSheet> {
 
   /// The modes a station import fetched, in catalogue order — the ones its
   /// filter chips can offer. A mode it never fetched has nothing to show.
-  static List<TransitMode> _importedModes(PoiSet s) =>
-      [for (final m in transitModes) if (s.modeMask & m.bit != 0) m];
+  static List<TransitMode> _importedModes(PoiSet s) => [
+    for (final m in transitModes)
+      if (s.modeMask & m.bit != 0) m,
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -141,8 +143,8 @@ class _PoiSetEditorSheetState extends ConsumerState<PoiSetEditorSheet> {
               s.isManual
                   ? poiSetIcon(s)
                   : s.isStationImport
-                      ? Icons.directions_transit
-                      : Icons.travel_explore,
+                  ? Icons.directions_transit
+                  : Icons.travel_explore,
               size: 20,
             ),
             const SizedBox(width: 8),
@@ -150,8 +152,8 @@ class _PoiSetEditorSheetState extends ConsumerState<PoiSetEditorSheet> {
               s.isManual
                   ? 'Edit category'
                   : s.isStationImport
-                      ? 'Edit station import'
-                      : 'Edit POI import',
+                  ? 'Edit station import'
+                  : 'Edit POI import',
               style: theme.textTheme.titleMedium,
             ),
             const SizedBox(width: 12),
@@ -166,10 +168,10 @@ class _PoiSetEditorSheetState extends ConsumerState<PoiSetEditorSheet> {
               title: widget.set.label?.trim().isNotEmpty == true
                   ? widget.set.label!.trim()
                   : (s.isManual
-                      ? 'Category'
-                      : s.isStationImport
-                          ? 'Station import'
-                          : 'POI import'),
+                        ? 'Category'
+                        : s.isStationImport
+                        ? 'Station import'
+                        : 'POI import'),
               colorArgb: widget.set.colorArgb,
               colorShade: widget.set.colorShade,
               layerColor: _layerColor,
@@ -214,7 +216,7 @@ class _PoiSetEditorSheetState extends ConsumerState<PoiSetEditorSheet> {
             children: [
               Text(
                 '${widget.pointCount} '
-                    'POI${widget.pointCount == 1 ? '' : 's'} placed',
+                'POI${widget.pointCount == 1 ? '' : 's'} placed',
                 style: theme.textTheme.bodySmall,
               ),
               const Spacer(),
@@ -245,8 +247,9 @@ class _PoiSetEditorSheetState extends ConsumerState<PoiSetEditorSheet> {
             Text(
               'This import didn\'t finish'
               '${s.lastError == null ? '' : ': ${s.lastError}'}.',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.error),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.error,
+              ),
             ),
             const SizedBox(height: 4),
             OutlinedButton.icon(
@@ -307,8 +310,9 @@ class _PoiSetEditorSheetState extends ConsumerState<PoiSetEditorSheet> {
             Text(
               'This import didn\'t finish'
               '${s.lastError == null ? '' : ': ${s.lastError}'}.',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.error),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.error,
+              ),
             ),
             const SizedBox(height: 4),
             OutlinedButton.icon(

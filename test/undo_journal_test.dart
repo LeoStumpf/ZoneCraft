@@ -50,8 +50,7 @@ void main() {
     await db.close();
   });
 
-  Future<String> layer() =>
-      repo.createLayer(name: 'L', colorArgb: 0xFF2196F3);
+  Future<String> layer() => repo.createLayer(name: 'L', colorArgb: 0xFF2196F3);
 
   Future<int> logRows() async {
     final r = await db
@@ -63,7 +62,9 @@ void main() {
   Future<String> snapshot(List<String> tables) async {
     final out = StringBuffer();
     for (final t in tables) {
-      final rows = await db.customSelect('SELECT * FROM "$t" ORDER BY id').get();
+      final rows = await db
+          .customSelect('SELECT * FROM "$t" ORDER BY id')
+          .get();
       out.writeln('$t: ${rows.map((r) => r.data).toList()}');
     }
     return out.toString();
@@ -92,7 +93,11 @@ void main() {
     test('a write that changes nothing opens no step', () async {
       final l = await layer();
       final id = await repo.createCircle(
-          layerId: l, centerLat: 48, centerLng: 11, radiusMeters: 500);
+        layerId: l,
+        centerLat: 48,
+        centerLng: 11,
+        radiusMeters: 500,
+      );
       await db.undo.sealStep();
       final before = await logRows();
       await repo.updateCircle(id, radiusMeters: 500);
@@ -102,7 +107,11 @@ void main() {
     test('clearAll wipes the history instead of recording itself', () async {
       final l = await layer();
       await repo.createCircle(
-          layerId: l, centerLat: 48, centerLng: 11, radiusMeters: 500);
+        layerId: l,
+        centerLat: 48,
+        centerLng: 11,
+        radiusMeters: 500,
+      );
       await db.undo.sealStep();
       expect(db.undo.state.canUndo, isTrue);
       await repo.clearAll();
@@ -116,7 +125,11 @@ void main() {
       final l = await layer();
       await db.undo.sealStep();
       final id = await repo.createCircle(
-          layerId: l, centerLat: 48, centerLng: 11, radiusMeters: 500);
+        layerId: l,
+        centerLat: 48,
+        centerLng: 11,
+        radiusMeters: 500,
+      );
       await db.undo.sealStep();
       expect(db.undo.state.undoLabel, 'Add circle');
 
@@ -133,8 +146,11 @@ void main() {
     test('an edited radius restores bit-exactly', () async {
       final l = await layer();
       final id = await repo.createCircle(
-          layerId: l, centerLat: 48.137154321, centerLng: 11.575382716,
-          radiusMeters: 1 / 3);
+        layerId: l,
+        centerLat: 48.137154321,
+        centerLng: 11.575382716,
+        radiusMeters: 1 / 3,
+      );
       await db.undo.sealStep();
       await repo.updateCircle(id, radiusMeters: 987.654321);
       await db.undo.sealStep();
@@ -150,10 +166,17 @@ void main() {
       final sub = await repo.createSubspace(layerId: l);
       for (var i = 0; i < 5; i++) {
         await repo.addSubspacePoint(
-            subspaceId: sub, lat: 48 + i / 1000, lng: 11 + i / 1000);
+          subspaceId: sub,
+          lat: 48 + i / 1000,
+          lng: 11 + i / 1000,
+        );
       }
       await repo.createCircle(
-          layerId: l, centerLat: 48, centerLng: 11, radiusMeters: 500);
+        layerId: l,
+        centerLat: 48,
+        centerLng: 11,
+        radiusMeters: 500,
+      );
       await db.undo.sealStep();
 
       const tables = ['layers', 'circles', 'subspaces', 'subspace_points'];
@@ -178,13 +201,21 @@ void main() {
       final l = await layer();
       await db.undo.sealStep();
       await repo.createCircle(
-          layerId: l, centerLat: 48, centerLng: 11, radiusMeters: 500);
+        layerId: l,
+        centerLat: 48,
+        centerLng: 11,
+        radiusMeters: 500,
+      );
       await db.undo.sealStep();
       await db.undo.undo();
       expect(db.undo.state.canRedo, isTrue);
 
       await repo.createCircle(
-          layerId: l, centerLat: 49, centerLng: 12, radiusMeters: 100);
+        layerId: l,
+        centerLat: 49,
+        centerLng: 12,
+        radiusMeters: 100,
+      );
       await db.undo.sealStep();
       expect(db.undo.state.canRedo, isFalse);
     });
@@ -195,7 +226,11 @@ void main() {
       await db.undo.group('Import', () async {
         for (var i = 0; i < 10; i++) {
           await repo.createCircle(
-              layerId: l, centerLat: 48 + i / 10, centerLng: 11, radiusMeters: 500);
+            layerId: l,
+            centerLat: 48 + i / 10,
+            centerLng: 11,
+            radiusMeters: 500,
+          );
         }
       });
       expect(db.undo.state.undoLabel, 'Import');
@@ -232,8 +267,11 @@ void main() {
         expect(triggers, isEmpty, reason: '$name is excluded');
       } else {
         expect(triggers, isNotEmpty, reason: '$name must be journalled');
-        expect(undoNounFor(name), isNot(null),
-            reason: '$name needs a noun for its undo label');
+        expect(
+          undoNounFor(name),
+          isNot(null),
+          reason: '$name needs a noun for its undo label',
+        );
       }
     }
   });

@@ -26,18 +26,18 @@ import 'package:zonecraft/ui/object_summary.dart';
 import 'package:zonecraft/ui/poi_groups.dart';
 
 Layer layer(String type) => Layer(
-      id: 'L',
-      name: 'Layer',
-      colorArgb: 0xFF0000FF,
-      isVisible: true,
-      sortOrder: 0,
-      type: type,
-      isInverted: false,
-      opacity: 1,
-      borderFillAreas: false,
-      borderShowNames: false,
-      createdAt: DateTime.utc(2026),
-    );
+  id: 'L',
+  name: 'Layer',
+  colorArgb: 0xFF0000FF,
+  isVisible: true,
+  sortOrder: 0,
+  type: type,
+  isInverted: false,
+  opacity: 1,
+  borderFillAreas: false,
+  borderShowNames: false,
+  createdAt: DateTime.utc(2026),
+);
 
 ObjectSummary sum(
   ObjectKind kind,
@@ -46,17 +46,16 @@ ObjectSummary sum(
   String subtitle = '',
   double? size,
   bool pending = false,
-}) =>
-    ObjectSummary(
-      ref: ObjectRef(kind: kind, id: id, layerId: 'L'),
-      title: name ?? '${kind.name} $id',
-      subtitle: subtitle,
-      center: const LatLng(48, 11),
-      fitPoints: const [LatLng(48, 11)],
-      sortName: name ?? '',
-      sizeMeasure: size,
-      isPending: pending,
-    );
+}) => ObjectSummary(
+  ref: ObjectRef(kind: kind, id: id, layerId: 'L'),
+  title: name ?? '${kind.name} $id',
+  subtitle: subtitle,
+  center: const LatLng(48, 11),
+  fitPoints: const [LatLng(48, 11)],
+  sortName: name ?? '',
+  sizeMeasure: size,
+  isPending: pending,
+);
 
 PoiTypeGroup poiGroup(
   String key,
@@ -64,16 +63,15 @@ PoiTypeGroup poiGroup(
   PoiGroupKind kind = PoiGroupKind.category,
   TransitMode? mode,
   Set<String> setIds = const {'S'},
-}) =>
-    PoiTypeGroup(
-      key: key,
-      kind: kind,
-      label: key,
-      icon: Icons.place,
-      mode: mode,
-      setIds: setIds,
-      points: points,
-    );
+}) => PoiTypeGroup(
+  key: key,
+  kind: kind,
+  label: key,
+  icon: Icons.place,
+  mode: mode,
+  setIds: setIds,
+  points: points,
+);
 
 ElementRows build({
   Layer? on,
@@ -83,21 +81,20 @@ ElementRows build({
   String query = '',
   Set<String> expanded = const {},
   bool importsExpanded = false,
-}) =>
-    buildElementRows(
-      layer: on ?? layer('circles'),
-      summaries: summaries,
-      poiGroups: groups,
-      sort: sort,
-      query: query,
-      expandedGroups: expanded,
-      importsExpanded: importsExpanded,
-    );
+}) => buildElementRows(
+  layer: on ?? layer('circles'),
+  summaries: summaries,
+  poiGroups: groups,
+  sort: sort,
+  query: query,
+  expandedGroups: expanded,
+  importsExpanded: importsExpanded,
+);
 
 List<String> ids(ElementRows r) => [
-      for (final row in r.rows)
-        if (row is ElementRow) row.summary.ref.id,
-    ];
+  for (final row in r.rows)
+    if (row is ElementRow) row.summary.ref.id,
+];
 
 void main() {
   final circles = [
@@ -112,17 +109,19 @@ void main() {
     });
 
     test('by name: case-insensitive, unnamed after the named', () {
-      expect(
-        ids(build(summaries: circles, sort: ElementSort.name)),
-        ['c', 'a', 'b'],
-      );
+      expect(ids(build(summaries: circles, sort: ElementSort.name)), [
+        'c',
+        'a',
+        'b',
+      ]);
     });
 
     test('by size: largest first', () {
-      expect(
-        ids(build(summaries: circles, sort: ElementSort.size)),
-        ['b', 'c', 'a'],
-      );
+      expect(ids(build(summaries: circles, sort: ElementSort.size)), [
+        'b',
+        'c',
+        'a',
+      ]);
     });
 
     test('kinds without a size fall back to name', () {
@@ -141,10 +140,10 @@ void main() {
 
     test('z-order flags come from stack order whatever the sort', () {
       Map<String, (bool, bool)> flags(ElementSort sort) => {
-            for (final row in build(summaries: circles, sort: sort).rows)
-              if (row is ElementRow)
-                row.summary.ref.id: (row.canMoveBack, row.canMoveForward),
-          };
+        for (final row in build(summaries: circles, sort: sort).rows)
+          if (row is ElementRow)
+            row.summary.ref.id: (row.canMoveBack, row.canMoveForward),
+      };
       final stack = flags(ElementSort.stack);
       expect(stack['a'], (false, true), reason: 'bottom of the stack');
       expect(stack['b'], (true, true));
@@ -273,8 +272,10 @@ void main() {
       expect(r.rows.whereType<StationToolsRow>(), hasLength(1));
       expect(r.rows.first, isA<GroupHeaderRow>());
       expect(r.rows[1], isA<StationToolsRow>());
-      expect(build(on: layer('poi'), groups: [cafes]).rows.first,
-          isA<GroupHeaderRow>());
+      expect(
+        build(on: layer('poi'), groups: [cafes]).rows.first,
+        isA<GroupHeaderRow>(),
+      );
     });
 
     test('searching expands matching groups and drops the rest', () {
@@ -308,7 +309,12 @@ void main() {
         on: layer('poi'),
         summaries: [
           ...sets,
-          sum(ObjectKind.poiSet, 'P', name: 'Import didn\'t finish', pending: true),
+          sum(
+            ObjectKind.poiSet,
+            'P',
+            name: 'Import didn\'t finish',
+            pending: true,
+          ),
         ],
         groups: [stations],
       );
@@ -319,6 +325,5 @@ void main() {
         hasLength(1),
       );
     });
-
   });
 }

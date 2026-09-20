@@ -53,8 +53,11 @@ void main() {
       expect(out, hasLength(1));
       expect(out.single.center.latitude, closeTo(48.85837, 1e-5));
       expect(out.single.center.longitude, closeTo(2.29448, 1e-5));
-      expect(out.single.hasGeometry, isFalse,
-          reason: 'nothing for the import dialog to offer');
+      expect(
+        out.single.hasGeometry,
+        isFalse,
+        reason: 'nothing for the import dialog to offer',
+      );
     });
 
     test('a hit with neither coordinates nor geometry is dropped', () {
@@ -83,8 +86,10 @@ void main() {
       expect(out.single.center.longitude, closeTo(11.0, 1e-9));
     });
 
-    test('extracts a Polygon outer ring (closing vertex dropped) as an area', () {
-      const body = '''
+    test(
+      'extracts a Polygon outer ring (closing vertex dropped) as an area',
+      () {
+        const body = '''
       [
         {
           "display_name": "Munich, Bavaria, Germany",
@@ -96,18 +101,22 @@ void main() {
           }
         }
       ]''';
-      final results = parsePlaceSearchResponse(body);
-      expect(results.length, 1);
-      final r = results.first;
-      expect(r.shortName, 'Munich');
-      expect(r.category, 'boundary');
-      expect(r.type, 'administrative');
-      expect(r.dominantKind, GeometryKind.area);
-      expect(r.areas.length, 1);
-      expect(r.areas.first.length, 4); // 5 coords minus the repeated closing one
-      expect(r.lines, isEmpty);
-      expect(r.pointCount, 4);
-    });
+        final results = parsePlaceSearchResponse(body);
+        expect(results.length, 1);
+        final r = results.first;
+        expect(r.shortName, 'Munich');
+        expect(r.category, 'boundary');
+        expect(r.type, 'administrative');
+        expect(r.dominantKind, GeometryKind.area);
+        expect(r.areas.length, 1);
+        expect(
+          r.areas.first.length,
+          4,
+        ); // 5 coords minus the repeated closing one
+        expect(r.lines, isEmpty);
+        expect(r.pointCount, 4);
+      },
+    );
 
     test('splits a MultiPolygon into one ring per part', () {
       const body = '''
@@ -214,7 +223,11 @@ void main() {
       ]''';
       final out = parsePlaceSearchResponse(body);
       expect(out, hasLength(1), reason: 'navigable');
-      expect(out.where((r) => r.hasGeometry), isEmpty, reason: 'not importable');
+      expect(
+        out.where((r) => r.hasGeometry),
+        isEmpty,
+        reason: 'not importable',
+      );
     });
 
     test('returns empty on malformed JSON rather than throwing', () {

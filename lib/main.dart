@@ -65,8 +65,9 @@ Future<void> main() async {
   ErrorWidget.builder = AppErrorWidget.new;
   // So a write that fails deep in an editor can say so, from a callback that
   // has no BuildContext of its own by the time it runs.
-  failureNotifier = (message) => appMessengerKey.currentState
-      ?.showSnackBar(SnackBar(content: Text(message)));
+  failureNotifier = (message) => appMessengerKey.currentState?.showSnackBar(
+    SnackBar(content: Text(message)),
+  );
 
   // Opened here, before the first frame, so a migration failure is caught where
   // something can be done about it instead of surfacing lazily under whichever
@@ -76,9 +77,7 @@ Future<void> main() async {
   runApp(
     ProviderScope(
       observers: [ErrorLogObserver()],
-      overrides: [
-        databaseProvider.overrideWithValue(opened.database),
-      ],
+      overrides: [databaseProvider.overrideWithValue(opened.database)],
       child: ZoneCraftApp(recovery: opened),
     ),
   );
@@ -102,8 +101,9 @@ final class ErrorLogObserver extends ProviderObserver {
   /// The first provider error of the run, or null. First rather than latest:
   /// one root cause (the database not opening) makes every dependent provider
   /// fail after it, and the first is the one worth showing.
-  static final ValueNotifier<Object?> firstFailure =
-      ValueNotifier<Object?>(null);
+  static final ValueNotifier<Object?> firstFailure = ValueNotifier<Object?>(
+    null,
+  );
 
   @override
   void providerDidFail(
@@ -147,7 +147,16 @@ final class ErrorLogObserver extends ProviderObserver {
 /// English one they can at least read around. Remove a code from here once its
 /// direction has actually been checked on a device.
 const Set<String> _untestedRtlLanguages = {
-  'ar', 'fa', 'he', 'iw', 'ps', 'sd', 'ug', 'ur', 'yi', 'ji',
+  'ar',
+  'fa',
+  'he',
+  'iw',
+  'ps',
+  'sd',
+  'ug',
+  'ur',
+  'yi',
+  'ji',
 };
 
 /// English is **first, deliberately**. When the device locale matches nothing
@@ -157,11 +166,10 @@ const Set<String> _untestedRtlLanguages = {
 /// landed on whatever language happened to come out first, which is a worse
 /// answer than English and a much stranger one.
 List<Locale> get supportedLocales => [
-      const Locale('en'),
-      for (final code in kMaterialSupportedLanguages.toList()..sort())
-        if (code != 'en' && !_untestedRtlLanguages.contains(code))
-          Locale(code),
-    ];
+  const Locale('en'),
+  for (final code in kMaterialSupportedLanguages.toList()..sort())
+    if (code != 'en' && !_untestedRtlLanguages.contains(code)) Locale(code),
+];
 
 /// The root messenger, so a failure with no context of its own can still
 /// reach the user. The drawer keeps its own — a Scaffold draws its drawer
@@ -262,10 +270,7 @@ class _RootState extends State<_Root> {
       // Pushed routes build under MaterialApp's theme and still follow the
       // system; the sheets and dialogs raised from the map's context inherit
       // this one, which is what we want, since they sit on top of the map.
-      child: Theme(
-        data: zoneCraftLightTheme(),
-        child: const MapScreen(),
-      ),
+      child: Theme(data: zoneCraftLightTheme(), child: const MapScreen()),
     );
   }
 }

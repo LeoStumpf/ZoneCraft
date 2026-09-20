@@ -56,7 +56,11 @@ class SharedPoint {
     if (!lat.isFinite || !lng.isFinite) return null;
     if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
     final n = name?.trim();
-    return SharedPoint(lat: lat, lng: lng, name: (n == null || n.isEmpty) ? null : n);
+    return SharedPoint(
+      lat: lat,
+      lng: lng,
+      name: (n == null || n.isEmpty) ? null : n,
+    );
   }
 
   LatLng get latLng => LatLng(lat, lng);
@@ -70,15 +74,15 @@ class SharedPoint {
 /// Built with [Uri], so a name carrying `&`, spaces or emoji is percent-encoded
 /// rather than silently truncating the query at the next separator.
 String encodeSharedPointLink(SharedPoint p) => Uri(
-      scheme: kSharedPointScheme,
-      host: _sharedPointHost,
-      queryParameters: {
-        'lat': p.lat.toStringAsFixed(6),
-        'lng': p.lng.toStringAsFixed(6),
-        // Null-aware element: an unnamed point simply has no `n` parameter.
-        'n': ?p.name,
-      },
-    ).toString();
+  scheme: kSharedPointScheme,
+  host: _sharedPointHost,
+  queryParameters: {
+    'lat': p.lat.toStringAsFixed(6),
+    'lng': p.lng.toStringAsFixed(6),
+    // Null-aware element: an unnamed point simply has no `n` parameter.
+    'n': ?p.name,
+  },
+).toString();
 
 /// Reads a shared position out of [input], whatever shape it arrives in.
 ///
@@ -118,8 +122,7 @@ SharedPoint? decodeSharedPointLink(String input) {
   return null;
 }
 
-SharedPoint? _decodeWhole(String text) =>
-    _decodeUri(text) ?? _decodeBare(text);
+SharedPoint? _decodeWhole(String text) => _decodeUri(text) ?? _decodeBare(text);
 
 /// The three URI shapes, or null when [text] is not a URI we know.
 SharedPoint? _decodeUri(String text) {

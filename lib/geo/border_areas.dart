@@ -295,11 +295,11 @@ bool _containsPoint(List<LatLng> ring, LatLng p) {
 /// 119 238 points, which as rows would mean that many UUIDs. Border areas are
 /// derived, non-editable snapshots, so nothing ever needs to address one point.
 String encodeRings(List<List<LatLng>> rings) => jsonEncode([
-      for (final r in rings)
-        [
-          for (final p in r) [p.latitude, p.longitude],
-        ],
-    ]);
+  for (final r in rings)
+    [
+      for (final p in r) [p.latitude, p.longitude],
+    ],
+]);
 
 /// Decodes [encodeRings]. Returns what it could read (empty on any structural
 /// surprise) rather than throwing — a corrupt row must not take the map down.
@@ -307,9 +307,9 @@ List<List<LatLng>> decodeRings(String json) {
   final dynamic decoded;
   try {
     decoded = jsonDecode(json);
-  // A corrupt row must not take the map down, whatever shape the corruption
-  // takes.
-  // ignore: avoid_catches_without_on_clauses
+    // A corrupt row must not take the map down, whatever shape the corruption
+    // takes.
+    // ignore: avoid_catches_without_on_clauses
   } catch (_) {
     return const [];
   }
@@ -390,19 +390,21 @@ List<BuiltBorderArea> buildBorderAreas(List<BorderRelationData> relations) {
       }
     }
     final anchor = labelAnchor(rings);
-    out.add(BuiltBorderArea(
-      osmId: rel.osmId,
-      name: rel.name,
-      south: south,
-      west: west,
-      north: north,
-      east: east,
-      labelLat: anchor.latitude,
-      labelLng: anchor.longitude,
-      pointCount: points,
-      rings: encodeRings(rings),
-      wayIds: rel.wayIds,
-    ));
+    out.add(
+      BuiltBorderArea(
+        osmId: rel.osmId,
+        name: rel.name,
+        south: south,
+        west: west,
+        north: north,
+        east: east,
+        labelLat: anchor.latitude,
+        labelLng: anchor.longitude,
+        pointCount: points,
+        rings: encodeRings(rings),
+        wayIds: rel.wayIds,
+      ),
+    );
   }
   return out;
 }
@@ -425,7 +427,11 @@ List<List<List<LatLng>>> groupRings(List<List<LatLng>> rings) {
     for (final r in rings)
       if (r.length >= 3) r,
   ];
-  if (usable.length < 2) return [for (final r in usable) [r]];
+  if (usable.length < 2) {
+    return [
+      for (final r in usable) [r],
+    ];
+  }
   final polys = <List<List<LatLng>>>[];
   final outerAt = <int, int>{}; // ring index -> polygon index
   for (var i = 0; i < usable.length; i++) {
@@ -435,7 +441,11 @@ List<List<List<LatLng>>> groupRings(List<List<LatLng>> rings) {
   }
   // Every ring was enclosed by another (rings crossing, or a corrupt row):
   // fall back to one polygon per ring rather than losing geometry.
-  if (polys.isEmpty) return [for (final r in usable) [r]];
+  if (polys.isEmpty) {
+    return [
+      for (final r in usable) [r],
+    ];
+  }
   for (var i = 0; i < usable.length; i++) {
     if (outerAt.containsKey(i)) continue;
     var target = 0;

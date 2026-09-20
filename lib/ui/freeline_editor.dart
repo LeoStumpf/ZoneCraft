@@ -153,12 +153,14 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
     // Persist a stable centre alongside the radius, so a line whose circle was
     // only ever derived (legacy/unset) stops drifting when its points change.
     final inc = _inclusion;
-    unawaited(_repo.updateFreeLine(
+    unawaited(
+      _repo.updateFreeLine(
         widget.freeLine.id,
         inclusionRadiusMeters: r,
         inclusionLat: widget.freeLine.inclusionLat ?? inc.center.latitude,
         inclusionLng: widget.freeLine.inclusionLng ?? inc.center.longitude,
-      ));
+      ),
+    );
   }
 
   Future<void> _deletePoint(FreeLinePoint p) async {
@@ -328,7 +330,7 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
           onChanged: (s) {
             final t = s.trim();
             unawaited(
-              _repo.updateFreeLine(id, label: Value(t.isEmpty ? null : t))
+              _repo.updateFreeLine(id, label: Value(t.isEmpty ? null : t)),
             );
           },
         ),
@@ -355,11 +357,13 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
             onChanged: (s) {
               final ll = parseLatLng(s);
               if (ll != null) {
-                unawaited(_repo.updateFreeLinePoint(
+                unawaited(
+                  _repo.updateFreeLinePoint(
                     p.id,
                     lat: ll.latitude,
                     lng: ll.longitude,
-                  ));
+                  ),
+                );
               }
             },
           ),
@@ -413,11 +417,17 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
             switch (v) {
               case 'up':
                 unawaited(
-                  _repo.swapFreeLinePointOrder(p.id, widget.points[index - 1].id)
+                  _repo.swapFreeLinePointOrder(
+                    p.id,
+                    widget.points[index - 1].id,
+                  ),
                 );
               case 'down':
                 unawaited(
-                  _repo.swapFreeLinePointOrder(p.id, widget.points[index + 1].id)
+                  _repo.swapFreeLinePointOrder(
+                    p.id,
+                    widget.points[index + 1].id,
+                  ),
                 );
               case 'remove':
                 unawaited(_deletePoint(p));

@@ -42,25 +42,34 @@ void main() {
       });
 
       await submitOsmNote(
-          lat: 48.1374, lng: 11.5755, text: 'A bench.', client: client);
+        lat: 48.1374,
+        lng: 11.5755,
+        text: 'A bench.',
+        client: client,
+      );
 
       final request = sent!;
       expect(request.method, 'POST');
       expect(request.url.path, '/api/0.6/notes.json');
       expect(request.headers['User-Agent'], zoneCraftUserAgent);
-      expect(request.headers['User-Agent'], contains(kAppVersion),
-          reason: 'the policy asks for the application *and version*');
+      expect(
+        request.headers['User-Agent'],
+        contains(kAppVersion),
+        reason: 'the policy asks for the application *and version*',
+      );
       final body = jsonDecode(request.body) as Map<String, Object?>;
       // `lon`, not `lng` — the API's spelling, and a silent 400 otherwise.
       expect(body, {'lat': 48.1374, 'lon': 11.5755, 'text': 'A bench.'});
     });
 
-    test('goes to the configured API, which is the sandbox in a test build',
-        () {
-      expect(osmNoteCreateUri().toString(), startsWith(kOsmApiBase));
-      expect(osmApiHost, Uri.parse(kOsmApiBase).host);
-      expect(osmApiIsLive, kOsmApiBase == 'https://api.openstreetmap.org');
-    });
+    test(
+      'goes to the configured API, which is the sandbox in a test build',
+      () {
+        expect(osmNoteCreateUri().toString(), startsWith(kOsmApiBase));
+        expect(osmApiHost, Uri.parse(kOsmApiBase).host);
+        expect(osmApiIsLive, kOsmApiBase == 'https://api.openstreetmap.org');
+      },
+    );
 
     test('an empty report is refused here, not at the far end', () async {
       var called = false;
@@ -68,8 +77,12 @@ void main() {
         called = true;
         return http.Response('', 200);
       });
-      final outcome =
-          await submitOsmNote(lat: 48.1, lng: 11.5, text: '   ', client: client);
+      final outcome = await submitOsmNote(
+        lat: 48.1,
+        lng: 11.5,
+        text: '   ',
+        client: client,
+      );
       expect(outcome.ok, isFalse);
       expect(called, isFalse, reason: 'nothing is sent');
     });
@@ -77,8 +90,10 @@ void main() {
 
   group('what comes back', () {
     test('a created note yields its number', () {
-      final outcome =
-          classifyOsmNoteResponse(200, '{"properties":{"id":4812345}}');
+      final outcome = classifyOsmNoteResponse(
+        200,
+        '{"properties":{"id":4812345}}',
+      );
       expect(outcome.ok, isTrue);
       expect(outcome.noteId, 4812345);
     });
@@ -108,8 +123,11 @@ void main() {
         final outcome = classifyOsmNoteResponse(status, '');
         expect(outcome.ok, isFalse, reason: 'HTTP $status');
         expect(outcome.message, isNotEmpty, reason: 'HTTP $status');
-        expect(outcome.retryable, isFalse,
-            reason: 'HTTP $status will not start working on its own');
+        expect(
+          outcome.retryable,
+          isFalse,
+          reason: 'HTTP $status will not start working on its own',
+        );
       }
       for (final status in [429, 500, 502, 503]) {
         final outcome = classifyOsmNoteResponse(status, '');
@@ -122,8 +140,11 @@ void main() {
       // so, because the sheet keeps the text and the outbox keeps the row.
       for (final status in [403, 409, 429, 500]) {
         final message = classifyOsmNoteResponse(status, '').message!;
-        expect(message, matches(RegExp('saved|save|export|account|try')),
-            reason: 'HTTP $status should say what to do next');
+        expect(
+          message,
+          matches(RegExp('saved|save|export|account|try')),
+          reason: 'HTTP $status should say what to do next',
+        );
       }
     });
 
@@ -138,9 +159,14 @@ void main() {
   group('failures below HTTP', () {
     test('being offline is an outcome, never an exception', () async {
       final client = MockClient(
-          (_) async => throw const SocketException('no route to host'));
+        (_) async => throw const SocketException('no route to host'),
+      );
       final outcome = await submitOsmNote(
-          lat: 48.1, lng: 11.5, text: 'A bench.', client: client);
+        lat: 48.1,
+        lng: 11.5,
+        text: 'A bench.',
+        client: client,
+      );
       expect(outcome.ok, isFalse);
       expect(outcome.retryable, isTrue);
       expect(outcome.message, contains('Could not reach OpenStreetMap'));
@@ -151,7 +177,11 @@ void main() {
         throw TimeoutException('too slow');
       });
       final outcome = await submitOsmNote(
-          lat: 48.1, lng: 11.5, text: 'A bench.', client: client);
+        lat: 48.1,
+        lng: 11.5,
+        text: 'A bench.',
+        client: client,
+      );
       expect(outcome.ok, isFalse);
       expect(outcome.retryable, isTrue);
     });
@@ -166,7 +196,11 @@ void main() {
         return http.Response('', 503);
       });
       await submitOsmNote(
-          lat: 48.1, lng: 11.5, text: 'A bench.', client: client);
+        lat: 48.1,
+        lng: 11.5,
+        text: 'A bench.',
+        client: client,
+      );
       expect(attempts, 1);
     });
   });

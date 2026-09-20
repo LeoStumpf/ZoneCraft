@@ -93,6 +93,9 @@ void main() {
       points: line,
     );
     expect(inc.radiusMeters, 1234); // stored radius kept
-    expect(inc.center.longitude, closeTo(0, 1e-9)); // centre derived (on the line)
+    expect(
+      inc.center.longitude,
+      closeTo(0, 1e-9),
+    ); // centre derived (on the line)
   });
 }

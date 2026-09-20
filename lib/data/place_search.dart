@@ -144,8 +144,8 @@ List<PlaceResult> parsePlaceSearchResponse(String body) {
   final dynamic decoded;
   try {
     decoded = jsonDecode(body);
-  // Nominatim answers with an error page under load; that is data, not a bug.
-  // ignore: avoid_catches_without_on_clauses
+    // Nominatim answers with an error page under load; that is data, not a bug.
+    // ignore: avoid_catches_without_on_clauses
   } catch (_) {
     return out;
   }
@@ -169,17 +169,21 @@ List<PlaceResult> parsePlaceSearchResponse(String body) {
     // Nominatim sends lat/lon as strings on every hit; the geometry is the
     // fallback for anything that does not, so a result is dropped only when
     // there is no way at all to say where it is.
-    final center = _pointOf(e['lat'], e['lon']) ?? _centerOfGeometry(areas, lines);
+    final center =
+        _pointOf(e['lat'], e['lon']) ?? _centerOfGeometry(areas, lines);
     if (center == null) continue;
 
-    out.add(PlaceResult(
-      displayName: (e['display_name'] as String?)?.trim() ?? 'Unnamed feature',
-      center: center,
-      areas: areas,
-      lines: lines,
-      category: e['category'] as String?,
-      type: e['type'] as String?,
-    ));
+    out.add(
+      PlaceResult(
+        displayName:
+            (e['display_name'] as String?)?.trim() ?? 'Unnamed feature',
+        center: center,
+        areas: areas,
+        lines: lines,
+        category: e['category'] as String?,
+        type: e['type'] as String?,
+      ),
+    );
   }
   return out;
 }
@@ -196,10 +200,7 @@ LatLng? _pointOf(Object? lat, Object? lng) {
 /// Not a centroid: for a ring this is cheaper, and for an L-shaped boundary the
 /// true centroid can fall outside the shape entirely, which is a worse place to
 /// put the camera than the middle of the box.
-LatLng? _centerOfGeometry(
-  List<List<LatLng>> areas,
-  List<List<LatLng>> lines,
-) {
+LatLng? _centerOfGeometry(List<List<LatLng>> areas, List<List<LatLng>> lines) {
   double? minLat, maxLat, minLng, maxLng;
   for (final ring in [...areas, ...lines]) {
     for (final p in ring) {
@@ -251,17 +252,19 @@ Future<List<PlaceResult>?> searchPlaces(
   final c = client ?? http.Client();
   try {
     final resp = await nominatimPacer.run(
-      () => c.get(
-        buildPlaceSearchUri(q, host: host),
-        headers: const {'User-Agent': zoneCraftUserAgent},
-      ).timeout(const Duration(seconds: 30)),
+      () => c
+          .get(
+            buildPlaceSearchUri(q, host: host),
+            headers: const {'User-Agent': zoneCraftUserAgent},
+          )
+          .timeout(const Duration(seconds: 30)),
     );
     if (resp.statusCode != 200) return null;
     final parsed = parsePlaceSearchResponse(resp.body);
     placeSearchCache.put(key, parsed);
     return parsed;
-  // Any network failure means the search simply has no answer to give.
-  // ignore: avoid_catches_without_on_clauses
+    // Any network failure means the search simply has no answer to give.
+    // ignore: avoid_catches_without_on_clauses
   } catch (_) {
     return null;
   } finally {

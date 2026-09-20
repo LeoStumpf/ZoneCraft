@@ -40,10 +40,11 @@ int tileYFor(double lat, int z) {
   final n = 1 << z;
   final clampedLat = lat.clamp(-mercatorMaxLat, mercatorMaxLat);
   final latRad = clampedLat * math.pi / 180.0;
-  final y = ((1.0 - math.log(math.tan(latRad) + 1.0 / math.cos(latRad)) / math.pi) /
-          2.0 *
-          n)
-      .floor();
+  final y =
+      ((1.0 - math.log(math.tan(latRad) + 1.0 / math.cos(latRad)) / math.pi) /
+              2.0 *
+              n)
+          .floor();
   return y.clamp(0, n - 1);
 }
 

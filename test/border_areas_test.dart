@@ -29,23 +29,24 @@ void main() {
 
   /// The unit square as three ways, given in order and forwards.
   List<BorderWay> squareWays() => [
-        way(1, [
-          [0, 0],
-          [0, 1]
-        ]),
-        way(2, [
-          [0, 1],
-          [1, 1]
-        ]),
-        way(3, [
-          [1, 1],
-          [1, 0],
-          [0, 0]
-        ]),
-      ];
+    way(1, [
+      [0, 0],
+      [0, 1],
+    ]),
+    way(2, [
+      [0, 1],
+      [1, 1],
+    ]),
+    way(3, [
+      [1, 1],
+      [1, 0],
+      [0, 0],
+    ]),
+  ];
 
-  Set<String> vertices(List<LatLng> ring) =>
-      {for (final p in ring) '${p.latitude},${p.longitude}'};
+  Set<String> vertices(List<LatLng> ring) => {
+    for (final p in ring) '${p.latitude},${p.longitude}',
+  };
 
   group('assembleRings', () {
     test('stitches ways into one closed ring', () {
@@ -53,7 +54,12 @@ void main() {
       expect(rings, hasLength(1));
       // Implicitly closed: no duplicated first vertex.
       expect(rings.single, hasLength(4));
-      expect(vertices(rings.single), {'0.0,0.0', '0.0,1.0', '1.0,1.0', '1.0,0.0'});
+      expect(vertices(rings.single), {
+        '0.0,0.0',
+        '0.0,1.0',
+        '1.0,1.0',
+        '1.0,0.0',
+      });
     });
 
     test('member order and direction are not trusted', () {
@@ -61,14 +67,16 @@ void main() {
       final ways = squareWays();
       final scrambled = [
         BorderWay(
-            id: ways[2].id,
-            role: 'outer',
-            points: ways[2].points.reversed.toList()),
+          id: ways[2].id,
+          role: 'outer',
+          points: ways[2].points.reversed.toList(),
+        ),
         ways[0],
         BorderWay(
-            id: ways[1].id,
-            role: 'outer',
-            points: ways[1].points.reversed.toList()),
+          id: ways[1].id,
+          role: 'outer',
+          points: ways[1].points.reversed.toList(),
+        ),
       ];
       final rings = assembleRings(scrambled);
       expect(rings, hasLength(1));
@@ -82,8 +90,8 @@ void main() {
           [0, 1],
           [1, 1],
           [1, 0],
-          [0, 0]
-        ])
+          [0, 0],
+        ]),
       ]);
       expect(rings.single, hasLength(4));
     });
@@ -96,7 +104,7 @@ void main() {
           [0.2, 0.8],
           [0.8, 0.8],
           [0.8, 0.2],
-          [0.2, 0.2]
+          [0.2, 0.2],
         ], role: 'inner'),
       ]);
       expect(rings, hasLength(2));
@@ -112,20 +120,20 @@ void main() {
       final rings = assembleRings([
         way(1, [
           [0, 0],
-          [0, 1]
+          [0, 1],
         ]),
         way(2, [
           [0, 1],
-          [1, 1]
+          [1, 1],
         ]),
         way(10, [
           [1, 1],
-          [0.5, 0.5]
+          [0.5, 0.5],
         ], role: 'inner'),
         way(11, [
           [0.5, 0.5],
           [0.6, 0.4],
-          [1, 1]
+          [1, 1],
         ], role: 'inner'),
       ]);
       expect(rings, hasLength(2));
@@ -138,19 +146,22 @@ void main() {
       final rings = assembleRings([
         way(1, [
           [0, 0],
-          [0, 1]
+          [0, 1],
         ]),
         way(2, [
           [0, 1],
-          [1, 1]
+          [1, 1],
         ]),
         way(3, [
           [1, 1],
-          [1, 0]
+          [1, 0],
         ]),
       ]);
-      expect(rings, hasLength(1),
-          reason: 'an area must never silently disappear');
+      expect(
+        rings,
+        hasLength(1),
+        reason: 'an area must never silently disappear',
+      );
       expect(rings.single, hasLength(4));
     });
 
@@ -159,8 +170,8 @@ void main() {
         assembleRings([
           way(1, [
             [0, 0],
-            [0, 1]
-          ])
+            [0, 1],
+          ]),
         ]),
         isEmpty,
       );
@@ -171,8 +182,8 @@ void main() {
       expect(
         assembleRings([
           way(1, [
-            [0, 0]
-          ])
+            [0, 0],
+          ]),
         ]),
         isEmpty,
       );
@@ -196,8 +207,11 @@ void main() {
       final colors = assignAreaColors(areas);
       expect(colors.keys.toSet(), {1, 2, 3, 4, 5});
       for (final pair in [(1, 2), (2, 3), (3, 4), (4, 5), (5, 1)]) {
-        expect(colors[pair.$1], isNot(colors[pair.$2]),
-            reason: '${pair.$1} and ${pair.$2} share a border');
+        expect(
+          colors[pair.$1],
+          isNot(colors[pair.$2]),
+          reason: '${pair.$1} and ${pair.$2} share a border',
+        );
       }
       for (final c in colors.values) {
         expect(c, inInclusiveRange(0, kBorderColorCount - 1));
@@ -224,7 +238,12 @@ void main() {
     });
 
     test('an isolated area is still coloured', () {
-      expect(assignAreaColors([a(1, [10])])[1], isNotNull);
+      expect(
+        assignAreaColors([
+          a(1, [10]),
+        ])[1],
+        isNotNull,
+      );
       expect(assignAreaColors(const []), isEmpty);
     });
 
@@ -249,8 +268,11 @@ void main() {
       final colors = assignAreaColors(areas);
       expect(colors, hasLength(9));
       for (var i = 1; i <= 8; i++) {
-        expect(colors[i], isNot(colors[0]),
-            reason: 'the hub must differ from every spoke');
+        expect(
+          colors[i],
+          isNot(colors[0]),
+          reason: 'the hub must differ from every spoke',
+        );
       }
     });
   });
@@ -263,7 +285,7 @@ void main() {
           const LatLng(0, 2),
           const LatLng(2, 2),
           const LatLng(2, 0),
-        ]
+        ],
       ]);
       expect(p.latitude, closeTo(1, 1e-9));
       expect(p.longitude, closeTo(1, 1e-9));
@@ -282,8 +304,11 @@ void main() {
         const LatLng(3, 0),
       ];
       final p = labelAnchor([ring]);
-      expect(_contains(ring, p), isTrue,
-          reason: 'a name outside its own outline reads as the neighbour\'s');
+      expect(
+        _contains(ring, p),
+        isTrue,
+        reason: 'a name outside its own outline reads as the neighbour\'s',
+      );
     });
 
     test('the largest ring wins, so an exclave never takes the name', () {
@@ -312,8 +337,16 @@ void main() {
   group('encodeRings / decodeRings', () {
     test('round-trips multi-ring geometry', () {
       final rings = [
-        [const LatLng(48.0, 11.0), const LatLng(48.1, 11.2), const LatLng(48.2, 11.0)],
-        [const LatLng(48.05, 11.05), const LatLng(48.06, 11.06), const LatLng(48.07, 11.05)],
+        [
+          const LatLng(48.0, 11.0),
+          const LatLng(48.1, 11.2),
+          const LatLng(48.2, 11.0),
+        ],
+        [
+          const LatLng(48.05, 11.05),
+          const LatLng(48.06, 11.06),
+          const LatLng(48.07, 11.05),
+        ],
       ];
       final back = decodeRings(encodeRings(rings));
       expect(back, hasLength(2));
@@ -321,20 +354,31 @@ void main() {
       expect(back.last.last.longitude, closeTo(11.05, 1e-9));
     });
 
-    test('garbage in, empty out — a corrupt row must not take the map down', () {
-      expect(decodeRings('nope'), isEmpty);
-      expect(decodeRings('{}'), isEmpty);
-      expect(decodeRings('[1,2,3]'), isEmpty);
-      expect(decodeRings('[[[1],[2,3],[4,5]]]'), isEmpty,
-          reason: 'a ring left with two points is not an area');
-      expect(decodeRings('[[["a","b"],[1,2],[3,4],[5,6]]]').single, hasLength(3));
-    });
+    test(
+      'garbage in, empty out — a corrupt row must not take the map down',
+      () {
+        expect(decodeRings('nope'), isEmpty);
+        expect(decodeRings('{}'), isEmpty);
+        expect(decodeRings('[1,2,3]'), isEmpty);
+        expect(
+          decodeRings('[[[1],[2,3],[4,5]]]'),
+          isEmpty,
+          reason: 'a ring left with two points is not an area',
+        );
+        expect(
+          decodeRings('[[["a","b"],[1,2],[3,4],[5,6]]]').single,
+          hasLength(3),
+        );
+      },
+    );
 
     test('drops degenerate rings rather than storing them', () {
       expect(
-        decodeRings(encodeRings([
-          [const LatLng(1, 1), const LatLng(2, 2)]
-        ])),
+        decodeRings(
+          encodeRings([
+            [const LatLng(1, 1), const LatLng(2, 2)],
+          ]),
+        ),
         isEmpty,
       );
     });
@@ -342,11 +386,11 @@ void main() {
 
   group('outerRings', () {
     List<LatLng> square(double x0, double y0, double x1, double y1) => [
-          LatLng(y0, x0),
-          LatLng(y0, x1),
-          LatLng(y1, x1),
-          LatLng(y1, x0),
-        ];
+      LatLng(y0, x0),
+      LatLng(y0, x1),
+      LatLng(y1, x1),
+      LatLng(y1, x0),
+    ];
 
     test('a lone ring is its own outer ring', () {
       final r = [square(0, 0, 1, 1)];
@@ -385,16 +429,21 @@ void main() {
         osmId: 42,
         name: 'Sticks out',
         ways: [
-          BorderWay(id: 1, role: 'outer', points: const [
-            LatLng(0.2, 0.2),
-            LatLng(0.2, 20.0),
-          ]),
-          BorderWay(id: 2, role: 'outer', points: const [
-            LatLng(0.2, 20.0),
-            LatLng(0.8, 20.0),
-            LatLng(0.8, 0.2),
-            LatLng(0.2, 0.2),
-          ]),
+          BorderWay(
+            id: 1,
+            role: 'outer',
+            points: const [LatLng(0.2, 0.2), LatLng(0.2, 20.0)],
+          ),
+          BorderWay(
+            id: 2,
+            role: 'outer',
+            points: const [
+              LatLng(0.2, 20.0),
+              LatLng(0.8, 20.0),
+              LatLng(0.8, 0.2),
+              LatLng(0.2, 0.2),
+            ],
+          ),
         ],
       );
       final built = buildBorderAreas([rel]);
@@ -403,20 +452,28 @@ void main() {
       expect(a.osmId, 42);
       expect(a.name, 'Sticks out');
       expect(a.wayIds, [1, 2]);
-      expect(a.east, closeTo(20.0, 1e-9),
-          reason: 'the far edge is kept, not clipped away');
+      expect(
+        a.east,
+        closeTo(20.0, 1e-9),
+        reason: 'the far edge is kept, not clipped away',
+      );
       expect(decodeRings(a.rings), hasLength(1));
       expect(totalPointCount(built), a.pointCount);
     });
 
     test('a relation with no usable rings yields no area', () {
       final built = buildBorderAreas([
-        BorderRelationData(osmId: 1, name: 'Too thin', ways: [
-          BorderWay(id: 1, role: 'outer', points: const [
-            LatLng(0, 0),
-            LatLng(0, 1),
-          ]),
-        ]),
+        BorderRelationData(
+          osmId: 1,
+          name: 'Too thin',
+          ways: [
+            BorderWay(
+              id: 1,
+              role: 'outer',
+              points: const [LatLng(0, 0), LatLng(0, 1)],
+            ),
+          ],
+        ),
       ]);
       expect(built, isEmpty);
     });
@@ -427,9 +484,11 @@ void main() {
         const LatLng(0.8, 0.8),
       ];
       final built = buildBorderAreas([
-        BorderRelationData(osmId: 1, name: null, ways: [
-          BorderWay(id: 1, role: 'outer', points: dense),
-        ]),
+        BorderRelationData(
+          osmId: 1,
+          name: null,
+          ways: [BorderWay(id: 1, role: 'outer', points: dense)],
+        ),
       ]);
       expect(built.single.pointCount, lessThan(dense.length));
       expect(built.single.pointCount, greaterThanOrEqualTo(3));
@@ -437,15 +496,23 @@ void main() {
 
     test('the label anchor lands inside the area', () {
       final built = buildBorderAreas([
-        BorderRelationData(osmId: 1, name: 'Box', ways: [
-          BorderWay(id: 1, role: 'outer', points: const [
-            LatLng(0, 0),
-            LatLng(0, 2),
-            LatLng(2, 2),
-            LatLng(2, 0),
-            LatLng(0, 0),
-          ]),
-        ]),
+        BorderRelationData(
+          osmId: 1,
+          name: 'Box',
+          ways: [
+            BorderWay(
+              id: 1,
+              role: 'outer',
+              points: const [
+                LatLng(0, 0),
+                LatLng(0, 2),
+                LatLng(2, 2),
+                LatLng(2, 0),
+                LatLng(0, 0),
+              ],
+            ),
+          ],
+        ),
       ]);
       final a = built.single;
       expect(a.labelLat, greaterThan(a.south));
@@ -458,8 +525,12 @@ void main() {
   group('groupRings', () {
     const outer = [LatLng(0, 0), LatLng(0, 10), LatLng(10, 10), LatLng(10, 0)];
     const hole = [LatLng(2, 2), LatLng(2, 4), LatLng(4, 4), LatLng(4, 2)];
-    const exclave =
-        [LatLng(20, 20), LatLng(20, 21), LatLng(21, 21), LatLng(21, 20)];
+    const exclave = [
+      LatLng(20, 20),
+      LatLng(20, 21),
+      LatLng(21, 21),
+      LatLng(21, 20),
+    ];
 
     test('one ring is one polygon', () {
       expect(groupRings([outer]), [
@@ -487,9 +558,15 @@ void main() {
     });
 
     test('degenerate rings are dropped rather than grouped', () {
-      expect(groupRings([outer, const [LatLng(0, 0), LatLng(1, 1)]]), [
-        [outer],
-      ]);
+      expect(
+        groupRings([
+          outer,
+          const [LatLng(0, 0), LatLng(1, 1)],
+        ]),
+        [
+          [outer],
+        ],
+      );
       expect(groupRings(const []), isEmpty);
     });
   });

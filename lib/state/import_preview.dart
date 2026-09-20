@@ -78,7 +78,8 @@ class PendingImportNotifier extends Notifier<PendingImport?> {
 
 final pendingImportProvider =
     NotifierProvider<PendingImportNotifier, PendingImport?>(
-        PendingImportNotifier.new);
+      PendingImportNotifier.new,
+    );
 
 /// Builds a [PendingImport] from parsed [data], or null when there is no
 /// geometry to show.
@@ -106,7 +107,9 @@ PendingImport? previewOf(ExportData data) {
       final r = o.radiusMeters;
       // A circle and a height region are a centre plus a radius; tracing their
       // stored `coords` would draw a single point.
-      if (r != null && r > 0 && o.coords.isNotEmpty &&
+      if (r != null &&
+          r > 0 &&
+          o.coords.isNotEmpty &&
           (o.kind == 'circle' || o.kind == 'height')) {
         circles.add((center: o.coords.first, radiusMeters: r));
         see(o.coords.first);
@@ -114,14 +117,18 @@ PendingImport? previewOf(ExportData data) {
         // ~111 km everywhere, which is close enough to keep a lone circle from
         // filling only its own centre pixel.
         final pad = r / 111000;
-        see(LatLng(
-          (o.coords.first.latitude - pad).clamp(-90, 90),
-          o.coords.first.longitude,
-        ));
-        see(LatLng(
-          (o.coords.first.latitude + pad).clamp(-90, 90),
-          o.coords.first.longitude,
-        ));
+        see(
+          LatLng(
+            (o.coords.first.latitude - pad).clamp(-90, 90),
+            o.coords.first.longitude,
+          ),
+        );
+        see(
+          LatLng(
+            (o.coords.first.latitude + pad).clamp(-90, 90),
+            o.coords.first.longitude,
+          ),
+        );
         continue;
       }
       // `rings` is the whole of a multi-ring object; `coords` is only its
@@ -141,7 +148,8 @@ PendingImport? previewOf(ExportData data) {
   final objects = data.objectCount;
   final n = data.layers.length;
   return PendingImport(
-    summary: '$n layer${n == 1 ? '' : 's'} · '
+    summary:
+        '$n layer${n == 1 ? '' : 's'} · '
         '$objects object${objects == 1 ? '' : 's'}',
     lines: lines,
     circles: circles,

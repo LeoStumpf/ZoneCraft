@@ -63,8 +63,7 @@ Future<ElementColorChoice?> showElementColorDialog(
                     ? 'Its own shade of the layer colour — in use now'
                     : 'Back to its own shade of the layer colour',
               ),
-              onTap: () =>
-                  Navigator.pop(ctx, const ElementColorChoice(null)),
+              onTap: () => Navigator.pop(ctx, const ElementColorChoice(null)),
             ),
             const Divider(),
             // The layer's own shade ladder, offered explicitly: these are the
@@ -95,10 +94,7 @@ Future<ElementColorChoice?> showElementColorDialog(
               ],
             ),
             const Divider(height: 24),
-            BlockPicker(
-              pickerColor: picked,
-              onColorChanged: (c) => picked = c,
-            ),
+            BlockPicker(pickerColor: picked, onColorChanged: (c) => picked = c),
           ],
         ),
       ),

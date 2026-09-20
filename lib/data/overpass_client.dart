@@ -112,22 +112,22 @@ typedef OverpassProgressCallback = void Function(OverpassProgress progress);
 /// 504 often enough that blaming the connection would usually be a lie.
 class OverpassOutcome<T> {
   const OverpassOutcome.ok(T this.value, {this.endpoint})
-      : message = null,
-        cancelled = false;
+    : message = null,
+      cancelled = false;
   const OverpassOutcome.failed(String this.message)
-      : value = null,
-        endpoint = null,
-        cancelled = false;
+    : value = null,
+      endpoint = null,
+      cancelled = false;
 
   /// The user pressed Cancel. Deliberately **not** a failure: nothing is worth
   /// reporting as an error, and nothing must be written — a cancelled transit
   /// import that recorded itself as failed would leave a retry row for
   /// something that never went wrong.
   const OverpassOutcome.cancelled()
-      : value = null,
-        message = null,
-        endpoint = null,
-        cancelled = true;
+    : value = null,
+      message = null,
+      endpoint = null,
+      cancelled = true;
 
   final T? value;
 
@@ -296,18 +296,20 @@ Future<OverpassOutcome<T>> overpassPost<T>(
         if (cancel != null && cancel.isCancelled) {
           return const OverpassOutcome.cancelled();
         }
-        OverpassProgress progress(OverpassStage stage,
-                {int bytes = 0, int? totalBytes}) =>
-            OverpassProgress(
-              stage: stage,
-              endpoint: endpoint,
-              endpointIndex: i + 1,
-              endpointCount: endpoints.length,
-              attempt: attempt,
-              timeout: timeout,
-              bytes: bytes,
-              totalBytes: totalBytes,
-            );
+        OverpassProgress progress(
+          OverpassStage stage, {
+          int bytes = 0,
+          int? totalBytes,
+        }) => OverpassProgress(
+          stage: stage,
+          endpoint: endpoint,
+          endpointIndex: i + 1,
+          endpointCount: endpoints.length,
+          attempt: attempt,
+          timeout: timeout,
+          bytes: bytes,
+          totalBytes: totalBytes,
+        );
 
         onProgress?.call(progress(OverpassStage.contacting));
 
@@ -316,54 +318,61 @@ Future<OverpassOutcome<T>> overpassPost<T>(
           // Paced, so a double-tapped import (or a failover landing straight on
           // the next instance) can't put two requests on the wire back to back.
           // Costs a user-initiated import nothing; the wait is already seconds.
-          resp = await overpassPacer.run(
-            () {
-              // Cancelling while queued behind another request must not put a
-              // dead request on the wire a second later.
-              if (cancel != null && cancel.isCancelled) {
-                throw const _CancelledException();
-              }
-              return _send(
-                c,
-                endpoint,
-                query,
-                timeout: timeout,
-                maxBytes: maxBytes,
-                cancel: cancel,
-                onBytes: (bytes, total) => onProgress
-                    ?.call(progress(OverpassStage.downloading,
-                        bytes: bytes, totalBytes: total)),
-              );
-            },
-          );
+          resp = await overpassPacer.run(() {
+            // Cancelling while queued behind another request must not put a
+            // dead request on the wire a second later.
+            if (cancel != null && cancel.isCancelled) {
+              throw const _CancelledException();
+            }
+            return _send(
+              c,
+              endpoint,
+              query,
+              timeout: timeout,
+              maxBytes: maxBytes,
+              cancel: cancel,
+              onBytes: (bytes, total) => onProgress?.call(
+                progress(
+                  OverpassStage.downloading,
+                  bytes: bytes,
+                  totalBytes: total,
+                ),
+              ),
+            );
+          });
         } on _CancelledException {
           return const OverpassOutcome.cancelled();
         } on _OversizeException {
           // Caught mid-stream, so an answer far too big to use is abandoned
           // rather than downloaded in full and then refused.
-          return OverpassOutcome.failed(oversizeMessage ??
-              'That area returns too much data — pick a smaller box.');
-        // The two failures that *do* say something about the query are typed and
-        // caught above. Anything else — timeout, socket, malformed chunk — says only
-        // that this endpoint is unwell, so it must fall through to the next one
-        // regardless of its type.
-        // ignore: avoid_catches_without_on_clauses
+          return OverpassOutcome.failed(
+            oversizeMessage ??
+                'That area returns too much data — pick a smaller box.',
+          );
+          // The two failures that *do* say something about the query are typed and
+          // caught above. Anything else — timeout, socket, malformed chunk — says only
+          // that this endpoint is unwell, so it must fall through to the next one
+          // regardless of its type.
+          // ignore: avoid_catches_without_on_clauses
         } catch (_) {
           // A timeout or socket error says nothing about the *query*, so try
           // the next instance rather than blaming the user's connection — and
           // don't retry this one, which is slow or down, not merely busy.
-          lastTransient = 'Could not reach Overpass — check your connection, '
+          lastTransient =
+              'Could not reach Overpass — check your connection, '
               'or try again in a moment.';
           break;
         }
 
         if (resp.statusCode == 200) {
-          onProgress?.call(progress(OverpassStage.processing,
-              bytes: resp.body.length));
+          onProgress?.call(
+            progress(OverpassStage.processing, bytes: resp.body.length),
+          );
           final parsed = await parse(resp.body);
           if (parsed == null) {
             return const OverpassOutcome.failed(
-                'Overpass sent a response we could not read. Try again.');
+              'Overpass sent a response we could not read. Try again.',
+            );
           }
           return OverpassOutcome.ok(parsed, endpoint: endpoint);
         }
@@ -378,7 +387,8 @@ Future<OverpassOutcome<T>> overpassPost<T>(
           break;
         }
         return OverpassOutcome.failed(
-            'Overpass refused the request (HTTP ${resp.statusCode}).');
+          'Overpass refused the request (HTTP ${resp.statusCode}).',
+        );
       }
     }
     return OverpassOutcome.failed(lastTransient);
@@ -434,16 +444,17 @@ Future<_Response> _send(
       // to Cancel, not merely be checked around.
       streamed = await Future.any<http.StreamedResponse>([
         sending,
-        cancel.future
-            .then<http.StreamedResponse>((_) => throw const _CancelledException()),
+        cancel.future.then<http.StreamedResponse>(
+          (_) => throw const _CancelledException(),
+        ),
       ]);
     } on _CancelledException {
       // The socket is still in flight and nothing will read it. Drain it in the
       // background so the connection is released now instead of being held to
       // the deadline.
-      unawaited(sending
-          .then((r) => r.stream.drain<void>())
-          .catchError((Object _) {}));
+      unawaited(
+        sending.then((r) => r.stream.drain<void>()).catchError((Object _) {}),
+      );
       rethrow;
     }
   }
@@ -482,8 +493,9 @@ Future<_Response> _send(
 
   // A large body legitimately takes a while; Cancel has to interrupt that too,
   // not only the connect.
-  final StreamSubscription<void>? cancelSub =
-      cancel?.future.asStream().listen((_) {
+  final StreamSubscription<void>? cancelSub = cancel?.future.asStream().listen((
+    _,
+  ) {
     unawaited(sub.cancel());
     if (!done.isCompleted) done.completeError(const _CancelledException());
   });

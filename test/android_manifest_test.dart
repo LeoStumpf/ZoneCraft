@@ -88,9 +88,9 @@ void main() {
   // The standard map intent. Without it ZoneCraft is absent from the chooser
   // that Maps, the ride apps and every "open in…" list appear in.
   test('geo: is claimed, on its own filter and with no mime type', () {
-    final geo = withAction('android.intent.action.VIEW')
-        .where((f) => schemes(f).contains('geo'))
-        .toList();
+    final geo = withAction(
+      'android.intent.action.VIEW',
+    ).where((f) => schemes(f).contains('geo')).toList();
     expect(geo, hasLength(1));
     // Its own filter: sharing one with `zonecraft` or with the file schemes
     // would cross-product them into matches nobody intended.
@@ -105,14 +105,15 @@ void main() {
   });
 
   test('openstreetmap.org links are claimed, and only those hosts', () {
-    final osm = withAction('android.intent.action.VIEW')
-        .where((f) => hosts(f).isNotEmpty)
-        .toList();
+    final osm = withAction(
+      'android.intent.action.VIEW',
+    ).where((f) => hosts(f).isNotEmpty).toList();
     expect(osm, hasLength(1));
-    expect(
-      hosts(osm.single),
-      <String>{'www.openstreetmap.org', 'openstreetmap.org', 'osm.org'},
-    );
+    expect(hosts(osm.single), <String>{
+      'www.openstreetmap.org',
+      'openstreetmap.org',
+      'osm.org',
+    });
     expect(mimeTypes(osm.single), isEmpty);
     // No autoVerify: verifying an App Link needs assetlinks.json on a domain
     // we control, and openstreetmap.org is not ours. Unverified means Android
@@ -123,9 +124,9 @@ void main() {
   // The https scheme must never appear on a filter that also names a mime
   // type or another scheme's host — that is the cross-product trap again.
   test('the file-open filter still claims only content: and file:', () {
-    final fileOpen = withAction('android.intent.action.VIEW')
-        .where((f) => mimeTypes(f).isNotEmpty)
-        .toList();
+    final fileOpen = withAction(
+      'android.intent.action.VIEW',
+    ).where((f) => mimeTypes(f).isNotEmpty).toList();
     expect(fileOpen, hasLength(1));
     expect(schemes(fileOpen.single), <String>{'content', 'file'});
     expect(hosts(fileOpen.single), isEmpty);
@@ -162,8 +163,9 @@ void main() {
   // rules file that listed only some of them would back up the rest.
   test('the extraction rules refuse both transfer paths', () {
     final rules = XmlDocument.parse(
-      File('android/app/src/main/res/xml/data_extraction_rules.xml')
-          .readAsStringSync(),
+      File(
+        'android/app/src/main/res/xml/data_extraction_rules.xml',
+      ).readAsStringSync(),
     );
     for (final path in ['cloud-backup', 'device-transfer']) {
       final section = rules.findAllElements(path).single;

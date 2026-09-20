@@ -38,7 +38,11 @@ class HeightGenException implements Exception {
 }
 
 class HeightGenResult {
-  const HeightGenResult(this.polygonCount, this.fetchedTiles, this.missingTiles);
+  const HeightGenResult(
+    this.polygonCount,
+    this.fetchedTiles,
+    this.missingTiles,
+  );
   final int polygonCount;
   final int fetchedTiles;
   final int missingTiles;
@@ -84,9 +88,9 @@ Future<double?> queryElevation({
         bytes = resp.bodyBytes;
         await repo.putTile(url, bytes);
       }
-    // Offline, server error and "slower than the spinner is willing to wait" are
-    // different exceptions with one meaning: this tile is missing.
-    // ignore: avoid_catches_without_on_clauses
+      // Offline, server error and "slower than the spinner is willing to wait" are
+      // different exceptions with one meaning: this tile is missing.
+      // ignore: avoid_catches_without_on_clauses
     } catch (_) {
       // Offline, server error, or the tile took longer than we're willing to
       // make the caller's spinner wait.
@@ -108,16 +112,22 @@ Future<HeightGenResult> generateHeightRegion({
   }
   if (region.radiusMeters > heightMaxRadiusMeters) {
     throw HeightGenException(
-        'Area too large — keep the radius under '
-        '${(heightMaxRadiusMeters / 1000).round()} km');
+      'Area too large — keep the radius under '
+      '${(heightMaxRadiusMeters / 1000).round()} km',
+    );
   }
   final z = region.sampleZoom;
   final box = heightTileBox(
-      region.centerLat, region.centerLng, region.radiusMeters, z);
+    region.centerLat,
+    region.centerLng,
+    region.radiusMeters,
+    z,
+  );
   if (box.count > heightMaxTiles) {
     throw HeightGenException(
-        'Area too detailed (${box.count} tiles) — lower the resolution or '
-        'shrink the radius');
+      'Area too detailed (${box.count} tiles) — lower the resolution or '
+      'shrink the radius',
+    );
   }
 
   final tileX = <int>[];
@@ -140,8 +150,8 @@ Future<HeightGenResult> generateHeightRegion({
             bytes = resp.bodyBytes;
             await repo.putTile(url, bytes);
           }
-        // As above — a missing tile reads as sea level, whatever the reason.
-        // ignore: avoid_catches_without_on_clauses
+          // As above — a missing tile reads as sea level, whatever the reason.
+          // ignore: avoid_catches_without_on_clauses
         } catch (_) {
           // Offline / server error / too slow: leave this tile missing
           // (sea level).
@@ -159,8 +169,9 @@ Future<HeightGenResult> generateHeightRegion({
 
   if (tileBytes.isEmpty) {
     throw HeightGenException(
-        'Could not fetch elevation data — $missing tiles unavailable '
-        '(offline?)');
+      'Could not fetch elevation data — $missing tiles unavailable '
+      '(offline?)',
+    );
   }
 
   final rings = await compute(
@@ -181,7 +192,8 @@ Future<HeightGenResult> generateHeightRegion({
   final polygons = <List<LatLng>>[
     for (final flat in rings)
       [
-        for (var i = 0; i + 1 < flat.length; i += 2) LatLng(flat[i], flat[i + 1]),
+        for (var i = 0; i + 1 < flat.length; i += 2)
+          LatLng(flat[i], flat[i + 1]),
       ],
   ];
   // Named, rather than left to the label deriver: `replaceHeightPolygons`

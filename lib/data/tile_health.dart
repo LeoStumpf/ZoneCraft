@@ -50,11 +50,11 @@ enum TileFailureKind {
 /// Null means "nothing worth a banner" — chiefly 404, which is an ordinary
 /// answer for a tile that does not exist at this zoom.
 TileFailureKind? tileFailureFor(int statusCode) => switch (statusCode) {
-      402 || 429 => TileFailureKind.quota,
-      401 || 403 => TileFailureKind.rejected,
-      >= 500 && < 600 => TileFailureKind.serverError,
-      _ => null,
-    };
+  402 || 429 => TileFailureKind.quota,
+  401 || 403 => TileFailureKind.rejected,
+  >= 500 && < 600 => TileFailureKind.serverError,
+  _ => null,
+};
 
 /// Watches tile fetches and decides when something is worth telling the user.
 ///
@@ -135,22 +135,22 @@ class TileHealth extends ChangeNotifier {
 
 /// The headline: what the user is actually seeing, in their terms.
 String tileFailureTitle(TileFailureKind kind) => switch (kind) {
-      TileFailureKind.quota => 'The map has stopped loading new areas',
-      TileFailureKind.rejected => 'The map server is refusing this app',
-      TileFailureKind.serverError => 'The map server is having trouble',
-      TileFailureKind.offline => 'No connection',
-    };
+  TileFailureKind.quota => 'The map has stopped loading new areas',
+  TileFailureKind.rejected => 'The map server is refusing this app',
+  TileFailureKind.serverError => 'The map server is having trouble',
+  TileFailureKind.offline => 'No connection',
+};
 
 /// One line under the headline. Short enough for a banner.
 String tileFailureSummary(TileFailureKind kind) => switch (kind) {
-      TileFailureKind.quota =>
-        "Today's allowance is used up. Everything you made is safe.",
-      TileFailureKind.rejected =>
-        'Tiles are being refused. Everything you made is safe.',
-      TileFailureKind.serverError =>
-        'The tile server is failing. Everything you made is safe.',
-      TileFailureKind.offline => 'Cached areas still work.',
-    };
+  TileFailureKind.quota =>
+    "Today's allowance is used up. Everything you made is safe.",
+  TileFailureKind.rejected =>
+    'Tiles are being refused. Everything you made is safe.',
+  TileFailureKind.serverError =>
+    'The tile server is failing. Everything you made is safe.',
+  TileFailureKind.offline => 'Cached areas still work.',
+};
 
 /// The full explanation, for the dialog behind the banner's "Why?".
 ///
@@ -163,40 +163,42 @@ String tileFailureExplanation(
   required String host,
   required bool isCommunityOsm,
 }) {
-  const safe = 'Nothing you have made is affected. Every zone, import, '
+  const safe =
+      'Nothing you have made is affected. Every zone, import, '
       'measurement and layer lives on this device, not on that server, and '
       'map areas you have already looked at are cached and still draw.';
 
   return switch (kind) {
-    TileFailureKind.quota => isCommunityOsm
-        ? 'The base map comes from OpenStreetMap’s own servers, which are '
-            'run on donations, and they are asking this app to slow down.\n\n'
-            '$safe\n\n'
-            'It usually clears by itself. If it does not, the app is asking '
-            'for more than its share and the author would want to know.'
-        : 'The base map comes from $host on a plan with a daily allowance, and '
-            'today’s is spent. It resets on the provider’s schedule, '
-            'normally within a day.\n\n'
-            '$safe\n\n'
-            'This is a limit of the app, not of anything you did — the '
-            'allowance is shared by everyone using ZoneCraft.',
-    TileFailureKind.rejected => isCommunityOsm
-        ? 'OpenStreetMap’s servers have refused this app’s requests. '
-            'They run on donations and may block a client that costs them more '
-            'than it should — without warning, which is their published '
-            'policy and a fair one.\n\n'
-            '$safe\n\n'
-            'This one does not fix itself. Please tell the author, who can '
-            'sort it out with them.'
-        : 'The key ZoneCraft uses for $host has been refused — expired, '
-            'revoked, or over its limit for good.\n\n'
-            '$safe\n\n'
-            'This one does not fix itself. Please tell the author.',
+    TileFailureKind.quota =>
+      isCommunityOsm
+          ? 'The base map comes from OpenStreetMap’s own servers, which are '
+                'run on donations, and they are asking this app to slow down.\n\n'
+                '$safe\n\n'
+                'It usually clears by itself. If it does not, the app is asking '
+                'for more than its share and the author would want to know.'
+          : 'The base map comes from $host on a plan with a daily allowance, and '
+                'today’s is spent. It resets on the provider’s schedule, '
+                'normally within a day.\n\n'
+                '$safe\n\n'
+                'This is a limit of the app, not of anything you did — the '
+                'allowance is shared by everyone using ZoneCraft.',
+    TileFailureKind.rejected =>
+      isCommunityOsm
+          ? 'OpenStreetMap’s servers have refused this app’s requests. '
+                'They run on donations and may block a client that costs them more '
+                'than it should — without warning, which is their published '
+                'policy and a fair one.\n\n'
+                '$safe\n\n'
+                'This one does not fix itself. Please tell the author, who can '
+                'sort it out with them.'
+          : 'The key ZoneCraft uses for $host has been refused — expired, '
+                'revoked, or over its limit for good.\n\n'
+                '$safe\n\n'
+                'This one does not fix itself. Please tell the author.',
     TileFailureKind.serverError =>
       '$host is returning errors. That is at their end, not yours.\n\n$safe\n\n'
           'Try again in a while.',
-    TileFailureKind.offline =>
-      'No tile server could be reached. $safe',
+    TileFailureKind.offline => 'No tile server could be reached. $safe',
   };
 }
 

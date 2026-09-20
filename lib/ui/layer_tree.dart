@@ -239,7 +239,9 @@ List<LayerRow> moveDrawerRows(List<LayerRow> rows, int from, int to) {
   at = at.clamp(0, rest.length);
   // A folder cannot land between another folder's members: it would nest.
   if (moved is FolderRow) {
-    while (at > 0 && at < rest.length && rest[at] is LayerLineRow &&
+    while (at > 0 &&
+        at < rest.length &&
+        rest[at] is LayerLineRow &&
         (rest[at] as LayerLineRow).folder != null) {
       at++;
     }
@@ -274,7 +276,12 @@ Folder? _parentAt(List<LayerRow> rows, int at) {
 /// Where one row ends up: its parent (null at the root) and its order within
 /// that parent. A folder's [folderId] is always null and its [sortOrder] is its
 /// place among the root items.
-typedef TreeWrite = ({String id, bool isFolder, String? folderId, int sortOrder});
+typedef TreeWrite = ({
+  String id,
+  bool isFolder,
+  String? folderId,
+  int sortOrder,
+});
 
 /// The dense ordering [drawerRows] describes, ready for one batch.
 ///

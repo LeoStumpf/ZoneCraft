@@ -76,9 +76,10 @@ class _FeatureSearchDialogState extends State<_FeatureSearchDialog> {
 
   String _subtitle(PlaceResult r) {
     final shape = r.dominantKind == GeometryKind.area ? 'area' : 'line';
-    final kind = [r.category, r.type]
-        .where((s) => s != null && s.isNotEmpty)
-        .join(' · ');
+    final kind = [
+      r.category,
+      r.type,
+    ].where((s) => s != null && s.isNotEmpty).join(' · ');
     final tail = '$shape · ${r.pointCount} pts';
     return kind.isEmpty ? tail : '$kind · $tail';
   }
@@ -135,11 +136,16 @@ class _FeatureSearchDialogState extends State<_FeatureSearchDialog> {
                     return ListTile(
                       dense: true,
                       contentPadding: EdgeInsets.zero,
-                      leading: Icon(r.dominantKind == GeometryKind.area
-                          ? Icons.hexagon_outlined
-                          : Icons.polyline),
-                      title: Text(r.displayName,
-                          maxLines: 2, overflow: TextOverflow.ellipsis),
+                      leading: Icon(
+                        r.dominantKind == GeometryKind.area
+                            ? Icons.hexagon_outlined
+                            : Icons.polyline,
+                      ),
+                      title: Text(
+                        r.displayName,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       subtitle: Text(_subtitle(r)),
                       onTap: () => Navigator.of(context).pop(r),
                     );

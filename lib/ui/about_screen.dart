@@ -65,8 +65,9 @@ class _AboutScreenState extends State<AboutScreen> {
     // Where there is no platform implementation the answer is "cannot", and
     // links stay plain text — which is what this screen did before they were
     // tappable. See [canLaunchExternalUrl].
-    final can =
-        await canLaunchExternalUrl(Uri.parse('https://openstreetmap.org'));
+    final can = await canLaunchExternalUrl(
+      Uri.parse('https://openstreetmap.org'),
+    );
     if (mounted && can) setState(() => _canOpenLinks = true);
   }
 
@@ -92,8 +93,9 @@ class _AboutScreenState extends State<AboutScreen> {
                     Text('ZoneCraft', style: theme.textTheme.headlineSmall),
                     Text(
                       'Version $kAppVersion',
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: theme.colorScheme.outline),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.outline,
+                      ),
                     ),
                   ],
                 ),
@@ -113,7 +115,8 @@ class _AboutScreenState extends State<AboutScreen> {
               _Action(
                 icon: Icons.dns_outlined,
                 label: 'Servers and limits',
-                detail: 'What the app asks of them, why some things are slow '
+                detail:
+                    'What the app asks of them, why some things are slow '
                     'on purpose, and how to reach the author',
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
@@ -125,7 +128,8 @@ class _AboutScreenState extends State<AboutScreen> {
                 icon: Icons.map_outlined,
                 name: 'OpenStreetMap tiles',
                 urls: const ['tile.openstreetmap.org'],
-                body: 'The base map. Map data and tiles © OpenStreetMap '
+                body:
+                    'The base map. Map data and tiles © OpenStreetMap '
                     'contributors, licensed under the Open Database License '
                     '(ODbL).',
                 canOpen: _canOpenLinks,
@@ -138,7 +142,8 @@ class _AboutScreenState extends State<AboutScreen> {
                   'overpass.kumi.systems',
                   'overpass.private.coffee',
                 ],
-                body: 'Points of interest, transit stations and '
+                body:
+                    'Points of interest, transit stations and '
                     'administrative areas, fetched once per import and then '
                     'stored on the device. Three community instances are '
                     'tried in turn, because whichever one is busy is the '
@@ -149,7 +154,8 @@ class _AboutScreenState extends State<AboutScreen> {
                 icon: Icons.search,
                 name: 'Nominatim',
                 urls: const ['nominatim.openstreetmap.org'],
-                body: 'Finds a place by name when you import a feature such '
+                body:
+                    'Finds a place by name when you import a feature such '
                     'as a city border or a river.',
                 canOpen: _canOpenLinks,
               ),
@@ -157,7 +163,8 @@ class _AboutScreenState extends State<AboutScreen> {
                 icon: Icons.terrain,
                 name: 'AWS Terrain Tiles',
                 urls: const ['s3.amazonaws.com/elevation-tiles-prod'],
-                body: 'Elevation for height layers and the elevation probe. '
+                body:
+                    'Elevation for height layers and the elevation probe. '
                     'A public open-data set: SRTM, 3DEP and GMTED2010 courtesy '
                     'of the U.S. Geological Survey, ETOPO1 courtesy of NOAA. '
                     'The same credit sits on the map itself, where the data is '
@@ -190,12 +197,12 @@ class _AboutScreenState extends State<AboutScreen> {
                     : 'The map is never downloaded ahead of what you look at.',
                 prefetches
                     ? 'This build is pointed at a tile provider of your own, '
-                        'so downloading an area ahead of time is available.'
+                          'so downloading an area ahead of time is available.'
                     : "OpenStreetMap's tile policy defines bulk downloading "
-                        'as any pre-emptive fetching, so there is no compliant '
-                        'amount of it. Tiles you have viewed are kept, which '
-                        'the policy requires, so revisiting an area works with '
-                        'no reception.',
+                          'as any pre-emptive fetching, so there is no compliant '
+                          'amount of it. Tiles you have viewed are kept, which '
+                          'the policy requires, so revisiting an area works with '
+                          'no reception.',
               ),
               const _Limit(
                 'Imports are snapshots, and do not refresh.',
@@ -233,7 +240,8 @@ class _AboutScreenState extends State<AboutScreen> {
                 urls: const [
                   'github.com/LeoStumpf/ZoneCraft/blob/main/PRIVACY.md',
                 ],
-                body: 'What is stored, what is sent, and to whom — in '
+                body:
+                    'What is stored, what is sent, and to whom — in '
                     'full.',
                 canOpen: _canOpenLinks,
               ),
@@ -252,7 +260,8 @@ class _AboutScreenState extends State<AboutScreen> {
                 icon: Icons.balance,
                 name: 'GNU AGPL v3 or later',
                 urls: const ['www.gnu.org/licenses/agpl-3.0.html'],
-                body: 'The AGPL requires that anyone you give the app to can '
+                body:
+                    'The AGPL requires that anyone you give the app to can '
                     'get its source under the same terms.',
                 canOpen: _canOpenLinks,
               ),
@@ -260,7 +269,8 @@ class _AboutScreenState extends State<AboutScreen> {
                 icon: Icons.code,
                 name: 'Source',
                 urls: const ['github.com/LeoStumpf/ZoneCraft'],
-                body: 'The complete corresponding source, as the licence '
+                body:
+                    'The complete corresponding source, as the licence '
                     'requires.',
                 canOpen: _canOpenLinks,
               ),
@@ -277,7 +287,8 @@ class _AboutScreenState extends State<AboutScreen> {
               _Action(
                 icon: Icons.bug_report_outlined,
                 label: 'Recent errors',
-                detail: 'Kept in memory for this run only: never written to '
+                detail:
+                    'Kept in memory for this run only: never written to '
                     'disk, never included in an export, never sent anywhere.',
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
@@ -407,10 +418,10 @@ class _Url extends StatelessWidget {
   final bool canOpen;
 
   Future<void> _open(BuildContext context) => openExternalUrl(
-        Uri.parse('https://$host'),
-        context: context,
-        failureMessage: "Couldn't open $host",
-      );
+    Uri.parse('https://$host'),
+    context: context,
+    failureMessage: "Couldn't open $host",
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -475,8 +486,9 @@ class _Action extends StatelessWidget {
                   children: [
                     Text(
                       label,
-                      style: theme.textTheme.bodyLarge
-                          ?.copyWith(color: theme.colorScheme.primary),
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: theme.colorScheme.primary,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(detail, style: theme.textTheme.bodySmall),
@@ -515,8 +527,9 @@ class _Limit extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             why,
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.outline),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.outline,
+            ),
           ),
         ],
       ),

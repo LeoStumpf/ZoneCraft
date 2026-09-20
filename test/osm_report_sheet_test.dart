@@ -105,8 +105,9 @@ void main() {
     matching: find.byType(TextField),
   );
 
-  testWidgets('opens on what the user just did, with a draft to argue with',
-      (tester) async {
+  testWidgets('opens on what the user just did, with a draft to argue with', (
+    tester,
+  ) async {
     await open(tester);
     // A moved point opens on the move; the draft already carries the element,
     // the tag and the measurement, because a note with none of those is one a
@@ -119,16 +120,19 @@ void main() {
     expect(text, contains('24 m north'));
   });
 
-  testWidgets('says every time who reads this and what it is not for',
-      (tester) async {
+  testWidgets('says every time who reads this and what it is not for', (
+    tester,
+  ) async {
     // OSM asks apps to make users aware that notes are for map data and not
     // for feedback about the app. A warning counted down by UiHints would stop
     // saying that to exactly the people comfortable enough to be careless, so
     // it is unconditional.
     await open(tester);
     expect(find.textContaining('public and permanent'), findsOneWidget);
-    expect(find.textContaining('not for feedback about ZoneCraft'),
-        findsOneWidget);
+    expect(
+      find.textContaining('not for feedback about ZoneCraft'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('an empty report cannot be sent or saved', (tester) async {
@@ -136,16 +140,25 @@ void main() {
     await tester.enterText(bodyField, '   ');
     await tester.pump();
 
-    expect(tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Send now'),
-    ).onPressed, isNull);
-    expect(tester.widget<OutlinedButton>(
-      find.widgetWithText(OutlinedButton, 'Save for later'),
-    ).onPressed, isNull);
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Send now'))
+          .onPressed,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.widgetWithText(OutlinedButton, 'Save for later'),
+          )
+          .onPressed,
+      isNull,
+    );
   });
 
-  testWidgets('a draft the user has written in is not overwritten by a chip',
-      (tester) async {
+  testWidgets('a draft the user has written in is not overwritten by a chip', (
+    tester,
+  ) async {
     // The worst possible moment to replace somebody's text is when they have
     // just finished writing it.
     await open(tester);
@@ -154,20 +167,25 @@ void main() {
     await tester.tap(find.text('It is not there any more'));
     await tester.pumpAndSettle();
 
-    expect(tester.widget<TextField>(bodyField).controller!.text,
-        'The bench is by the oak, not the gate.');
+    expect(
+      tester.widget<TextField>(bodyField).controller!.text,
+      'The bench is by the oak, not the gate.',
+    );
   });
 
   testWidgets('an untouched draft follows the chips', (tester) async {
     await open(tester);
     await tester.tap(find.text('It is not there any more'));
     await tester.pumpAndSettle();
-    expect(tester.widget<TextField>(bodyField).controller!.text,
-        contains('does not seem to be here any more'));
+    expect(
+      tester.widget<TextField>(bodyField).controller!.text,
+      contains('does not seem to be here any more'),
+    );
   });
 
-  testWidgets('"also remove it" is offered only where it means something',
-      (tester) async {
+  testWidgets('"also remove it" is offered only where it means something', (
+    tester,
+  ) async {
     await open(tester);
     expect(find.text('Also remove it from my import'), findsNothing);
     await tester.tap(find.text('It is not there any more'));
@@ -185,19 +203,28 @@ void main() {
     expect(repo.calls.single, contains('48.1374'));
   });
 
-  testWidgets('past the daily cap Send closes but Save stays open',
-      (tester) async {
+  testWidgets('past the daily cap Send closes but Save stays open', (
+    tester,
+  ) async {
     // The cap is osm.org's own number, and the outbox is the way through it —
     // so the button that saves must never be the one that greys.
     repo.sentToday = kOsmReportsHardCapPerDay;
     await open(tester);
 
-    expect(tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Send now'),
-    ).onPressed, isNull);
-    expect(tester.widget<OutlinedButton>(
-      find.widgetWithText(OutlinedButton, 'Save for later'),
-    ).onPressed, isNotNull);
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Send now'))
+          .onPressed,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.widgetWithText(OutlinedButton, 'Save for later'),
+          )
+          .onPressed,
+      isNotNull,
+    );
     expect(find.textContaining('as many as'), findsOneWidget);
   });
 
@@ -205,15 +232,21 @@ void main() {
     repo.sentToday = kOsmReportsSoftCapPerDay;
     await open(tester);
 
-    expect(tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Send now'),
-    ).onPressed, isNotNull);
-    expect(find.textContaining('exporting the file is the kinder route'),
-        findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Send now'))
+          .onPressed,
+      isNotNull,
+    );
+    expect(
+      find.textContaining('exporting the file is the kinder route'),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('a hand-placed POI is offered as an addition, not a complaint',
-      (tester) async {
+  testWidgets('a hand-placed POI is offered as an addition, not a complaint', (
+    tester,
+  ) async {
     await open(
       tester,
       subject: const OsmReportSubject(
@@ -225,12 +258,15 @@ void main() {
         tagValue: 'bench',
       ),
     );
-    expect(tester.widget<TextField>(bodyField).controller!.text,
-        contains('missing from OpenStreetMap'));
+    expect(
+      tester.widget<TextField>(bodyField).controller!.text,
+      contains('missing from OpenStreetMap'),
+    );
   });
 
-  testWidgets('bare ground can only add something or say something',
-      (tester) async {
+  testWidgets('bare ground can only add something or say something', (
+    tester,
+  ) async {
     // Nothing is known about the place, so the two honest things to say about
     // it are "OSM is missing something here" and "something else" — not "this
     // is in the wrong place", which would be about an element there isn't one
@@ -243,8 +279,10 @@ void main() {
     // And "something else" hands the whole sentence over rather than guessing
     // at one.
     await press(tester, 'Something else');
-    expect(tester.widget<TextField>(bodyField).controller!.text.trim(),
-        osmReportTrailer);
+    expect(
+      tester.widget<TextField>(bodyField).controller!.text.trim(),
+      osmReportTrailer,
+    );
   });
 }
 

@@ -14,7 +14,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -66,10 +65,15 @@ void main() {
     });
 
     test('the context is what a row leads with', () {
-      ErrorLog.instance.record('DriftRemoteException: x', StackTrace.empty,
-          context: 'Saving the radius');
-      expect(ErrorLog.instance.entries.single.summary,
-          startsWith('Saving the radius'));
+      ErrorLog.instance.record(
+        'DriftRemoteException: x',
+        StackTrace.empty,
+        context: 'Saving the radius',
+      );
+      expect(
+        ErrorLog.instance.entries.single.summary,
+        startsWith('Saving the radius'),
+      );
     });
   });
 
@@ -114,8 +118,9 @@ void main() {
     // The failure this replaces: in release, Flutter's default ErrorWidget is
     // a featureless grey rectangle, and MapScreen is the app's `home:` — so
     // that rectangle was the whole app, with no message and no way out.
-    testWidgets('AppErrorWidget shows the cause and offers to copy it',
-        (tester) async {
+    testWidgets('AppErrorWidget shows the cause and offers to copy it', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
           home: AppErrorWidget(
@@ -132,8 +137,9 @@ void main() {
     // The reassurance has to come before the technical detail: an empty map is
     // indistinguishable from a deleted one, and the user's instinct — reinstall,
     // or "Clear all data" — is the one action that would actually destroy it.
-    testWidgets('DataUnavailableScreen says the data is still there',
-        (tester) async {
+    testWidgets('DataUnavailableScreen says the data is still there', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
           home: DataUnavailableScreen(error: StateError('no such table')),
@@ -145,8 +151,9 @@ void main() {
       expect(find.textContaining('no such table'), findsOneWidget);
     });
 
-    testWidgets('DatabaseRecoveredScreen names where the old file went',
-        (tester) async {
+    testWidgets('DatabaseRecoveredScreen names where the old file went', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
           home: DatabaseRecoveredScreen(
@@ -157,18 +164,14 @@ void main() {
         ),
       );
 
-      expect(
-        find.text('/data/zonecraft.broken-2026.sqlite'),
-        findsOneWidget,
-      );
+      expect(find.text('/data/zonecraft.broken-2026.sqlite'), findsOneWidget);
       expect(find.textContaining('do not reinstall'), findsOneWidget);
     });
 
-    testWidgets('the error log screen says so when there is nothing to show',
-        (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(home: ErrorLogScreen()),
-      );
+    testWidgets('the error log screen says so when there is nothing to show', (
+      tester,
+    ) async {
+      await tester.pumpWidget(const MaterialApp(home: ErrorLogScreen()));
       expect(
         find.text('Nothing has gone wrong since the app started.'),
         findsOneWidget,
@@ -176,8 +179,11 @@ void main() {
     });
 
     testWidgets('a recorded error reaches the screen', (tester) async {
-      ErrorLog.instance
-          .record('DriftRemoteException', StackTrace.empty, context: 'Saving');
+      ErrorLog.instance.record(
+        'DriftRemoteException',
+        StackTrace.empty,
+        context: 'Saving',
+      );
       await tester.pumpWidget(const MaterialApp(home: ErrorLogScreen()));
 
       expect(find.textContaining('Saving'), findsOneWidget);

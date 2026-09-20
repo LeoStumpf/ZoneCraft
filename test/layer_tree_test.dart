@@ -76,10 +76,15 @@ void main() {
           _layer('in1', folderId: 'f', sortOrder: 0),
         ],
       );
-      expect(tree.map((n) => switch (n) {
+      expect(
+        tree.map(
+          (n) => switch (n) {
             FolderNode(:final folder) => folder.id,
             LayerNodeLeaf(:final layer) => layer.id,
-          }), ['bottom', 'f', 'top']);
+          },
+        ),
+        ['bottom', 'f', 'top'],
+      );
       expect((tree[1] as FolderNode).layers.map((l) => l.id), ['in1', 'in2']);
     });
 
@@ -102,8 +107,10 @@ void main() {
     test('a folder changes nothing while it is shown and not inverted', () {
       final tree = buildLayerTree(
         [_folder('f')],
-        [_layer('a', folderId: 'f', isInverted: true), _layer('b', folderId: 'f',
-            sortOrder: 1)],
+        [
+          _layer('a', folderId: 'f', isInverted: true),
+          _layer('b', folderId: 'f', sortOrder: 1),
+        ],
       );
       final drawn = resolveLayers(tree);
       // What you put in comes out again unchanged — the whole point over the
@@ -124,22 +131,24 @@ void main() {
       expect(drawn.firstWhere((l) => l.id == 'root').isVisible, isTrue);
     });
 
-    test('an inverted folder flips each member, and un-flips an inverted one',
-        () {
-      // The switch is a switch: inverting twice is the identity, so a member
-      // that was already inverted goes back to normal rather than being
-      // silently overridden.
-      final tree = buildLayerTree(
-        [_folder('f', isInverted: true)],
-        [
-          _layer('plain', folderId: 'f'),
-          _layer('already', folderId: 'f', sortOrder: 1, isInverted: true),
-        ],
-      );
-      final drawn = resolveLayers(tree);
-      expect(drawn.firstWhere((l) => l.id == 'plain').isInverted, isTrue);
-      expect(drawn.firstWhere((l) => l.id == 'already').isInverted, isFalse);
-    });
+    test(
+      'an inverted folder flips each member, and un-flips an inverted one',
+      () {
+        // The switch is a switch: inverting twice is the identity, so a member
+        // that was already inverted goes back to normal rather than being
+        // silently overridden.
+        final tree = buildLayerTree(
+          [_folder('f', isInverted: true)],
+          [
+            _layer('plain', folderId: 'f'),
+            _layer('already', folderId: 'f', sortOrder: 1, isInverted: true),
+          ],
+        );
+        final drawn = resolveLayers(tree);
+        expect(drawn.firstWhere((l) => l.id == 'plain').isInverted, isTrue);
+        expect(drawn.firstWhere((l) => l.id == 'already').isInverted, isFalse);
+      },
+    );
 
     test('colour and opacity are never folded in', () {
       final tree = buildLayerTree([_folder('f')], [_layer('a', folderId: 'f')]);
@@ -158,8 +167,12 @@ void main() {
           _layer('mid2', folderId: 'f', sortOrder: 1),
         ],
       );
-      expect(resolveLayers(tree).map((l) => l.id),
-          ['below', 'mid1', 'mid2', 'above']);
+      expect(resolveLayers(tree).map((l) => l.id), [
+        'below',
+        'mid1',
+        'mid2',
+        'above',
+      ]);
     });
   });
 
@@ -175,8 +188,13 @@ void main() {
     );
 
     test('top of stack first, members under their folder', () {
-      expect(drawerRows(sample()).map((r) => r.id),
-          ['top', 'f', 'in2', 'in1', 'bottom']);
+      expect(drawerRows(sample()).map((r) => r.id), [
+        'top',
+        'f',
+        'in2',
+        'in1',
+        'bottom',
+      ]);
     });
 
     test('a collapsed folder shows as one row but still knows its members', () {
@@ -188,15 +206,17 @@ void main() {
 
   group('moveDrawerRows', () {
     // top · f · in2 · in1 · bottom
-    List<LayerRow> rows() => drawerRows(buildLayerTree(
-      [_folder('f', sortOrder: 1)],
-      [
-        _layer('bottom', sortOrder: 0),
-        _layer('top', sortOrder: 2),
-        _layer('in1', folderId: 'f', sortOrder: 0),
-        _layer('in2', folderId: 'f', sortOrder: 1),
-      ],
-    ));
+    List<LayerRow> rows() => drawerRows(
+      buildLayerTree(
+        [_folder('f', sortOrder: 1)],
+        [
+          _layer('bottom', sortOrder: 0),
+          _layer('top', sortOrder: 2),
+          _layer('in1', folderId: 'f', sortOrder: 0),
+          _layer('in2', folderId: 'f', sortOrder: 1),
+        ],
+      ),
+    );
 
     String? parentOf(List<LayerRow> rs, String id) =>
         (rs.firstWhere((r) => r.id == id) as LayerLineRow).folder?.id;
@@ -223,10 +243,12 @@ void main() {
     });
 
     test('a folder never lands inside another folder', () {
-      final base = drawerRows(buildLayerTree(
-        [_folder('f', sortOrder: 0), _folder('g', sortOrder: 1)],
-        [_layer('in', folderId: 'f', sortOrder: 0)],
-      ));
+      final base = drawerRows(
+        buildLayerTree(
+          [_folder('f', sortOrder: 0), _folder('g', sortOrder: 1)],
+          [_layer('in', folderId: 'f', sortOrder: 0)],
+        ),
+      );
       // g · f · in  ->  drop 'g' between 'f' and its member
       final moved = moveDrawerRows(base, 0, 2);
       expect(moved.map((r) => r.id), ['f', 'in', 'g']);
@@ -234,13 +256,15 @@ void main() {
     });
 
     test('a collapsed folder is opaque: a drop under it goes to the root', () {
-      final base = drawerRows(buildLayerTree(
-        [_folder('f', sortOrder: 1, isCollapsed: true)],
-        [
-          _layer('in', folderId: 'f', sortOrder: 0),
-          _layer('root', sortOrder: 0),
-        ],
-      ));
+      final base = drawerRows(
+        buildLayerTree(
+          [_folder('f', sortOrder: 1, isCollapsed: true)],
+          [
+            _layer('in', folderId: 'f', sortOrder: 0),
+            _layer('root', sortOrder: 0),
+          ],
+        ),
+      );
       // f · root  ->  drop 'root' under the collapsed header
       expect(base.map((r) => r.id), ['f', 'root']);
       final moved = moveDrawerRows(base, 1, 1);
@@ -251,20 +275,25 @@ void main() {
       // The bug this covers: reading the parent off the row above for *every*
       // row swept every layer below the drop into the folder too, because
       // nothing in the list says where a folder's members end.
-      final base = drawerRows(buildLayerTree(
-        [_folder('f', sortOrder: 2)],
-        [
-          _layer('bottom', sortOrder: 0),
-          _layer('middle', sortOrder: 1),
-          _layer('in', folderId: 'f', sortOrder: 0),
-        ],
-      ));
+      final base = drawerRows(
+        buildLayerTree(
+          [_folder('f', sortOrder: 2)],
+          [
+            _layer('bottom', sortOrder: 0),
+            _layer('middle', sortOrder: 1),
+            _layer('in', folderId: 'f', sortOrder: 0),
+          ],
+        ),
+      );
       // f · in · middle · bottom  ->  drop 'middle' among the members
       expect(base.map((r) => r.id), ['f', 'in', 'middle', 'bottom']);
       final moved = moveDrawerRows(base, 2, 1);
       expect(parentOf(moved, 'middle'), 'f');
-      expect(parentOf(moved, 'bottom'), isNull,
-          reason: 'a layer below the drop is not in the folder');
+      expect(
+        parentOf(moved, 'bottom'),
+        isNull,
+        reason: 'a layer below the drop is not in the folder',
+      );
       expect(parentOf(moved, 'in'), 'f');
     });
 
@@ -277,15 +306,19 @@ void main() {
 
   group('treeWrites', () {
     test('re-packs each parent from 0, bottom-to-top', () {
-      final writes = treeWrites(drawerRows(buildLayerTree(
-        [_folder('f', sortOrder: 7)],
-        [
-          _layer('bottom', sortOrder: 3),
-          _layer('top', sortOrder: 9),
-          _layer('in1', folderId: 'f', sortOrder: 4),
-          _layer('in2', folderId: 'f', sortOrder: 8),
-        ],
-      )));
+      final writes = treeWrites(
+        drawerRows(
+          buildLayerTree(
+            [_folder('f', sortOrder: 7)],
+            [
+              _layer('bottom', sortOrder: 3),
+              _layer('top', sortOrder: 9),
+              _layer('in1', folderId: 'f', sortOrder: 4),
+              _layer('in2', folderId: 'f', sortOrder: 8),
+            ],
+          ),
+        ),
+      );
       final by = {for (final w in writes) w.id: w};
       expect((by['bottom']!.sortOrder, by['bottom']!.folderId), (0, null));
       expect((by['f']!.sortOrder, by['f']!.isFolder), (1, true));
@@ -295,10 +328,12 @@ void main() {
     });
 
     test('a drop writes the new parent', () {
-      final rows = drawerRows(buildLayerTree(
-        [_folder('f', sortOrder: 1)],
-        [_layer('root', sortOrder: 0), _layer('in', folderId: 'f')],
-      ));
+      final rows = drawerRows(
+        buildLayerTree(
+          [_folder('f', sortOrder: 1)],
+          [_layer('root', sortOrder: 0), _layer('in', folderId: 'f')],
+        ),
+      );
       // f · in · root  ->  'root' dropped between the header and its member
       final writes = treeWrites(moveDrawerRows(rows, 2, 1));
       final root = writes.firstWhere((w) => w.id == 'root');
@@ -317,8 +352,11 @@ void main() {
       for (final w in treeWrites(drawerRows(tree))) {
         if (w.isFolder) continue;
         final was = treeLayers(tree).firstWhere((l) => l.id == w.id);
-        expect((w.folderId, w.sortOrder), (was.folderId, was.sortOrder),
-            reason: w.id);
+        expect(
+          (w.folderId, w.sortOrder),
+          (was.folderId, was.sortOrder),
+          reason: w.id,
+        );
       }
     });
   });

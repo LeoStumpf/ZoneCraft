@@ -45,8 +45,9 @@ void main() {
   /// tie and fall back to the (arbitrary but stable) id tie-break. Stamp
   /// distinct times when the assertion is about ordering.
   Future<void> stampCircle(String id, DateTime at) =>
-      (db.update(db.circles)..where((c) => c.id.equals(id)))
-          .write(CirclesCompanion(createdAt: Value(at)));
+      (db.update(db.circles)..where((c) => c.id.equals(id))).write(
+        CirclesCompanion(createdAt: Value(at)),
+      );
 
   test('formatMeters switches unit at 1 km', () {
     expect(formatMeters(0), '0 m');
@@ -56,7 +57,6 @@ void main() {
     expect(formatMeters(double.nan), '—');
   });
 
-
   test('formatElevationMeters groups thousands and marks negatives', () {
     expect(formatElevationMeters(2962), '2,962 m');
     expect(formatElevationMeters(-12), '−12 m');
@@ -65,13 +65,18 @@ void main() {
   test('circle rows: label wins, otherwise a positional name', () async {
     final layerId = await repo.createLayer(name: 'C', colorArgb: 0xFF0000FF);
     final first = await repo.createCircle(
-        layerId: layerId, centerLat: 48.1, centerLng: 11.5, radiusMeters: 500);
+      layerId: layerId,
+      centerLat: 48.1,
+      centerLng: 11.5,
+      radiusMeters: 500,
+    );
     final second = await repo.createCircle(
-        layerId: layerId,
-        centerLat: 48.2,
-        centerLng: 11.6,
-        radiusMeters: 2000,
-        label: 'Home');
+      layerId: layerId,
+      centerLat: 48.2,
+      centerLng: 11.6,
+      radiusMeters: 2000,
+      label: 'Home',
+    );
     await stampCircle(first, DateTime.utc(2026, 1, 1));
     await stampCircle(second, DateTime.utc(2026, 1, 2));
 
@@ -92,10 +97,17 @@ void main() {
 
   test('subspace rows count points and centre on the main point', () async {
     final layerId = await repo.createLayer(
-        name: 'S', colorArgb: 0xFF00FFFF, type: 'subspace');
+      name: 'S',
+      colorArgb: 0xFF00FFFF,
+      type: 'subspace',
+    );
     final id = await repo.createSubspace(layerId: layerId);
     await repo.addSubspacePoint(
-        subspaceId: id, lat: 48.0, lng: 11.0, isMain: true);
+      subspaceId: id,
+      lat: 48.0,
+      lng: 11.0,
+      isMain: true,
+    );
     await repo.addSubspacePoint(subspaceId: id, lat: 49.0, lng: 12.0);
 
     final rows = summariseLayer(
@@ -109,43 +121,51 @@ void main() {
     expect(rows.single.fitPoints.length, 2);
   });
 
-  test('freeline rows frame the inclusion circle, not the raw extent',
-      () async {
-    final layerId = await repo.createLayer(
-        name: 'L', colorArgb: 0xFFFF0000, type: 'freeline');
-    // A "river" spanning ~7° of longitude, bounded to a 1 km circle.
-    final id = await repo.createFreeLine(
-      layerId: layerId,
-      inclusionLat: 48.0,
-      inclusionLng: 11.0,
-      inclusionRadiusMeters: 1000,
-    );
-    await repo.addFreeLinePoint(freeLineId: id, lat: 48.0, lng: 8.0);
-    await repo.addFreeLinePoint(freeLineId: id, lat: 48.0, lng: 15.0);
+  test(
+    'freeline rows frame the inclusion circle, not the raw extent',
+    () async {
+      final layerId = await repo.createLayer(
+        name: 'L',
+        colorArgb: 0xFFFF0000,
+        type: 'freeline',
+      );
+      // A "river" spanning ~7° of longitude, bounded to a 1 km circle.
+      final id = await repo.createFreeLine(
+        layerId: layerId,
+        inclusionLat: 48.0,
+        inclusionLng: 11.0,
+        inclusionRadiusMeters: 1000,
+      );
+      await repo.addFreeLinePoint(freeLineId: id, lat: 48.0, lng: 8.0);
+      await repo.addFreeLinePoint(freeLineId: id, lat: 48.0, lng: 15.0);
 
-    final rows = summariseLayer(
-      await layerById(layerId),
-      freeLines: await db.select(db.freeLines).get(),
-      freeLinePoints: await db.select(db.freeLinePoints).get(),
-    );
+      final rows = summariseLayer(
+        await layerById(layerId),
+        freeLines: await db.select(db.freeLines).get(),
+        freeLinePoints: await db.select(db.freeLinePoints).get(),
+      );
 
-    // Point count, then the ground length: 7° of longitude at 48° N is
-    // roughly 520 km.
-    expect(rows.single.subtitle, startsWith('2 points · '));
-    expect(rows.single.subtitle, endsWith(' km'));
-    expect(rows.single.sizeMeasure, closeTo(520000, 10000));
-    expect(rows.single.center.longitude, closeTo(11.0, 1e-9));
-    // Every framing point stays within ~1 km of the inclusion centre — the
-    // 7°-wide raw extent must not leak into the camera fit.
-    for (final p in rows.single.fitPoints) {
-      expect((p.longitude - 11.0).abs(), lessThan(0.05));
-      expect((p.latitude - 48.0).abs(), lessThan(0.05));
-    }
-  });
+      // Point count, then the ground length: 7° of longitude at 48° N is
+      // roughly 520 km.
+      expect(rows.single.subtitle, startsWith('2 points · '));
+      expect(rows.single.subtitle, endsWith(' km'));
+      expect(rows.single.sizeMeasure, closeTo(520000, 10000));
+      expect(rows.single.center.longitude, closeTo(11.0, 1e-9));
+      // Every framing point stays within ~1 km of the inclusion centre — the
+      // 7°-wide raw extent must not leak into the camera fit.
+      for (final p in rows.single.fitPoints) {
+        expect((p.longitude - 11.0).abs(), lessThan(0.05));
+        expect((p.latitude - 48.0).abs(), lessThan(0.05));
+      }
+    },
+  );
 
   test('freeline subtitle mentions a non-zero offset', () async {
     final layerId = await repo.createLayer(
-        name: 'L', colorArgb: 0xFFFF0000, type: 'freeline');
+      name: 'L',
+      colorArgb: 0xFFFF0000,
+      type: 'freeline',
+    );
     final id = await repo.createFreeLine(layerId: layerId);
     await repo.addFreeLinePoint(freeLineId: id, lat: 48.0, lng: 11.0);
     await repo.addFreeLinePoint(freeLineId: id, lat: 48.1, lng: 11.1);
@@ -166,7 +186,10 @@ void main() {
 
   test('freearea rows quote the enclosed area', () async {
     final layerId = await repo.createLayer(
-        name: 'A', colorArgb: 0xFFFF0000, type: 'freearea');
+      name: 'A',
+      colorArgb: 0xFFFF0000,
+      type: 'freearea',
+    );
     final id = await repo.createFreeArea(layerId: layerId, label: 'Yard');
     // 0.01° × 0.01° at 48° N ≈ 1113 m × 745 m ≈ 0.83 km².
     await repo.addFreeAreaPoint(freeAreaId: id, lat: 48.00, lng: 11.00);
@@ -192,13 +215,18 @@ void main() {
   test('sort keys: sortName is the label only, sizeMeasure per kind', () async {
     final layerId = await repo.createLayer(name: 'C', colorArgb: 0xFF0000FF);
     await repo.createCircle(
-        layerId: layerId, centerLat: 48.1, centerLng: 11.5, radiusMeters: 500);
+      layerId: layerId,
+      centerLat: 48.1,
+      centerLng: 11.5,
+      radiusMeters: 500,
+    );
     await repo.createCircle(
-        layerId: layerId,
-        centerLat: 48.2,
-        centerLng: 11.6,
-        radiusMeters: 2000,
-        label: '  Home ');
+      layerId: layerId,
+      centerLat: 48.2,
+      centerLng: 11.6,
+      radiusMeters: 2000,
+      label: '  Home ',
+    );
 
     final rows = summariseLayer(
       await layerById(layerId),
@@ -214,7 +242,10 @@ void main() {
 
   test('height rows show the band, radius and generation state', () async {
     final layerId = await repo.createLayer(
-        name: 'H', colorArgb: 0xFF888888, type: 'height');
+      name: 'H',
+      colorArgb: 0xFF888888,
+      type: 'height',
+    );
     final id = await repo.createHeightRegion(
       layerId: layerId,
       centerLat: 47.0,
@@ -238,8 +269,11 @@ void main() {
   });
 
   test('poi set rows count their stored POIs', () async {
-    final layerId =
-        await repo.createLayer(name: 'POI', colorArgb: 0xFF123456, type: 'poi');
+    final layerId = await repo.createLayer(
+      name: 'POI',
+      colorArgb: 0xFF123456,
+      type: 'poi',
+    );
     final id = await repo.createPoiSet(
       layerId: layerId,
       source: kPoiSourceRadius,
@@ -266,8 +300,11 @@ void main() {
   });
 
   test('updatePoiSet renames a set and clears the name with null', () async {
-    final layerId =
-        await repo.createLayer(name: 'POI', colorArgb: 0xFF123456, type: 'poi');
+    final layerId = await repo.createLayer(
+      name: 'POI',
+      colorArgb: 0xFF123456,
+      type: 'poi',
+    );
     final id = await repo.createPoiSet(
       layerId: layerId,
       source: kPoiSourceRadius,
@@ -280,15 +317,17 @@ void main() {
     await repo.fillPoiSet(id, const []);
 
     await repo.updatePoiSet(id, label: const Value('Seating'));
-    var set = await (db.select(db.poiSets)..where((s) => s.id.equals(id)))
-        .getSingle();
+    var set = await (db.select(
+      db.poiSets,
+    )..where((s) => s.id.equals(id))).getSingle();
     expect(set.label, 'Seating');
     // The search circle is immutable — only the name changed.
     expect(set.radiusMeters, 800);
 
     await repo.updatePoiSet(id, label: const Value(null));
-    set = await (db.select(db.poiSets)..where((s) => s.id.equals(id)))
-        .getSingle();
+    set = await (db.select(
+      db.poiSets,
+    )..where((s) => s.id.equals(id))).getSingle();
     expect(set.label, isNull);
 
     final rows = summariseLayer(
@@ -300,7 +339,10 @@ void main() {
 
   test('an object with no points still yields a usable focus point', () async {
     final layerId = await repo.createLayer(
-        name: 'S', colorArgb: 0xFF00FFFF, type: 'subspace');
+      name: 'S',
+      colorArgb: 0xFF00FFFF,
+      type: 'subspace',
+    );
     await repo.createSubspace(layerId: layerId);
 
     final rows = summariseLayer(
@@ -313,57 +355,65 @@ void main() {
     expect(rows.single.fitPoints, hasLength(1));
   });
 
-  test('station-import rows summarise the import, not individual stations',
-      () async {
-    final layerId = await repo.createLayer(
-        name: 'T', colorArgb: 0xFF123456, type: 'poi');
-    final setId = await repo.createPoiSet(
-      layerId: layerId,
-      source: kPoiSourceBox,
-      categoryKey: kTransitStationCategoryKey,
-      centerLat: 0,
-      centerLng: 0,
-      radiusMeters: 0,
-      bbox: [48.10, 11.50, 48.15, 11.60],
-      modeMask: transitAllModesMask,
-      visibleModeMask: transitAllModesMask,
-      label: 'Centre',
-    );
-    await repo.fillPoiSet(setId, [
-      PoiResult(
-        lat: 48.11,
-        lng: 11.51,
+  test(
+    'station-import rows summarise the import, not individual stations',
+    () async {
+      final layerId = await repo.createLayer(
+        name: 'T',
+        colorArgb: 0xFF123456,
+        type: 'poi',
+      );
+      final setId = await repo.createPoiSet(
+        layerId: layerId,
+        source: kPoiSourceBox,
         categoryKey: kTransitStationCategoryKey,
-        name: 'A',
-        osmType: 'node',
-        osmId: 9,
-        modeMask: transitModeByKey('subway')!.bit,
-      ),
-    ]);
+        centerLat: 0,
+        centerLng: 0,
+        radiusMeters: 0,
+        bbox: [48.10, 11.50, 48.15, 11.60],
+        modeMask: transitAllModesMask,
+        visibleModeMask: transitAllModesMask,
+        label: 'Centre',
+      );
+      await repo.fillPoiSet(setId, [
+        PoiResult(
+          lat: 48.11,
+          lng: 11.51,
+          categoryKey: kTransitStationCategoryKey,
+          name: 'A',
+          osmType: 'node',
+          osmId: 9,
+          modeMask: transitModeByKey('subway')!.bit,
+        ),
+      ]);
 
-    final rows = summariseLayer(
-      await layerById(layerId),
-      poiSets: await db.select(db.poiSets).get(),
-      poiPoints: await db.select(db.poiPoints).get(),
-    );
+      final rows = summariseLayer(
+        await layerById(layerId),
+        poiSets: await db.select(db.poiSets).get(),
+        poiPoints: await db.select(db.poiPoints).get(),
+      );
 
-    expect(rows, hasLength(1));
-    expect(rows.single.title, 'Centre');
-    expect(rows.single.ref.kind, ObjectKind.poiSet);
-    expect(rows.single.isPending, isFalse);
-    expect(rows.single.subtitle, startsWith('1 station · '));
-    expect(rows.single.subtitle, contains('imported '));
-    // "Zoom to" frames the box that was imported — exactly what was fetched.
-    expect(rows.single.fitPoints, hasLength(2));
-    expect(rows.single.fitPoints.first.latitude, closeTo(48.10, 1e-9));
-    expect(rows.single.fitPoints.last.longitude, closeTo(11.60, 1e-9));
-  });
+      expect(rows, hasLength(1));
+      expect(rows.single.title, 'Centre');
+      expect(rows.single.ref.kind, ObjectKind.poiSet);
+      expect(rows.single.isPending, isFalse);
+      expect(rows.single.subtitle, startsWith('1 station · '));
+      expect(rows.single.subtitle, contains('imported '));
+      // "Zoom to" frames the box that was imported — exactly what was fetched.
+      expect(rows.single.fitPoints, hasLength(2));
+      expect(rows.single.fitPoints.first.latitude, closeTo(48.10, 1e-9));
+      expect(rows.single.fitPoints.last.longitude, closeTo(11.60, 1e-9));
+    },
+  );
 
   test('an import that never finished reads as a retry row', () async {
     // Both import kinds: every import is born pending, so the radius one
     // reads the same way until it is filled.
     final layerId = await repo.createLayer(
-        name: 'T', colorArgb: 0xFF123456, type: 'poi');
+      name: 'T',
+      colorArgb: 0xFF123456,
+      type: 'poi',
+    );
     final box = await repo.createPoiSet(
       layerId: layerId,
       source: kPoiSourceBox,
@@ -395,15 +445,22 @@ void main() {
       expect(r.title, contains("didn't finish"));
       expect(r.subtitle, contains('tap to try again'));
     }
-    expect(rows.firstWhere((r) => r.ref.id == box).subtitle,
-        contains('Overpass is busy'));
-    expect(rows.firstWhere((r) => r.ref.id == radius).subtitle,
-        contains('within 800 m'));
+    expect(
+      rows.firstWhere((r) => r.ref.id == box).subtitle,
+      contains('Overpass is busy'),
+    );
+    expect(
+      rows.firstWhere((r) => r.ref.id == radius).subtitle,
+      contains('within 800 m'),
+    );
   });
 
   test('a hand-made category is never a retry row', () async {
     final layerId = await repo.createLayer(
-        name: 'Mine', colorArgb: 0xFF123456, type: 'poi');
+      name: 'Mine',
+      colorArgb: 0xFF123456,
+      type: 'poi',
+    );
     await repo.createPoiSet(
       layerId: layerId,
       source: kPoiSourceManual,
@@ -431,10 +488,11 @@ void main() {
     /// Seeds a borders layer holding [names] as areas of one import.
     Future<Layer> seed(List<String?> names) async {
       final layerId = await repo.createLayer(
-          name: 'Districts',
-          colorArgb: 0xFF000000,
-          type: 'borders',
-          borderLevel: '9');
+        name: 'Districts',
+        colorArgb: 0xFF000000,
+        type: 'borders',
+        borderLevel: '9',
+      );
       await repo.addBorderSet(
         layerId: layerId,
         south: 48.0,
@@ -459,32 +517,39 @@ void main() {
             ),
         ],
       );
-      return (await repo.watchLayers().first).firstWhere((l) => l.id == layerId);
+      return (await repo.watchLayers().first).firstWhere(
+        (l) => l.id == layerId,
+      );
     }
 
     Future<List<ObjectSummary>> rowsFor(Layer layer) async => summariseLayer(
-          layer,
-          borderSets: await repo.watchAllBorderSets().first,
-          borderAreas: await repo.watchAllBorderAreas().first,
-        );
+      layer,
+      borderSets: await repo.watchAllBorderSets().first,
+      borderAreas: await repo.watchAllBorderAreas().first,
+    );
 
     test('rows are the areas, named and sorted by name', () async {
       final layer = await seed(['Schwabing', 'Maxvorstadt', 'Altstadt-Lehel']);
       final rows = await rowsFor(layer);
-      expect(rows.map((r) => r.title),
-          ['Altstadt-Lehel', 'Maxvorstadt', 'Schwabing']);
+      expect(rows.map((r) => r.title), [
+        'Altstadt-Lehel',
+        'Maxvorstadt',
+        'Schwabing',
+      ]);
       expect(rows.first.ref.kind, ObjectKind.borderArea);
       expect(rows.first.subtitle, contains('42 points'));
     });
 
-    test('the ref points at the AREA, so rename/delete hit one district',
-        () async {
-      final layer = await seed(['Maxvorstadt']);
-      final rows = await rowsFor(layer);
-      final areas = await repo.watchAllBorderAreas().first;
-      expect(rows.single.ref.id, areas.single.id);
-      expect(rows.single.ref.id, isNot(areas.single.setId));
-    });
+    test(
+      'the ref points at the AREA, so rename/delete hit one district',
+      () async {
+        final layer = await seed(['Maxvorstadt']);
+        final rows = await rowsFor(layer);
+        final areas = await repo.watchAllBorderAreas().first;
+        expect(rows.single.ref.id, areas.single.id);
+        expect(rows.single.ref.id, isNot(areas.single.setId));
+      },
+    );
 
     test('unnamed areas sort last and get a positional name', () async {
       final layer = await seed([null, 'Named']);
@@ -503,8 +568,9 @@ void main() {
       // 97 areas on a layer and one of them forked from OSM: the Elements list
       // is where you would go to find out which.
       final layer = await seed(['Maxvorstadt', 'Schwabing']);
-      final max = (await repo.watchAllBorderAreas().first)
-          .firstWhere((a) => a.name == 'Maxvorstadt');
+      final max = (await repo.watchAllBorderAreas().first).firstWhere(
+        (a) => a.name == 'Maxvorstadt',
+      );
       await repo.reshapeBorderArea(max.id, [
         [
           const LatLng(48.1, 11.5),
@@ -610,22 +676,31 @@ void main() {
       final l = await repo.createLayer(name: 'L', colorArgb: 0xFF43A047);
       final ids = <String>[];
       for (var i = 0; i < 3; i++) {
-        ids.add(await repo.createCircle(
-            layerId: l, centerLat: 48.1, centerLng: 11.5, radiusMeters: 100));
+        ids.add(
+          await repo.createCircle(
+            layerId: l,
+            centerLat: 48.1,
+            centerLng: 11.5,
+            radiusMeters: 100,
+          ),
+        );
         await stampCircle(ids.last, DateTime.utc(2026, 1, i + 1));
       }
       return (l, ids);
     }
 
     Future<List<ObjectSummary>> rowsOf(String layerId) async => summariseLayer(
-          await layerById(layerId),
-          circles: await repo.watchAllCircles().first,
-        );
+      await layerById(layerId),
+      circles: await repo.watchAllCircles().first,
+    );
 
     test('reordering does not renumber the positional names', () async {
       final (l, ids) = await threeCircles();
-      expect((await rowsOf(l)).map((r) => r.title),
-          ['Circle 1', 'Circle 2', 'Circle 3']);
+      expect((await rowsOf(l)).map((r) => r.title), [
+        'Circle 1',
+        'Circle 2',
+        'Circle 3',
+      ]);
 
       await repo.moveElementZ(ColoredElement.circle, ids.first, ZMove.toFront);
 
@@ -639,8 +714,7 @@ void main() {
     test('the list reads bottom-of-map first', () async {
       final (l, ids) = await threeCircles();
       await repo.moveElementZ(ColoredElement.circle, ids.last, ZMove.toBack);
-      expect((await rowsOf(l)).map((r) => r.ref.id),
-          [ids[2], ids[0], ids[1]]);
+      expect((await rowsOf(l)).map((r) => r.ref.id), [ids[2], ids[0], ids[1]]);
     });
 
     test('an untouched layer still lists in creation order', () async {
@@ -650,5 +724,4 @@ void main() {
       expect((await rowsOf(l)).map((r) => r.ref.id), ids);
     });
   });
-
 }

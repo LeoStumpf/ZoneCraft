@@ -127,8 +127,10 @@ class ErrorLogEntry {
 
   String asReport() {
     final b = StringBuffer()
-      ..writeln('[${when.toIso8601String()}]'
-          '${context == null ? '' : ' $context'}')
+      ..writeln(
+        '[${when.toIso8601String()}]'
+        '${context == null ? '' : ' $context'}',
+      )
       ..writeln(error);
     final s = stack;
     if (s != null && s.isNotEmpty) {

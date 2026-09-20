@@ -38,7 +38,8 @@ void main() {
     for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
       final xi = poly[i].longitude, yi = poly[i].latitude;
       final xj = poly[j].longitude, yj = poly[j].latitude;
-      final intersect = (yi > q.latitude) != (yj > q.latitude) &&
+      final intersect =
+          (yi > q.latitude) != (yj > q.latitude) &&
           q.longitude < (xj - xi) * (q.latitude - yi) / (yj - yi) + xi;
       if (intersect) hit = !hit;
     }
@@ -74,7 +75,11 @@ void main() {
   test('bandInward shrinks the band inside the ring (inverted layer)', () {
     // Inverted: outer is the nominal ring, core shrinks inward (band inside).
     final r = freeAreaRegion(
-        ring: box, offsetMeters: 0, bandMeters: 500, bandInward: true);
+      ring: box,
+      offsetMeters: 0,
+      bandMeters: 500,
+      bandInward: true,
+    );
     expect(area(r.outer), closeTo(area(box), 1e-12)); // outer = nominal ring
     expect(area(r.core), lessThan(area(box))); // core shrunk inward
     expect(r.core.every((v) => inside(box, v)), isTrue);

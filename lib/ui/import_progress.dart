@@ -127,7 +127,8 @@ ImportProgress showImportProgress(
 }) {
   final navigator = Navigator.of(context, rootNavigator: true);
   final notifier = ValueNotifier<String>(message);
-  unawaited(showDialog<void>(
+  unawaited(
+    showDialog<void>(
       context: context,
       barrierDismissible: false,
       useRootNavigator: true,
@@ -142,7 +143,8 @@ ImportProgress showImportProgress(
           onCancel: onCancel,
         ),
       ),
-    ));
+    ),
+  );
   return ImportProgress._(notifier, navigator.pop);
 }
 
@@ -176,8 +178,7 @@ class _ImportProgressDialogState extends State<_ImportProgressDialog> {
     // The one thing guaranteed to keep moving. While a slow instance sits on
     // the request there are no bytes and no stage change for a minute, and a
     // frozen dialog is what "it just hangs" actually means.
-    _tick = Timer.periodic(
-        const Duration(seconds: 1), (_) => setState(() {}));
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) => setState(() {}));
   }
 
   @override
@@ -219,8 +220,9 @@ class _ImportProgressDialogState extends State<_ImportProgressDialog> {
             seconds < 60
                 ? '${seconds}s elapsed'
                 : '${seconds ~/ 60}m ${seconds % 60}s elapsed',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.outline),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.outline,
+            ),
           ),
         ],
       ),

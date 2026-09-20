@@ -96,8 +96,9 @@ class _PoiImportSheetState extends State<PoiImportSheet> {
     _category = _choices.first;
     // Draw the default straight away: the sheet opening is itself an answer to
     // "how far is 1000 m from here".
-    WidgetsBinding.instance
-        .addPostFrameCallback((_) => widget.onPreview(_radiusOrNull()));
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => widget.onPreview(_radiusOrNull()),
+    );
   }
 
   /// The search radius as typed, or null if it is not a usable number.
@@ -125,12 +126,14 @@ class _PoiImportSheetState extends State<PoiImportSheet> {
   /// in the first few pixels.
   static double _toSlider(double m) =>
       (math.log(m.clamp(kMinPoiSearchRadius, kMaxPoiSearchRadius)) -
-              math.log(kMinPoiSearchRadius)) /
-          (math.log(kMaxPoiSearchRadius) - math.log(kMinPoiSearchRadius));
+          math.log(kMinPoiSearchRadius)) /
+      (math.log(kMaxPoiSearchRadius) - math.log(kMinPoiSearchRadius));
 
   static double _fromSlider(double t) {
-    final v = math.exp(math.log(kMinPoiSearchRadius) +
-        t * (math.log(kMaxPoiSearchRadius) - math.log(kMinPoiSearchRadius)));
+    final v = math.exp(
+      math.log(kMinPoiSearchRadius) +
+          t * (math.log(kMaxPoiSearchRadius) - math.log(kMinPoiSearchRadius)),
+    );
     // Round to something a person would have typed, so the field does not
     // fill with 1473.9182.
     if (v < 1000) return (v / 10).round() * 10;
@@ -215,7 +218,8 @@ class _PoiImportSheetState extends State<PoiImportSheet> {
                       for (final c in _choices)
                         DropdownMenuItem(value: c, child: Text(c.label)),
                     ],
-                    onChanged: (c) => setState(() => _category = c ?? _category),
+                    onChanged: (c) =>
+                        setState(() => _category = c ?? _category),
                   ),
                   const SizedBox(height: 8),
                   // Field and slider drive the same value from both ends: type

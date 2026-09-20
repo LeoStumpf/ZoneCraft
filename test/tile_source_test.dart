@@ -36,8 +36,10 @@ void main() {
   group('the shipped default', () {
     test('is the community OSM server', () {
       expect(TileSource.configured.isCommunityOsm, isTrue);
-      expect(TileSource.configured.urlTemplate,
-          'https://tile.openstreetmap.org/{z}/{x}/{y}.png');
+      expect(
+        TileSource.configured.urlTemplate,
+        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+      );
     });
 
     test('does NOT permit pre-emptive fetching', () {

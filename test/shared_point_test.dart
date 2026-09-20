@@ -45,7 +45,9 @@ void main() {
 
   group('encode → decode round-trips', () {
     test('a plain coordinate', () {
-      final back = decodeSharedPointLink(encodeSharedPointLink(p(48.169123, 11.56789)))!;
+      final back = decodeSharedPointLink(
+        encodeSharedPointLink(p(48.169123, 11.56789)),
+      )!;
       expect(back.lat, closeTo(48.169123, 1e-9));
       expect(back.lng, closeTo(11.567890, 1e-9));
       expect(back.name, isNull);
@@ -55,16 +57,18 @@ void main() {
       // Built with Uri, so an unescaped `&` cannot truncate the query at the
       // next parameter and silently drop the longitude.
       const awkward = 'Bar & Grill 🍺 / "Zum Stiftl"';
-      final back =
-          decodeSharedPointLink(encodeSharedPointLink(p(48.1, 11.5, awkward)))!;
+      final back = decodeSharedPointLink(
+        encodeSharedPointLink(p(48.1, 11.5, awkward)),
+      )!;
       expect(back.name, awkward);
       expect(back.lat, closeTo(48.1, 1e-9));
       expect(back.lng, closeTo(11.5, 1e-9));
     });
 
     test('a negative and a southern-hemisphere coordinate', () {
-      final back =
-          decodeSharedPointLink(encodeSharedPointLink(p(-33.8688, 151.2093)))!;
+      final back = decodeSharedPointLink(
+        encodeSharedPointLink(p(-33.8688, 151.2093)),
+      )!;
       expect(back.lat, closeTo(-33.8688, 1e-6));
       expect(back.lng, closeTo(151.2093, 1e-6));
     });
@@ -88,8 +92,9 @@ void main() {
       expect(plain.lat, closeTo(48.137, 1e-9));
       expect(plain.name, isNull);
 
-      final labelled =
-          decodeSharedPointLink('geo:0,0?q=48.137,11.575(Marienplatz)')!;
+      final labelled = decodeSharedPointLink(
+        'geo:0,0?q=48.137,11.575(Marienplatz)',
+      )!;
       expect(labelled.lat, closeTo(48.137, 1e-9));
       expect(labelled.lng, closeTo(11.575, 1e-9));
       expect(labelled.name, 'Marienplatz');
@@ -103,7 +108,8 @@ void main() {
 
     test('a whole pasted WhatsApp message, words and all', () {
       // The reason the scan exists: nobody trims the message by hand.
-      const msg = 'hey, meet me here! Nordbad — 48.169123, 11.567890\n'
+      const msg =
+          'hey, meet me here! Nordbad — 48.169123, 11.567890\n'
           'see you at 7';
       final r = decodeSharedPointLink(msg)!;
       expect(r.lat, closeTo(48.169123, 1e-9));
@@ -129,10 +135,7 @@ void main() {
     });
 
     test('rejects an out-of-range coordinate inside a well-formed link', () {
-      expect(
-        decodeSharedPointLink('zonecraft://p?lat=99.0&lng=11.5'),
-        isNull,
-      );
+      expect(decodeSharedPointLink('zonecraft://p?lat=99.0&lng=11.5'), isNull);
     });
   });
 
@@ -142,14 +145,16 @@ void main() {
   group('map links from other apps', () {
     test('an osm.org address-bar link, whose position is in the fragment', () {
       final p = decodeSharedPointLink(
-          'https://www.openstreetmap.org/#map=17/48.13700/11.57500')!;
+        'https://www.openstreetmap.org/#map=17/48.13700/11.57500',
+      )!;
       expect(p.latLng.latitude, closeTo(48.137, 1e-6));
       expect(p.latLng.longitude, closeTo(11.575, 1e-6));
     });
 
     test('the fragment can carry more than the position', () {
       final p = decodeSharedPointLink(
-          'https://www.openstreetmap.org/#map=12/-33.8688/151.2093&layers=N')!;
+        'https://www.openstreetmap.org/#map=12/-33.8688/151.2093&layers=N',
+      )!;
       expect(p.latLng.latitude, closeTo(-33.8688, 1e-6));
       expect(p.latLng.longitude, closeTo(151.2093, 1e-6));
     });
@@ -158,7 +163,8 @@ void main() {
     // while the fragment only names where the map was looking.
     test('mlat/mlon is preferred over the fragment', () {
       final p = decodeSharedPointLink(
-          'https://www.openstreetmap.org/?mlat=1.5&mlon=2.5#map=17/9/9')!;
+        'https://www.openstreetmap.org/?mlat=1.5&mlon=2.5#map=17/9/9',
+      )!;
       expect(p.latLng.latitude, closeTo(1.5, 1e-9));
       expect(p.latLng.longitude, closeTo(2.5, 1e-9));
     });
@@ -167,10 +173,15 @@ void main() {
     // something plausible — the caller turns null into a message, and a wrong
     // position would be worse than no position.
     test('links with no readable position decode to null', () {
-      expect(decodeSharedPointLink('https://www.openstreetmap.org/node/240109189'),
-          isNull);
+      expect(
+        decodeSharedPointLink('https://www.openstreetmap.org/node/240109189'),
+        isNull,
+      );
       expect(decodeSharedPointLink('https://www.openstreetmap.org/'), isNull);
-      expect(decodeSharedPointLink('https://www.openstreetmap.org/#map='), isNull);
+      expect(
+        decodeSharedPointLink('https://www.openstreetmap.org/#map='),
+        isNull,
+      );
     });
 
     test('a geo: URI with an uncertainty suffix', () {
@@ -199,7 +210,8 @@ void main() {
         expect(
           decodeSharedPointLink(line),
           isNotNull,
-          reason: 'a message that survives only partially still has to work: '
+          reason:
+              'a message that survives only partially still has to work: '
               '"$line" did not decode',
         );
       }

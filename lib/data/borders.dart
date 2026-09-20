@@ -96,7 +96,8 @@ const borderLevels = <BorderLevel>[
     key: 'country',
     label: 'Countries',
     adminLevel: '2',
-    blurb: 'National borders. A whole country comes down for any box that '
+    blurb:
+        'National borders. A whole country comes down for any box that '
         'touches it — 17 MB on the German/Austrian border — so keep it small.',
     maxDiagonalMeters: 60000,
   ),
@@ -104,7 +105,8 @@ const borderLevels = <BorderLevel>[
     key: 'state',
     label: 'States / provinces',
     adminLevel: '4',
-    blurb: 'Federal states, provinces, regions. One state is ~120 000 points; '
+    blurb:
+        'Federal states, provinces, regions. One state is ~120 000 points; '
         'a box spanning several is refused rather than left to time out.',
     maxDiagonalMeters: 150000,
   ),
@@ -112,14 +114,16 @@ const borderLevels = <BorderLevel>[
     key: 'county',
     label: 'Counties / districts',
     adminLevel: '6',
-    blurb: 'Counties, Landkreise, départements — the tier above municipalities.',
+    blurb:
+        'Counties, Landkreise, départements — the tier above municipalities.',
     maxDiagonalMeters: 120000,
   ),
   BorderLevel(
     key: 'city',
     label: 'Cities / municipalities',
     adminLevel: '8',
-    blurb: 'Towns and municipalities: the tier that tiles the map completely. '
+    blurb:
+        'Towns and municipalities: the tier that tiles the map completely. '
         'Munich and its 54 neighbours import in about two seconds.',
     maxDiagonalMeters: 80000,
   ),
@@ -127,7 +131,8 @@ const borderLevels = <BorderLevel>[
     key: 'district',
     label: 'City districts',
     adminLevel: '9',
-    blurb: 'Boroughs / Stadtbezirke inside a city. Cheap, but only mapped in '
+    blurb:
+        'Boroughs / Stadtbezirke inside a city. Cheap, but only mapped in '
         'cities that use them.',
     maxDiagonalMeters: 80000,
   ),
@@ -135,7 +140,8 @@ const borderLevels = <BorderLevel>[
     key: 'suburb',
     label: 'Suburbs / neighbourhoods',
     adminLevel: '10',
-    blurb: 'Neighbourhoods. The public Overpass instances refused every attempt '
+    blurb:
+        'Neighbourhoods. The public Overpass instances refused every attempt '
         'at this level over Munich — expect it to fail in a dense city.',
     maxDiagonalMeters: 60000,
   ),
@@ -164,9 +170,16 @@ const Distance _distance = Distance(calculator: Haversine());
 
 /// The diagonal of a box in metres (NaN when it isn't a usable box).
 double borderBoxDiagonalMeters(
-    double south, double west, double north, double east) {
+  double south,
+  double west,
+  double north,
+  double east,
+) {
   final d = _distance.as(
-      LengthUnit.Meter, LatLng(south, west), LatLng(north, east));
+    LengthUnit.Meter,
+    LatLng(south, west),
+    LatLng(north, east),
+  );
   return d.isFinite ? d : double.nan;
 }
 
@@ -197,11 +210,7 @@ String buildBorderAreasQuery({
 /// One member way of a relation, as Overpass returns it: its id, its role
 /// (`outer`/`inner`), and its points.
 class BorderWay {
-  const BorderWay({
-    required this.id,
-    required this.role,
-    required this.points,
-  });
+  const BorderWay({required this.id, required this.role, required this.points});
 
   final int id;
 
@@ -277,10 +286,10 @@ List<BorderRelationData>? parseBorderRelations(String body) {
   final dynamic decoded;
   try {
     decoded = jsonDecode(body);
-  // Overpass can answer with an HTML error page or a truncated body. That is
-  // malformed *data*, not a bug here, and the null is how the caller tells it
-  // apart from a genuinely empty area.
-  // ignore: avoid_catches_without_on_clauses
+    // Overpass can answer with an HTML error page or a truncated body. That is
+    // malformed *data*, not a bug here, and the null is how the caller tells it
+    // apart from a genuinely empty area.
+    // ignore: avoid_catches_without_on_clauses
   } catch (_) {
     return null;
   }
@@ -304,21 +313,21 @@ List<BorderRelationData>? parseBorderRelations(String body) {
         final pts = _points(m['geometry']);
         if (pts.length < 2) continue;
         final role = m['role'];
-        ways.add(BorderWay(
-          id: wid,
-          role: role is String ? role : '',
-          points: pts,
-        ));
+        ways.add(
+          BorderWay(id: wid, role: role is String ? role : '', points: pts),
+        );
       }
     }
     // A relation with no usable geometry is dropped rather than stored as an
     // empty area — there would be nothing to draw and nothing to name.
     if (ways.isEmpty) continue;
-    out.add(BorderRelationData(
-      osmId: id,
-      name: tags is Map<String, dynamic> ? _tag(tags, 'name') : null,
-      ways: ways,
-    ));
+    out.add(
+      BorderRelationData(
+        osmId: id,
+        name: tags is Map<String, dynamic> ? _tag(tags, 'name') : null,
+        ways: ways,
+      ),
+    );
   }
   return out;
 }
@@ -351,7 +360,8 @@ Future<OverpassOutcome<List<BorderRelationData>>> fetchBorderAreas({
     client: client,
     timeout: borderRequestTimeout,
     maxBytes: borderMaxResponseBytes,
-    oversizeMessage: 'That area returns too much data — the whole of every '
+    oversizeMessage:
+        'That area returns too much data — the whole of every '
         'boundary it touches has to come down. Pick a smaller box, or a finer '
         'level.',
     preferEndpoint: preferEndpoint,

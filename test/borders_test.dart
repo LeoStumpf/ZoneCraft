@@ -55,11 +55,15 @@ void main() {
     test('the caps reflect what was measured, not the level ordering', () {
       // Countries are the *most* expensive despite being the coarsest: any box
       // touching a national border downloads whole countries (17.3 MB).
-      expect(lvl('country').maxDiagonalMeters,
-          lessThan(lvl('state').maxDiagonalMeters));
+      expect(
+        lvl('country').maxDiagonalMeters,
+        lessThan(lvl('state').maxDiagonalMeters),
+      );
       // Suburbs were unobtainable in Munich, so they are capped tightly too.
-      expect(lvl('suburb').maxDiagonalMeters,
-          lessThan(lvl('city').maxDiagonalMeters));
+      expect(
+        lvl('suburb').maxDiagonalMeters,
+        lessThan(lvl('city').maxDiagonalMeters),
+      );
     });
   });
 
@@ -83,19 +87,26 @@ void main() {
 
     test('one level per query — a layer holds exactly one', () {
       final q = buildBorderAreasQuery(
-          south: 1, west: 2, north: 3, east: 4, adminLevel: '4');
+        south: 1,
+        west: 2,
+        north: 3,
+        east: 4,
+        adminLevel: '4',
+      );
       expect('"admin_level"'.allMatches(q).length, 1);
     });
   });
 
   group('parseBorderRelations', () {
-    String body(String members) => '''
+    String body(String members) =>
+        '''
       {"elements":[
         {"type":"relation","id":42,"tags":{"name":"München"},
          "members":[$members]}
       ]}''';
 
-    const wayA = '{"type":"way","ref":100,"role":"outer","geometry":'
+    const wayA =
+        '{"type":"way","ref":100,"role":"outer","geometry":'
         '[{"lat":48.0,"lon":11.0},{"lat":48.0,"lon":11.1}]}';
 
     test('reads the relation, its name and its member ways', () {
@@ -112,7 +123,8 @@ void main() {
     });
 
     test('also accepts the GeoJSON LineString shape', () {
-      const way = '{"type":"way","ref":7,"role":"inner","geometry":'
+      const way =
+          '{"type":"way","ref":7,"role":"inner","geometry":'
           '{"type":"LineString","coordinates":[[11.0,48.0],[11.2,48.2]]}}';
       final rel = parseBorderRelations(body(way))!.single;
       expect(rel.ways.single.role, 'inner');
@@ -122,7 +134,8 @@ void main() {
     });
 
     test('skips non-way members and degenerate geometry', () {
-      const junk = '{"type":"node","ref":5,"role":"admin_centre"},'
+      const junk =
+          '{"type":"node","ref":5,"role":"admin_centre"},'
           '{"type":"way","ref":6,"role":"outer","geometry":'
           '[{"lat":48.0,"lon":11.0}]}';
       // Only junk left, so the whole relation goes: nothing to draw or name.
@@ -166,7 +179,8 @@ void main() {
   });
 
   group('network contract', () {
-    const ok = '{"elements":[{"type":"relation","id":1,"members":['
+    const ok =
+        '{"elements":[{"type":"relation","id":1,"members":['
         '{"type":"way","ref":1,"role":"outer","geometry":'
         '[{"lat":0,"lon":0},{"lat":1,"lon":1}]}]}]}';
 
@@ -192,22 +206,26 @@ void main() {
       // one ask in three in ~8 s, then answers. Failing straight over sent the
       // import to a 160 s instance and then a dead one.
       var calls = 0;
-      final out = await fetch(MockClient((_) async {
-        calls++;
-        return calls == 1
-            ? http.Response('busy', 504)
-            : http.Response(ok, 200);
-      }));
+      final out = await fetch(
+        MockClient((_) async {
+          calls++;
+          return calls == 1
+              ? http.Response('busy', 504)
+              : http.Response(ok, 200);
+        }),
+      );
       expect(out.ok, isTrue);
       expect(out.endpoint, overpassEndpoints.first);
     });
 
     test('a query error is reported as-is and does NOT fail over', () async {
       var calls = 0;
-      final out = await fetch(MockClient((_) async {
-        calls++;
-        return http.Response('bad query', 400);
-      }));
+      final out = await fetch(
+        MockClient((_) async {
+          calls++;
+          return http.Response('bad query', 400);
+        }),
+      );
       expect(out.ok, isFalse);
       expect(out.message, contains('400'));
       expect(calls, 1);
@@ -215,14 +233,17 @@ void main() {
 
     test('an oversized body is refused with advice, not decoded', () async {
       final huge = 'x' * (borderMaxResponseBytes + 1);
-      final out = await fetch(MockClient((_) async => http.Response(huge, 200)));
+      final out = await fetch(
+        MockClient((_) async => http.Response(huge, 200)),
+      );
       expect(out.ok, isFalse);
       expect(out.message, contains('smaller box'));
     });
 
     test('an unreadable 200 is distinguished from an empty area', () async {
-      final out =
-          await fetch(MockClient((_) async => http.Response('nope', 200)));
+      final out = await fetch(
+        MockClient((_) async => http.Response('nope', 200)),
+      );
       expect(out.ok, isFalse);
       expect(out.message, contains('could not read'));
     });

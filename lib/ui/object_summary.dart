@@ -118,17 +118,17 @@ class ObjectSummary {
 /// The canonical icon for a `Layers.type` — shared by the drawer, the Elements
 /// list and the Add button so one type never has two icons.
 IconData typeIcon(String layerType) => switch (layerType) {
-      'subspace' => Icons.scatter_plot_outlined,
-      'freeline' => Icons.polyline,
-      'freearea' => Icons.hexagon_outlined,
-      'height' => Icons.terrain,
-      // Not `travel_explore`: that is the OSM *import* button, and on a POI
+  'subspace' => Icons.scatter_plot_outlined,
+  'freeline' => Icons.polyline,
+  'freearea' => Icons.hexagon_outlined,
+  'height' => Icons.terrain,
+  // Not `travel_explore`: that is the OSM *import* button, and on a POI
   // layer the Add FAB sits right beside it wearing this icon — two
   // identical symbols doing different things.
   'poi' => Icons.place_outlined,
-      'borders' => Icons.public,
-      _ => Icons.circle_outlined,
-    };
+  'borders' => Icons.public,
+  _ => Icons.circle_outlined,
+};
 
 /// Whether a `Layers.type` has an editor at all.
 ///
@@ -142,16 +142,15 @@ IconData typeIcon(String layerType) => switch (layerType) {
 /// **false for an unknown type**: the Elements list and the map's Edit mode
 /// have to agree on it, and when they didn't, Edit mode armed tap-to-select
 /// against types nothing could select — a button that visibly does nothing.
-bool layerHasEditor(String layerType) =>
-    const {
-      'circles',
-      'subspace',
-      'freeline',
-      'freearea',
-      'height',
-      'poi',
-      'borders',
-    }.contains(layerType);
+bool layerHasEditor(String layerType) => const {
+  'circles',
+  'subspace',
+  'freeline',
+  'freearea',
+  'height',
+  'poi',
+  'borders',
+}.contains(layerType);
 
 /// Formats a ground distance for display: metres below 1 km, then kilometres.
 String formatMeters(double meters) {
@@ -178,9 +177,9 @@ String formatSquareMeters(double squareMeters) {
 }
 
 String _thousands(int n) => n.toString().replaceAllMapped(
-      RegExp(r'(\d)(?=(\d{3})+$)'),
-      (m) => '${m[1]},',
-    );
+  RegExp(r'(\d)(?=(\d{3})+$)'),
+  (m) => '${m[1]},',
+);
 
 bool _finite(double lat, double lng) => lat.isFinite && lng.isFinite;
 
@@ -214,8 +213,8 @@ LatLng? _bboxCenter(List<LatLng> points) {
 
 String _titleOr(String? label, String noun, int index) =>
     (label != null && label.trim().isNotEmpty)
-        ? label.trim()
-        : '$noun ${index + 1}';
+    ? label.trim()
+    : '$noun ${index + 1}';
 
 String _plural(int n, String noun) => '$n $noun${n == 1 ? '' : 's'}';
 
@@ -262,9 +261,7 @@ Map<String, int> _creationRank<T>(
   String Function(T) id,
 ) {
   final byCreation = _ordered(rows, createdAt, id);
-  return {
-    for (var i = 0; i < byCreation.length; i++) id(byCreation[i]): i,
-  };
+  return {for (var i = 0; i < byCreation.length; i++) id(byCreation[i]): i};
 }
 
 /// Sorts a layer's objects into **stack** order: bottom of the map first.
@@ -347,51 +344,75 @@ List<ObjectSummary> summariseLayer(
     switch (type) {
       case 'circles':
         final mine = circles.where((c) => c.layerId == layer.id);
-          final rank = _creationRank(mine, (c) => c.createdAt, (c) => c.id);
-          final rows =
-              _stacked(mine, (c) => c.zOrder, (c) => c.createdAt, (c) => c.id);
-        return [
-          for (final r in rows) _circleSummary(r, layer.id, rank[r.id]!),
-        ];
+        final rank = _creationRank(mine, (c) => c.createdAt, (c) => c.id);
+        final rows = _stacked(
+          mine,
+          (c) => c.zOrder,
+          (c) => c.createdAt,
+          (c) => c.id,
+        );
+        return [for (final r in rows) _circleSummary(r, layer.id, rank[r.id]!)];
       case 'subspace':
         final mine = subspaces.where((s) => s.layerId == layer.id);
-          final rank = _creationRank(mine, (s) => s.createdAt, (s) => s.id);
-          final rows =
-              _stacked(mine, (s) => s.zOrder, (s) => s.createdAt, (s) => s.id);
+        final rank = _creationRank(mine, (s) => s.createdAt, (s) => s.id);
+        final rows = _stacked(
+          mine,
+          (s) => s.zOrder,
+          (s) => s.createdAt,
+          (s) => s.id,
+        );
         return [
-          for (final r in rows) _subspaceSummary(r, layer.id, rank[r.id]!, subspacePoints),
+          for (final r in rows)
+            _subspaceSummary(r, layer.id, rank[r.id]!, subspacePoints),
         ];
       case 'freeline':
         final mine = freeLines.where((l) => l.layerId == layer.id);
-          final rank = _creationRank(mine, (l) => l.createdAt, (l) => l.id);
-          final rows =
-              _stacked(mine, (l) => l.zOrder, (l) => l.createdAt, (l) => l.id);
+        final rank = _creationRank(mine, (l) => l.createdAt, (l) => l.id);
+        final rows = _stacked(
+          mine,
+          (l) => l.zOrder,
+          (l) => l.createdAt,
+          (l) => l.id,
+        );
         return [
-          for (final r in rows) _freeLineSummary(r, layer.id, rank[r.id]!, freeLinePoints),
+          for (final r in rows)
+            _freeLineSummary(r, layer.id, rank[r.id]!, freeLinePoints),
         ];
       case 'freearea':
         final mine = freeAreas.where((a) => a.layerId == layer.id);
-          final rank = _creationRank(mine, (a) => a.createdAt, (a) => a.id);
-          final rows =
-              _stacked(mine, (a) => a.zOrder, (a) => a.createdAt, (a) => a.id);
+        final rank = _creationRank(mine, (a) => a.createdAt, (a) => a.id);
+        final rows = _stacked(
+          mine,
+          (a) => a.zOrder,
+          (a) => a.createdAt,
+          (a) => a.id,
+        );
         return [
-          for (final r in rows) _freeAreaSummary(r, layer.id, rank[r.id]!, freeAreaPoints),
+          for (final r in rows)
+            _freeAreaSummary(r, layer.id, rank[r.id]!, freeAreaPoints),
         ];
       case 'height':
         final mine = heightRegions.where((r) => r.layerId == layer.id);
-          final rank = _creationRank(mine, (r) => r.createdAt, (r) => r.id);
-          final rows =
-              _stacked(mine, (r) => r.zOrder, (r) => r.createdAt, (r) => r.id);
-        return [
-          for (final r in rows) _heightSummary(r, layer.id, rank[r.id]!),
-        ];
+        final rank = _creationRank(mine, (r) => r.createdAt, (r) => r.id);
+        final rows = _stacked(
+          mine,
+          (r) => r.zOrder,
+          (r) => r.createdAt,
+          (r) => r.id,
+        );
+        return [for (final r in rows) _heightSummary(r, layer.id, rank[r.id]!)];
       case 'poi':
         final mine = poiSets.where((s) => s.layerId == layer.id);
-          final rank = _creationRank(mine, (s) => s.createdAt, (s) => s.id);
-          final rows =
-              _stacked(mine, (s) => s.zOrder, (s) => s.createdAt, (s) => s.id);
+        final rank = _creationRank(mine, (s) => s.createdAt, (s) => s.id);
+        final rows = _stacked(
+          mine,
+          (s) => s.zOrder,
+          (s) => s.createdAt,
+          (s) => s.id,
+        );
         return [
-          for (final r in rows) _poiSetSummary(r, layer.id, rank[r.id]!, poiPoints),
+          for (final r in rows)
+            _poiSetSummary(r, layer.id, rank[r.id]!, poiPoints),
         ];
       case 'borders':
         // The imports are bookkeeping; the *areas* are what you came to look at,
@@ -474,8 +495,9 @@ ObjectSummary _freeLineSummary(
   List<FreeLinePoint> allPoints,
 ) {
   final pts = [
-    for (final p in (allPoints.where((p) => p.freeLineId == l.id).toList()
-      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder))))
+    for (final p
+        in (allPoints.where((p) => p.freeLineId == l.id).toList()
+          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder))))
       if (_finite(p.lat, p.lng)) LatLng(p.lat, p.lng),
   ];
   final LatLng center;
@@ -521,8 +543,9 @@ ObjectSummary _freeAreaSummary(
   List<FreeAreaPoint> allPoints,
 ) {
   final pts = [
-    for (final p in (allPoints.where((p) => p.freeAreaId == a.id).toList()
-      ..sort((x, y) => x.sortOrder.compareTo(y.sortOrder))))
+    for (final p
+        in (allPoints.where((p) => p.freeAreaId == a.id).toList()
+          ..sort((x, y) => x.sortOrder.compareTo(y.sortOrder))))
       if (_finite(p.lat, p.lng)) LatLng(p.lat, p.lng),
   ];
   final center = _bboxCenter(pts) ?? const LatLng(0, 0);
@@ -582,9 +605,15 @@ int _byName(BorderArea a, BorderArea b) =>
 ObjectSummary _borderAreaSummary(BorderArea a, String layerId, int index) {
   final center = LatLng((a.south + a.north) / 2, (a.west + a.east) / 2);
   final width = geoDistance.as(
-      LengthUnit.Meter, LatLng(a.south, a.west), LatLng(a.south, a.east));
+    LengthUnit.Meter,
+    LatLng(a.south, a.west),
+    LatLng(a.south, a.east),
+  );
   final height = geoDistance.as(
-      LengthUnit.Meter, LatLng(a.south, a.west), LatLng(a.north, a.west));
+    LengthUnit.Meter,
+    LatLng(a.south, a.west),
+    LatLng(a.north, a.west),
+  );
   return ObjectSummary(
     ref: ObjectRef(kind: ObjectKind.borderArea, id: a.id, layerId: layerId),
     colorArgb: a.colorArgb,
@@ -606,8 +635,18 @@ ObjectSummary _borderAreaSummary(BorderArea a, String layerId, int index) {
 }
 
 const List<String> _months = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
 ];
 
 String _shortDate(DateTime d) => '${d.day} ${_months[d.month - 1]}';
@@ -626,16 +665,13 @@ ObjectSummary _poiSetSummary(
     final box = s.bbox!;
     final sw = LatLng(box[0], box[1]);
     final ne = LatLng(box[2], box[3]);
-    final width =
-        geoDistance.as(LengthUnit.Meter, sw, LatLng(box[0], box[3]));
-    final height =
-        geoDistance.as(LengthUnit.Meter, sw, LatLng(box[2], box[1]));
+    final width = geoDistance.as(LengthUnit.Meter, sw, LatLng(box[0], box[3]));
+    final height = geoDistance.as(LengthUnit.Meter, sw, LatLng(box[2], box[1]));
     final size = '${formatMeters(width)} × ${formatMeters(height)}';
     // Which types were asked for is part of what this row *is*: a set
     // holding only trains looks identical to a failed bus import otherwise.
     final partial = s.modeMask & transitAllModesMask != transitAllModesMask;
-    final types =
-        partial ? transitModeLabels(s.modeMask).toLowerCase() : null;
+    final types = partial ? transitModeLabels(s.modeMask).toLowerCase() : null;
     return ObjectSummary(
       ref: ref,
       colorArgb: s.colorArgb,
@@ -647,7 +683,10 @@ ObjectSummary _poiSetSummary(
         if (s.isPending) ?s.lastError else _plural(count, 'station'),
         ?types,
         size,
-        if (s.isPending) 'tap to try again' else 'imported ${_shortDate(s.fetchedAt!)}',
+        if (s.isPending)
+          'tap to try again'
+        else
+          'imported ${_shortDate(s.fetchedAt!)}',
       ].join(' · '),
       center: center,
       // An import is a snapshot with no refresh path, so framing it means

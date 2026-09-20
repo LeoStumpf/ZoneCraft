@@ -129,10 +129,10 @@ class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
       );
     } on HeightGenException catch (e) {
       _snack(e.message);
-    // The failure we can explain is typed and handled above. This is the backstop
-    // that puts everything else in front of the user instead of dropping it into
-    // an unhandled async error.
-    // ignore: avoid_catches_without_on_clauses
+      // The failure we can explain is typed and handled above. This is the backstop
+      // that puts everything else in front of the user instead of dropping it into
+      // an unhandled async error.
+      // ignore: avoid_catches_without_on_clauses
     } catch (e) {
       _snack('Generation failed: $e');
     } finally {
@@ -162,7 +162,9 @@ class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
     final armed = ref.watch(heightPlacementProvider);
     final r = widget.region;
     final id = r.id;
-    final heightLayers = widget.layers.where((l) => layerHolds(l, kHeight)).toList();
+    final heightLayers = widget.layers
+        .where((l) => layerHolds(l, kHeight))
+        .toList();
     final generated = r.generatedAt != null;
 
     return EditorSheet(
@@ -229,11 +231,14 @@ class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
                 onChanged: (s) {
                   final ll = parseLatLng(s);
                   if (ll != null) {
-                    logAsyncFailure(_repo.updateHeightRegion(
+                    logAsyncFailure(
+                      _repo.updateHeightRegion(
                         id,
                         centerLat: ll.latitude,
                         centerLng: ll.longitude,
-                      ), 'Moving the area');
+                      ),
+                      'Moving the area',
+                    );
                   }
                 },
               ),

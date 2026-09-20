@@ -76,7 +76,8 @@ class _GoToPlaceDialogState extends State<_GoToPlaceDialog> {
     setState(() {
       _searching = false;
       if (res == null) {
-        _error = 'Search failed — offline, or the geocoder is busy. '
+        _error =
+            'Search failed — offline, or the geocoder is busy. '
             'Try again shortly.';
       } else {
         // Everything is navigable, shape or no shape.
@@ -87,9 +88,10 @@ class _GoToPlaceDialogState extends State<_GoToPlaceDialog> {
   }
 
   String _subtitle(PlaceResult r) {
-    final kind = [r.category, r.type]
-        .where((s) => s != null && s.isNotEmpty)
-        .join(' · ');
+    final kind = [
+      r.category,
+      r.type,
+    ].where((s) => s != null && s.isNotEmpty).join(' · ');
     return kind.isEmpty ? r.displayName : '$kind · ${r.displayName}';
   }
 

@@ -14,7 +14,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-
 /// Generates the SQL that turns SQLite itself into an undo journal.
 ///
 /// Every write to a journalled table fires a trigger that appends the statement
@@ -98,17 +97,17 @@ String _quote(String row, String column) => 'quote($row.${_id(column)})';
 
 /// The statements that create the journal itself. Run before [undoTriggerSql].
 List<String> undoSetupSql() => [
-      'CREATE TEMP TABLE IF NOT EXISTS $undoCtlTable('
-          'recording INTEGER NOT NULL)',
-      'DELETE FROM $undoCtlTable',
-      'INSERT INTO $undoCtlTable(recording) VALUES (0)',
-      'CREATE TEMP TABLE IF NOT EXISTS $undoLogTable('
-          'seq INTEGER PRIMARY KEY AUTOINCREMENT, '
-          'tbl TEXT NOT NULL, '
-          'op TEXT NOT NULL, '
-          'stmt TEXT NOT NULL)',
-      'DELETE FROM $undoLogTable',
-    ];
+  'CREATE TEMP TABLE IF NOT EXISTS $undoCtlTable('
+      'recording INTEGER NOT NULL)',
+  'DELETE FROM $undoCtlTable',
+  'INSERT INTO $undoCtlTable(recording) VALUES (0)',
+  'CREATE TEMP TABLE IF NOT EXISTS $undoLogTable('
+      'seq INTEGER PRIMARY KEY AUTOINCREMENT, '
+      'tbl TEXT NOT NULL, '
+      'op TEXT NOT NULL, '
+      'stmt TEXT NOT NULL)',
+  'DELETE FROM $undoLogTable',
+];
 
 /// The three triggers for one table, each preceded by a `DROP … IF EXISTS` so
 /// installing twice on one connection is a no-op rather than an error.
@@ -136,14 +135,16 @@ List<String> undoTriggerSql(TableInfo<dynamic, dynamic> table) {
       _lit('DELETE FROM ${_id(name)}'),
       _piece(whereOn('new'), 'new', pk),
     ].join(' || ');
-    out.addAll(_trigger(
-      'undo_${name}_ai',
-      'AFTER INSERT ON ${_id(name)}',
-      _gate(),
-      name,
-      'insert',
-      undoInsert,
-    ));
+    out.addAll(
+      _trigger(
+        'undo_${name}_ai',
+        'AFTER INSERT ON ${_id(name)}',
+        _gate(),
+        name,
+        'insert',
+        undoInsert,
+      ),
+    );
 
     // DELETE -> put the whole row back, with its original id, so every
     // reference to it (a selection, an FK child restored next) still resolves.
@@ -153,20 +154,24 @@ List<String> undoTriggerSql(TableInfo<dynamic, dynamic> table) {
       values.add(_quote('old', all[i]));
     }
     final undoDelete = [
-      _lit('INSERT INTO ${_id(name)}'
-          '(${all.map(_id).join(',')}) VALUES('),
+      _lit(
+        'INSERT INTO ${_id(name)}'
+        '(${all.map(_id).join(',')}) VALUES(',
+      ),
       ...values,
       _lit(')'),
     ].join(' || ');
-    out.addAll(_trigger(
-      'undo_${name}_bd',
-      // BEFORE, because AFTER cannot read the row it is asked to describe.
-      'BEFORE DELETE ON ${_id(name)}',
-      _gate(),
-      name,
-      'delete',
-      undoDelete,
-    ));
+    out.addAll(
+      _trigger(
+        'undo_${name}_bd',
+        // BEFORE, because AFTER cannot read the row it is asked to describe.
+        'BEFORE DELETE ON ${_id(name)}',
+        _gate(),
+        name,
+        'delete',
+        undoDelete,
+      ),
+    );
   }
 
   // UPDATE -> restore only the columns that actually changed.
@@ -194,25 +199,29 @@ List<String> undoTriggerSql(TableInfo<dynamic, dynamic> table) {
     _quote('old', pk.first),
   ];
   for (final c in tracked) {
-    sets.add('CASE WHEN new.${_id(c)} IS NOT old.${_id(c)} '
-        "THEN ${_lit(', ${_id(c)}=')} || ${_quote('old', c)} "
-        "ELSE '' END");
+    sets.add(
+      'CASE WHEN new.${_id(c)} IS NOT old.${_id(c)} '
+      "THEN ${_lit(', ${_id(c)}=')} || ${_quote('old', c)} "
+      "ELSE '' END",
+    );
   }
   sets.add(_piece(whereOn('old'), 'old', pk));
 
-  out.addAll(_trigger(
-    'undo_${name}_au',
-    'AFTER UPDATE${settings ? ' OF ${undoSettingsColumns.map(_id).join(',')}' : ''} '
-        'ON ${_id(name)}',
-    // The gate *and* the change test. Drift writes a column whether or not its
-    // value differs, and a slider re-writes the same number constantly — without
-    // this, a no-op write records `UPDATE t SET "id"=1 WHERE "id"=1`: a
-    // statement that does nothing except open an undo step.
-    '${_gate()} AND ($changed)',
-    name,
-    'update',
-    sets.join(' || '),
-  ));
+  out.addAll(
+    _trigger(
+      'undo_${name}_au',
+      'AFTER UPDATE${settings ? ' OF ${undoSettingsColumns.map(_id).join(',')}' : ''} '
+          'ON ${_id(name)}',
+      // The gate *and* the change test. Drift writes a column whether or not its
+      // value differs, and a slider re-writes the same number constantly — without
+      // this, a no-op write records `UPDATE t SET "id"=1 WHERE "id"=1`: a
+      // statement that does nothing except open an undo step.
+      '${_gate()} AND ($changed)',
+      name,
+      'update',
+      sets.join(' || '),
+    ),
+  );
   return out;
 }
 
@@ -245,10 +254,9 @@ List<String> _trigger(
   String table,
   String op,
   String expression,
-) =>
-    [
-      'DROP TRIGGER IF EXISTS ${_id(triggerName)}',
-      'CREATE TEMP TRIGGER ${_id(triggerName)} $on WHEN $when '
-          'BEGIN INSERT INTO $undoLogTable(tbl, op, stmt) '
-          'VALUES(${_lit(table)}, ${_lit(op)}, $expression); END',
-    ];
+) => [
+  'DROP TRIGGER IF EXISTS ${_id(triggerName)}',
+  'CREATE TEMP TRIGGER ${_id(triggerName)} $on WHEN $when '
+      'BEGIN INSERT INTO $undoLogTable(tbl, op, stmt) '
+      'VALUES(${_lit(table)}, ${_lit(op)}, $expression); END',
+];

@@ -34,7 +34,6 @@ library;
 
 import 'package:flutter/material.dart';
 
-
 /// Where a control sits, which is most of how someone finds it again.
 enum MapControlArea {
   /// The row across the top: the drawer, undo/redo, the active layer.
@@ -114,7 +113,8 @@ const List<MapControl> mapControls = [
     area: MapControlArea.top,
     icon: Icons.undo,
     name: 'Undo and redo',
-    what: 'Takes back the last change, or puts it back. Each names the step '
+    what:
+        'Takes back the last change, or puts it back. Each names the step '
         'it would undo.',
     sometimes: 'Hidden while the tools are hidden.',
   ),
@@ -123,7 +123,8 @@ const List<MapControl> mapControls = [
     area: MapControlArea.top,
     icon: Icons.layers_outlined,
     name: 'The active layer',
-    what: 'Names the layer everything else acts on. Tap it for that layer’s '
+    what:
+        'Names the layer everything else acts on. Tap it for that layer’s '
         'settings, or to switch to another.',
     sometimes: 'Hidden while the tools are hidden.',
   ),
@@ -141,7 +142,8 @@ const List<MapControl> mapControls = [
     icon: Icons.download_for_offline_outlined,
     name: 'Download this area',
     what: 'Stores the map around you for use with no reception.',
-    sometimes: 'Only in a build pointed at a map provider whose terms allow '
+    sometimes:
+        'Only in a build pointed at a map provider whose terms allow '
         'downloading ahead. Never on OpenStreetMap’s own servers.',
   ),
   MapControl(
@@ -149,7 +151,8 @@ const List<MapControl> mapControls = [
     area: MapControlArea.tools,
     icon: Icons.search,
     name: 'Go to place',
-    what: 'Type a town, street or landmark and the map moves there. It '
+    what:
+        'Type a town, street or landmark and the map moves there. It '
         'searches OpenStreetMap\u2019s own place index and changes nothing '
         'on your map.',
   ),
@@ -158,7 +161,8 @@ const List<MapControl> mapControls = [
     area: MapControlArea.tools,
     icon: Icons.my_location,
     name: 'Locate me',
-    what: 'Finds where you are and marks it, with the ground height there. '
+    what:
+        'Finds where you are and marks it, with the ground height there. '
         'Press again to take the mark away.',
   ),
   MapControl(
@@ -180,7 +184,8 @@ const List<MapControl> mapControls = [
     area: MapControlArea.tools,
     icon: Icons.straighten,
     name: 'Measure distance',
-    what: 'Tap two points afterwards for the distance and bearing between '
+    what:
+        'Tap two points afterwards for the distance and bearing between '
         'them.',
   ),
   MapControl(
@@ -188,7 +193,8 @@ const List<MapControl> mapControls = [
     area: MapControlArea.tools,
     icon: Icons.gesture,
     name: 'Draw with your finger',
-    what: 'Trace a line or an area instead of tapping point by point. '
+    what:
+        'Trace a line or an area instead of tapping point by point. '
         'One-finger panning is off while this is on.',
     sometimes: 'Only on a layer that holds lines or areas.',
   ),
@@ -197,7 +203,8 @@ const List<MapControl> mapControls = [
     area: MapControlArea.bottom,
     icon: Icons.edit_outlined,
     name: 'Select by tapping',
-    what: 'Turns the map into a chooser: a tap opens whatever you tapped. '
+    what:
+        'Turns the map into a chooser: a tap opens whatever you tapped. '
         'Reaches anything you can see, on any visible layer.',
   ),
   MapControl(
@@ -205,7 +212,8 @@ const List<MapControl> mapControls = [
     area: MapControlArea.bottom,
     icon: Icons.select_all,
     name: 'The layer’s own switch',
-    what: 'Changes with the layer — see below for the three it can be. Lit '
+    what:
+        'Changes with the layer — see below for the three it can be. Lit '
         'while the switch is on.',
     sometimes: 'Only where the layer has one.',
   ),
@@ -214,7 +222,8 @@ const List<MapControl> mapControls = [
     area: MapControlArea.bottom,
     icon: Icons.travel_explore,
     name: 'Find a place by name',
-    what: 'Searches OpenStreetMap for a city, river or coastline and imports '
+    what:
+        'Searches OpenStreetMap for a city, river or coastline and imports '
         'its outline.',
     sometimes: 'Only on a layer that holds lines or areas.',
   ),
@@ -223,7 +232,8 @@ const List<MapControl> mapControls = [
     area: MapControlArea.bottom,
     icon: Icons.cloud_download_outlined,
     name: 'Import what is nearby',
-    what: 'Fetches places or transit stops from OpenStreetMap into this layer '
+    what:
+        'Fetches places or transit stops from OpenStreetMap into this layer '
         'and keeps them on the device.',
     sometimes: 'Only on layers that can hold imported points.',
   ),
@@ -232,7 +242,8 @@ const List<MapControl> mapControls = [
     area: MapControlArea.bottom,
     icon: Icons.add,
     name: 'Add',
-    what: 'Arms the map: the next tap places a new element where you point. '
+    what:
+        'Arms the map: the next tap places a new element where you point. '
         'Its icon shows which kind. Long-press to place one at the centre '
         'instead.',
   ),
@@ -241,7 +252,8 @@ const List<MapControl> mapControls = [
     area: MapControlArea.bottom,
     icon: Icons.unfold_less,
     name: 'Hide and show the tools',
-    what: 'Clears the screen down to the map: the column above it, the '
+    what:
+        'Clears the screen down to the map: the column above it, the '
         'undo buttons and the layer name all go, and come back.',
   ),
 ];

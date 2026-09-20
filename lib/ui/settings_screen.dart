@@ -64,9 +64,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     await _repo.resetHints();
     messenger
       ..clearSnackBars()
-      ..showSnackBar(
-        const SnackBar(content: Text('Tips will be shown again')),
-      );
+      ..showSnackBar(const SnackBar(content: Text('Tips will be shown again')));
   }
 
   @override
@@ -355,8 +353,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _TipsSection(
             enabled:
                 ref.watch(settingsProvider).asData?.value.hintsEnabled ?? true,
-            onEnabled: (v) =>
-                unawaited(_repo.updateHintsEnabled(enabled: v)),
+            onEnabled: (v) => unawaited(_repo.updateHintsEnabled(enabled: v)),
             onReset: () => unawaited(_resetTips()),
           ),
           const Divider(height: 48),
@@ -418,10 +415,10 @@ class _DataSourcesSection extends StatelessWidget {
   final void Function(ServiceOverride which, String? value) onSave;
 
   String? _valueOf(ServiceOverride which) => switch (which) {
-        ServiceOverride.tiles => settings?.tileUrlOverride,
-        ServiceOverride.overpass => settings?.overpassEndpointOverride,
-        ServiceOverride.nominatim => settings?.nominatimHostOverride,
-      };
+    ServiceOverride.tiles => settings?.tileUrlOverride,
+    ServiceOverride.overpass => settings?.overpassEndpointOverride,
+    ServiceOverride.nominatim => settings?.nominatimHostOverride,
+  };
 
   @override
   Widget build(BuildContext context) {

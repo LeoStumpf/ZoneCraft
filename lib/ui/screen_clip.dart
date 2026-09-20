@@ -113,8 +113,7 @@ List<Offset> _clipAxis(
 }) {
   if (poly.isEmpty) return poly;
   double coord(Offset p) => xAxis ? p.dx : p.dy;
-  bool inside(Offset p) =>
-      keepBelow ? coord(p) <= bound : coord(p) >= bound;
+  bool inside(Offset p) => keepBelow ? coord(p) <= bound : coord(p) >= bound;
   Offset cross(Offset a, Offset b) {
     // Only called when a/b straddle the line, so the denominator is non-zero.
     final t = (bound - coord(a)) / (coord(b) - coord(a));

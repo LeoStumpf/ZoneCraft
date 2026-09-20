@@ -47,11 +47,23 @@ int terrariumTileY(double lat, int z) =>
 /// PNG [bytes] (tile [tileX]/[tileY] at zoom [z]) that covers it; null if the
 /// bytes don't decode. Used by the map's "measure elevation" probe.
 double? elevationFromTilePng(
-    Uint8List bytes, int z, int tileX, int tileY, double lat, double lng) {
+  Uint8List bytes,
+  int z,
+  int tileX,
+  int tileY,
+  double lat,
+  double lng,
+) {
   final im = img.decodePng(bytes);
   if (im == null) return null;
-  final px = ((_lngToTileX(lng, z) - tileX) * 256).floor().clamp(0, im.width - 1);
-  final py = ((_latToTileY(lat, z) - tileY) * 256).floor().clamp(0, im.height - 1);
+  final px = ((_lngToTileX(lng, z) - tileX) * 256).floor().clamp(
+    0,
+    im.width - 1,
+  );
+  final py = ((_latToTileY(lat, z) - tileY) * 256).floor().clamp(
+    0,
+    im.height - 1,
+  );
   final p = im.getPixel(px, py);
   return p.r * 256 + p.g + p.b / 256 - 32768;
 }
@@ -131,10 +143,10 @@ List<List<double>> buildHeightRings(HeightGenRequest req) {
   final b = _circleBounds(req.centerLat, req.centerLng, req.radiusMeters);
 
   // 2. Grid resolution ≈ tile-pixel ground size over the bbox, capped.
-  final pxAcross =
-      ((_lngToTileX(b.east, z) - _lngToTileX(b.west, z)) * 256).abs();
-  final pxDown =
-      ((_latToTileY(b.south, z) - _latToTileY(b.north, z)) * 256).abs();
+  final pxAcross = ((_lngToTileX(b.east, z) - _lngToTileX(b.west, z)) * 256)
+      .abs();
+  final pxDown = ((_latToTileY(b.south, z) - _latToTileY(b.north, z)) * 256)
+      .abs();
   final gridW = pxAcross.round().clamp(_minGrid, _maxGrid);
   final gridH = pxDown.round().clamp(_minGrid, _maxGrid);
 
@@ -193,14 +205,34 @@ List<List<double>> buildHeightRings(HeightGenRequest req) {
       if (c == 0 || c == 15) continue;
 
       // Edge crossing points (only computed when used).
-      _Pt top() => interp(iso, tl, tr, _Pt(ai.toDouble(), aj.toDouble()),
-          _Pt(ai + 1.0, aj.toDouble()));
-      _Pt right() => interp(iso, tr, br, _Pt(ai + 1.0, aj.toDouble()),
-          _Pt(ai + 1.0, aj + 1.0));
-      _Pt bottom() => interp(iso, bl, br, _Pt(ai.toDouble(), aj + 1.0),
-          _Pt(ai + 1.0, aj + 1.0));
-      _Pt left() => interp(iso, tl, bl, _Pt(ai.toDouble(), aj.toDouble()),
-          _Pt(ai.toDouble(), aj + 1.0));
+      _Pt top() => interp(
+        iso,
+        tl,
+        tr,
+        _Pt(ai.toDouble(), aj.toDouble()),
+        _Pt(ai + 1.0, aj.toDouble()),
+      );
+      _Pt right() => interp(
+        iso,
+        tr,
+        br,
+        _Pt(ai + 1.0, aj.toDouble()),
+        _Pt(ai + 1.0, aj + 1.0),
+      );
+      _Pt bottom() => interp(
+        iso,
+        bl,
+        br,
+        _Pt(ai.toDouble(), aj + 1.0),
+        _Pt(ai + 1.0, aj + 1.0),
+      );
+      _Pt left() => interp(
+        iso,
+        tl,
+        bl,
+        _Pt(ai.toDouble(), aj.toDouble()),
+        _Pt(ai.toDouble(), aj + 1.0),
+      );
 
       void add(_Pt a, _Pt b) => segs.add(_Seg(a, b));
       final centerInside = (tl + tr + br + bl) / 4 >= iso;
@@ -261,10 +293,15 @@ List<List<double>> buildHeightRings(HeightGenRequest req) {
     final clipped = _clipToConvex(ring, clipPoly, center);
     // Thin the marching-squares stair-steps (many collinear points) before
     // storing; runs in this isolate so the cost stays off the UI thread.
-    final simplified =
-        simplifyRing(clipped, kHeightSimplifyMeters, minPoints: 4);
+    final simplified = simplifyRing(
+      clipped,
+      kHeightSimplifyMeters,
+      minPoints: 4,
+    );
     if (simplified.length < 3) continue;
-    out.add([for (final p in simplified) ...[p.latitude, p.longitude]]);
+    out.add([
+      for (final p in simplified) ...[p.latitude, p.longitude],
+    ]);
   }
   return out;
 }
@@ -333,8 +370,12 @@ _Bounds _circleBounds(double lat, double lng, double radiusMeters) {
 
 const Distance _dist = Distance(calculator: Haversine());
 
-List<LatLng> _geoCircle(double lat, double lng, double radiusMeters,
-    {int points = 64}) {
+List<LatLng> _geoCircle(
+  double lat,
+  double lng,
+  double radiusMeters, {
+  int points = 64,
+}) {
   final center = LatLng(lat, lng);
   final ring = <LatLng>[];
   for (var i = 0; i < points; i++) {
@@ -360,7 +401,10 @@ double _latToTileY(double lat, int z) {
 /// the result is independent of [clip]'s winding. Coordinates are treated as
 /// planar (lng = x, lat = y), fine at the small scales involved.
 List<LatLng> _clipToConvex(
-    List<LatLng> subject, List<LatLng> clip, LatLng inside) {
+  List<LatLng> subject,
+  List<LatLng> clip,
+  LatLng inside,
+) {
   var output = subject;
   for (var i = 0; i < clip.length; i++) {
     if (output.isEmpty) break;

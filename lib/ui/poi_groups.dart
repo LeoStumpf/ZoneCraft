@@ -131,7 +131,8 @@ List<PoiTypeGroup> poiTypeGroups({
           icon: poiSetIcon(s),
           setIds: {s.id},
           points: _sorted([
-            for (final p in pts) _pointSummary(p, layer.id, label, 'Unnamed POI'),
+            for (final p in pts)
+              _pointSummary(p, layer.id, label, 'Unnamed POI'),
           ]),
         ),
       );

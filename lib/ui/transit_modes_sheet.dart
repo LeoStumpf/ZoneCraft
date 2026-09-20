@@ -78,8 +78,10 @@ class _TransitModesSheet extends ConsumerWidget {
                   style: theme.textTheme.titleMedium,
                 ),
               ),
-              Text('${tally.shown} / ${tally.total} shown',
-                  style: theme.textTheme.bodySmall),
+              Text(
+                '${tally.shown} / ${tally.total} shown',
+                style: theme.textTheme.bodySmall,
+              ),
             ],
           ),
         ),
@@ -157,8 +159,10 @@ class TransitModeFilter extends ConsumerWidget {
                 ),
                 const SizedBox(width: 8),
                 Expanded(child: Text(m.label)),
-                Text('${tally.counts[m.key]}',
-                    style: theme.textTheme.bodySmall),
+                Text(
+                  '${tally.counts[m.key]}',
+                  style: theme.textTheme.bodySmall,
+                ),
               ],
             ),
             subtitle: Text(m.blurb),
@@ -167,10 +171,11 @@ class TransitModeFilter extends ConsumerWidget {
           ListTile(
             leading: const Icon(Icons.help_outline),
             title: const Text('No type given'),
-            subtitle:
-                const Text('Shown whenever anything is — never orphaned'),
-            trailing:
-                Text('${tally.untyped}', style: theme.textTheme.bodySmall),
+            subtitle: const Text('Shown whenever anything is — never orphaned'),
+            trailing: Text(
+              '${tally.untyped}',
+              style: theme.textTheme.bodySmall,
+            ),
           ),
       ],
     );
@@ -206,10 +211,7 @@ class TransitModeShortcuts extends ConsumerWidget {
             onPressed: () => write(transitAllModesMask),
             child: const Text('Show all'),
           ),
-          TextButton(
-            onPressed: () => write(0),
-            child: const Text('Hide all'),
-          ),
+          TextButton(onPressed: () => write(0), child: const Text('Hide all')),
         ],
       ),
     );
@@ -255,8 +257,9 @@ TransitTally transitTally({
       .where((s) => s.layerId == layerId && s.isStationImport)
       .toList();
   final setIds = {for (final s in mine) s.id};
-  final stations =
-      allStations.where((s) => setIds.contains(s.poiSetId)).toList();
+  final stations = allStations
+      .where((s) => setIds.contains(s.poiSetId))
+      .toList();
 
   final counts = <String, int>{};
   var untyped = 0;
