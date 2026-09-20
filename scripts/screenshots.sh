@@ -196,8 +196,14 @@ PY
   "$ADB" -s "$serial" shell cmd uimode night no >/dev/null 2>&1 || true
   enter_demo_mode "$serial"
 
+  # Through build.sh, not `flutter build` directly, so the screenshots are
+  # taken against the tile source the shipped app actually uses. Built bare,
+  # they fell back to tile.openstreetmap.org and the attribution pill read
+  # "© OpenStreetMap contributors" while the release build reads
+  # "… · Powered by Geoapify" — a store listing showing a line the app never
+  # shows. build.sh owns the dart-defines; this must not keep its own copy.
   note "building + installing a debug APK (run-as needs it debuggable)"
-  flutter build apk --debug >/dev/null
+  ./scripts/build.sh --skip-checks >/dev/null
   "$ADB" -s "$serial" install -r build/app/outputs/flutter-apk/app-debug.apk >/dev/null
 
   note "generating the deterministic seed database"
