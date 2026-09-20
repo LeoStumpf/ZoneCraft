@@ -18,13 +18,14 @@ All dependencies are permissive. The direct runtime dependencies:
 |---|---|
 | `flutter`, `flutter_map`, `flutter_map_dragmarker`, `http`, `share_plus`, `path_provider`, `file_selector`, `url_launcher`, `meta` | BSD-3-Clause |
 | `latlong2`, `app_links` | Apache-2.0 |
-| `drift`, `drift_flutter`, `flutter_riverpod`, `uuid`, `flutter_colorpicker`, `geolocator`, `sqlite3_flutter_libs`, `cupertino_icons`, `xml`, `archive`, `image` | MIT |
+| `drift`, `drift_flutter`, `sqlite3`, `flutter_riverpod`, `uuid`, `flutter_colorpicker`, `geolocator`, `cupertino_icons`, `xml`, `archive`, `image` | MIT |
 
 Build/dev-only tools (`build_runner`, `drift_dev`, `flutter_lints`, `flutter_launcher_icons`,
 `flutter_native_splash`) and all transitive dependencies are likewise permissive — MIT,
 BSD-3-Clause or Apache-2.0, plus three MPL-2.0 packages (`dbus`, `gsettings`, `geoclue`) that
-are Linux-desktop-only and not shipped in the Android/iOS app. `sqlite3_flutter_libs` bundles
-SQLite, which is public domain.
+are Linux-desktop-only and not shipped in the Android/iOS app. The `sqlite3` package bundles
+**SQLite**, which is public domain — the attribution used to name
+`sqlite3_flutter_libs`, which no longer bundles anything and is no longer a dependency.
 
 ## Map data, tiles & services
 
