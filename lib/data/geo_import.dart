@@ -236,7 +236,33 @@ List<ImportedFeature> parseKml(String text) {
   return out;
 }
 
+/// The most a KMZ may expand to.
+///
+/// A zip's whole point is that a small file becomes a large one, so the byte
+/// cap the import already applies (`confirmLargeImport`, on what the user
+/// picked or was sent) says nothing about what comes out: a few hundred
+/// kilobytes of zip can declare gigabytes of KML. That is the classic zip
+/// bomb, and it does not need an attacker — a shared file the user never
+/// chose reaches this through the app's `ACTION_SEND` filter.
+///
+/// 64 MB is far past any real KMZ (a dense city export is single-digit MB) and
+/// far short of what would exhaust the heap while an XML tree is built beside
+/// it.
+const int kMaxKmzUncompressedBytes = 64 * 1024 * 1024;
+
 /// Unzips a KMZ archive and parses the first `.kml` entry it contains.
+///
+/// Refuses anything that *declares* more than [kMaxKmzUncompressedBytes], and
+/// checks again after decoding. Be precise about what each check buys:
+///
+/// * The declared-size check is the one that matters. A zip stores each
+///   entry's uncompressed size in its header, and a bomb declares it honestly
+///   — that is how it works. Reading it costs nothing and refuses before a
+///   single byte is inflated.
+/// * The post-decode check catches a header that *lied*. By then the memory is
+///   already spent, so it is not a defence against exhaustion — what it
+///   prevents is handing a wildly oversized string to the XML parser, which is
+///   where a merely large file turns into an unresponsive app.
 List<ImportedFeature> parseKmz(Uint8List bytes) {
   final Archive archive;
   try {
@@ -247,6 +273,16 @@ List<ImportedFeature> parseKmz(Uint8List bytes) {
   } catch (_) {
     return const [];
   }
+
+  // The sum, not just the entry we want: an archive that declares 40 GB across
+  // a thousand entries is not one to go looking through.
+  var declared = 0;
+  for (final f in archive.files) {
+    if (!f.isFile) continue;
+    declared += f.size;
+    if (declared > kMaxKmzUncompressedBytes) return const [];
+  }
+
   // Prefer doc.kml, else the first .kml entry.
   ArchiveFile? kml;
   for (final f in archive.files) {
@@ -257,7 +293,11 @@ List<ImportedFeature> parseKmz(Uint8List bytes) {
     }
   }
   if (kml == null) return const [];
-  return parseKml(utf8.decode(kml.content as List<int>, allowMalformed: true));
+  if (kml.size > kMaxKmzUncompressedBytes) return const [];
+
+  final content = kml.content as List<int>;
+  if (content.length > kMaxKmzUncompressedBytes) return const [];
+  return parseKml(utf8.decode(content, allowMalformed: true));
 }
 
 /// Parses a KML `<coordinates>` element: whitespace-separated `lng,lat[,alt]`

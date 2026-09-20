@@ -2283,16 +2283,45 @@ class Repository {
 
   // --- Tile cache -----------------------------------------------------------
 
-  /// Returns the cached bytes for [url] (bumping its last-used time so eviction
-  /// keeps it), or null if the tile isn't cached.
+  /// How stale a tile's `lastUsedAt` has to be before serving it writes a new
+  /// one.
+  ///
+  /// This is the whole fix for a read that wrote. `getTile` used to `UPDATE`
+  /// on **every** tile it served, so a pan across the map — dozens of tiles a
+  /// second, most of them re-served seconds apart — became dozens of write
+  /// transactions a second, all on the single sqlite3 connection the whole app
+  /// shares (`database.dart` explains why there is only one), competing with
+  /// the queries that were drawing the map.
+  ///
+  /// Five minutes, and the number was argued down from an hour for a reason
+  /// worth keeping. The write is what makes a tile survive eviction, so the
+  /// interval is exactly how stale the recency order is allowed to be. At an
+  /// hour, a user who looks at one city, then another, then comes back to the
+  /// first is served those tiles from cache **without** re-stamping them — so
+  /// when the cap is hit they are evicted as "old" while on screen, and
+  /// re-downloaded. That is precisely the cost the cache exists to avoid.
+  ///
+  /// Five minutes keeps recency accurate enough that whatever is on screen is
+  /// never the oldest thing in the table, and still collapses the case the
+  /// amplification actually came from: panning back and forth over an area
+  /// already cached, where every tile load is a hit and used to be a write.
+  static const int tileTouchIntervalMs = 5 * 60 * 1000;
+
+  /// Returns the cached bytes for [url], or null if the tile isn't cached.
+  ///
+  /// Bumps the tile's last-used time so eviction keeps it — but at most once
+  /// per [tileTouchIntervalMs]. See there for why.
   Future<Uint8List?> getTile(String url) async {
     final row = await (_db.select(_db.tileCache)
           ..where((t) => t.url.equals(url)))
         .getSingleOrNull();
     if (row == null) return null;
-    await (_db.update(_db.tileCache)..where((t) => t.url.equals(url))).write(
-      TileCacheCompanion(lastUsedAt: Value(DateTime.now().millisecondsSinceEpoch)),
-    );
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - row.lastUsedAt >= tileTouchIntervalMs) {
+      await (_db.update(_db.tileCache)..where((t) => t.url.equals(url))).write(
+        TileCacheCompanion(lastUsedAt: Value(now)),
+      );
+    }
     return row.bytes;
   }
 
@@ -2329,23 +2358,66 @@ class Repository {
     return row.read(sum) ?? 0;
   }
 
+  /// The eviction currently running, if any. See [evictTilesDownTo].
+  Future<void>? _evicting;
+
   /// Evicts least-recently-used tiles until the cache total is at or below
   /// [maxBytes]. Cheap no-op when already under the cap.
-  Future<void> evictTilesDownTo(int maxBytes) async {
-    var total = await tileCacheBytes();
-    if (total <= maxBytes) return;
-    // Walk oldest-first in batches, deleting until under the cap.
-    while (total > maxBytes) {
+  ///
+  /// **Coalesced**, because the caller is `CachedTileProvider`'s unawaited
+  /// write-back: one per tile stored, so a pan on a cold cache starts dozens
+  /// of these at once.
+  ///
+  /// Be accurate about what that fixes, because the audit note this answers
+  /// overstated it. Concurrent runs did **not** over-evict in practice: they
+  /// all read the same total, then all selected the same oldest rows, so the
+  /// redundant `DELETE ... WHERE url IN (...)` statements hit rows that were
+  /// already gone and did nothing. That is what "harmless and self-correcting"
+  /// meant, and it was right.
+  ///
+  /// What they did do is the same full `SUM(size_bytes)` scan and the same
+  /// delete, dozens of times over, on the single sqlite3 connection the whole
+  /// app shares — during a pan, which is when that connection is also trying
+  /// to draw the map. Callers arriving while a run is in flight now join it.
+  ///
+  /// The second change is the one that removes the *correctness* risk rather
+  /// than the waste: the loop re-reads the total each pass instead of
+  /// decrementing a number taken once at the start, so tiles written while an
+  /// eviction runs are counted, and it stops at the cap rather than past it.
+  ///
+  /// **A joined caller inherits the running call's [maxBytes].** That is safe
+  /// only because all three call sites pass the same
+  /// `CachedTileProvider.maxCacheBytes` — the tile cache has one cap, not one
+  /// per caller. A caller wanting a *stricter* cap would silently get the
+  /// looser one; if that ever becomes a real case, this needs to remember the
+  /// in-flight target and chain a second run rather than join.
+  Future<void> evictTilesDownTo(int maxBytes) {
+    return _evicting ??=
+        _evictTilesDownTo(maxBytes).whenComplete(() => _evicting = null);
+  }
+
+  Future<void> _evictTilesDownTo(int maxBytes) async {
+    // The total is re-read each pass rather than decremented locally: tiles
+    // are still being written while this runs, so a number taken once at the
+    // start is wrong by the end — in the direction that deletes too much.
+    while (true) {
+      final total = await tileCacheBytes();
+      if (total <= maxBytes) return;
+
+      // Oldest first, in batches, so a large eviction is not one enormous
+      // statement.
       final batch = await (_db.select(_db.tileCache)
             ..orderBy([(t) => OrderingTerm(expression: t.lastUsedAt)])
             ..limit(64))
           .get();
-      if (batch.isEmpty) break;
+      if (batch.isEmpty) return;
+
+      var running = total;
       final urls = <String>[];
       for (final row in batch) {
         urls.add(row.url);
-        total -= row.sizeBytes;
-        if (total <= maxBytes) break;
+        running -= row.sizeBytes;
+        if (running <= maxBytes) break;
       }
       await (_db.delete(_db.tileCache)..where((t) => t.url.isIn(urls))).go();
     }

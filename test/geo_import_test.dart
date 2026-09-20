@@ -95,6 +95,65 @@ void main() {
       expect(feats, hasLength(1));
       expect(feats.first.label, 'z');
     });
+
+    // A zip's whole point is that a small file becomes a large one, so the
+    // byte cap on what the user picked says nothing about what comes out —
+    // and this is reachable from a file another app shared in, which the user
+    // never chose at all.
+    test('an entry that declares more than the cap is refused', () {
+      // Valid KML, so that without the cap this parses and yields a feature —
+      // otherwise the test would pass for the wrong reason, on a payload that
+      // was simply not KML. The padding is a comment, which is legal XML and
+      // highly compressible: tiny zip in, enormous document out.
+      final huge = '<kml><!--${'a' * (kMaxKmzUncompressedBytes + 1024)}-->'
+          '<Placemark><name>bomb</name><LineString><coordinates>'
+          '1,2 3,4</coordinates></LineString></Placemark></kml>';
+      final archive = Archive()..addFile(ArchiveFile.string('doc.kml', huge));
+      final bytes = Uint8List.fromList(ZipEncoder().encode(archive));
+
+      // The bomb property: tiny in, enormous out.
+      expect(bytes.length, lessThan(kMaxKmzUncompressedBytes ~/ 100));
+      expect(parseKmz(bytes), isEmpty);
+    });
+
+    // The sum, not just the entry we want: an archive declaring 40 GB across a
+    // thousand entries is not one to go looking through.
+    test('many entries that add up past the cap are refused together', () {
+      final chunk = 'a' * (kMaxKmzUncompressedBytes ~/ 4);
+      final archive = Archive();
+      for (var i = 0; i < 8; i++) {
+        archive.addFile(ArchiveFile.string('pad$i.txt', chunk));
+      }
+      archive.addFile(ArchiveFile.string(
+        'doc.kml',
+        '<kml><Placemark><LineString><coordinates>1,2 3,4'
+            '</coordinates></LineString></Placemark></kml>',
+      ));
+      final bytes = Uint8List.fromList(ZipEncoder().encode(archive));
+
+      expect(parseKmz(bytes), isEmpty,
+          reason: 'no single entry is over the cap, but together they are');
+    });
+
+    test('an ordinary KMZ well under the cap still imports', () {
+      const kml = '''
+      <kml><Placemark><name>fine</name><LineString><coordinates>
+        1,2 3,4</coordinates></LineString></Placemark></kml>''';
+      final archive = Archive()
+        ..addFile(ArchiveFile.string('doc.kml', kml))
+        // A real KMZ carries icons and styles beside the KML; those count
+        // towards the sum and must not push a normal file over.
+        ..addFile(ArchiveFile.string('files/icon.png', 'x' * 4096));
+      final bytes = Uint8List.fromList(ZipEncoder().encode(archive));
+
+      final feats = parseKmz(bytes);
+      expect(feats, hasLength(1));
+      expect(feats.first.label, 'fine');
+    });
+
+    test('a file that is not a zip at all is empty, not a throw', () {
+      expect(parseKmz(Uint8List.fromList(utf8.encode('not a zip'))), isEmpty);
+    });
   });
 
   group('GPX', () {
