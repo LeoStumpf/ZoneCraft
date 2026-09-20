@@ -59,17 +59,10 @@ import '../geo/tiles.dart';
 import '../state/map_mode.dart';
 import '../state/import_preview.dart';
 import '../state/providers.dart';
-import 'circle_editor.dart';
-import 'collapsible_sheet.dart';
 import 'external_link.dart';
-import 'freearea_editor.dart';
-import 'freeline_editor.dart';
-import 'border_area_editor.dart';
 import 'border_reshape.dart';
 import 'camera_viewport.dart';
-import 'height_editor.dart';
-import 'imported_point_editor.dart';
-import 'poi_set_editor.dart';
+import 'editor_sheet_host.dart';
 import 'go_to_place_dialog.dart';
 import 'hit_test.dart';
 import 'import_actions.dart';
@@ -77,11 +70,11 @@ import 'import_progress.dart';
 import 'layer_actions.dart';
 import 'layer_sheet.dart';
 import 'map_controls.dart';
+import 'map_fab_column.dart';
 import 'map_semantics.dart';
 import 'layers_panel.dart';
 import 'object_summary.dart';
 import 'osm_report_sheet.dart';
-import 'pending_import_sheet.dart';
 import 'draw_stroke.dart';
 import 'two_finger_gestures.dart';
 import 'poi_import_dialog.dart';
@@ -96,7 +89,6 @@ import 'region_geometry.dart';
 import 'region_layer.dart';
 import 'service_policy_screen.dart';
 import 'share_place.dart';
-import 'subspace_editor.dart';
 import 'theme.dart';
 import 'transit_import_dialog.dart';
 import 'undo_buttons.dart';
@@ -937,55 +929,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
       _hint('Could not get your location.');
       return null;
     }
-  }
-
-  /// A map button that is painted unavailable but still answers a tap.
-  ///
-  /// A `FloatingActionButton` with `onPressed: null` registers no tap
-  /// recogniser at all — no ripple, no callback — so the one moment a user most
-  /// wants an explanation is the one moment the button cannot give one. Every
-  /// control that can become useless therefore stays live and only *looks*
-  /// disabled; pressing it says why, in words naming what to do instead.
-  ///
-  /// That answer is **not** counted by `UiHints`. A tip that teaches goes quiet
-  /// after a few showings; an answer to "why did nothing happen?" has to come
-  /// every single time, or the third press of a dead button is silent again and
-  /// we are back where we started.
-  Widget _mapFab({
-    required String heroTag,
-    required String tooltip,
-    required VoidCallback onPressed,
-    required Widget child,
-    String? unavailable,
-    bool lit = false,
-  }) {
-    final scheme = Theme.of(context).colorScheme;
-    final off = unavailable != null;
-    return FloatingActionButton.small(
-      heroTag: heroTag,
-      // The reason replaces the description: what it *would* do matters less
-      // than why it will not.
-      tooltip: unavailable ?? tooltip,
-      // A FAB does not grey itself the way an IconButton does, so both colours
-      // are explicit. Not `disabledColor` — a dark grey that on this light row
-      // read as the lit state (also dark) rather than as unavailable — and no
-      // longer Material's faded *fill* either: over the white chrome this row
-      // now uses, a translucent dark wash is a blob, not a greyed button. The
-      // unavailable fill is therefore the deepest paper tier, which keeps the
-      // button looking like chrome while the faded icon says it is off.
-      backgroundColor: off
-          ? scheme.surfaceContainerHighest
-          : lit
-          ? scheme.primary
-          : null,
-      foregroundColor: off
-          ? scheme.onSurface.withValues(alpha: 0.38)
-          : lit
-          ? scheme.onPrimary
-          : null,
-      onPressed: off ? () => _hint(unavailable) : onPressed,
-      child: child,
-    );
   }
 
   /// Runs the quick-toggle FAB and, for a toggle, says what is now true.
@@ -2355,18 +2298,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
     }
   }
 
-  /// The Add button's label for a layer type. A nested ternary got unreadable
-  /// at seven types; this is the same mapping as a switch.
-  static String _addFabLabel(String? type) => switch (type) {
-    'poi' => 'Add POI',
-    'borders' => 'Import borders',
-    'subspace' => 'Add subspace',
-    'freeline' => 'Add line',
-    'freearea' => 'Add area',
-    'height' => 'Add height area',
-    _ => 'Add circle',
-  };
-
   /// The four lat/lng-axis-aligned corners spanned by two opposite points.
   /// `Polygon` closes itself, so the first vertex is not repeated.
   static List<LatLng> _bboxRing(LatLng a, LatLng b) {
@@ -3101,6 +3032,98 @@ class _MapScreenState extends ConsumerState<MapScreen>
         _exitAddMode();
         await _importBox(layer, LatLngBounds(a, latlng));
     }
+  }
+
+  // The FAB column knows nothing about layers or rows: it says "the user
+  // pressed Add", and the map works out what that means for whatever layer is
+  // active, now. Resolving it here rather than passing the layer in is what
+  // lets that widget be pumped in a test with no database behind it.
+  Layer? get _activeLayerNow {
+    final id = effectiveActiveLayerId(
+      ref.read(layersProvider).asData?.value ?? const <Layer>[],
+      ref.read(activeLayerProvider),
+    );
+    return (ref.read(layersProvider).asData?.value ?? const <Layer>[])
+        .where((l) => l.id == id)
+        .firstOrNull;
+  }
+
+  void _toggleDrawForActiveLayer() {
+    if (_mode == MapMode.draw) {
+      _finishDraw();
+      return;
+    }
+    final layer = _activeLayerNow;
+    if (layer != null) _enterDrawMode(layer);
+  }
+
+  void _importNearbyForActiveLayer() {
+    final layer = _activeLayerNow;
+    if (layer == null) return;
+    // A POI layer has two imports to choose from; the seeding types (circles,
+    // subspace) only the one.
+    unawaited(
+      layerHolds(layer, kPoi) ? _pickPoiImport(layer) : _importPois(layer),
+    );
+  }
+
+  void _toggleAddForActiveLayer() {
+    if (_mode == MapMode.add) {
+      unawaited(_finishAdd());
+      return;
+    }
+    final layer = _activeLayerNow;
+    if (layer != null) unawaited(_enterAddMode(layer));
+  }
+
+  void _addAtMapCentreForActiveLayer() {
+    final layer = _activeLayerNow;
+    if (layer == null) return;
+    _addAtMapCentre(
+      layer,
+      subspaces: ref.read(subspacesProvider).asData?.value ?? const [],
+      freeLines: ref.read(freeLinesProvider).asData?.value ?? const [],
+      freeAreas: ref.read(freeAreasProvider).asData?.value ?? const [],
+    );
+  }
+
+  // The editor sheets ask for "a point on the selected object, at the map's
+  // centre". They do not know which object is selected and must not need the
+  // camera, so the lookup happens here, at press time, with `ref.read`.
+  void _addPointToSelectedSubspace() {
+    final id = ref.read(selectedSubspaceProvider);
+    final rows =
+        ref.read(subspacesProvider).asData?.value ?? const <Subspace>[];
+    final sub = rows.where((s) => s.id == id).firstOrNull;
+    if (sub == null) return;
+    final layers = ref.read(layersProvider).asData?.value ?? const <Layer>[];
+    final layer = layers.where((l) => l.id == sub.layerId).firstOrNull;
+    if (layer == null) return;
+    unawaited(_addSubspaceAt(_mapController.camera.center, layer, rows));
+  }
+
+  void _addPointToSelectedFreeLine() {
+    final id = ref.read(selectedFreeLineProvider);
+    final rows =
+        ref.read(freeLinesProvider).asData?.value ?? const <FreeLine>[];
+    final line = rows.where((l) => l.id == id).firstOrNull;
+    if (line == null) return;
+    final layers = ref.read(layersProvider).asData?.value ?? const <Layer>[];
+    final layer = layers.where((l) => l.id == line.layerId).firstOrNull;
+    if (layer == null) return;
+    unawaited(_addFreeLineAt(_mapController.camera.center, layer, rows));
+  }
+
+  void _addPointToSelectedFreeArea() {
+    final id = ref.read(selectedFreeAreaProvider);
+    final rows =
+        ref.read(freeAreasProvider).asData?.value ?? const <FreeArea>[];
+    final area = rows.where((a) => a.id == id).firstOrNull;
+    if (area == null) return;
+    final layers = ref.read(layersProvider).asData?.value ?? const <Layer>[];
+    final layer = layers.where((l) => l.id == area.layerId).firstOrNull;
+    if (layer == null) return;
+    unawaited(_addFreeAreaAt(_mapController.camera.center, layer, rows));
   }
 
   Future<void> _addSubspaceAt(
@@ -4130,11 +4153,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
             .firstOrNull;
         if (p == null) return null;
         final sets = ref.read(poiSetsProvider).asData?.value ?? const [];
-        final set = _setOf(sets, p.poiSetId);
+        final set = poiSetOf(sets, p.poiSetId);
         // A station says which modes serve it; a POI says its category.
         final kind = set != null && set.isStationImport
             ? transitModeLabels(p.modeMask)
-            : _poiCategoryLabel(sets, p.poiSetId);
+            : poiCategoryLabel(sets, p.poiSetId);
         return p.name?.isNotEmpty == true ? '${p.name} · $kind' : kind;
       // Every other kind carries its own subtitle; this helper only supplements
       // the imported point kind.
@@ -4142,39 +4165,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
         return null;
     }
   }
-
-  /// The catalogue entry a POI set's category corresponds to, or null.
-  ///
-  /// For an import this is simply the category it was fetched with. For a
-  /// hand-made category it is non-null only when the user picked one of the
-  /// dialog's presets, which copy a catalogue key — a category built from a
-  /// bare icon has no OSM tag behind it, and a report is better off saying
-  /// nothing than suggesting one nobody chose.
-  static PoiCategory? _poiCategoryTag(List<PoiSet> sets, String setId) {
-    final set = sets.where((s) => s.id == setId).firstOrNull;
-    if (set == null) return null;
-    return poiCategories.where((c) => c.key == set.categoryKey).firstOrNull;
-  }
-
-  /// The human name of the category a POI's set imported ("Cafés"), for the
-  /// point editor's subtitle. Falls back to the raw key so an old set whose
-  /// category has since been renamed still says something.
-  static String _poiCategoryLabel(List<PoiSet> sets, String setId) {
-    final set = sets.where((s) => s.id == setId).firstOrNull;
-    if (set == null) return 'POI';
-    // A hand-made category has no OSM tag behind it, so its own name is the
-    // only thing that describes it.
-    if (set.isManual) return set.label ?? 'Category';
-    return poiCategories
-            .where((c) => c.key == set.categoryKey)
-            .firstOrNull
-            ?.label ??
-        set.categoryKey;
-  }
-
-  /// The set a POI belongs to, or null when it is gone.
-  static PoiSet? _setOf(List<PoiSet> sets, String setId) =>
-      sets.where((s) => s.id == setId).firstOrNull;
 
   /// This layer's element summaries, keyed by ref — used to label hit-menu rows
   /// with the same names the Elements list shows.
@@ -4710,30 +4700,18 @@ class _MapScreenState extends ConsumerState<MapScreen>
     // corner fields it was asking for and its own close button.
     // An import sheet outranks everything: it is a question already being
     // asked, and it comes down as soon as it is answered.
-    final Widget? bottomSheet = _bottomSheetFor(
-      pendingImport: pendingImport,
-      receivedPoint: receivedPoint,
-      hasSelection: hasSelection,
-      layers: layers,
-      subspaces: subspaces,
-      freeLines: freeLines,
-      freeAreas: freeAreas,
-      poiSets: poiSets,
-      poiPoints: poiPoints,
-      heightPolygons: heightPolygons,
-      selectedCircle: selectedCircle,
-      selectedSubspace: selectedSubspace,
-      selectedSubspacePoints: selectedSubspacePoints,
-      selectedFreeLine: selectedFreeLine,
-      selectedFreeLinePoints: selectedFreeLinePoints,
-      selectedFreeArea: selectedFreeArea,
-      selectedFreeAreaPoints: selectedFreeAreaPoints,
-      selectedHeightRegion: selectedHeightRegion,
-      selectedPoiPoint: selectedPoiPoint,
-      selectedPoiSet: selectedPoiSet,
-      selectedBorderArea: selectedBorderArea,
-      selectedBorderLayer: selectedBorderLayer,
-    );
+    // One predicate decides both the sheet and whether the FABs are hidden.
+    // Keeping that single is the fix for a real bug — see `watchHasMapSheet`.
+    final showsSheet = watchHasMapSheet(ref, importSheet: _importSheet);
+    final Widget? bottomSheet = showsSheet
+        ? EditorSheetHost(
+            importSheet: _importSheet,
+            onKeepSharedPlace: (p) => unawaited(_keepSharedPlace(p)),
+            onAddSubspacePoint: _addPointToSelectedSubspace,
+            onAddFreeLinePoint: _addPointToSelectedFreeLine,
+            onAddFreeAreaPoint: _addPointToSelectedFreeArea,
+          )
+        : null;
 
     return Scaffold(
       key: _scaffoldKey,
@@ -5911,529 +5889,56 @@ class _MapScreenState extends ConsumerState<MapScreen>
       // buttons landed on top of the form asking for the import's corners.
       floatingActionButton: bottomSheet != null
           ? null
-          : _fabColumn(
+          : MapFabColumn(
               controlState: controlState,
-              layers: layers,
-              activeLayer: activeLayer,
               mode: mode,
               toolsExpanded: toolsExpanded,
+              allowsPrefetch: _tiles.allowsPrefetch,
+              downloading: _downloading,
+              locating: _locating,
+              sharing: _sharing,
+              showingMyLocation: _myPosition != null,
+              hasActiveLayer: activeLayer != null,
+              activeLayerType: activeLayer?.type,
               canDraw: canDraw,
-              isSubspaceLayer: isSubspaceLayer,
-              isCircleLayer: isCircleLayer,
-              isPoiLayer: isPoiLayer,
               canImportFeature: canImportFeature,
+              canImportNearby: isCircleLayer || isSubspaceLayer || isPoiLayer,
               quickToggle: quickToggle,
-              subspaces: subspaces,
-              freeLines: freeLines,
-              freeAreas: freeAreas,
+              onUnavailable: _hint,
+              onDownloadArea: () => unawaited(_downloadArea()),
+              onGoToPlace: () => unawaited(_goToPlace()),
+              onToggleMyLocation: () => _myPosition != null
+                  ? _hideMyLocation()
+                  : unawaited(_locateMe()),
+              onShareMyLocation: () => unawaited(_shareMyLocation()),
+              onToggleProbe: _toggleProbe,
+              onToggleDistance: _toggleDistance,
+              onToggleDraw: _toggleDrawForActiveLayer,
+              onToggleEdit: () => _enterMode(
+                mode == MapMode.edit ? MapMode.view : MapMode.edit,
+              ),
+              onQuickToggle: () => quickToggle == null
+                  ? null
+                  : unawaited(_runQuickToggle(quickToggle)),
+              onImportFeature: () => unawaited(
+                importFeatureFlow(
+                  context,
+                  ref.read(repositoryProvider),
+                  layers,
+                  into: activeLayer,
+                ),
+              ),
+              onImportNearby: _importNearbyForActiveLayer,
+              onToggleAdd: _toggleAddForActiveLayer,
+              onAddAtMapCentre: _addAtMapCentreForActiveLayer,
+              onToggleTools: () => unawaited(
+                ref
+                    .read(repositoryProvider)
+                    .updateToolsExpanded(expanded: !toolsExpanded),
+              ),
             ),
       bottomSheet: bottomSheet,
     );
-  }
-
-  /// The right-hand tool column and the bottom row, as one widget.
-  ///
-  /// Lifted out of `build()` — which was 2036 lines — rather than out of the
-  /// class. Every control here reads `_MapScreenState`: 23 private members
-  /// between them, plus six locals. Turning it into a separate widget means
-  /// wiring twenty callbacks by hand, which is worth doing and is the obvious
-  /// next step now that `map_screen_smoke_test.dart` exists to catch a
-  /// mis-wire — but it is a different change from making `build()` readable,
-  /// and mixing the two would make neither reviewable.
-  ///
-  /// What the buttons *are* is not here: `ui/map_controls.dart` is the one
-  /// catalogue, and `unavailableReason` decides what can act, both covered by
-  /// `test/map_controls_test.dart`. This is only their layout.
-  Widget _fabColumn({
-    required MapControlState controlState,
-    required List<Layer> layers,
-    required Layer? activeLayer,
-    required MapMode mode,
-    required bool toolsExpanded,
-    required bool canDraw,
-    required bool isSubspaceLayer,
-    required bool isCircleLayer,
-    required bool isPoiLayer,
-    required bool canImportFeature,
-    required LayerAction? quickToggle,
-    required List<Subspace> subspaces,
-    required List<FreeLine> freeLines,
-    required List<FreeArea> freeAreas,
-  }) {
-    // Promoted once, here. `canDraw`, `isPoiLayer` and friends each already
-    // imply a layer exists — they are built from `activeLayer != null && …` —
-    // but the analyzer cannot carry that implication through a boolean, and
-    // inside `build()` it never had to. Naming it is better than `!`: the
-    // extra check costs nothing and cannot become a crash if one of those
-    // flags is ever computed differently.
-    final layer = activeLayer;
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        if (toolsExpanded) ...[
-          // Offline download exists only where the tile source allows
-          // pre-emptive fetching — not on the community OSM servers.
-          // See `data/tile_source.dart`.
-          if (_tiles.allowsPrefetch) ...[
-            FloatingActionButton.small(
-              heroTag: 'download',
-              tooltip: mapControl(MapControlId.download).name,
-              onPressed: _downloading ? null : _downloadArea,
-              child: _downloading
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.download_for_offline_outlined),
-            ),
-            const SizedBox(height: 12),
-          ],
-          // First in the column, because on a fresh install it is
-          // the only button that can get you to your own town: the
-          // camera starts over southern Germany wherever you are.
-          FloatingActionButton.small(
-            heroTag: 'goToPlace',
-            tooltip: mapControl(MapControlId.goToPlace).name,
-            onPressed: () => unawaited(_goToPlace()),
-            child: Icon(mapControl(MapControlId.goToPlace).icon),
-          ),
-          const SizedBox(height: 12),
-          // (The compass lives on the map itself, top-right, and only
-          // while the map is rotated — see the map chrome above.)
-          // A toggle, lit while the marker is up, in the shape the
-          // probe and distance buttons already use — tapping it again
-          // is the only way to put your position away, and the lit
-          // state is what says there is something to put away.
-          FloatingActionButton.small(
-            heroTag: 'locate',
-            tooltip: _myPosition != null ? 'Hide my location' : 'Locate me',
-            backgroundColor: _myPosition != null
-                ? Theme.of(context).colorScheme.primary
-                : null,
-            foregroundColor: _myPosition != null
-                ? Theme.of(context).colorScheme.onPrimary
-                : null,
-            onPressed: _locating
-                ? null
-                : (_myPosition != null ? _hideMyLocation : _locateMe),
-            child: _locating
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Icon(
-                    _myPosition != null
-                        ? Icons.location_disabled
-                        : Icons.my_location,
-                  ),
-          ),
-          const SizedBox(height: 12),
-          // Next to Locate on purpose: both answer "where am I", one
-          // for you and one for the person you are meeting. Any
-          // *other* place is shared by long-pressing it.
-          FloatingActionButton.small(
-            heroTag: 'share',
-            tooltip: mapControl(MapControlId.share).name,
-            onPressed: _sharing ? null : _shareMyLocation,
-            child: _sharing
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.ios_share),
-          ),
-          const SizedBox(height: 12),
-          FloatingActionButton.small(
-            heroTag: 'probe',
-            tooltip: mapControl(MapControlId.elevation).name,
-            backgroundColor: mode == MapMode.elevation
-                ? Theme.of(context).colorScheme.primary
-                : null,
-            foregroundColor: mode == MapMode.elevation
-                ? Theme.of(context).colorScheme.onPrimary
-                : null,
-            onPressed: _toggleProbe,
-            child: const Icon(Icons.terrain),
-          ),
-          const SizedBox(height: 12),
-          FloatingActionButton.small(
-            heroTag: 'distance',
-            tooltip: mapControl(MapControlId.distance).name,
-            backgroundColor: mode == MapMode.distance
-                ? Theme.of(context).colorScheme.primary
-                : null,
-            foregroundColor: mode == MapMode.distance
-                ? Theme.of(context).colorScheme.onPrimary
-                : null,
-            onPressed: _toggleDistance,
-            child: const Icon(Icons.straighten),
-          ),
-          const SizedBox(height: 12),
-          // Freehand layers only: there is nothing to draw into on a
-          // circle, a subspace or an import layer.
-          if (canDraw && layer != null) ...[
-            FloatingActionButton.small(
-              heroTag: 'draw',
-              tooltip: mapControl(MapControlId.draw).name,
-              backgroundColor: mode == MapMode.draw
-                  ? Theme.of(context).colorScheme.primary
-                  : null,
-              foregroundColor: mode == MapMode.draw
-                  ? Theme.of(context).colorScheme.onPrimary
-                  : null,
-              onPressed: () =>
-                  mode == MapMode.draw ? _finishDraw() : _enterDrawMode(layer),
-              child: const Icon(Icons.gesture),
-            ),
-            const SizedBox(height: 12),
-          ],
-        ],
-        // Bottom row, left to right: Edit, the per-type quick toggle,
-        // up to two import buttons, Add, and finally the tools toggle.
-        //
-        // The toggle goes **last** because it is the one button that
-        // acts on the column above it, and that column is anchored to
-        // the right edge: sitting at the left it was the furthest thing
-        // on the row from what it opens and closes. Everything here is
-        // the same small round button showing only its icon — a label
-        // on one of them made that one the odd size out, and with a
-        // full row it ran past the edge of the screen.
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Edit mode: while on, a plain tap selects the object under
-            // it. Kept outside the collapsible tools group — selecting
-            // by tap must always be one press away.
-            _mapFab(
-              heroTag: 'editMode',
-              tooltip: mode == MapMode.edit
-                  ? 'Stop selecting by tap'
-                  : 'Select by tapping the map',
-              unavailable: unavailableReason(MapControlId.edit, controlState),
-              lit: mode == MapMode.edit,
-              onPressed: () => _enterMode(
-                mode == MapMode.edit ? MapMode.view : MapMode.edit,
-              ),
-              child: Icon(
-                mode == MapMode.edit ? Icons.edit : Icons.edit_outlined,
-              ),
-            ),
-            if (quickToggle != null) ...[
-              const SizedBox(width: 12),
-              _mapFab(
-                heroTag: 'quickToggle',
-                // Label *and* description: the label alone was the
-                // menu entry, ellipsis included, which on a bare icon
-                // answered nothing.
-                tooltip: '${quickToggle.label} — ${quickToggle.description}',
-                // Lit while the toggle is on; a plain button for the
-                // one that opens a sheet (the station filter).
-                lit: quickToggle.checked ?? false,
-                // Two questions, two homes: whether the *map* can use
-                // this button (a layer at all, and a visible one) is
-                // the catalogue's, and whether the switch itself has
-                // anything to act on is the action's — written once
-                // there for the menus that print it too.
-                unavailable:
-                    unavailableReason(MapControlId.quickToggle, controlState) ??
-                    quickToggle.unavailable,
-                onPressed: () => unawaited(_runQuickToggle(quickToggle)),
-                child: Icon(quickToggle.icon),
-              ),
-            ],
-            if (canImportFeature) ...[
-              const SizedBox(width: 12),
-              FloatingActionButton.small(
-                heroTag: 'featureImport',
-                tooltip: mapControl(MapControlId.featureImport).name,
-                // Same flow the layers drawer offers, same arguments:
-                // this adds a route to it, it does not fork it. The
-                // full layer list is only for the fallback picker (a
-                // line asked for from an area layer, or vice versa).
-                onPressed: () => unawaited(
-                  importFeatureFlow(
-                    context,
-                    ref.read(repositoryProvider),
-                    layers,
-                    into: activeLayer,
-                  ),
-                ),
-                // A globe with a magnifier: this one searches the
-                // whole world by name. Its neighbour downloads what is
-                // nearby, and a plain magnifier beside it said neither.
-                child: const Icon(Icons.travel_explore),
-              ),
-            ],
-            if ((isCircleLayer || isSubspaceLayer || isPoiLayer) &&
-                layer != null) ...[
-              const SizedBox(width: 12),
-              FloatingActionButton.small(
-                heroTag: 'poiImport',
-                tooltip: mapControl(MapControlId.osmImport).name,
-                // Reached only when the layer holds one of the three
-                // types above, which already implies it is non-null.
-                // A POI layer has two imports to choose from; the
-                // seeding types (circles, subspace) only the one.
-                onPressed: () =>
-                    isPoiLayer ? _pickPoiImport(layer) : _importPois(layer),
-                child: const Icon(Icons.cloud_download_outlined),
-              ),
-            ],
-            // Add is a sticky *mode*, not an instant create: tapping it
-            // arms the map so a tap places the object exactly where you
-            // point. Long-press keeps the old one-shot behaviour (place
-            // at the map centre, open the editor) as a no-aim fallback.
-            const SizedBox(width: 12),
-            GestureDetector(
-              onLongPress: activeLayer == null
-                  ? null
-                  : () => _addAtMapCentre(
-                      activeLayer,
-                      subspaces: subspaces,
-                      freeLines: freeLines,
-                      freeAreas: freeAreas,
-                    ),
-              child: _mapFab(
-                heroTag: 'add',
-                // The words the label used to carry live in the
-                // tooltip, and the icon still says which type a tap
-                // would place.
-                tooltip: mode == MapMode.add
-                    ? 'Done'
-                    : '${_addFabLabel(activeLayer?.type)} · tap the '
-                          'map to place · long-press for the map '
-                          'centre',
-                lit: mode == MapMode.add,
-                unavailable: unavailableReason(MapControlId.add, controlState),
-                // `activeLayer` is non-null whenever this runs — the
-                // unavailable branch owns the null case — but the two
-                // facts sit a hundred lines apart, so this checks
-                // rather than asserts.
-                onPressed: () {
-                  if (mode == MapMode.add) {
-                    unawaited(_finishAdd());
-                  } else if (activeLayer != null) {
-                    unawaited(_enterAddMode(activeLayer));
-                  }
-                },
-                child: Icon(
-                  mode == MapMode.add
-                      ? Icons.check
-                      : typeIcon(activeLayer?.type ?? 'circles'),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            // Last, and beside the column it governs.
-            FloatingActionButton.small(
-              heroTag: 'fabsToggle',
-              tooltip: toolsExpanded ? 'Hide tools' : 'Show tools',
-              onPressed: () => ref
-                  .read(repositoryProvider)
-                  .updateToolsExpanded(expanded: !toolsExpanded),
-              child: Icon(
-                toolsExpanded ? Icons.unfold_less : Icons.unfold_more,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  /// Whatever owns the Scaffold's single sheet slot, whichever of the five
-  /// kinds it is.
-  ///
-  /// Lifted out of `build()` for length: this was a 155-line expression ending
-  /// in a nine-arm conditional, which is the least readable thing in the file.
-  /// It is a method rather than a widget because every arm reads a different
-  /// slice of the selection state — twenty-two values — and a `ConsumerWidget`
-  /// would have to re-watch all of them. Worth doing later, now that
-  /// `map_screen_smoke_test.dart` can catch a mis-wire; worth keeping separate
-  /// from this change, which only moves code.
-  Widget? _bottomSheetFor({
-    required PendingImport? pendingImport,
-    required SharedPoint? receivedPoint,
-    required bool hasSelection,
-    required List<Layer> layers,
-    required List<Subspace> subspaces,
-    required List<FreeLine> freeLines,
-    required List<FreeArea> freeAreas,
-    required List<PoiSet> poiSets,
-    required List<PoiPoint> poiPoints,
-    required Map<String, List<HeightPolygon>> heightPolygons,
-    required Circle? selectedCircle,
-    required Subspace? selectedSubspace,
-    required List<SubspacePoint> selectedSubspacePoints,
-    required FreeLine? selectedFreeLine,
-    required List<FreeLinePoint> selectedFreeLinePoints,
-    required FreeArea? selectedFreeArea,
-    required List<FreeAreaPoint> selectedFreeAreaPoints,
-    required HeightRegion? selectedHeightRegion,
-    required PoiPoint? selectedPoiPoint,
-    required PoiSet? selectedPoiSet,
-    required BorderArea? selectedBorderArea,
-    required Layer? selectedBorderLayer,
-  }) {
-    return (pendingImport == null
-            ? null
-            : PendingImportSheet(
-                pending: pendingImport,
-                onKeep: () => pendingImport.answer(keep: true),
-                onDiscard: () => pendingImport.answer(keep: false),
-              )) ??
-        _importSheet ??
-        (!hasSelection
-            // A shared position. An arriving one clears the selection (see the
-            // listener above), so in practice these two never compete; the order
-            // here only decides what happens if something is selected *after*.
-            ? (receivedPoint == null
-                  ? null
-                  : ReceivedPlaceSheet(
-                      point: receivedPoint,
-                      onKeep: () => unawaited(_keepSharedPlace(receivedPoint)),
-                      onDismiss: () =>
-                          ref.read(receivedPointProvider.notifier).clear(),
-                    ))
-            : CollapsibleSheet(
-                // Reset to expanded whenever the selected object changes —
-                // and rebuild from scratch on an undo. Editors mirror their
-                // row into controllers and skip re-syncing a focused field,
-                // so without the revision an undone value would still be sat
-                // in the text box, ready for the next keystroke to write it
-                // back. Discarding the subtree re-seeds every editor at once.
-                key: ValueKey(
-                  'sheet-${ref.watch(undoRevisionProvider)}-'
-                  '${selectedCircle?.id ?? selectedSubspace?.id ?? selectedFreeLine?.id ?? selectedFreeArea?.id ?? selectedHeightRegion?.id ?? selectedPoiSet?.id ?? selectedPoiPoint?.id ?? selectedBorderArea?.id}',
-                ),
-                child: selectedCircle != null
-                    ? CircleEditorSheet(
-                        key: ValueKey(selectedCircle.id),
-                        circle: selectedCircle,
-                        layers: layers,
-                      )
-                    : selectedSubspace != null
-                    ? SubspaceEditorSheet(
-                        key: ValueKey(selectedSubspace.id),
-                        subspace: selectedSubspace,
-                        points: selectedSubspacePoints,
-                        layers: layers,
-                        onAddPoint: () => _addSubspaceAt(
-                          _mapController.camera.center,
-                          layers.firstWhere(
-                            (l) => l.id == selectedSubspace.layerId,
-                          ),
-                          subspaces,
-                        ),
-                      )
-                    : selectedFreeLine != null
-                    ? FreeLineEditorSheet(
-                        key: ValueKey(selectedFreeLine.id),
-                        freeLine: selectedFreeLine,
-                        points: selectedFreeLinePoints,
-                        layers: layers,
-                        onAddPoint: () => _addFreeLineAt(
-                          _mapController.camera.center,
-                          layers.firstWhere(
-                            (l) => l.id == selectedFreeLine.layerId,
-                          ),
-                          freeLines,
-                        ),
-                      )
-                    : selectedFreeArea != null
-                    ? FreeAreaEditorSheet(
-                        key: ValueKey(selectedFreeArea.id),
-                        freeArea: selectedFreeArea,
-                        points: selectedFreeAreaPoints,
-                        layers: layers,
-                        onAddPoint: () => _addFreeAreaAt(
-                          _mapController.camera.center,
-                          layers.firstWhere(
-                            (l) => l.id == selectedFreeArea.layerId,
-                          ),
-                          freeAreas,
-                        ),
-                      )
-                    : selectedHeightRegion != null
-                    ? HeightEditorSheet(
-                        key: ValueKey(selectedHeightRegion.id),
-                        region: selectedHeightRegion,
-                        polygonCount:
-                            heightPolygons[selectedHeightRegion.id]?.length ??
-                            0,
-                        layers: layers,
-                      )
-                    : selectedPoiPoint != null
-                    ? () {
-                        // A station and a POI are the same row; the set
-                        // says which it is, and that decides the sheet's
-                        // icon, wording and whether the point may move.
-                        final set = _setOf(poiSets, selectedPoiPoint.poiSetId);
-                        final station = set != null && set.isStationImport;
-                        return ImportedPointEditorSheet(
-                          key: ValueKey(selectedPoiPoint.id),
-                          id: selectedPoiPoint.id,
-                          name: selectedPoiPoint.name,
-                          lat: selectedPoiPoint.lat,
-                          lng: selectedPoiPoint.lng,
-                          icon: set == null
-                              ? Icons.place_outlined
-                              : poiPointIcon(selectedPoiPoint, set),
-                          title: station ? 'Edit station' : 'Edit POI',
-                          subtitle: station
-                              ? transitModeLabels(selectedPoiPoint.modeMask)
-                              : _poiCategoryLabel(
-                                  poiSets,
-                                  selectedPoiPoint.poiSetId,
-                                ),
-                          // Both kinds can be moved; this says which one it
-                          // is, and therefore what the move means.
-                          movable: set?.isManual ?? false,
-                          editedAt: selectedPoiPoint.editedAt,
-                          origLat: selectedPoiPoint.origLat,
-                          origLng: selectedPoiPoint.origLng,
-                          origName: selectedPoiPoint.origName,
-                          osmType: selectedPoiPoint.osmType,
-                          osmId: selectedPoiPoint.osmId,
-                          // The OSM tag behind the category, when there is
-                          // one — it is what makes a report actionable, and a
-                          // hand-made category built from a bare icon has
-                          // none to offer.
-                          tagKey: _poiCategoryTag(
-                            poiSets,
-                            selectedPoiPoint.poiSetId,
-                          )?.tagKey,
-                          tagValue: _poiCategoryTag(
-                            poiSets,
-                            selectedPoiPoint.poiSetId,
-                          )?.tagValue,
-                        );
-                      }()
-                    : selectedPoiSet != null
-                    ? PoiSetEditorSheet(
-                        key: ValueKey(selectedPoiSet.id),
-                        set: selectedPoiSet,
-                        pointCount: poiPoints
-                            .where((p) => p.poiSetId == selectedPoiSet.id)
-                            .length,
-                        layers: [
-                          for (final l in layers)
-                            if (layerHolds(l, kPoi)) l,
-                        ],
-                      )
-                    : selectedBorderArea != null && selectedBorderLayer != null
-                    ? BorderAreaEditorSheet(
-                        key: ValueKey(selectedBorderArea.id),
-                        area: selectedBorderArea,
-                        layer: selectedBorderLayer,
-                      )
-                    : const SizedBox.shrink(),
-              ));
   }
 }
 

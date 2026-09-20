@@ -17,6 +17,7 @@
 import 'package:latlong2/latlong.dart';
 
 import 'database.dart';
+import 'overpass.dart';
 import 'transit.dart';
 
 /// The [PoiSets.categoryKey] a station import is stored under — the catalogue
@@ -70,3 +71,44 @@ double boxCoveringRadiusMeters({
 }) =>
     _distance.as(LengthUnit.Meter, LatLng(south, west), LatLng(north, east)) /
     2;
+
+// --- What a POI set is called, and what OSM tag is behind it ---------------
+//
+// These live here rather than on a screen because three places ask the same
+// questions of the same rows: the map's hit menu, the imported-point editor,
+// and the OpenStreetMap report the editor can raise. They were private
+// statics on `_MapScreenState`, which meant the editor host could not be
+// lifted out of that class without taking them with it.
+
+/// The set a POI belongs to, or null when it is gone.
+PoiSet? poiSetOf(List<PoiSet> sets, String setId) =>
+    sets.where((s) => s.id == setId).firstOrNull;
+
+/// The catalogue entry a POI set's category corresponds to, or null.
+///
+/// For an import this is simply the category it was fetched with. For a
+/// hand-made category it is non-null only when the user picked one of the
+/// dialog's presets, which copy a catalogue key — a category built from a bare
+/// icon has no OSM tag behind it, and a report is better off saying nothing
+/// than suggesting one nobody chose.
+PoiCategory? poiCategoryTag(List<PoiSet> sets, String setId) {
+  final set = poiSetOf(sets, setId);
+  if (set == null) return null;
+  return poiCategories.where((c) => c.key == set.categoryKey).firstOrNull;
+}
+
+/// The human name of the category a POI's set imported ("Cafés"), for the
+/// point editor's subtitle. Falls back to the raw key so an old set whose
+/// category has since been renamed still says something.
+String poiCategoryLabel(List<PoiSet> sets, String setId) {
+  final set = poiSetOf(sets, setId);
+  if (set == null) return 'POI';
+  // A hand-made category has no OSM tag behind it, so its own name is the
+  // only thing that describes it.
+  if (set.isManual) return set.label ?? 'Category';
+  return poiCategories
+          .where((c) => c.key == set.categoryKey)
+          .firstOrNull
+          ?.label ??
+      set.categoryKey;
+}
