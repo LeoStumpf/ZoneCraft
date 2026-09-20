@@ -600,6 +600,17 @@ release notes, store listing copy and the exact data-safety answers live there.
 - **Build & verify with the script:** before wrapping up a task, run
   `./scripts/build.sh --install --run` (analyze + test + build + install + launch) and check
   the change on the device. Use `--skip-checks` only for quick iteration.
+- **CI runs the same gate on every push to `main`** (`.github/workflows/ci.yml`): lockfile
+  (`--enforce-lockfile`), `dart format`, analyze, test, then a **release** APK — the last
+  because R8 and the native-asset path exist only in release, which is how `share_plus`
+  13.3.0 got through everything else. It does not replace the device check: an emulator-less
+  runner cannot tell you a control is unreachable or a band is invisible.
+  **`origin` is SSH (`git@github.com:LeoStumpf/ZoneCraft.git`), and that is load-bearing.**
+  A push that adds or edits anything under `.github/workflows/` is refused over HTTPS unless
+  the token carries the `workflow` scope — and the scope is a property of *tokens*, so an SSH
+  key, which has no scopes, is never subject to it. If a push of a workflow file is ever
+  rejected with "refusing to allow an OAuth App to create or update workflow", the remote has
+  been put back to HTTPS; the fix is the URL, not the file.
 - **Always commit and push directly to `main`** (the project's "master"/integration branch).
   **Do not create feature branches and do not open PRs** — work on `main`, commit there, and
   push there. After completing **every** task, **always commit and push to `main`
