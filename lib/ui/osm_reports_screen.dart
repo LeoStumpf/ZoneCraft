@@ -35,6 +35,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 
 import '../data/database.dart';
 import '../data/osm_notes.dart';
@@ -45,7 +46,11 @@ import 'external_link.dart';
 import 'import_actions.dart';
 
 class OsmReportsScreen extends ConsumerStatefulWidget {
-  const OsmReportsScreen({super.key});
+  const OsmReportsScreen({super.key, this.client});
+
+  /// Swapped in tests so a widget test can never reach OpenStreetMap. Null in
+  /// the app, which is the only place a note should ever actually be posted.
+  final http.Client? client;
 
   @override
   ConsumerState<OsmReportsScreen> createState() => _OsmReportsScreenState();
@@ -83,6 +88,26 @@ class _OsmReportsScreenState extends ConsumerState<OsmReportsScreen> {
   }
 
   Future<void> _send(OsmReport report) async {
+    // Claimed **before the first await**, not after the cap lookup. The Send
+    // button is only hidden once `_sending` is set, so with the guard below
+    // the await a second tap inside that round-trip got through: two notes on
+    // openstreetmap.org, which nothing can delete, a volunteer has to close by
+    // hand, and which a block for abuse would punish every install for. Both
+    // calls also read the daily count before either had incremented it, so the
+    // cap was bypassed at the same time.
+    //
+    // `osm_report_sheet.dart` has had this in the right order all along; this
+    // screen was the one place it was backwards.
+    if (_sending != null) return;
+    setState(() => _sending = report.id);
+    try {
+      await _sendNow(report);
+    } finally {
+      if (mounted) setState(() => _sending = null);
+    }
+  }
+
+  Future<void> _sendNow(OsmReport report) async {
     // The hard cap applies here too, or the outbox would be the way around
     // the limit the sheet enforces.
     final today = await _repo.osmReportsSentSince(const Duration(days: 1));
@@ -93,11 +118,11 @@ class _OsmReportsScreenState extends ConsumerState<OsmReportsScreen> {
       );
       return;
     }
-    setState(() => _sending = report.id);
     final outcome = await submitOsmNote(
       lat: report.lat,
       lng: report.lng,
       text: report.body,
+      client: widget.client,
     );
     if (outcome.ok) {
       await _repo.markOsmReportSent(report.id, outcome.noteId!);
@@ -106,7 +131,6 @@ class _OsmReportsScreenState extends ConsumerState<OsmReportsScreen> {
       await _repo.markOsmReportFailed(report.id, outcome.message!);
       _toast(outcome.message!);
     }
-    if (mounted) setState(() => _sending = null);
   }
 
   Future<void> _edit(OsmReport report) async {

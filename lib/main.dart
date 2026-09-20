@@ -72,15 +72,66 @@ Future<void> main() async {
   // Opened here, before the first frame, so a migration failure is caught where
   // something can be done about it instead of surfacing lazily under whichever
   // widget happens to read a provider first.
-  final opened = await openDatabaseSafely();
+  //
+  // **Everything from here to `runApp` is inside a catch, and that is the whole
+  // point.** This work happens before there is a widget tree, so a throw would
+  // leave the app with nothing at all: `ErrorWidget.builder` above needs a tree
+  // to build into, and the in-memory [ErrorLog] is only reachable through a
+  // screen. The user would get a black window, on every launch, with no way
+  // out — which is exactly the unfixable-from-inside state
+  // `database_recovery.dart` exists to prevent, reintroduced one level up.
+  //
+  // `openDatabaseSafely` is itself total and documents that as a contract, so
+  // this is a backstop rather than the mechanism: it covers whatever else ends
+  // up here later.
+  DatabaseOpenResult? opened;
+  Object? bootFailure;
+  try {
+    opened = await openDatabaseSafely();
+    // Whatever it was — there is no widget tree yet, so the alternative to
+    // catching it is a black screen with no way out.
+    // ignore: avoid_catches_without_on_clauses
+  } catch (e, s) {
+    ErrorLog.instance.record(e, s, context: 'Starting up');
+    bootFailure = e;
+  }
+
+  final database = opened?.database;
+  if (database == null) {
+    // No database at all — not even a fresh one. There is nothing for the
+    // providers to read, so the app runs without a ProviderScope and shows the
+    // one screen that needs no data.
+    runApp(
+      _FailedStart(error: bootFailure ?? opened?.error ?? 'Unknown error'),
+    );
+    return;
+  }
 
   runApp(
     ProviderScope(
       observers: [ErrorLogObserver()],
-      overrides: [databaseProvider.overrideWithValue(opened.database)],
-      child: ZoneCraftApp(recovery: opened),
+      overrides: [databaseProvider.overrideWithValue(database)],
+      child: ZoneCraftApp(recovery: opened!),
     ),
   );
+}
+
+/// The app when it has no database to show — the one case where ZoneCraft
+/// starts without a `ProviderScope`, because every provider would fail.
+class _FailedStart extends StatelessWidget {
+  const _FailedStart({required this.error});
+
+  final Object error;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'ZoneCraft',
+      debugShowCheckedModeBanner: false,
+      theme: zoneCraftLightTheme(),
+      home: DataUnavailableScreen(error: error),
+    );
+  }
 }
 
 /// Records provider failures, which otherwise reach nothing at all.

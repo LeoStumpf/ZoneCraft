@@ -73,6 +73,13 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
 
+  # Used by test/database_recovery_test.dart to point
+  # `getApplicationDocumentsDirectory()` at a scratch folder, so the quarantine
+  # path can be exercised without a device. Both arrive transitively via
+  # path_provider; declared here because the test imports them directly.
+  path_provider_platform_interface: ^2.1.2
+  plugin_platform_interface: ^2.1.8
+
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
   # activated in the `analysis_options.yaml` file located at the root of your

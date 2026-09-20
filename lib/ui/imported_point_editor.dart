@@ -20,6 +20,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/error_log.dart';
 import '../data/osm_report.dart';
 import '../data/repository.dart';
 import '../geo/coords.dart' show formatLatLng, parseLatLng;
@@ -287,12 +288,13 @@ class _ImportedPointEditorSheetState
                 onChanged: (t) {
                   final p = parseLatLng(t);
                   if (p == null) return; // half-typed; ignore until valid
-                  unawaited(
+                  logAsyncFailure(
                     _repo.movePoiPoint(
                       id: widget.id,
                       lat: p.latitude,
                       lng: p.longitude,
                     ),
+                    'Moving the place',
                   );
                 },
               ),

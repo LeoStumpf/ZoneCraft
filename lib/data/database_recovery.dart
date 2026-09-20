@@ -25,13 +25,19 @@ import 'error_log.dart';
 class DatabaseOpenResult {
   const DatabaseOpenResult(this.database, {this.quarantinedPath, this.error});
 
-  final AppDatabase database;
+  /// Null when the database could not be opened **at all** — not even a fresh
+  /// one. The app still starts; it shows [DataUnavailableScreen] instead of a
+  /// map. See [openDatabaseSafely] for why this is nullable rather than a
+  /// thrown exception.
+  final AppDatabase? database;
 
   /// Where the unreadable file was moved, if it had to be. Null on the normal
   /// path, which is every launch but the broken one.
   final String? quarantinedPath;
 
-  /// What went wrong with the old file, kept so the user can report it.
+  /// What went wrong, kept so the user can report it. Always the **first**
+  /// cause: if the retry fails too, that second failure is a symptom and this
+  /// stays the thing worth reading.
   final Object? error;
 
   bool get recovered => quarantinedPath != null;
@@ -53,36 +59,70 @@ class DatabaseOpenResult {
 /// is very often still readable by something else — `sqlite3 .recover`, or a
 /// later build of ZoneCraft that fixes the migration. Deleting it to get the
 /// app running again would be trading their data for our convenience.
-Future<DatabaseOpenResult> openDatabaseSafely() async {
-  var db = AppDatabase();
+///
+/// **This function never throws.** That is a hard contract, not politeness:
+/// `main()` awaits it *before* `runApp()`, so anything escaping here leaves the
+/// app with no widget tree at all. `ErrorWidget.builder` needs a tree to build
+/// into and the in-memory [ErrorLog] is reachable only through a screen, so the
+/// user would get a black window, on every launch, with no way out — the exact
+/// unfixable-from-inside state this file exists to prevent, reintroduced one
+/// level up. A total failure comes back as a result with a null
+/// [DatabaseOpenResult.database] instead.
+///
+/// [openDatabase] exists so a test can make opening fail on demand; production
+/// always uses the real constructor.
+Future<DatabaseOpenResult> openDatabaseSafely({
+  AppDatabase Function()? openDatabase,
+}) async {
+  final open = openDatabase ?? AppDatabase.new;
+
+  // Declared outside the try so the failed handle is still reachable in the
+  // catch: on Android the quarantine rename fails while the old connection
+  // holds the file open.
+  AppDatabase? attempt;
   try {
-    await _probe(db);
-    return DatabaseOpenResult(db);
+    attempt = open();
+    await _probe(attempt);
+    return DatabaseOpenResult(attempt);
     // Anything at all: a failed migration, a corrupt page, a read-only file,
     // a disk with nothing left on it. What it was matters for the report, not
     // for the decision — the file is unusable and the app must still start.
     // ignore: avoid_catches_without_on_clauses
   } catch (e, s) {
     ErrorLog.instance.record(e, s, context: 'Opening the database');
-    // The handle is unusable but may still hold the file open; on Android a
-    // rename would otherwise fail with the old connection still attached.
-    try {
-      await db.close();
-      // Closing a database that failed to open throws about as often as not,
-      // and the rename below is what actually matters.
-      // ignore: avoid_catches_without_on_clauses
-    } catch (_) {
-      // Deliberately empty: see above.
-    }
+    await _closeQuietly(attempt);
 
     final moved = await _quarantine();
-    db = AppDatabase();
-    // If a *fresh* file cannot be created either, the problem is not the data
-    // — no disk space, no permission — and pretending otherwise would put the
-    // user in a loop of losing their map for nothing. Let it reach the error
-    // screen with the original cause.
-    await _probe(db);
-    return DatabaseOpenResult(db, quarantinedPath: moved, error: e);
+    try {
+      final fresh = open();
+      await _probe(fresh);
+      return DatabaseOpenResult(fresh, quarantinedPath: moved, error: e);
+      // A *fresh* file cannot be created either, so the problem is not the
+      // data — no disk space, no permission, a read-only app directory. The
+      // app starts and says so; `e` is kept rather than this second failure,
+      // which is a symptom of it.
+      // ignore: avoid_catches_without_on_clauses
+    } catch (e2, s2) {
+      ErrorLog.instance.record(e2, s2, context: 'Opening a fresh database');
+      return DatabaseOpenResult(null, quarantinedPath: moved, error: e);
+    }
+  }
+}
+
+/// Closes a handle that failed to open, if there is one.
+///
+/// Closing a database that never opened throws about as often as not, and the
+/// quarantine rename is what actually matters — but on Android the rename
+/// fails while the old connection still holds the file, so it is worth trying.
+Future<void> _closeQuietly(AppDatabase? db) async {
+  if (db == null) return;
+  try {
+    await db.close();
+    // Closing a handle that never opened throws about as often as not, and
+    // the quarantine rename is what actually matters.
+    // ignore: avoid_catches_without_on_clauses
+  } catch (_) {
+    // Deliberately empty: see above.
   }
 }
 

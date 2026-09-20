@@ -22,6 +22,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart' show LatLng, LengthUnit;
 
 import '../data/database.dart';
+import '../data/error_log.dart';
 import '../data/repository.dart';
 import '../state/providers.dart';
 import 'editor_sheet.dart';
@@ -174,8 +175,9 @@ class _BorderAreaEditorSheetState extends ConsumerState<BorderAreaEditorSheet> {
           ),
           onChanged: (s) {
             final t = s.trim();
-            unawaited(
+            logAsyncFailure(
               _repo.updateBorderArea(a.id, name: Value(t.isEmpty ? null : t)),
+              'Saving the name',
             );
           },
         ),

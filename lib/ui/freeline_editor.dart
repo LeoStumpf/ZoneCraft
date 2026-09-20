@@ -22,6 +22,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../data/database.dart';
+import '../data/error_log.dart';
 import '../data/layer_types.dart';
 import '../data/repository.dart';
 import '../geo/coords.dart';
@@ -153,13 +154,14 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
     // Persist a stable centre alongside the radius, so a line whose circle was
     // only ever derived (legacy/unset) stops drifting when its points change.
     final inc = _inclusion;
-    unawaited(
+    logAsyncFailure(
       _repo.updateFreeLine(
         widget.freeLine.id,
         inclusionRadiusMeters: r,
         inclusionLat: widget.freeLine.inclusionLat ?? inc.center.latitude,
         inclusionLng: widget.freeLine.inclusionLng ?? inc.center.longitude,
       ),
+      'Saving the line',
     );
   }
 
@@ -314,7 +316,10 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
                 onChanged: (s) {
                   final n = parseDecimal(s);
                   if (n != null && n.isFinite) {
-                    unawaited(_repo.updateFreeLine(id, offsetMeters: n));
+                    logAsyncFailure(
+                      _repo.updateFreeLine(id, offsetMeters: n),
+                      'Saving the offset',
+                    );
                   }
                 },
               ),
@@ -329,8 +334,9 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
           ),
           onChanged: (s) {
             final t = s.trim();
-            unawaited(
+            logAsyncFailure(
               _repo.updateFreeLine(id, label: Value(t.isEmpty ? null : t)),
+              'Saving the name',
             );
           },
         ),
@@ -357,12 +363,13 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
             onChanged: (s) {
               final ll = parseLatLng(s);
               if (ll != null) {
-                unawaited(
+                logAsyncFailure(
                   _repo.updateFreeLinePoint(
                     p.id,
                     lat: ll.latitude,
                     lng: ll.longitude,
                   ),
+                  'Moving the point',
                 );
               }
             },
@@ -416,21 +423,23 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
           onSelected: (v) {
             switch (v) {
               case 'up':
-                unawaited(
+                logAsyncFailure(
                   _repo.swapFreeLinePointOrder(
                     p.id,
                     widget.points[index - 1].id,
                   ),
+                  'Reordering the points',
                 );
               case 'down':
-                unawaited(
+                logAsyncFailure(
                   _repo.swapFreeLinePointOrder(
                     p.id,
                     widget.points[index + 1].id,
                   ),
+                  'Reordering the points',
                 );
               case 'remove':
-                unawaited(_deletePoint(p));
+                logAsyncFailure(_deletePoint(p), 'Removing the point');
             }
           },
         ),
