@@ -204,7 +204,16 @@ PY
   # shows. build.sh owns the dart-defines; this must not keep its own copy.
   note "building + installing a debug APK (run-as needs it debuggable)"
   ./scripts/build.sh --skip-checks >/dev/null
-  "$ADB" -s "$serial" install -r build/app/outputs/flutter-apk/app-debug.apk >/dev/null
+  # Uninstall first. `install -r` refuses an APK whose signature differs from
+  # the installed one, and a *release* build gets installed here often enough
+  # to matter — verifying a signed bundle before a store upload puts one on
+  # this very AVD. The refusal is INSTALL_FAILED_UPDATE_INCOMPATIBLE, printed
+  # on stdout, which the old `>/dev/null` swallowed whole: the run carried on
+  # and shot the previous build. Losing this AVD's app data costs nothing,
+  # because the next two steps overwrite the database anyway.
+  "$ADB" -s "$serial" uninstall "$APP_ID" >/dev/null 2>&1 || true
+  "$ADB" -s "$serial" install build/app/outputs/flutter-apk/app-debug.apk \
+    | grep -q '^Success' || die "installing the debug APK failed"
 
   note "generating the deterministic seed database"
   flutter test tool/make_screenshot_seed.dart >/dev/null
