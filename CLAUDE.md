@@ -605,6 +605,17 @@ release notes, store listing copy and the exact data-safety answers live there.
   because R8 and the native-asset path exist only in release, which is how `share_plus`
   13.3.0 got through everything else. It does not replace the device check: an emulator-less
   runner cannot tell you a control is unreachable or a band is invisible.
+  **The release build CI keeps is the shippable one.** Six repository secrets mirror the two
+  files that live outside version control — `ANDROID_KEYSTORE_BASE64` / `_PASSWORD`,
+  `ANDROID_KEY_PASSWORD` / `_ALIAS` from `android/key.properties` + the upload keystore, and
+  `TILE_URL` / `TILE_ATTRIBUTION` from `~/.config/zonecraft/release.env` — so rotating either
+  side means rotating both. CI writes them back into `key.properties` and a `.jks`, builds
+  the APK **and** the App Bundle through `scripts/build.sh` (never a bare `flutter build`, so
+  the dart-defines cannot drift from the laptop build), fails if `keytool` finds the debug
+  cert on either, and uploads both as the artifact `zonecraft-release-<sha>` (30 days;
+  `gh run download -n ...`). A fork's PR sees no secrets: every one of those steps is gated
+  on `env.HAVE_KEYSTORE`, and the debug-signed OSM-tiled smoke build is not uploaded. There
+  is deliberately **no** Play upload step.
   **`origin` is SSH (`git@github.com:LeoStumpf/ZoneCraft.git`), and that is load-bearing.**
   A push that adds or edits anything under `.github/workflows/` is refused over HTTPS unless
   the token carries the `workflow` scope — and the scope is a property of *tokens*, so an SSH

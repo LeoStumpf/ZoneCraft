@@ -201,7 +201,7 @@ export TILE_ATTRIBUTION='© MapTiler © OpenStreetMap contributors'
 ./scripts/build.sh --release
 ```
 
-The key belongs in your environment, never in the repo.
+The key belongs in your environment, never in the repo. CI (`.github/workflows/ci.yml`) takes the same two variables from repository secrets, alongside the upload keystore, so the release build it keeps as a workflow artifact is the shippable one; a fork's pull request has no secrets and gets the default build.
 
 Re-enabling the viewport prefetch and the "download this area" button is a **separate**
 statement, `TILE_ALLOWS_PREFETCH=true`, and it is separate because being off

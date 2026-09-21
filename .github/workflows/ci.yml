@@ -15,10 +15,23 @@
 #                                    release, so a break there would otherwise
 #                                    surface the night before a store upload
 #
-# No secrets. `android/app/build.gradle.kts` falls back to the debug signing
-# key when `key.properties` is absent, and `scripts/build.sh` guards the tile
-# key's env file with `if [ -f ]`, so both work unconfigured. The APK produced
-# here is a smoke test, never something to ship.
+# With six repository secrets the release build is the shippable one -- the
+# same build `scripts/build.sh --bundle` makes on the laptop, signed with the
+# upload key and pointed at the keyed tile provider -- and it is kept as a
+# workflow artifact (`zonecraft-release-<sha>`, 30 days). The secrets mirror
+# two files that live outside version control, so rotating either means
+# rotating both:
+#   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,
+#   ANDROID_KEY_PASSWORD, ANDROID_KEY_ALIAS       <- android/key.properties
+#                                                    + the upload keystore
+#   TILE_URL, TILE_ATTRIBUTION                    <- ~/.config/zonecraft/release.env
+#
+# Without them -- a fork's pull request never sees secrets -- every step marked
+# `if: env.HAVE_KEYSTORE` is skipped: `android/app/build.gradle.kts` falls back
+# to the debug key when `key.properties` is absent and `scripts/build.sh` builds
+# against the community OSM tiles when TILE_URL is unset. That build is the
+# smoke test this workflow started as, and it is deliberately not uploaded: a
+# release-looking APK nobody can ship would only mislead.
 name: CI
 
 on:
@@ -34,7 +47,12 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
+
+    # The `secrets` context cannot be read in a step's `if:`; an env var can.
+    # Empty on a fork's pull request, set on every push to main.
+    env:
+      HAVE_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
 
     steps:
       - uses: actions/checkout@v4
@@ -73,8 +91,69 @@ jobs:
       - name: Test
         run: flutter test
 
+      # Materialise what build.gradle.kts reads. The keystore lands next to the
+      # app module because Gradle's `file()` there resolves relative to
+      # android/app/. Both paths are gitignored (`*.jks`, `**/key.properties`).
+      - name: Release signing
+        if: env.HAVE_KEYSTORE != ''
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/upload-keystore.jks
+          {
+            echo "storeFile=upload-keystore.jks"
+            echo "storePassword=$ANDROID_KEYSTORE_PASSWORD"
+            echo "keyPassword=$ANDROID_KEY_PASSWORD"
+            echo "keyAlias=$ANDROID_KEY_ALIAS"
+          } > android/key.properties
+
       # Last because it is the slowest. Release mode only: debug would not
       # exercise R8 or the native-asset path, which is the whole reason this
-      # step exists.
-      - name: Release build
-        run: flutter build apk --release
+      # step exists. Through build.sh, not a bare `flutter build`, so the
+      # dart-defines cannot drift from the laptop build: it forwards TILE_URL /
+      # TILE_ATTRIBUTION, prints the tile source with the key masked, and
+      # refuses TILE_ALLOWS_PREFETCH without a URL. Checks are skipped because
+      # format, analyze and test are the steps above.
+      - name: Release build (APK)
+        env:
+          TILE_URL: ${{ secrets.TILE_URL }}
+          TILE_ATTRIBUTION: ${{ secrets.TILE_ATTRIBUTION }}
+        run: scripts/build.sh --release --skip-checks
+
+      - name: Release build (App Bundle)
+        if: env.HAVE_KEYSTORE != ''
+        env:
+          TILE_URL: ${{ secrets.TILE_URL }}
+          TILE_ATTRIBUTION: ${{ secrets.TILE_ATTRIBUTION }}
+        run: scripts/build.sh --bundle --skip-checks
+
+      # Gradle's fallback to the debug key is silent, and an artifact that looks
+      # like a release but cannot be uploaded to Play is exactly the failure
+      # worth a red run. keytool comes with the setup-java JDK.
+      - name: Signed with the upload key, not debug
+        if: env.HAVE_KEYSTORE != ''
+        run: |
+          for f in build/app/outputs/flutter-apk/app-release.apk \
+                   build/app/outputs/bundle/release/app-release.aab; do
+            certs="$(keytool -printcert -jarfile "$f")"
+            echo "== $f"
+            echo "$certs" | grep -E 'Owner:|SHA256:'
+            if echo "$certs" | grep -q 'CN=Android Debug'; then
+              echo "!!! $f is signed with the debug key" >&2
+              exit 1
+            fi
+          done
+
+      - name: Keep the signed build
+        if: env.HAVE_KEYSTORE != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: zonecraft-release-${{ github.sha }}
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 30
