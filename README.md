@@ -166,6 +166,10 @@ test/          geometry, parsing, network, migration and database unit tests
 
 ## Develop
 
+The [wiki](https://github.com/LeoStumpf/ZoneCraft/wiki) holds the user guide and the developer
+pages — building, architecture, migrations, data-source policies, and how a CI build reaches
+Google Play. What follows is the short version.
+
 ### Build script (recommended)
 
 `scripts/build.sh` runs the checks and builds in one step (it puts `flutter` on `PATH` itself,
