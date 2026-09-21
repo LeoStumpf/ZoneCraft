@@ -22,9 +22,13 @@
 # two files that live outside version control, so rotating either means
 # rotating both:
 #   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,
-#   ANDROID_KEY_PASSWORD, ANDROID_KEY_ALIAS       <- android/key.properties
+#   ANDROID_KEY_PASSWORD                           <- android/key.properties
 #                                                    + the upload keystore
 #   TILE_URL, TILE_ATTRIBUTION                    <- ~/.config/zonecraft/release.env
+# The key alias is written below as the literal `upload`, not a fifth
+# secret: it is not secret, and GitHub masks every occurrence of a secret's
+# value in the log, which turned every "upload" -- step names, the artifact
+# action's own output -- into `***`.
 #
 # Without them -- a fork's pull request never sees secrets -- every step marked
 # `if: env.HAVE_KEYSTORE` is skipped: `android/app/build.gradle.kts` falls back
@@ -100,14 +104,13 @@ jobs:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/upload-keystore.jks
           {
             echo "storeFile=upload-keystore.jks"
             echo "storePassword=$ANDROID_KEYSTORE_PASSWORD"
             echo "keyPassword=$ANDROID_KEY_PASSWORD"
-            echo "keyAlias=$ANDROID_KEY_ALIAS"
+            echo "keyAlias=upload"
           } > android/key.properties
 
       # Last because it is the slowest. Release mode only: debug would not
@@ -132,20 +135,30 @@ jobs:
 
       # Gradle's fallback to the debug key is silent, and an artifact that looks
       # like a release but cannot be uploaded to Play is exactly the failure
-      # worth a red run. keytool comes with the setup-java JDK.
+      # worth a red run. Two tools because the two files are signed differently:
+      # an APK carries a v2/v3 signature in its signing block, which only
+      # apksigner reads (keytool sees "not a signed jar" and prints nothing --
+      # that is how the first version of this step failed); an App Bundle is a
+      # plain jar-signed zip, which keytool reads and apksigner refuses.
       - name: Signed with the upload key, not debug
         if: env.HAVE_KEYSTORE != ''
         run: |
-          for f in build/app/outputs/flutter-apk/app-release.apk \
-                   build/app/outputs/bundle/release/app-release.aab; do
-            certs="$(keytool -printcert -jarfile "$f")"
-            echo "== $f"
-            echo "$certs" | grep -E 'Owner:|SHA256:'
-            if echo "$certs" | grep -q 'CN=Android Debug'; then
-              echo "!!! $f is signed with the debug key" >&2
-              exit 1
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)"
+          check() { # $1 = file, stdin = certificate description
+            desc="$(cat)"
+            echo "== $1"
+            echo "$desc" | grep -E 'DN:|Owner:|SHA-?256' || true
+            if [ -z "$desc" ]; then
+              echo "!!! $1: no signing certificate found" >&2; exit 1
             fi
-          done
+            if echo "$desc" | grep -q 'CN=Android Debug'; then
+              echo "!!! $1 is signed with the debug key" >&2; exit 1
+            fi
+          }
+          apk=build/app/outputs/flutter-apk/app-release.apk
+          aab=build/app/outputs/bundle/release/app-release.aab
+          "$apksigner" verify --print-certs "$apk" | check "$apk"
+          keytool -printcert -jarfile "$aab" | check "$aab"
 
       - name: Keep the signed build
         if: env.HAVE_KEYSTORE != ''
