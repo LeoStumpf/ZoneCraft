@@ -1,0 +1,1 @@
+ZoneCraft is free software (AGPL-3.0-or-later) · [Source](https://github.com/LeoStumpf/ZoneCraft) · [Privacy policy](https://github.com/LeoStumpf/ZoneCraft/blob/main/PRIVACY.md) · [Issues](https://github.com/LeoStumpf/ZoneCraft/issues) · Map data © OpenStreetMap contributors
