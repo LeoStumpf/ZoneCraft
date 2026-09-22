@@ -1,0 +1,89 @@
+# The wiki, generated from `docs/`.
+#
+# A GitHub wiki is a *second* git repository (`<repo>.wiki.git`) — that is
+# GitHub's design, not a choice. Left to itself it is invisible to everything
+# that keeps this project honest: a wiki edit never appears in a diff or a
+# review, `ci.yml` cannot see it, and no test can check it. That mattered here
+# rather than in theory, because `docs/Layer-Types.md` quotes all seven
+# `kLayerTypeChoices` subtitles **word for word**, and
+# `docs/Getting-Started.md` promises its example matches the welcome sheet's.
+# Nothing but memory connected the two, and a copy change had to remember to
+# edit both.
+#
+# So `docs/` in this repo is the source — reviewed, and guarded by
+# `test/docs_quotes_test.dart` — and this workflow publishes it. The wiki is
+# **output**: editing it in the browser is a change the next publish silently
+# overwrites, which is why "Restrict editing to collaborators only" belongs on
+# in the repository's wiki settings.
+#
+# Two details are load-bearing:
+#
+#   * **Only local page links lose their `.md`.** A wiki resolves
+#     `](Layer-Types)`, while the repo needs `](Layer-Types.md)` to render — so
+#     the suffix is stripped on the way out. But `docs/` also links to
+#     `https://github.com/.../blob/main/PRIVACY.md`, and stripping *that* `.md`
+#     would produce a 404. The rewrite therefore matches only targets with no
+#     `/` and no `:` in them.
+#
+#   * **The push is not allowed to fail quietly.** A publish that no-ops leaves
+#     the wiki stale while every signal says it succeeded, which is the exact
+#     failure this workflow exists to end.
+#
+# A push to the wiki does not trigger workflows, so there is no loop.
+name: Publish wiki
+
+on:
+  push:
+    branches: [main]
+    paths: ['docs/**']
+  workflow_dispatch:
+
+# Needed to push to <repo>.wiki.git. If the repository's
+# Settings -> Actions -> General -> Workflow permissions is set to read-only,
+# this cannot escalate and the push will 403 — that setting has to allow write.
+permissions:
+  contents: write
+
+# Two pushes in quick succession would otherwise clone, rewrite and push the
+# same wiki repository at the same time, and one would lose.
+concurrency:
+  group: publish-wiki
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the source
+        uses: actions/checkout@v4
+
+      - name: Clone the wiki
+        run: |
+          git clone --depth 1 \
+            "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.wiki.git" \
+            wiki
+
+      - name: Copy docs/ over the wiki, and make the links wiki-shaped
+        run: |
+          set -euo pipefail
+          # Remove the pages the wiki currently has, so a page deleted from
+          # docs/ disappears instead of lingering. .git is never touched.
+          find wiki -maxdepth 1 -name '*.md' -delete
+          cp docs/*.md wiki/
+          # ](Page-Name.md) -> ](Page-Name), for local pages only: a target
+          # containing / or : is a URL and keeps its extension.
+          sed -i -E 's/\]\(([^):/]+)\.md(#[^)]*)?\)/](\1\2)/g' wiki/*.md
+
+      - name: Publish
+        run: |
+          set -euo pipefail
+          cd wiki
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "wiki already matches docs/ — nothing to publish"
+            exit 0
+          fi
+          git commit -m "Publish docs/ from ${GITHUB_SHA:0:7}"
+          git push

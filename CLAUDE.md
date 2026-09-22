@@ -714,12 +714,34 @@ lib/
                explained, once, for both its tooltip and the guide)
 ```
 
+## Docs — `docs/` is the wiki
+
+**The public wiki is generated from `docs/`, and is never edited by hand.** A GitHub wiki is a
+*second* git repository (`ZoneCraft.wiki.git`, cloned at `~/git/ZoneCraft.wiki`) — GitHub's
+design, not a choice — so left to itself it is invisible to everything that keeps this project
+honest: a wiki edit appears in no diff and no review, `ci.yml` cannot see it, and no test can
+check it. The docs therefore live in `docs/` here, and
+`.github/workflows/wiki.yml` publishes them on any push to `main` that touches `docs/**`.
+- **Edit `docs/`, never `~/git/ZoneCraft.wiki`** — that clone is now *output*, and a change made
+  there is silently overwritten by the next publish. Same for a browser edit of the wiki.
+- **Links are relative `.md` links** (`[Layer Types](Layer-Types.md)`), which is what renders in
+  the repo; the publish step strips the `.md` because that is what a wiki resolves. It strips it
+  **only** from targets with no `/` and no `:`, so the absolute `github.com/.../PRIVACY.md` links
+  keep their extension. Wiki-native `[[Page]]` links do not render outside a wiki — never
+  reintroduce them.
+- **`docs/Layer-Types.md` quotes every `kLayerTypeChoices` subtitle word for word**, and
+  `test/docs_quotes_test.dart` fails when they diverge. A subtitle edit in `ui/layer_actions.dart`
+  is a `docs/` edit in the same commit. The same test checks every cross-page link resolves.
+- The filename *is* the page name (`Layer-Types.md` → the "Layer Types" page), so renaming a file
+  moves a public URL.
+
 ## Plans
 
 **All planning docs live in the `planning/` folder, which is gitignored — they are local-only
 and never committed.** New plans/notes go there too. This is strict: **no planning/checklist/TODO
 `.md` files may live anywhere outside `planning/`** (the repo root keeps only genuine public docs
-— `README.md`, `PRIVACY.md`, `THIRD_PARTY_NOTICES.md`, `CLAUDE.md`). Likewise, generated
+— `README.md`, `PRIVACY.md`, `THIRD_PARTY_NOTICES.md`, `CLAUDE.md`; `docs/` is the published
+wiki, see above, and is exempt from this rule). Likewise, generated
 release artifacts (Play Store screenshots, icons, feature graphics) go under
 `planning/play-store-assets/`, never committed.
 

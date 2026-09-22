@@ -171,6 +171,11 @@ The [wiki](https://github.com/LeoStumpf/ZoneCraft/wiki) holds the user guide and
 pages — building, architecture, migrations, data-source policies, and how a CI build reaches
 Google Play. What follows is the short version.
 
+Those pages are written in [`docs/`](docs/) and published to the wiki by
+[`.github/workflows/wiki.yml`](.github/workflows/wiki.yml) on every push to `main`, so a doc fix
+is a pull request like any other — an edit made in the wiki's own web editor would be overwritten
+by the next publish.
+
 ### Build script (recommended)
 
 `scripts/build.sh` runs the checks and builds in one step (it puts `flutter` on `PATH` itself,
