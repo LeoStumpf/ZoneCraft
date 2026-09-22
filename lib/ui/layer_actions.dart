@@ -936,7 +936,7 @@ const kLayerTypeChoices = <LayerTypeChoice>[
     label: 'Circles layer',
     subtitle:
         'Everything within a distance of a point — "within 2 km of '
-        'the station".',
+        'the town hall".',
   ),
   (
     type: kSubspace,

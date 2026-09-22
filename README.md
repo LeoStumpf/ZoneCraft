@@ -1,9 +1,10 @@
 # ZoneCraft
 
-ZoneCraft turns a map into a deduction board. You draw **zones** — coloured regions defined by
-simple geometric rules — stack them as **layers** over OpenStreetMap, and watch the possible
-area shrink to where it has to be. There is **no login and no server**: every layer, object and
-setting lives in a local SQLite database on the device.
+ZoneCraft builds map areas out of geometric rules. Each rule is a **zone** — a coloured region
+defined by one simple constraint, like *within 2 km of this point*, *closer to A than to B* or
+*above 800 m* — and you stack the zones as **layers** over OpenStreetMap until the overlap is
+the area you meant: *"inside the city, but more than 2 km from its border"*. There is **no login
+and no server**: every layer, object and setting lives in a local SQLite database on the device.
 
 Android-first, iOS-ready. Built with Flutter.
 

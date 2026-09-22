@@ -78,8 +78,9 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
-    // The sentence that lived only in README.md.
-    expect(find.textContaining('deduction board'), findsOneWidget);
+    // The sentence that lived only in README.md: what the app is for, in the
+    // terms the app actually works in — rules, zones, and their overlap.
+    expect(find.textContaining('geometric rules'), findsOneWidget);
     // One worked example of the loop, so the idea is concrete.
     expect(find.textContaining('Fill outside'), findsOneWidget);
     // A door to the button guide, which nothing on the map points at.

@@ -30,16 +30,22 @@ const String kWelcomeHintKey = 'hint.firstRun';
 
 /// What ZoneCraft is for, said once, on the map.
 ///
-/// The app never said it. The one sentence that explains it — "turns a map into
-/// a deduction board… watch the possible area shrink to where it has to be" —
-/// lived in README.md, where no user is. In the app, every explanation answered
-/// "what does this button do" (the guide) or "which servers does it contact"
-/// (About); nothing answered "why would I open this?". A first-time user got a
-/// map of somewhere they do not live and twelve unlabelled icons.
+/// The app never said it. The one sentence that explains it — the app builds a
+/// map area out of geometric rules, one rule per layer, and the overlap is what
+/// satisfies all of them — lived in README.md, where no user is. In the app,
+/// every explanation answered "what does this button do" (the guide) or "which
+/// servers does it contact" (About); nothing answered "why would I open this?".
+/// A first-time user got a map of somewhere they do not live and twelve
+/// unlabelled icons.
 ///
 /// So: the idea, one worked example of the loop, and a door to the guide. It is
 /// a bottom sheet rather than a full-screen tour because the map stays visible
 /// behind it — the thing being explained is right there.
+///
+/// The example *states* its constraints rather than quoting answers to somebody
+/// else's questions. A layer is a constraint; phrasing one as a reply made the
+/// reader supply a scenario the app does not have, and left a "they" with no
+/// referent standing where the explanation should be.
 Future<void> showWelcomeSheet(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
@@ -73,10 +79,10 @@ class _WelcomeSheet extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               Text(
-                'ZoneCraft turns a map into a deduction board. Each thing you '
-                'learn about where something is becomes a zone; stack the '
-                'zones, and the area it could be in shrinks to where it has '
-                'to be.',
+                'ZoneCraft builds map areas out of geometric rules. Each rule '
+                'you add is a zone — within a distance of a point, on one side '
+                'of a line, above an elevation — and where the zones overlap '
+                'is the area that satisfies all of them.',
                 style: theme.textTheme.bodyMedium,
               ),
               const SizedBox(height: 20),
@@ -85,20 +91,20 @@ class _WelcomeSheet extends StatelessWidget {
               const _Step(
                 icon: Icons.circle_outlined,
                 text:
-                    '“They are within 2 km of the station.” Add a circle '
-                    'there and set its radius.',
+                    'Within 2 km of the station: add a circle there and set '
+                    'its radius.',
               ),
               const _Step(
                 icon: Icons.flip_to_back,
                 text:
-                    '“No, they are not.” Press Fill outside — now the zone '
-                    'is everywhere except that circle.',
+                    'More than 2 km from it: press Fill outside — the zone '
+                    'becomes everything except that circle.',
               ),
               const _Step(
                 icon: Icons.layers_outlined,
                 text:
-                    'Add a layer per answer. Where the colours overlap is '
-                    'what is left.',
+                    'One layer per rule. Where the colours overlap is your '
+                    'area.',
               ),
               const SizedBox(height: 20),
               Text(
