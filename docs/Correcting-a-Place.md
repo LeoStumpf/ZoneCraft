@@ -40,13 +40,19 @@ only asked about. Undo brings a deleted place back.
 
 ## Publishing
 
+Why bother? Everything on this map — the streets, the benches, the borders — was put there by
+OpenStreetMap volunteers and is free for anyone to use, this app included. Passing on what you
+found is how you give something back: the next person looking for a bench finds it, whichever
+app they use.
+
 A place with something to publish shows **Publish to OpenStreetMap…** (one you added) or
 **Publish this change…** (a correction) in its editor, and its row in the Elements list says
 *not published*, *in your OSM list* or *sent to OSM*. The sheet holds a draft you can edit —
 *"What should a mapper know?"* — that says what the place is (its category and OpenStreetMap
 tag, e.g. `amenity=bench`), where it is, and what changed: the old and new position with the
 distance and direction between them, the old and new name, or for a new place the tags a
-mapper would type. It is signed with the app's name and version. Three ways out:
+mapper would type. It carries nothing else — no signature, no app name: it is your own post
+to other mappers. Three ways out:
 
 | Button | What happens |
 |---|---|

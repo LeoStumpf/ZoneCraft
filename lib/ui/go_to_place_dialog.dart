@@ -17,6 +17,8 @@
 import 'package:flutter/material.dart';
 
 import '../data/place_search.dart';
+import '../data/service_credits.dart';
+import 'service_credit_line.dart';
 
 /// Type a place, move the map there. Changes nothing.
 ///
@@ -169,9 +171,16 @@ class _GoToPlaceDialogState extends State<_GoToPlaceDialog> {
             else
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text(
-                  'Moves the map only — nothing is added to your layers.',
-                  style: theme.textTheme.bodySmall,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Moves the map only — nothing is added to your layers.',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 8),
+                    const ServiceCreditLine(kNominatimCredit),
+                  ],
                 ),
               ),
           ],

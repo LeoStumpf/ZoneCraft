@@ -14,6 +14,26 @@ for people forking the app, and for the operators of those services.
 | **AWS Terrain Tiles** | Ground-height layers, *Measure elevation*, the height under *Locate me* | `s3.amazonaws.com/elevation-tiles-prod/terrarium/` — SRTM, 3DEP and GMTED2010 courtesy of the U.S. Geological Survey; ETOPO1 courtesy of NOAA |
 | **OpenStreetMap Notes API** | *Publish to OpenStreetMap* — the one thing the app ever writes | `api.openstreetmap.org`; `OSM_API_URL` at build time |
 
+## Saying so in the app
+
+The app names these services at the moment you use them, in one friendly line each, so a wait
+reads as what it is — somebody else's free service, shared with everyone — rather than as a
+broken app. The words are defined once, in `lib/data/service_credits.dart`:
+
+- **An import** shows, while it waits, that Overpass is run by volunteers and that everyone's
+  requests queue together — why a busy moment can take a minute or two.
+- **The place searches** say they use Nominatim, OpenStreetMap's free place finder, one search
+  per press.
+- **The height editor** says where the terrain comes from, and that each area is fetched once.
+- **The credits** (the attribution pill) say who draws the map tiles.
+- **Publishing** opens with why it is worth doing: the map is made by volunteers, and a fix
+  passed on improves it for everyone.
+
+None of these is counted down like a tip: the fourth import is as slow as the first. The
+**Servers and limits** screen (from About) adds the ways to give back — publishing fixes,
+mapping on openstreetmap.org, supporting the OpenStreetMap Foundation, running an Overpass
+instance.
+
 ## What the app asks of them
 
 **Only when you ask.** No timer, no background fetch, no request on a map move except for

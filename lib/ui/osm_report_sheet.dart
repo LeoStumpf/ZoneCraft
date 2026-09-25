@@ -45,6 +45,8 @@ import '../data/osm_report.dart';
 import '../data/repository.dart';
 import '../state/providers.dart';
 import 'editor_sheet.dart';
+import '../data/service_credits.dart';
+import 'service_credit_line.dart';
 
 /// What the sheet decided, so the caller can say so.
 enum OsmReportOutcomeKind { cancelled, saved, sent }
@@ -279,6 +281,10 @@ class _OsmReportSheetState extends ConsumerState<_OsmReportSheet> {
                 : null,
           ),
         ),
+        const SizedBox(height: 8),
+        // Why this is worth doing — the warning below says what it is *not*
+        // for, and on its own made the whole sheet read as a caution.
+        const ServiceCreditLine(kGiveBackCredit),
         const SizedBox(height: 8),
         // Every time, never counted down. See the library doc.
         Text(

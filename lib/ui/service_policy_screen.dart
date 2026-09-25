@@ -24,6 +24,7 @@ import '../data/osm_notes.dart';
 import '../data/overpass_client.dart' show overpassEndpoints;
 import '../data/place_search.dart' show defaultNominatimHost;
 import '../data/tile_source.dart';
+import '../data/service_credits.dart';
 import 'external_link.dart';
 
 /// What ZoneCraft asks of other people's servers, and how to reach its author.
@@ -98,6 +99,21 @@ class _ServicePolicyScreenState extends State<ServicePolicyScreen> {
             style: theme.textTheme.bodyMedium,
           ),
 
+          _Heading('Why this matters'),
+          Text(kGiveBackCredit, style: theme.textTheme.bodyMedium),
+          const SizedBox(height: 8),
+          Text(
+            'Ways to give back, from the smallest:\n'
+            '• Publish your fixes from ZoneCraft — a bench you added, a name '
+            'you corrected, a place that is gone.\n'
+            '• Map directly on openstreetmap.org with a free account.\n'
+            '• Support the OpenStreetMap Foundation, which runs '
+            'OpenStreetMap itself — the data every import comes from, the '
+            'notes and the place search.\n'
+            '• Run an Overpass instance for others (see below).',
+            style: theme.textTheme.bodyMedium,
+          ),
+
           _Heading('What the app asks for'),
           _Rule(
             icon: Icons.touch_app_outlined,
@@ -144,10 +160,12 @@ class _ServicePolicyScreenState extends State<ServicePolicyScreen> {
             icon: Icons.volunteer_activism_outlined,
             title: 'One thing the app can send, and only on a press',
             body:
-                'If you correct an imported point, the app offers to pass '
-                'the correction on as an OpenStreetMap note. You write the '
-                'text, you press Send, and that is the only circumstance in '
-                'which anything you typed leaves this device. Nothing is ever '
+                'When you add a place, correct one, or delete one that is '
+                'gone, the app offers to pass that on as an OpenStreetMap '
+                'note. You read and edit the text, you press Send, and that '
+                'is the only circumstance in which anything you typed leaves '
+                'this device. The note is your own words — the app adds no '
+                'signature. Nothing is ever '
                 'sent in a batch, on a timer, or when a connection comes back '
                 '— notes are meant to be one person telling another, and the '
                 'project asks apps not to generate them automatically.',

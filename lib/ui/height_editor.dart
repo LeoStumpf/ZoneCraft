@@ -32,6 +32,8 @@ import '../state/providers.dart';
 import 'editor_sheet.dart';
 import 'element_color_dialog.dart';
 import 'import_actions.dart' show convertRingsToFreehandFlow;
+import '../data/service_credits.dart';
+import 'service_credit_line.dart';
 
 /// Docked bottom-sheet editor for a height region: an elevation threshold
 /// applied inside a bounded circle. Lets the user set the centre (typed or
@@ -382,6 +384,12 @@ class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
             ),
           ],
         ),
+        // Said before and during the one fetch, where the wait is; once the
+        // area is generated it is offline and the line has nothing to explain.
+        if (_busy || !generated) ...[
+          const SizedBox(height: 8),
+          const ServiceCreditLine(kTerrainCredit),
+        ],
         if (generated && widget.polygonCount > 0) ...[
           const SizedBox(height: 8),
           // The way out of a generated fill and into geometry you own — the

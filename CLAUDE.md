@@ -354,6 +354,11 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
     (the old tap-to-place, kept as the fallback), double-tap zoom is off while armed
     (`tapPlaces`), and the pin is put away when the selection moves to another point or any
     transient mode is cleared. `poiPointPlacementProvider` is gone.
+  - **A note is unsigned.** `composeOsmReportText` adds no "reported with ZoneCraft" line: a
+    note is the user's own post, OSM's Notes guidance asks apps for no attribution (only "no
+    automated notes"), and the request's `User-Agent` already names the app to the operator,
+    which is what the API policy requires. It also keeps `PRIVACY.md` literally true — the note
+    is the text you wrote and where you pinned it.
   - **Notes, not edits, and that is not a stopgap.** `parseOverpassResponse` keeps no tag map
     and no element `version`, and uses `out center`, so a `PUT` would strip tags off live OSM
     objects. A note is the only report this data model can make honestly — and it is the
@@ -384,6 +389,16 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   be reflected in both. An OSM note is not an exception to this — it carries nothing the user
   did not type, goes nowhere but OpenStreetMap, and only on a press — but it *is* the one
   thing that leaves the device, so PRIVACY.md names it in full.
+- **The app names the free services it uses, at the moment it uses them**
+  (`data/service_credits.dart`, drawn by `ui/service_credit_line.dart`). One friendly line
+  each: the Overpass import dialog says volunteers run it and requests queue together (why a
+  wait can take minutes — `showImportProgress(credit:)`), the two place searches credit
+  Nominatim, the height editor credits the open terrain data, the credits sheet says who draws
+  the tiles (`tileCredit(TileSource)`), and the publish sheet and point editor open with why
+  giving back matters (`kGiveBackCredit` / `kGiveBackShort`); "Servers and limits" adds a
+  **Why this matters** section. The strings are defined once so the surfaces cannot drift,
+  and they are **never counted by `UiHints`** — they sit inside a wait or a form already on
+  screen, and the fourth import is as slow as the first.
 - **Every outbound HTTP call is timed out.** `package:http` has no default timeout, so each
   call site sets one explicitly (`kTerrainTileTimeout`, `CachedTileProvider.fetchTimeout`,
   the Overpass per-request budgets), plus `kHeightGenBudget` as an overall deadline on a

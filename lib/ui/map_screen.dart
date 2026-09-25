@@ -46,6 +46,7 @@ import '../data/overpass_client.dart'
 import '../data/layer_types.dart';
 import '../data/platform_files.dart';
 import '../data/repository.dart' show Repository;
+import '../data/service_credits.dart';
 import '../data/shared_point.dart';
 import '../data/tile_health.dart';
 import '../data/tile_source.dart';
@@ -2061,6 +2062,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       title: title,
       message: message,
       onCancel: cancel.cancel,
+      credit: kOverpassCredit,
     );
     final repo = ref.read(repositoryProvider);
     final settings = ref.read(settingsProvider).asData?.value;
@@ -2408,6 +2410,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       title: 'Importing ${level.label.toLowerCase()}',
       message: 'Preparing the query…',
       onCancel: cancel.cancel,
+      credit: kOverpassCredit,
     );
     final elapsed = Stopwatch()..start();
     try {
@@ -5577,7 +5580,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       ),
                       child: _MapAttribution(
                         text: _tiles.attribution,
-                        onTap: () => _showCredits(context),
+                        onTap: () => _showCredits(context, _tiles),
                       ),
                     ),
                   ),
@@ -6214,7 +6217,9 @@ class _MapAttribution extends StatelessWidget {
 /// Tiles attribution list asks that the underlying providers be named wherever
 /// the data is shown, and naming four of them in a corner pill would crowd out
 /// the OpenStreetMap line that must not be crowded out.
-void _showCredits(BuildContext context) {
+/// [source] is the tile source in force, so the sheet can say who draws the
+/// map as well as whose data it is.
+void _showCredits(BuildContext context, TileSource source) {
   unawaited(
     showModalBottomSheet<void>(
       context: context,
@@ -6232,7 +6237,8 @@ void _showCredits(BuildContext context) {
                 icon: Icons.map_outlined,
                 text:
                     'Map data and tiles © OpenStreetMap contributors, '
-                    'licensed under the Open Database License (ODbL).',
+                    'licensed under the Open Database License (ODbL). '
+                    '${tileCredit(source)}',
                 linkLabel: 'openstreetmap.org/copyright',
                 url: osmCopyrightUrl,
               ),

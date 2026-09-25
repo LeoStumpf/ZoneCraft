@@ -132,6 +132,8 @@ void main() {
     // saying that to exactly the people comfortable enough to be careless, so
     // it is unconditional.
     await open(tester);
+    // Why it is worth doing comes first; the caution below it is unchanged.
+    expect(find.textContaining('how you give something back'), findsOneWidget);
     expect(find.textContaining('public and permanent'), findsOneWidget);
     expect(
       find.textContaining('not for feedback about ZoneCraft'),

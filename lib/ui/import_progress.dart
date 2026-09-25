@@ -20,6 +20,7 @@ import 'package:flutter/material.dart';
 
 import '../data/overpass_client.dart';
 import '../data/repository.dart' show ImportTally;
+import 'service_credit_line.dart';
 
 /// The progress dialog shared by the Overpass-backed imports (transit, borders).
 ///
@@ -119,11 +120,16 @@ String formatBytes(int bytes) {
 /// [onCancel] adds a Cancel button and points the back gesture at it. The route
 /// still never pops itself — cancelling asks the *import* to stop, and the
 /// caller closes this dialog when it has, so the two can't get out of step.
+///
+/// [credit] names the service being waited on and why it can be slow (see
+/// `data/service_credits.dart`) — the difference between a wait that reads as
+/// courtesy and one that reads as a hang.
 ImportProgress showImportProgress(
   BuildContext context, {
   required String title,
   required String message,
   VoidCallback? onCancel,
+  String? credit,
 }) {
   final navigator = Navigator.of(context, rootNavigator: true);
   final notifier = ValueNotifier<String>(message);
@@ -141,6 +147,7 @@ ImportProgress showImportProgress(
           title: title,
           message: notifier,
           onCancel: onCancel,
+          credit: credit,
         ),
       ),
     ),
@@ -153,11 +160,13 @@ class _ImportProgressDialog extends StatefulWidget {
     required this.title,
     required this.message,
     this.onCancel,
+    this.credit,
   });
 
   final String title;
   final ValueNotifier<String> message;
   final VoidCallback? onCancel;
+  final String? credit;
 
   @override
   State<_ImportProgressDialog> createState() => _ImportProgressDialogState();
@@ -224,6 +233,10 @@ class _ImportProgressDialogState extends State<_ImportProgressDialog> {
               color: theme.colorScheme.outline,
             ),
           ),
+          if (widget.credit != null) ...[
+            const Divider(height: 24),
+            ServiceCreditLine(widget.credit!),
+          ],
         ],
       ),
       actions: widget.onCancel == null

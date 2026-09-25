@@ -241,19 +241,18 @@ String describeOffset(double meters) {
   return '${(meters / 100).round() / 10} km';
 }
 
-/// The line every report ends with, so an operator reading their logs can tell
-/// where a bad report came from and reach somebody about it.
-///
-/// The `User-Agent` already carries this, but a note is read by mappers in a
-/// web page, not by an operator reading headers.
-String get osmReportTrailer =>
-    '(reported with ZoneCraft $kAppVersion — '
-    '$kAppRepositoryUrl)';
-
 /// Builds the draft note for [kind] about [s].
 ///
 /// The result is what goes in the editable field, not what is sent: the user
 /// reads it, changes it, and only then presses Send.
+///
+/// **It carries no signature.** A note is the user's own post to other
+/// mappers, and OSM's guidance asks apps for none — only that notes stay
+/// human-to-human. It used to end "(reported with ZoneCraft 1.4.0 — …)" so an
+/// operator could trace a bad note, but the request's `User-Agent` already
+/// does that, which is what the API usage policy actually requires. Without
+/// it the note is exactly what `PRIVACY.md` says it is: the text you wrote and
+/// where you pinned it.
 String composeOsmReportText(OsmReportKind kind, OsmReportSubject s) {
   final lines = <String>[];
 
@@ -264,9 +263,7 @@ String composeOsmReportText(OsmReportKind kind, OsmReportSubject s) {
   if (lines.isNotEmpty) lines.add('');
 
   lines.add(_body(kind, s));
-  lines.add('');
-  lines.add(osmReportTrailer);
-  return lines.join('\n');
+  return lines.join('\n').trimRight();
 }
 
 String? _heading(OsmReportKind kind, OsmReportSubject s) {

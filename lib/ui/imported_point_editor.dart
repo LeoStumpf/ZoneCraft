@@ -28,6 +28,8 @@ import '../state/providers.dart';
 import 'editor_sheet.dart';
 import 'osm_report_sheet.dart';
 import 'poi_delete.dart';
+import '../data/service_credits.dart';
+import 'service_credit_line.dart';
 
 /// Docked editor for **one stored point** — a POI or a station; since v27
 /// both are `PoiPoints` rows, and only the icon and subtitle differ.
@@ -346,6 +348,10 @@ class _ImportedPointEditorSheetState
                 : 'In your OpenStreetMap list, not sent yet.',
             style: theme.textTheme.bodySmall,
           ),
+        ],
+        if (subject.canPublish) ...[
+          const SizedBox(height: 8),
+          const ServiceCreditLine(kGiveBackShort),
         ],
         const SizedBox(height: 12),
         Wrap(

@@ -175,7 +175,7 @@ void main() {
         // 0.00022° of latitude is about 24 m, due north.
         expect(text, contains('24 m north'));
         expect(text, contains('48.137400, 11.575000'));
-        expect(text, contains('ZoneCraft'));
+        expect(text, isNot(contains('ZoneCraft')));
       },
     );
 
@@ -301,28 +301,25 @@ void main() {
       expect(text, isNot(contains('=')));
     });
 
-    test('every kind produces something, and every one is signed', () {
+    test('a note carries nothing the user did not see written', () {
+      // It is the user's own post. OSM asks apps for no signature, and the
+      // request's User-Agent already names the app to the operator.
       for (final kind in OsmReportKind.values) {
         final text = composeOsmReportText(kind, munich);
-        expect(text.trim(), isNotEmpty);
-        expect(
-          text,
-          contains(osmReportTrailer),
-          reason:
-              'an operator reading a bad report has to be able to '
-              'trace it back to this app',
-        );
+        expect(text, isNot(contains('ZoneCraft')), reason: kind.name);
+        expect(text, isNot(contains('github.com')), reason: kind.name);
+        expect(text, isNot(endsWith('\n')), reason: kind.name);
       }
     });
 
-    test('"something else" leaves the sentence to the human', () {
-      // It is the one kind the app has nothing to say about, so it hands over
-      // a heading, a link and an empty line rather than a guess.
-      final text = composeOsmReportText(
-        OsmReportKind.other,
-        const OsmReportSubject(lat: 48.1, lng: 11.5),
+    test('the retired "something else" has nothing to say for the user', () {
+      expect(
+        composeOsmReportText(
+          OsmReportKind.other,
+          const OsmReportSubject(lat: 48.1, lng: 11.5),
+        ),
+        isEmpty,
       );
-      expect(text.trim(), osmReportTrailer);
     });
   });
 

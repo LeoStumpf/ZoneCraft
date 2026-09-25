@@ -18,6 +18,8 @@ import 'package:flutter/material.dart';
 
 import '../data/geo_import.dart';
 import '../data/place_search.dart';
+import '../data/service_credits.dart';
+import 'service_credit_line.dart';
 
 /// A search dialog that geocodes an OSM feature name (Nominatim) and lets the
 /// user pick a result to import — areas become a freehand area, lines (rivers,
@@ -153,11 +155,19 @@ class _FeatureSearchDialogState extends State<_FeatureSearchDialog> {
                 ),
               )
             else
-              Text(
-                'Type a place, river, road or boundary name, then search. The '
-                'match is imported as a freehand area (boundaries, parks, lakes…) '
-                'or a freehand line (rivers, roads, coastlines…).',
-                style: Theme.of(context).textTheme.bodySmall,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Type a place, river, road or boundary name, then search. '
+                    'The match is imported as a freehand area (boundaries, '
+                    'parks, lakes…) or a freehand line (rivers, roads, '
+                    'coastlines…).',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 8),
+                  const ServiceCreditLine(kNominatimCredit),
+                ],
               ),
           ],
         ),
