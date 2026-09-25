@@ -87,12 +87,66 @@ void main() {
   );
 
   group('ImportedPointEditorSheet', () {
+    PoiPoint row({String? name, DateTime? editedAt}) => PoiPoint(
+      id: 'p1',
+      poiSetId: 'ps1',
+      lat: 48.001,
+      lng: 11.002,
+      name: name,
+      sortOrder: 0,
+      createdAt: DateTime(2026),
+      osmType: 'node',
+      osmId: 240109189,
+      modeMask: 0,
+      editedAt: editedAt,
+    );
+
+    /// The delete flow reads the point and its set from the providers, and a
+    /// live drift stream never emits inside a widget test's FakeAsync.
+    void seed({PoiPoint? point, bool manual = false}) {
+      container.dispose();
+      container = ProviderContainer(
+        overrides: [
+          repositoryProvider.overrideWithValue(repo),
+          poiPointsProvider.overrideWith(
+            (ref) => Stream.value([point ?? row(name: 'Alte Post')]),
+          ),
+          poiSetsProvider.overrideWith(
+            (ref) => Stream.value([
+              PoiSet(
+                id: 'ps1',
+                layerId: 'L',
+                categoryKey: 'cafe',
+                centerLat: 48,
+                centerLng: 11,
+                radiusMeters: 800,
+                createdAt: DateTime(2026),
+                colorShade: 0,
+                zOrder: 0,
+                source: manual ? kPoiSourceManual : kPoiSourceRadius,
+                modeMask: 0,
+                visibleModeMask: -1,
+                fetchedAt: manual ? null : DateTime(2026),
+              ),
+            ]),
+          ),
+          osmReportsProvider.overrideWith(
+            (ref) => Stream.value(const <OsmReport>[]),
+          ),
+        ],
+      );
+      // Subscribed now, so the one value each stream sends is there to read.
+      container.listen(poiPointsProvider, (_, _) {});
+      container.listen(poiSetsProvider, (_, _) {});
+    }
+
     Widget poiSheet({
       String? name,
       DateTime? editedAt,
       double? origLat,
       double? origLng,
       String? origName,
+      bool movable = false,
     }) => ImportedPointEditorSheet(
       id: 'p1',
       name: name,
@@ -101,57 +155,112 @@ void main() {
       icon: Icons.place_outlined,
       title: 'Edit POI',
       subtitle: 'Cafés',
-      osmType: 'node',
-      osmId: 240109189,
+      osmType: movable ? null : 'node',
+      osmId: movable ? null : 240109189,
       tagKey: 'amenity',
       tagValue: 'cafe',
+      movable: movable,
       editedAt: editedAt,
       origLat: origLat,
       origLng: origLng,
       origName: origName,
     );
 
-    // There are two fields now — name and position — so every entry has to
-    // say which.
-    final nameField = find.ancestor(
-      of: find.text('Name'),
-      matching: find.byType(TextField),
-    );
-    final positionField = find.ancestor(
-      of: find.text('Position (lat, lng)'),
-      matching: find.byType(TextField),
+    /// The Edit button beside [fact] ("Name" / "Position").
+    Finder editOf(String fact) => find.descendant(
+      of: find.ancestor(of: find.text(fact), matching: find.byType(Wrap)).first,
+      matching: find.widgetWithText(TextButton, 'Edit'),
     );
 
-    testWidgets('typing a name renames that POI', (tester) async {
+    Future<void> editAndSave(
+      WidgetTester tester,
+      String fact,
+      String value,
+    ) async {
+      await tester.tap(editOf(fact));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(TextField),
+        ),
+        value,
+      );
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('the name is text with an Edit button, saved once', (
+      tester,
+    ) async {
       await pump(tester, poiSheet(name: 'Alte Post'));
       expect(find.text('Edit POI'), findsOneWidget);
       expect(find.text('Alte Post'), findsOneWidget);
+      // Not a live field any more: nothing is written until Save.
+      expect(find.byType(TextField), findsNothing);
 
-      await tester.enterText(nameField, 'Neue Post');
-      await tester.pump();
-      expect(repo.calls, contains('updatePoiPoint p1 name=Neue Post'));
+      await editAndSave(tester, 'Name', 'Neue Post');
+      expect(repo.calls, ['updatePoiPoint p1 name=Neue Post']);
     });
 
-    testWidgets('an emptied field clears the name rather than storing blank', (
+    testWidgets('an emptied name clears it rather than storing blank', (
       tester,
     ) async {
       // The renderer draws no plate for a nameless POI, and only null says
       // that — a stored '' would leave an empty white plate on the map.
       await pump(tester, poiSheet(name: 'Alte Post'));
-      await tester.enterText(nameField, '   ');
-      await tester.pump();
+      await editAndSave(tester, 'Name', '   ');
       expect(repo.calls, contains('updatePoiPoint p1 name=null'));
     });
 
-    testWidgets('delete removes the POI and clears the selection', (
+    testWidgets('a position is edited as text, and a bad one cannot be saved', (
       tester,
     ) async {
+      await pump(tester, poiSheet(name: 'Alte Post'));
+      expect(find.textContaining('48.0010'), findsOneWidget);
+      await tester.tap(editOf('Position'));
+      await tester.pumpAndSettle();
+      final field = find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(field, 'somewhere');
+      await tester.pump();
+      expect(
+        tester
+            .widget<FilledButton>(find.widgetWithText(FilledButton, 'Save'))
+            .onPressed,
+        isNull,
+      );
+      await tester.enterText(field, '48.5, 11.5');
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+      expect(repo.calls, contains('movePoiPoint p1 48.5,11.5'));
+    });
+
+    testWidgets('there is no copy button', (tester) async {
+      await pump(tester, poiSheet(name: 'Alte Post'));
+      expect(find.textContaining('Copy'), findsNothing);
+      expect(find.widgetWithText(TextButton, 'Move'), findsOneWidget);
+    });
+
+    testWidgets('delete asks first, and can tell OSM an import is gone', (
+      tester,
+    ) async {
+      seed();
       container.read(selectedPoiPointProvider.notifier).select('p1');
       await pump(tester, poiSheet(name: 'Alte Post'));
 
-      await tester.tap(find.byTooltip('Remove from this import'));
-      await tester.pump();
+      await tester.tap(find.byTooltip('Delete…'));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete “Alte Post”?'), findsOneWidget);
+      expect(find.text('Delete & tell OSM…'), findsOneWidget);
+      expect(repo.calls, isEmpty, reason: 'nothing goes before the answer');
 
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+      await tester.pumpAndSettle();
       expect(repo.calls, contains('deletePoiPoint p1'));
       expect(
         repo.calls,
@@ -161,66 +270,45 @@ void main() {
       expect(container.read(selectedPoiPointProvider), isNull);
     });
 
-    testWidgets('the same sheet edits a station — it is the same row', (
+    testWidgets('a hand-placed POI is only asked about — OSM never had it', (
       tester,
     ) async {
-      container.read(selectedPoiPointProvider.notifier).select('s1');
-      await pump(
-        tester,
-        const ImportedPointEditorSheet(
-          id: 's1',
-          name: 'Hauptbahnhof',
-          lat: 48.14,
-          lng: 11.56,
-          icon: Icons.directions_transit,
-          title: 'Edit station',
-          subtitle: 'Train, Subway',
+      seed(
+        point: PoiPoint(
+          id: 'p1',
+          poiSetId: 'ps1',
+          lat: 48.001,
+          lng: 11.002,
+          name: 'My bench',
+          sortOrder: 0,
+          createdAt: DateTime(2026),
+          modeMask: 0,
         ),
+        manual: true,
       );
-      await tester.enterText(nameField, 'Hbf');
-      await tester.pump();
-      expect(repo.calls, contains('updatePoiPoint s1 name=Hbf'));
-
-      await tester.tap(find.byTooltip('Remove from this import'));
-      await tester.pump();
-      expect(repo.calls, contains('deletePoiPoint s1'));
-      expect(container.read(selectedPoiPointProvider), isNull);
+      await pump(tester, poiSheet(name: 'My bench', movable: true));
+      await tester.tap(find.byTooltip('Delete…'));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete “My bench”?'), findsOneWidget);
+      expect(find.text('Delete & tell OSM…'), findsNothing);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(repo.calls, isEmpty);
     });
 
-    testWidgets('an imported position can be corrected, and it is recorded', (
-      tester,
-    ) async {
-      // The coordinate used to be untouchable, because no column could say one
-      // had been moved. There is one now, so the field exists — and what makes
-      // that safe is the write it makes: `movePoiPoint`, which captures what
-      // OSM returned and stamps the fork.
+    testWidgets('an untouched import has nothing to publish', (tester) async {
       await pump(tester, poiSheet(name: 'Alte Post'));
-      expect(positionField, findsOneWidget);
-      // Printed once, in the field — it used to be a line of text because
-      // there was nowhere else to put it.
-      expect(find.textContaining('48.0010'), findsOneWidget);
-      expect(find.textContaining('Cafés'), findsOneWidget);
-
-      await tester.enterText(positionField, '48.5, 11.5');
-      await tester.pump();
-      expect(repo.calls, contains('movePoiPoint p1 48.5,11.5'));
-    });
-
-    testWidgets('an untouched import says its copy is OSM\u2019s', (
-      tester,
-    ) async {
-      await pump(tester, poiSheet(name: 'Alte Post'));
-      expect(
-        find.textContaining('Imported from OpenStreetMap'),
-        findsOneWidget,
-      );
       expect(find.text('Revert'), findsNothing);
-      // The offer is there from the start: you may have noticed it is gone,
-      // or wrong in a way you do not want to fix locally.
-      expect(find.text('Tell OpenStreetMap'), findsOneWidget);
+      expect(find.textContaining('Publish'), findsNothing);
+      expect(find.textContaining('Tell OpenStreetMap'), findsNothing);
     });
 
-    testWidgets('a corrected point says so, and says what OSM still has', (
+    testWidgets('a hand-placed POI offers to publish itself', (tester) async {
+      await pump(tester, poiSheet(name: 'My bench', movable: true));
+      expect(find.text('Publish to OpenStreetMap…'), findsOneWidget);
+    });
+
+    testWidgets('a corrected point says so, and offers to publish it', (
       tester,
     ) async {
       // The whole point of recording the fork: the row keeps its osmId, so
@@ -238,7 +326,29 @@ void main() {
       );
       expect(find.textContaining('Corrected by you'), findsOneWidget);
       expect(find.textContaining('Alte Post'), findsOneWidget);
-      expect(find.text('Share this correction'), findsOneWidget);
+      expect(find.text('Publish this change…'), findsOneWidget);
+    });
+
+    testWidgets('Save & publish saves, then opens the publish sheet', (
+      tester,
+    ) async {
+      await pump(tester, poiSheet(name: 'Alte Post'));
+      await tester.tap(editOf('Name'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(TextField),
+        ),
+        'Neue Post',
+      );
+      await tester.pump();
+      await tester.tap(find.text('Save & publish…'));
+      await tester.pumpAndSettle();
+      expect(repo.calls.first, 'updatePoiPoint p1 name=Neue Post');
+      // The sheet describes the change just made, not the old row.
+      expect(find.text('Publish to OpenStreetMap'), findsOneWidget);
+      expect(find.textContaining('it is “Neue Post”'), findsOneWidget);
     });
 
     testWidgets('revert hands an imported point back', (tester) async {
@@ -636,6 +746,14 @@ class _RecordingRepository extends Repository {
   @override
   Future<void> deletePoiPoint(String id) async =>
       calls.add('deletePoiPoint $id');
+
+  // The editor shows where a point's report stands, and the publish sheet
+  // counts today's notes; neither may reach the never-opened database.
+  @override
+  Stream<List<OsmReport>> watchOsmReports() => Stream.value(const []);
+
+  @override
+  Future<int> osmReportsSentSince(Duration window) async => 0;
 
   @override
   Future<void> movePoiPoint({

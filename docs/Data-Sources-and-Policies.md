@@ -12,7 +12,7 @@ for people forking the app, and for the operators of those services.
 | **Overpass** | Places, station and border imports | `overpass-api.de`, then `overpass.kumi.systems`, then `overpass.private.coffee` — three community instances tried in turn; a configured server is tried first |
 | **Nominatim** | *Go to place* and *Import map feature by name* | `nominatim.openstreetmap.org` |
 | **AWS Terrain Tiles** | Ground-height layers, *Measure elevation*, the height under *Locate me* | `s3.amazonaws.com/elevation-tiles-prod/terrarium/` — SRTM, 3DEP and GMTED2010 courtesy of the U.S. Geological Survey; ETOPO1 courtesy of NOAA |
-| **OpenStreetMap Notes API** | *Tell OpenStreetMap* — the one thing the app ever writes | `api.openstreetmap.org`; `OSM_API_URL` at build time |
+| **OpenStreetMap Notes API** | *Publish to OpenStreetMap* — the one thing the app ever writes | `api.openstreetmap.org`; `OSM_API_URL` at build time |
 
 ## What the app asks of them
 
@@ -62,7 +62,7 @@ can otherwise pull tens of megabytes off a donated server.
 moves to the next instance; a query the server rejected outright is not retried anywhere. The instance that last
 answered is remembered and tried first next time.
 
-**One note per press.** *Tell OpenStreetMap* files an anonymous note through the Notes API,
+**One note per press.** *Publish to OpenStreetMap* files an anonymous note through the Notes API,
 which OpenStreetMap's developer guidance sanctions for third-party apps. It is **never
 retried and never fails over** (a POST that timed out may well have been applied, and there
 is only one OpenStreetMap), the outbox has **no timer, no flush-on-reconnect, no

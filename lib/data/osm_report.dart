@@ -39,26 +39,36 @@ import 'database.dart' show OsmReport;
 // out on its own.
 import 'osm_notes.dart' show osmNoteUrl;
 
-/// What kind of thing is being reported.
+/// What kind of thing is being published.
+///
+/// **Only a change the user made can be published.** The app used to offer a
+/// report about anything — an untouched import ("it is not there any more"),
+/// bare ground ("something else") — which made it a complaints form. What it
+/// is for is the other way round: you fix something for yourself, and then
+/// may pass that fix on. So [OsmReportSubject.availableKinds] offers exactly
+/// one kind, the one the user's own edit implies, or none — and [gone] is
+/// offered by exactly one act, deleting an imported POI (see
+/// [OsmReportSubject.canReportGone]).
 ///
 /// Stored by `name`, never by index — a future kind must not renumber rows
-/// already written.
+/// already written. [other] is **retired**: nothing offers it any more, and
+/// it stays only so reports already in an outbox still read.
 enum OsmReportKind {
-  /// The element exists but is in the wrong place, and the user has moved
-  /// their copy to where it really is. Only offered once that move has
-  /// happened: its sentence quotes the correction.
-  movedHere(label: 'It is in the wrong place', needsCorrection: true),
+  /// The element is in the wrong place, and the user has moved their copy to
+  /// where it really is. Its note also carries a rename made alongside.
+  movedHere(label: 'Moved to where it really is', needsCorrection: true),
 
   /// The name (or the lack of one) is wrong, and the user has fixed theirs.
-  wrongName(label: 'The name is wrong', needsCorrection: true),
+  wrongName(label: 'Name corrected', needsCorrection: true),
 
-  /// It is not there any more.
+  /// It is not there any more — offered only when the user deletes their copy
+  /// of an imported POI, which is the change this one publishes.
   gone(label: 'It is not there any more'),
 
   /// A hand-placed POI that OpenStreetMap does not have.
-  missing(label: 'This is missing from OpenStreetMap'),
+  missing(label: 'Not on OpenStreetMap yet'),
 
-  /// Anything else, including a report about ground with no element on it.
+  /// Retired: free text about bare ground.
   other(label: 'Something else');
 
   const OsmReportKind({required this.label, this.needsCorrection = false});
@@ -79,10 +89,10 @@ enum OsmReportKind {
   }
 }
 
-/// The subject of a report, gathered from wherever the sheet was opened.
+/// The subject of a report: one POI, as it is now and as OSM had it.
 ///
-/// A plain value type rather than a POI row, because one of the four entry
-/// points is a long-press on empty ground, which has no row at all.
+/// A plain value type rather than a POI row, so the composition stays pure
+/// and the editor can describe a change it is *about* to save.
 class OsmReportSubject {
   const OsmReportSubject({
     required this.lat,
@@ -99,20 +109,6 @@ class OsmReportSubject {
     this.osmId,
     this.poiPointId,
   });
-
-  /// Ground with nothing mapped on it — a long-press anywhere.
-  const OsmReportSubject.place(this.lat, this.lng)
-    : name = null,
-      origLat = null,
-      origLng = null,
-      origName = null,
-      edited = false,
-      categoryLabel = null,
-      tagKey = null,
-      tagValue = null,
-      osmType = null,
-      osmId = null,
-      poiPointId = null;
 
   /// Where the user's copy is *now* — the corrected position when it has been
   /// moved.
@@ -151,26 +147,33 @@ class OsmReportSubject {
   /// Whether the name has actually changed.
   bool get nameCorrected => edited && origName != name;
 
-  /// Which kinds this subject can honestly report.
+  /// What this subject can publish: the one kind the user's own change
+  /// implies, or nothing.
   ///
-  /// [OsmReportKind.missing] belongs to a hand-placed point and nothing else;
-  /// the correction kinds need a correction; and ground with no element on it
-  /// can only say "something else".
+  /// A hand-placed point (no upstream identity, never forked) is new to OSM.
+  /// A corrected import publishes its correction — the move when there is
+  /// one, since its note carries a rename too, else the rename. An untouched
+  /// import has nothing to say: it *is* what OSM has.
   List<OsmReportKind> get availableKinds {
     if (osmKeyOf(this) == null && !edited) {
-      return const [OsmReportKind.missing, OsmReportKind.other];
+      return const [OsmReportKind.missing];
     }
-    return [
-      if (positionCorrected) OsmReportKind.movedHere,
-      if (nameCorrected) OsmReportKind.wrongName,
-      OsmReportKind.gone,
-      OsmReportKind.other,
-    ];
+    if (positionCorrected) return const [OsmReportKind.movedHere];
+    if (nameCorrected) return const [OsmReportKind.wrongName];
+    return const [];
   }
 
-  /// The kind the sheet opens on: whatever the user has just done, if they
-  /// have done anything.
-  OsmReportKind get defaultKind => availableKinds.first;
+  /// Whether there is anything to publish at all — what decides whether the
+  /// editor shows its Publish button.
+  bool get canPublish => availableKinds.isNotEmpty;
+
+  /// Whether deleting this POI can also tell OSM it is gone: only something
+  /// OSM actually has. A hand-placed point was never there to go.
+  bool get canReportGone => osmKeyOf(this) != null;
+
+  /// The kind the sheet opens on.
+  OsmReportKind get defaultKind =>
+      availableKinds.firstOrNull ?? OsmReportKind.missing;
 }
 
 /// `node/240109189`, or null when there is no upstream identity.
@@ -291,30 +294,71 @@ String _body(OsmReportKind kind, OsmReportSubject s) {
   final here = _formatLatLng(s.lat, s.lng);
   switch (kind) {
     case OsmReportKind.movedHere:
-      final from = LatLng(s.origLat!, s.origLng!);
-      final to = LatLng(s.lat, s.lng);
-      final offset = describeOffset(_haversine.as(LengthUnit.Meter, from, to));
-      final where = compassName(const Distance().bearing(from, to));
-      return 'This is mapped about $offset $where of where it actually is. '
-          'I make it $here.';
+      // One note for one visit: a bench moved *and* renamed is one thing a
+      // mapper fixes, not two notes pinned a few metres apart.
+      return [
+        _moveSentence(s),
+        if (s.nameCorrected) _renameSentence(s),
+      ].join('\n');
     case OsmReportKind.wrongName:
-      final was = s.origName;
-      final now = s.name;
-      if (now == null || now.trim().isEmpty) {
-        return was == null
-            ? 'The name here looks wrong.'
-            : 'This does not seem to be called “$was” any more.';
-      }
-      return was == null
-          ? 'This has a name: “$now”.'
-          : 'This is named “$was”, but on the ground it is “$now”.';
+      return _renameSentence(s);
     case OsmReportKind.gone:
       return 'This does not seem to be here any more.';
     case OsmReportKind.missing:
-      return 'This seems to be missing from OpenStreetMap. I make it $here.';
+      return [
+        'This seems to be missing from OpenStreetMap. I make it $here.',
+        ..._suggestedTags(s),
+      ].join('\n');
     case OsmReportKind.other:
       return '';
   }
+}
+
+String _moveSentence(OsmReportSubject s) {
+  final from = LatLng(s.origLat!, s.origLng!);
+  final to = LatLng(s.lat, s.lng);
+  final offset = describeOffset(_haversine.as(LengthUnit.Meter, from, to));
+  final where = compassName(const Distance().bearing(from, to));
+  return 'OpenStreetMap has this at ${_formatLatLng(from.latitude, from.longitude)}. '
+      'It is actually about $offset $where of there, at '
+      '${_formatLatLng(to.latitude, to.longitude)}.';
+}
+
+String _renameSentence(OsmReportSubject s) {
+  final was = s.origName;
+  final now = s.name;
+  if (now == null || now.trim().isEmpty) {
+    return was == null
+        ? 'The name here looks wrong.'
+        : 'This does not seem to be called “$was” any more.';
+  }
+  return was == null
+      ? 'This has a name: “$now”.'
+      : 'This is named “$was”, but on the ground it is “$now”.';
+}
+
+/// What a mapper would type to add a hand-placed POI — the tag its category
+/// stands for, then its name — so the note can be acted on as it stands.
+///
+/// A category with no tag behind it says so instead of guessing: a mapper can
+/// tag an unlabelled bench, but has to undo a wrong suggestion first. Its name
+/// alone is not offered as a tag — `name=` on an untyped node is not a
+/// feature anybody can map.
+List<String> _suggestedTags(OsmReportSubject s) {
+  final key = s.tagKey, value = s.tagValue;
+  if (key == null || value == null) {
+    final category = s.categoryLabel;
+    return [
+      if (category != null) 'Category: $category (no OpenStreetMap tag known).',
+    ];
+  }
+  final name = s.name?.trim();
+  return [
+    '',
+    'Suggested tags:',
+    '$key=$value',
+    if (name != null && name.isNotEmpty) 'name=$name',
+  ];
 }
 
 String _formatLatLng(double lat, double lng) =>

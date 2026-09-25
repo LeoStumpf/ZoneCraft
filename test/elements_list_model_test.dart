@@ -447,6 +447,30 @@ void main() {
       );
     });
 
+    test('a change of your own says where it stands with OSM', () {
+      ObjectSummary own(PoiPublishState state) => ObjectSummary(
+        ref: const ObjectRef(kind: ObjectKind.poiPoint, id: 'm', layerId: 'L'),
+        title: 'My bench',
+        subtitle: 'Benches',
+        center: const LatLng(48, 11),
+        fitPoints: const [LatLng(48, 11)],
+        sortName: 'My bench',
+        publishState: state,
+      );
+      expect(
+        poiRowSubtitle(own(PoiPublishState.unpublished), groupLabel: 'Benches'),
+        'not published',
+      );
+      expect(
+        poiRowSubtitle(own(PoiPublishState.listed), groupLabel: 'Benches'),
+        'in your OSM list',
+      );
+      expect(
+        poiRowSubtitle(own(PoiPublishState.sent), groupLabel: 'Benches'),
+        'sent to OSM',
+      );
+    });
+
     test('with nothing known, nothing is claimed', () {
       expect(poiRowSubtitle(bench(), groupLabel: 'Benches'), '');
     });

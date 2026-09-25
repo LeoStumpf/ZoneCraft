@@ -104,7 +104,7 @@ three bytes) → **Save → Review → Roll out**.
   account has to run a closed test with at least 12 testers opted in for 14 continuous days
   before Google unlocks production access, and internal testing does not count towards it.
 - The tester instructions field should say that the map lives only on the phone (export to
-  keep a copy) and that **Tell OpenStreetMap** sends a real, public, permanent note that a
+  keep a copy) and that **Publish to OpenStreetMap** sends a real, public, permanent note that a
   volunteer reads — this build points at the live OSM database on purpose.
 
 ### 3. Sanity-test the release build first

@@ -14,7 +14,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-/// Writing one correction and deciding what happens to it.
+/// Publishing one change you made — a place you added, moved or renamed —
+/// and deciding what happens to it: send it now, or keep it in your list.
 ///
 /// Three things here are load-bearing rather than decorative:
 ///
@@ -45,42 +46,43 @@ import '../data/repository.dart';
 import '../state/providers.dart';
 import 'editor_sheet.dart';
 
-/// What the sheet decided, so the caller can follow through — deleting the
-/// local copy of something that is not there any more, for instance.
+/// What the sheet decided, so the caller can say so.
 enum OsmReportOutcomeKind { cancelled, saved, sent }
 
 class OsmReportResult {
-  const OsmReportResult(this.outcome, {this.kind, this.alsoRemove = false});
+  const OsmReportResult(this.outcome, {this.kind});
 
   final OsmReportOutcomeKind outcome;
   final OsmReportKind? kind;
-
-  /// Whether the user asked for their own copy to go too.
-  final bool alsoRemove;
 }
 
 /// Opens the report form over [subject]. Returns what was decided.
+///
+/// [kind] overrides the one the subject's own change implies — the delete
+/// flow passes [OsmReportKind.gone], which no edit implies.
 ///
 /// A modal route rather than the map's `bottomSheet` slot: unlike an editor,
 /// this is not something you leave open while you look at the map, and the
 /// slot is already shared by four other things.
 Future<OsmReportResult> showOsmReportSheet(
   BuildContext context,
-  OsmReportSubject subject,
-) async {
+  OsmReportSubject subject, {
+  OsmReportKind? kind,
+}) async {
   final result = await showModalBottomSheet<OsmReportResult>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => _OsmReportSheet(subject: subject),
+    builder: (_) => _OsmReportSheet(subject: subject, kind: kind),
   );
   return result ?? const OsmReportResult(OsmReportOutcomeKind.cancelled);
 }
 
 class _OsmReportSheet extends ConsumerStatefulWidget {
-  const _OsmReportSheet({required this.subject});
+  const _OsmReportSheet({required this.subject, this.kind});
 
   final OsmReportSubject subject;
+  final OsmReportKind? kind;
 
   @override
   ConsumerState<_OsmReportSheet> createState() => _OsmReportSheetState();
@@ -97,7 +99,6 @@ class _OsmReportSheetState extends ConsumerState<_OsmReportSheet> {
   bool _touched = false;
 
   bool _sending = false;
-  bool _alsoRemove = false;
   String? _error;
 
   /// Notes actually delivered in the last day, or null while it is being
@@ -109,7 +110,7 @@ class _OsmReportSheetState extends ConsumerState<_OsmReportSheet> {
   @override
   void initState() {
     super.initState();
-    _kind = widget.subject.defaultKind;
+    _kind = widget.kind ?? widget.subject.defaultKind;
     _text = TextEditingController(
       text: composeOsmReportText(_kind, widget.subject),
     );
@@ -135,7 +136,6 @@ class _OsmReportSheetState extends ConsumerState<_OsmReportSheet> {
       if (!_touched) {
         _text.text = composeOsmReportText(kind, widget.subject);
       }
-      if (kind != OsmReportKind.gone) _alsoRemove = false;
     });
   }
 
@@ -155,13 +155,9 @@ class _OsmReportSheetState extends ConsumerState<_OsmReportSheet> {
   Future<void> _save() async {
     await _store();
     if (!mounted) return;
-    Navigator.of(context).pop(
-      OsmReportResult(
-        OsmReportOutcomeKind.saved,
-        kind: _kind,
-        alsoRemove: _alsoRemove,
-      ),
-    );
+    Navigator.of(
+      context,
+    ).pop(OsmReportResult(OsmReportOutcomeKind.saved, kind: _kind));
   }
 
   Future<void> _send() async {
@@ -182,13 +178,9 @@ class _OsmReportSheetState extends ConsumerState<_OsmReportSheet> {
     if (outcome.ok) {
       await _repo.markOsmReportSent(id, outcome.noteId!);
       if (!mounted) return;
-      Navigator.of(context).pop(
-        OsmReportResult(
-          OsmReportOutcomeKind.sent,
-          kind: _kind,
-          alsoRemove: _alsoRemove,
-        ),
-      );
+      Navigator.of(
+        context,
+      ).pop(OsmReportResult(OsmReportOutcomeKind.sent, kind: _kind));
       return;
     }
     await _repo.markOsmReportFailed(id, outcome.message!);
@@ -228,7 +220,10 @@ class _OsmReportSheetState extends ConsumerState<_OsmReportSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final kinds = widget.subject.availableKinds;
+    // A forced kind is the whole choice; otherwise at most one is offered.
+    final kinds = widget.kind != null
+        ? [widget.kind!]
+        : widget.subject.availableKinds;
     final blocked = _sendBlocked;
     final sent = _sentToday ?? 0;
     final length = _text.text.trim().length;
@@ -241,7 +236,7 @@ class _OsmReportSheetState extends ConsumerState<_OsmReportSheet> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Tell OpenStreetMap',
+                'Publish to OpenStreetMap',
                 style: theme.textTheme.titleMedium,
               ),
             ),
@@ -284,20 +279,6 @@ class _OsmReportSheetState extends ConsumerState<_OsmReportSheet> {
                 : null,
           ),
         ),
-        if (_kind == OsmReportKind.gone &&
-            widget.subject.poiPointId != null) ...[
-          const SizedBox(height: 4),
-          CheckboxListTile(
-            contentPadding: EdgeInsets.zero,
-            dense: true,
-            controlAffinity: ListTileControlAffinity.leading,
-            value: _alsoRemove,
-            onChanged: _sending
-                ? null
-                : (v) => setState(() => _alsoRemove = v ?? false),
-            title: const Text('Also remove it from my import'),
-          ),
-        ],
         const SizedBox(height: 8),
         // Every time, never counted down. See the library doc.
         Text(
@@ -370,7 +351,7 @@ class _OsmReportSheetState extends ConsumerState<_OsmReportSheet> {
                     ? null
                     : () => unawaited(_save()),
                 icon: const Icon(Icons.inbox_outlined, size: 18),
-                label: const Text('Save for later'),
+                label: const Text('Keep in my list'),
               ),
               FilledButton.icon(
                 onPressed: blocked != null ? null : () => unawaited(_send()),

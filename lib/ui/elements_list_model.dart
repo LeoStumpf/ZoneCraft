@@ -358,14 +358,20 @@ String poiRowSubtitle(
   LatLng? myPosition,
   LatLng? mapCenter,
 }) {
-  final parts = [
+  final parts = <String?>[
     if (s.subtitle.isNotEmpty && s.subtitle != groupLabel) s.subtitle,
     if (myPosition != null)
       '${formatDistance(distanceMeters(myPosition, s.center))} from you',
     if (mapCenter != null)
       '${formatDistance(distanceMeters(mapCenter, s.center))} from centre',
     if (s.isEdited) 'edited',
-  ];
+    switch (s.publishState) {
+      PoiPublishState.none => null,
+      PoiPublishState.unpublished => 'not published',
+      PoiPublishState.listed => 'in your OSM list',
+      PoiPublishState.sent => 'sent to OSM',
+    },
+  ].nonNulls;
   return parts.join(' · ');
 }
 

@@ -71,6 +71,7 @@ void main() {
   Future<void> open(
     WidgetTester tester, {
     OsmReportSubject subject = bench,
+    OsmReportKind? kind,
   }) async {
     await tester.pumpWidget(
       UncontrolledProviderScope(
@@ -79,7 +80,8 @@ void main() {
           home: Scaffold(
             body: Builder(
               builder: (context) => TextButton(
-                onPressed: () => showOsmReportSheet(context, subject),
+                onPressed: () =>
+                    showOsmReportSheet(context, subject, kind: kind),
                 child: const Text('open'),
               ),
             ),
@@ -109,10 +111,12 @@ void main() {
     tester,
   ) async {
     await open(tester);
-    // A moved point opens on the move; the draft already carries the element,
-    // the tag and the measurement, because a note with none of those is one a
-    // mapper cannot act on.
-    expect(find.text('It is in the wrong place'), findsOneWidget);
+    // A moved point publishes the move, and nothing else is on offer: the
+    // sheet is for passing on a change of the user's own. The draft already
+    // carries the element, the tag and the measurement, because a note with
+    // none of those is one a mapper cannot act on.
+    expect(find.text('Publish to OpenStreetMap'), findsOneWidget);
+    expect(find.byType(ChoiceChip), findsNothing);
     final field = tester.widget<TextField>(bodyField);
     final text = field.controller!.text;
     expect(text, contains('amenity=bench'));
@@ -149,53 +153,16 @@ void main() {
     expect(
       tester
           .widget<OutlinedButton>(
-            find.widgetWithText(OutlinedButton, 'Save for later'),
+            find.widgetWithText(OutlinedButton, 'Keep in my list'),
           )
           .onPressed,
       isNull,
     );
   });
 
-  testWidgets('a draft the user has written in is not overwritten by a chip', (
-    tester,
-  ) async {
-    // The worst possible moment to replace somebody's text is when they have
-    // just finished writing it.
-    await open(tester);
-    await tester.enterText(bodyField, 'The bench is by the oak, not the gate.');
-    await tester.pump();
-    await tester.tap(find.text('It is not there any more'));
-    await tester.pumpAndSettle();
-
-    expect(
-      tester.widget<TextField>(bodyField).controller!.text,
-      'The bench is by the oak, not the gate.',
-    );
-  });
-
-  testWidgets('an untouched draft follows the chips', (tester) async {
-    await open(tester);
-    await tester.tap(find.text('It is not there any more'));
-    await tester.pumpAndSettle();
-    expect(
-      tester.widget<TextField>(bodyField).controller!.text,
-      contains('does not seem to be here any more'),
-    );
-  });
-
-  testWidgets('"also remove it" is offered only where it means something', (
-    tester,
-  ) async {
-    await open(tester);
-    expect(find.text('Also remove it from my import'), findsNothing);
-    await tester.tap(find.text('It is not there any more'));
-    await tester.pumpAndSettle();
-    expect(find.text('Also remove it from my import'), findsOneWidget);
-  });
-
   testWidgets('Save for later stores it unsent, and says so', (tester) async {
     await open(tester);
-    await press(tester, 'Save for later');
+    await press(tester, 'Keep in my list');
 
     expect(repo.calls.single, startsWith('createOsmReport movedHere'));
     expect(repo.calls.single, contains('node/240109189'));
@@ -220,7 +187,7 @@ void main() {
     expect(
       tester
           .widget<OutlinedButton>(
-            find.widgetWithText(OutlinedButton, 'Save for later'),
+            find.widgetWithText(OutlinedButton, 'Keep in my list'),
           )
           .onPressed,
       isNotNull,
@@ -264,25 +231,19 @@ void main() {
     );
   });
 
-  testWidgets('bare ground can only add something or say something', (
-    tester,
-  ) async {
-    // Nothing is known about the place, so the two honest things to say about
-    // it are "OSM is missing something here" and "something else" — not "this
-    // is in the wrong place", which would be about an element there isn't one
-    // of.
-    await open(tester, subject: const OsmReportSubject.place(48.1, 11.5));
-    expect(find.byType(ChoiceChip), findsNWidgets(2));
-    expect(find.text('It is in the wrong place'), findsNothing);
-    expect(find.text('It is not there any more'), findsNothing);
-
-    // And "something else" hands the whole sentence over rather than guessing
-    // at one.
-    await press(tester, 'Something else');
+  testWidgets('deleting opens on "it is not there any more"', (tester) async {
+    // The one report no edit implies: it is offered by the delete, which is
+    // the change it publishes.
+    await open(tester, kind: OsmReportKind.gone);
+    expect(find.byType(ChoiceChip), findsNothing);
     expect(
-      tester.widget<TextField>(bodyField).controller!.text.trim(),
-      osmReportTrailer,
+      tester.widget<TextField>(bodyField).controller!.text,
+      contains('does not seem to be here any more'),
     );
+    await press(tester, 'Keep in my list');
+    expect(repo.calls.single, startsWith('createOsmReport gone'));
+    // Pinned at the element OSM has, not the user's moved copy.
+    expect(repo.calls.single, contains('48.13718'));
   });
 }
 

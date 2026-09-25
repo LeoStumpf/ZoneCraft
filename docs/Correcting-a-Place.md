@@ -1,32 +1,53 @@
-# Correcting a place, and telling OpenStreetMap
+# Correcting a place, and publishing it to OpenStreetMap
 
-An imported place records what OpenStreetMap returned. When you can see it is wrong — a
-bench in the wrong spot, a name that is not the one on the sign — you can fix it by hand,
-and the app can pass the fix on.
+The places on a POI layer are yours: imported ones record what OpenStreetMap returned, and you
+can add your own. When you change something for yourself — add a bench, fix a name, move a
+place to where it really is, delete one that is gone — the app can pass that change on to
+OpenStreetMap. Only a change of your own is ever offered; an untouched import *is* what
+OpenStreetMap has, so there is nothing to say about it.
 
-## Correcting it
+## Editing a place
 
-Open the point (Select by tapping, or long-press) and edit its **name** or drag it to the
-right **position**. The moment either changes, the row is marked **corrected**: its editor
-says *"Corrected by you. OpenStreetMap still has …"* with what the import returned, and offers
-**Revert**. A move that ends where it started is not a correction.
+Open the point (Select by tapping, or from the Elements list). Its editor shows the facts, each
+with the button that changes it:
+
+- **Name** — shown as text, with **Edit**.
+- **Position** — shown as coordinates, with **Edit** (type a new one) and **Move** (tap the map
+  where it really is).
+
+**Edit** opens a small dialog with **Save** and **Save & publish…** — the second saves and then
+opens the publish sheet below, describing the change you just made.
+
+On an imported place, the moment the name or position changes the row is marked **corrected**:
+the editor says *"Corrected by you. OpenStreetMap still has …"* with what the import returned,
+and offers **Revert**. A move that ends where it started is not a correction.
 
 The mark matters because the point keeps its OpenStreetMap identity. Without it, your guess
 would silently beat whatever OpenStreetMap says next time — and, in an exported file, would
 arrive on another phone looking like "what OSM says". So the flag travels with an export, the
 original values alongside it, and a re-import keeps your corrected version knowingly.
 
-## Telling OpenStreetMap
+## Deleting a place
 
-Beside Revert is **Tell OpenStreetMap**. It opens a sheet with a draft you can edit —
-*"What should a mapper know?"* — and a tick box, *Also remove it from my import*. The draft
-says what changed (old name, new name, old and new position) and is signed with the app's
-name and version. Three ways out:
+**Delete** always asks first. For an imported place the question offers a third answer,
+**Delete & tell OSM…**, which files *"This does not seem to be here any more"* with the same
+sheet before your copy goes. A place you added yourself was never on OpenStreetMap, so it is
+only asked about. Undo brings a deleted place back.
+
+## Publishing
+
+A place with something to publish shows **Publish to OpenStreetMap…** (one you added) or
+**Publish this change…** (a correction) in its editor, and its row in the Elements list says
+*not published*, *in your OSM list* or *sent to OSM*. The sheet holds a draft you can edit —
+*"What should a mapper know?"* — that says what the place is (its category and OpenStreetMap
+tag, e.g. `amenity=bench`), where it is, and what changed: the old and new position with the
+distance and direction between them, the old and new name, or for a new place the tags a
+mapper would type. It is signed with the app's name and version. Three ways out:
 
 | Button | What happens |
 |---|---|
 | **Send now** | One anonymous **note** is filed on OpenStreetMap, at the place's position. |
-| **Save for later** | The report goes to the **outbox** (**OpenStreetMap outbox** in the layers menu, shown once it holds something), from where it can be sent another day — or **exported as GeoJSON** to work through in JOSM or iD under your own account. |
+| **Keep in my list** | The report goes to the **outbox** (**OpenStreetMap outbox** in the layers menu, shown once it holds something), from where it can be sent another day — or **exported as GeoJSON** to work through in JOSM or iD under your own account. |
 | **Copy** | The text goes to the clipboard. |
 
 The sheet's warning is always shown and never goes quiet:
@@ -45,7 +66,7 @@ OpenStreetMap publishes no hard limit on anonymous notes, so the app sets its ow
 what osm.org itself allows an anonymous visitor:
 
 - After **5 reports in a day** the sheet says so, and suggests saving and exporting instead.
-- After **10** the Send button is withdrawn until tomorrow. Save and Copy still work.
+- After **10** the Send button is withdrawn until tomorrow. Keep in my list and Copy still work.
 
 A block for abuse would land on the app's `User-Agent` — that is, on every install at once —
 which is why the numbers are conservative.

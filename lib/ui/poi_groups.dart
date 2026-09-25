@@ -114,8 +114,25 @@ List<PoiTypeGroup> poiTypeGroups({
   required Layer layer,
   required List<PoiSet> sets,
   required Map<String, List<PoiPoint>> pointsBySet,
+  Map<String, OsmReport> reportByPoint = const {},
 }) {
   if (!layerHolds(layer, kPoi)) return const [];
+  // Only a hand-placed point or a correction has anything to publish, so the
+  // subject (a few lookups) is built for those few and never for an import's
+  // thousands of untouched rows.
+  PoiPublishState publishState(PoiPoint p, PoiSet s) {
+    if (!s.isManual && p.editedAt == null) return PoiPublishState.none;
+    final report = reportByPoint[p.id];
+    if (report != null) {
+      return report.sentAt != null
+          ? PoiPublishState.sent
+          : PoiPublishState.listed;
+    }
+    return osmSubjectFor(p, sets).canPublish
+        ? PoiPublishState.unpublished
+        : PoiPublishState.none;
+  }
+
   final mine = [
     for (final s in sets)
       if (s.layerId == layer.id) s,
@@ -176,7 +193,13 @@ List<PoiTypeGroup> poiTypeGroups({
     if (s.isManual) group.manualSetIds.add(s.id);
     group.points.addAll([
       for (final p in pts)
-        _pointSummary(p, layer.id, group.label, 'Unnamed POI'),
+        _pointSummary(
+          p,
+          layer.id,
+          group.label,
+          'Unnamed POI',
+          publishState: publishState(p, s),
+        ),
     ]);
   }
 
@@ -241,8 +264,9 @@ ObjectSummary _pointSummary(
   PoiPoint p,
   String layerId,
   String subtitle,
-  String unnamed,
-) {
+  String unnamed, {
+  PoiPublishState publishState = PoiPublishState.none,
+}) {
   final at = LatLng(p.lat, p.lng);
   final name = p.name?.trim();
   return ObjectSummary(
@@ -253,6 +277,7 @@ ObjectSummary _pointSummary(
     fitPoints: [at],
     sortName: name ?? '',
     isEdited: p.editedAt != null,
+    publishState: publishState,
   );
 }
 
@@ -272,5 +297,13 @@ final poiTypeGroupsProvider = Provider.family<List<PoiTypeGroup>, String>((
     layer: layer,
     sets: ref.watch(poiSetsProvider).asData?.value ?? const [],
     pointsBySet: ref.watch(poiPointsBySetProvider),
+    // Newest first, so the first per point is its latest.
+    reportByPoint: {
+      for (final r
+          in (ref.watch(osmReportsProvider).asData?.value ??
+                  const <OsmReport>[])
+              .reversed)
+        if (r.poiPointId != null) r.poiPointId!: r,
+    },
   );
 }, isAutoDispose: true);

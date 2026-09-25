@@ -33,6 +33,7 @@ import 'element_color.dart';
 import 'layer_actions.dart' show emptyStateActions;
 import 'element_color_dialog.dart';
 import 'object_summary.dart';
+import 'poi_delete.dart';
 import 'poi_groups.dart';
 import 'poi_thumbnail.dart';
 import 'transit_modes_sheet.dart'
@@ -854,6 +855,11 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
     WidgetRef ref,
     ObjectSummary s,
   ) async {
+    // One POI goes through the one POI delete, which asks and can tell OSM.
+    if (s.ref.kind == ObjectKind.poiPoint) {
+      await deletePoiPointFlow(context, ref, s.ref.id);
+      return;
+    }
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(

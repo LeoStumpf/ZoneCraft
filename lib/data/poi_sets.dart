@@ -17,6 +17,7 @@
 import 'package:latlong2/latlong.dart';
 
 import 'database.dart';
+import 'osm_report.dart' show OsmReportSubject;
 import 'overpass.dart';
 import 'transit.dart';
 
@@ -145,4 +146,28 @@ String poiCategoryLabel(List<PoiSet> sets, String setId) {
           .firstOrNull
           ?.label ??
       set.categoryKey;
+}
+
+/// Everything an OpenStreetMap note needs to know about [p], as it is now.
+///
+/// One builder, read by the point editor and by every delete, so a note
+/// written from the Elements list and one written from the editor describe
+/// the same point in the same words.
+OsmReportSubject osmSubjectFor(PoiPoint p, List<PoiSet> sets) {
+  final tag = poiCategoryTag(sets, p.poiSetId);
+  return OsmReportSubject(
+    lat: p.lat,
+    lng: p.lng,
+    name: p.name,
+    origLat: p.origLat,
+    origLng: p.origLng,
+    origName: p.origName,
+    edited: p.editedAt != null,
+    categoryLabel: poiCategoryLabel(sets, p.poiSetId),
+    tagKey: tag?.tagKey,
+    tagValue: tag?.tagValue,
+    osmType: p.osmType,
+    osmId: p.osmId,
+    poiPointId: p.id,
+  );
 }

@@ -25,6 +25,7 @@ import 'package:zonecraft/data/poi_sets.dart';
 import 'package:zonecraft/data/repository.dart';
 import 'package:zonecraft/data/transit.dart';
 import 'package:zonecraft/state/providers.dart';
+import 'package:zonecraft/ui/object_summary.dart';
 import 'package:zonecraft/ui/poi_groups.dart';
 
 void main() {
@@ -388,6 +389,57 @@ void main() {
       final groups = await groupsOf(layerId);
       expect(groups.map((g) => g.label), ['Benches', 'Cafés']);
       expect(groups.first.points, isEmpty);
+    },
+  );
+
+  test(
+    'a hand-placed POI is unpublished until a report says otherwise',
+    () async {
+      final layerId = await repo.createLayer(
+        name: 'P',
+        colorArgb: 0xFF123456,
+        type: kPoi,
+      );
+      final imported = await radiusImport(layerId, 'bench');
+      await repo.fillPoiSet(imported, [poi('bench', 'By the lake', 1)]);
+      final mine = await manualSet(layerId, 'bench', 'Bench');
+      final placed = await repo.addManualPoiPoint(
+        poiSetId: mine,
+        lat: 48.1,
+        lng: 11.5,
+        label: 'Mine',
+      );
+
+      PoiPublishState stateOf(List<PoiTypeGroup> g, String title) =>
+          g.single.points.singleWhere((p) => p.title == title).publishState;
+
+      var groups = await groupsOf(layerId);
+      expect(stateOf(groups, 'Mine'), PoiPublishState.unpublished);
+      // An untouched import has nothing of the user's to publish.
+      expect(stateOf(groups, 'By the lake'), PoiPublishState.none);
+
+      await repo.createOsmReport(
+        lat: 48.1,
+        lng: 11.5,
+        kind: 'missing',
+        body: 'x',
+        poiPointId: placed,
+      );
+      final report = (await db.select(db.osmReports).get()).single;
+      final points = await db.select(db.poiPoints).get();
+      groups = poiTypeGroups(
+        layer: await layerById(layerId),
+        sets: await db.select(db.poiSets).get(),
+        pointsBySet: {
+          for (final s in {for (final p in points) p.poiSetId})
+            s: [
+              for (final p in points)
+                if (p.poiSetId == s) p,
+            ],
+        },
+        reportByPoint: {placed: report},
+      );
+      expect(stateOf(groups, 'Mine'), PoiPublishState.listed);
     },
   );
 

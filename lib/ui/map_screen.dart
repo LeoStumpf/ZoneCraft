@@ -44,7 +44,6 @@ import '../data/overpass_client.dart'
         kOverpassPreferenceMaxElapsed,
         overpassEndpointOverride;
 import '../data/layer_types.dart';
-import '../data/osm_report.dart';
 import '../data/platform_files.dart';
 import '../data/repository.dart' show Repository;
 import '../data/shared_point.dart';
@@ -73,7 +72,6 @@ import 'map_fab_column.dart';
 import 'map_semantics.dart';
 import 'layers_panel.dart';
 import 'object_summary.dart';
-import 'osm_report_sheet.dart';
 import 'draw_stroke.dart';
 import 'two_finger_gestures.dart';
 import 'poi_import_dialog.dart';
@@ -3537,28 +3535,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
   ///
   /// It opens one menu listing (a) the active layer's objects under the finger,
   /// ranked most-likely first, and (b) the contextual "add a point exactly
-  /// Opens the report form for bare ground — a path that is not there, a
-  /// building gone, a name spelled wrong.
-  ///
-  /// The editors cover reporting a POI you can *see*; this covers everything
-  /// else, which is most of the map. It carries no element identity, so the
-  /// sheet offers only "something else" and the whole sentence is the user's.
-  Future<void> _reportPlace(LatLng latlng) async {
-    final result = await showOsmReportSheet(
-      context,
-      OsmReportSubject.place(latlng.latitude, latlng.longitude),
-    );
-    if (!mounted) return;
-    switch (result.outcome) {
-      case OsmReportOutcomeKind.cancelled:
-        return;
-      case OsmReportOutcomeKind.saved:
-        _hint('Saved to your OpenStreetMap outbox');
-      case OsmReportOutcomeKind.sent:
-        _hint('Sent to OpenStreetMap — thank you');
-    }
-  }
-
   /// here" actions the long-press used to perform directly. Everything goes
   /// through the menu on purpose: an accidental long-press must never silently
   /// pop an editor open.
@@ -3711,17 +3687,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
         'Paste coordinates…',
       ),
     );
-    // And what is true of the *ground* — for the things a POI layer cannot
-    // hold: a path that is not there, a name spelled wrong, a building gone.
-    // The editors cover reporting a POI you can see; this covers the rest,
-    // which is most of the map.
-    items.add(
-      _pointMenuItem(
-        'reportHere',
-        Icons.volunteer_activism_outlined,
-        'Tell OpenStreetMap about this place',
-      ),
-    );
 
     final selected = await _showPointMenu(
       activeLayer?.name ?? 'This place',
@@ -3737,8 +3702,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
       return;
     }
     switch (selected) {
-      case 'reportHere':
-        await _reportPlace(latlng);
       case 'deselect':
         _clearSelection();
         setState(() {});

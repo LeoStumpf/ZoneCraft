@@ -327,6 +327,23 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
     the original **is** kept (a POI is three scalars, not a 119 238-point ring), which buys
     both `revertPoiPoint` and a note that can state what changed. A move that changes nothing
     is not a fork.
+  - **Only a change of the user's own is published.** `OsmReportSubject.availableKinds` offers
+    exactly one kind or none — `missing` for a hand-placed point, `movedHere` for a moved
+    correction (its note carries a rename too: one visit, one note), `wrongName` for a rename —
+    and `canPublish` is what shows the editor's Publish button. `gone` is offered by exactly
+    one act, **deleting** an imported POI (`deletePoiPointFlow` in `ui/poi_delete.dart`, the one
+    single-POI delete: it always asks, and for something OSM has offers *Delete & tell OSM…*;
+    the note is composed before the row goes). `other` is retired, read only so old outbox rows
+    still display; the long-press "Tell OpenStreetMap about this place" is gone. An untouched
+    import has nothing to publish — it *is* what OSM has. The editor's name and position are
+    facts with **Edit** buttons whose dialog says **Save** or **Save & publish…** (one write,
+    one undo step — the old live field wrote on every keystroke), and the subject for "Save &
+    publish" is composed from the values being saved (`_subject(name:/lat:/lng:)`), not the
+    row that has not come back yet. `osmSubjectFor` (`data/poi_sets.dart`) is the one
+    point→subject builder. A new place's note lists the tags a mapper would type
+    (`amenity=bench`, `name=…`); a category with no tag says so rather than guessing. Rows show
+    `PoiPublishState` (not published / in your OSM list / sent to OSM), from the newest report
+    per `poiPointId`.
   - **Notes, not edits, and that is not a stopgap.** `parseOverpassResponse` keeps no tag map
     and no element `version`, and uses `out center`, so a `PUT` would strip tags off live OSM
     objects. A note is the only report this data model can make honestly — and it is the
@@ -607,8 +624,8 @@ to freehand areas), plus two import types with their own painters:
 `poi` (offline sets — radius category imports, box station imports with per-type
 visibility and retryable failed imports, hand-made categories — with screen-space
 clustering, per-point hand corrections that are flagged as forks and revertible, and a
-**"Tell OpenStreetMap"** route that files the correction as an anonymous note or keeps it in
-an exportable outbox) and `borders` (offline area imports per admin level, neighbour-distinct
+**"Publish to OpenStreetMap"** route — for your own changes only: a place you added, moved,
+renamed or deleted — that files it as an anonymous note or keeps it in an exportable outbox) and `borders` (offline area imports per admin level, neighbour-distinct
 colouring, name plates, per-area convert-to-freehand, hand-reshapeable outlines that are
 flagged as forks) — the layers drawer + an editor for every type, settings (uncertainty,
 clear-all, offline cache, import/export), opt-in locate-me (the app's only use of location),

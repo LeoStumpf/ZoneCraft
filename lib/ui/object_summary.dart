@@ -73,6 +73,7 @@ class ObjectSummary {
     this.sizeMeasure,
     this.isPending = false,
     this.isEdited = false,
+    this.publishState = PoiPublishState.none,
     this.colorArgb,
     this.colorShade = 0,
   });
@@ -118,6 +119,26 @@ class ObjectSummary {
   /// An imported POI the user has corrected by hand (`PoiPoints.editedAt`) —
   /// the row says so, since the name or place shown is no longer OSM's.
   final bool isEdited;
+
+  /// Where a change of the user's own stands with OpenStreetMap — a
+  /// hand-placed POI or a correction. [PoiPublishState.none] for everything
+  /// with nothing to publish.
+  final PoiPublishState publishState;
+}
+
+/// Where one POI's own change stands with OpenStreetMap.
+enum PoiPublishState {
+  /// Nothing to publish: an untouched import, or not a POI.
+  none,
+
+  /// A place you added or corrected that OSM has not been told about.
+  unpublished,
+
+  /// Written up and kept in the OpenStreetMap list, not sent.
+  listed,
+
+  /// Sent as a note.
+  sent,
 }
 
 /// The canonical icon for a `Layers.type` — shared by the drawer, the Elements

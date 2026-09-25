@@ -20,13 +20,13 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../data/error_log.dart';
 import '../data/osm_report.dart';
 import '../data/repository.dart';
 import '../geo/coords.dart' show formatLatLng, parseLatLng;
 import '../state/providers.dart';
 import 'editor_sheet.dart';
 import 'osm_report_sheet.dart';
+import 'poi_delete.dart';
 
 /// Docked editor for **one stored point** — a POI or a station; since v27
 /// both are `PoiPoints` rows, and only the icon and subtitle differ.
@@ -47,8 +47,10 @@ import 'osm_report_sheet.dart';
 ///
 /// Which is also where the feature this editor exists for begins: you are
 /// standing next to the bench, you have just fixed your copy, and the obvious
-/// next question is whether anyone else gets the fix. **Share this
-/// correction** is that question, answered with an OpenStreetMap note.
+/// next question is whether anyone else gets the fix. **Publish** is that
+/// question, answered with an OpenStreetMap note — offered only for a change
+/// of the user's own, and asked again as **Save & publish** at the moment a
+/// name or position is saved, and as **Delete & tell OSM** on a delete.
 ///
 /// A POI in a **hand-made** category has no upstream to fork from, so none of
 /// the bookkeeping applies to it — but it has the same offer, the other way
@@ -121,89 +123,107 @@ class ImportedPointEditorSheet extends ConsumerStatefulWidget {
 
 class _ImportedPointEditorSheetState
     extends ConsumerState<ImportedPointEditorSheet> {
-  late final TextEditingController _name;
-  late final TextEditingController _pos;
-  final FocusNode _posFocus = FocusNode();
-
   Repository get _repo => ref.read(repositoryProvider);
-
-  @override
-  void initState() {
-    super.initState();
-    _name = TextEditingController(text: widget.name ?? '');
-    _pos = TextEditingController(text: formatLatLng(widget.lat, widget.lng));
-  }
-
-  @override
-  void didUpdateWidget(ImportedPointEditorSheet old) {
-    super.didUpdateWidget(old);
-    if (old.id != widget.id) _name.text = widget.name ?? '';
-    // Keep the field in step when the point is moved by tapping the map, but
-    // never rewrite it under the caret.
-    if (!_posFocus.hasFocus) {
-      final t = formatLatLng(widget.lat, widget.lng);
-      if (_pos.text != t) _pos.text = t;
-    }
-  }
-
-  @override
-  void dispose() {
-    _name.dispose();
-    _pos.dispose();
-    _posFocus.dispose();
-    super.dispose();
-  }
 
   void _armPlacement() {
     ref.read(poiPointPlacementProvider.notifier).arm(on: true);
-    ScaffoldMessenger.of(context)
-      ..clearSnackBars()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            widget.movable
-                ? 'Tap the map to move this POI'
-                : 'Tap the map where it really is',
-          ),
-        ),
-      );
+    _toast(
+      widget.movable
+          ? 'Tap the map to move this POI'
+          : 'Tap the map where it really is',
+    );
   }
 
-  /// Everything the report needs to know about this point, gathered in one
-  /// place so the sheet has no idea it came from a POI row.
-  OsmReportSubject get _subject => OsmReportSubject(
-    lat: widget.lat,
-    lng: widget.lng,
-    name: widget.name,
-    origLat: widget.origLat,
-    origLng: widget.origLng,
-    origName: widget.origName,
-    edited: widget.editedAt != null,
-    categoryLabel: widget.subtitle,
-    tagKey: widget.tagKey,
-    tagValue: widget.tagValue,
-    osmType: widget.osmType,
-    osmId: widget.osmId,
-    poiPointId: widget.id,
-  );
+  /// This point as a note would describe it — optionally as it will be once
+  /// a change being saved right now has landed, so "Save & publish" can
+  /// compose from the new values without waiting for the row to come back.
+  ///
+  /// For an import the original is what OSM returned: the stored `orig*`
+  /// once the point is a fork, else its current values, which is exactly what
+  /// the repository will record as `orig*` on this first edit.
+  OsmReportSubject _subject({String? name, double? lat, double? lng}) {
+    final changing = name != null || lat != null || lng != null;
+    final forked = widget.editedAt != null;
+    final hand = widget.movable;
+    return OsmReportSubject(
+      lat: lat ?? widget.lat,
+      lng: lng ?? widget.lng,
+      name: name == null ? widget.name : (name.isEmpty ? null : name),
+      origLat: hand ? null : (forked ? widget.origLat : widget.lat),
+      origLng: hand ? null : (forked ? widget.origLng : widget.lng),
+      origName: hand ? null : (forked ? widget.origName : widget.name),
+      edited: !hand && (forked || changing),
+      categoryLabel: widget.subtitle,
+      tagKey: widget.tagKey,
+      tagValue: widget.tagValue,
+      osmType: widget.osmType,
+      osmId: widget.osmId,
+      poiPointId: widget.id,
+    );
+  }
 
-  Future<void> _report() async {
+  Future<void> _publish(OsmReportSubject subject) async {
     // Disarm first: the sheet covers the map, and a tap landing behind it
     // would move the point the user is in the middle of describing.
     ref.read(poiPointPlacementProvider.notifier).arm(on: false);
-    final result = await showOsmReportSheet(context, _subject);
+    if (!subject.canPublish) {
+      _toast('Nothing to publish — it matches OpenStreetMap');
+      return;
+    }
+    final result = await showOsmReportSheet(context, subject);
     if (!mounted) return;
     switch (result.outcome) {
       case OsmReportOutcomeKind.cancelled:
         return;
       case OsmReportOutcomeKind.saved:
-        _toast('Saved to your OpenStreetMap outbox');
+        _toast('Kept in your OpenStreetMap list');
       case OsmReportOutcomeKind.sent:
         _toast('Sent to OpenStreetMap — thank you');
     }
-    // "It is not there any more" usually ends with the local copy going too.
-    // After the report, never before: the report quotes the point.
-    if (result.alsoRemove) await _delete();
+  }
+
+  Future<void> _editName() async {
+    final answer = await showDialog<_Edited>(
+      context: context,
+      builder: (_) => _EditValueDialog(
+        title: 'Name',
+        initial: widget.name ?? '',
+        hint: 'Leave empty to clear',
+        capitalization: TextCapitalization.words,
+        validate: (_) => null,
+      ),
+    );
+    if (answer == null || !mounted) return;
+    final name = answer.value.trim();
+    await _repo.updatePoiPoint(
+      widget.id,
+      name: Value<String?>(name.isEmpty ? null : name),
+    );
+    if (answer.publish && mounted) await _publish(_subject(name: name));
+  }
+
+  Future<void> _editPosition() async {
+    final answer = await showDialog<_Edited>(
+      context: context,
+      builder: (_) => _EditValueDialog(
+        title: 'Position',
+        initial: formatLatLng(widget.lat, widget.lng),
+        hint: 'lat, lng',
+        keyboard: const TextInputType.numberWithOptions(
+          decimal: true,
+          signed: true,
+        ),
+        validate: (t) => parseLatLng(t) == null
+            ? 'Not a position — try 48.137, 11.575'
+            : null,
+      ),
+    );
+    if (answer == null || !mounted) return;
+    final p = parseLatLng(answer.value)!;
+    await _repo.movePoiPoint(id: widget.id, lat: p.latitude, lng: p.longitude);
+    if (answer.publish && mounted) {
+      await _publish(_subject(lat: p.latitude, lng: p.longitude));
+    }
   }
 
   Future<void> _revert() async {
@@ -223,20 +243,18 @@ class _ImportedPointEditorSheetState
     ref.read(selectedPoiPointProvider.notifier).select(null);
   }
 
-  Future<void> _rename(String text) {
-    final label = Value<String?>(text.trim().isEmpty ? null : text.trim());
-    return _repo.updatePoiPoint(widget.id, name: label);
-  }
-
-  Future<void> _delete() async {
-    await _repo.deletePoiPoint(widget.id);
-    _close();
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final edited = widget.editedAt != null;
+    final subject = _subject();
+    // The newest report about this point, if any: what the Publish button's
+    // neighbour says, so a place already sent does not look unpublished.
+    final report = (ref.watch(osmReportsProvider).asData?.value ?? const [])
+        .where((r) => r.poiPointId == widget.id)
+        .firstOrNull;
+    final name = widget.name?.trim();
+    final placing = ref.watch(poiPointPlacementProvider);
     return EditorSheet(
       children: [
         Row(
@@ -246,12 +264,11 @@ class _ImportedPointEditorSheetState
             Text(widget.title, style: theme.textTheme.titleMedium),
             const Spacer(),
             IconButton(
-              tooltip: widget.movable
-                  ? 'Delete this POI'
-                  : 'Remove from this import',
+              tooltip: 'Delete…',
               icon: const Icon(Icons.delete_outline),
-              color: Theme.of(context).colorScheme.error,
-              onPressed: _delete,
+              color: theme.colorScheme.error,
+              onPressed: () =>
+                  unawaited(deletePoiPointFlow(context, ref, widget.id)),
             ),
             IconButton(
               tooltip: 'Close',
@@ -260,69 +277,48 @@ class _ImportedPointEditorSheetState
             ),
           ],
         ),
-        const SizedBox(height: 4),
-        TextField(
-          controller: _name,
-          decoration: const InputDecoration(
-            labelText: 'Name',
-            hintText: 'Leave empty to clear',
-            isDense: true,
-          ),
-          onChanged: _rename,
-        ),
-        const SizedBox(height: 8),
-        // Both kinds get a position field now. What differs is what a change
-        // to it *means*: on a hand-placed point it is simply where you put it,
-        // on an imported one it forks the row from upstream — which is why the
-        // note below spells that out rather than leaving it to be discovered.
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _pos,
-                focusNode: _posFocus,
-                decoration: const InputDecoration(
-                  labelText: 'Position (lat, lng)',
-                  isDense: true,
-                ),
-                onChanged: (t) {
-                  final p = parseLatLng(t);
-                  if (p == null) return; // half-typed; ignore until valid
-                  logAsyncFailure(
-                    _repo.movePoiPoint(
-                      id: widget.id,
-                      lat: p.latitude,
-                      lng: p.longitude,
-                    ),
-                    'Moving the place',
-                  );
-                },
-              ),
-            ),
-            IconButton(
-              tooltip: widget.movable
-                  ? 'Tap the map to move it'
-                  : 'Tap the map where it really is',
-              icon: Icon(
-                Icons.touch_app_outlined,
-                color: ref.watch(poiPointPlacementProvider)
-                    ? theme.colorScheme.primary
-                    : null,
-              ),
-              onPressed: _armPlacement,
+        // Facts first, each with the button that changes it. A live text field
+        // wrote on every keystroke — eleven undo steps for one name, and no
+        // moment at which "save this, and publish it" could be asked.
+        _Fact(
+          label: 'Name',
+          value: (name == null || name.isEmpty) ? 'No name' : name,
+          dim: name == null || name.isEmpty,
+          actions: [
+            TextButton.icon(
+              onPressed: () => unawaited(_editName()),
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              label: const Text('Edit'),
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        // The coordinate used to be printed here because there was nowhere
-        // else for it. There is a field for it now, so this line says only
-        // what the field cannot.
+        _Fact(
+          label: 'Position',
+          value: formatLatLng(widget.lat, widget.lng),
+          actions: [
+            TextButton.icon(
+              onPressed: () => unawaited(_editPosition()),
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              label: const Text('Edit'),
+            ),
+            TextButton.icon(
+              onPressed: _armPlacement,
+              icon: Icon(
+                Icons.open_with,
+                size: 18,
+                color: placing ? theme.colorScheme.primary : null,
+              ),
+              label: const Text('Move'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
         Text(
           [widget.subtitle, if (widget.movable) 'placed by hand'].join(' · '),
           style: theme.textTheme.bodySmall,
         ),
         if (edited) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Text(
             'Corrected by you. OpenStreetMap still has '
             '${_upstreamDescription()}.',
@@ -330,11 +326,15 @@ class _ImportedPointEditorSheetState
               color: theme.colorScheme.tertiary,
             ),
           ),
-        ] else if (!widget.movable) ...[
-          const SizedBox(height: 8),
+        ],
+        if (report != null &&
+            (subject.canPublish || report.sentAt != null)) ...[
+          const SizedBox(height: 4),
           Text(
-            'Imported from OpenStreetMap. Changing it here changes your copy '
-            'only — and the app will say so from then on.',
+            report.sentAt != null
+                ? 'Sent to OpenStreetMap'
+                      '${report.noteId != null ? ' as note ${report.noteId}' : ''}.'
+                : 'In your OpenStreetMap list, not sent yet.',
             style: theme.textTheme.bodySmall,
           ),
         ],
@@ -349,17 +349,20 @@ class _ImportedPointEditorSheetState
                 icon: const Icon(Icons.undo, size: 18),
                 label: const Text('Revert'),
               ),
-            FilledButton.tonalIcon(
-              onPressed: () => unawaited(_report()),
-              icon: const Icon(Icons.volunteer_activism_outlined, size: 18),
-              label: Text(
-                edited
-                    ? 'Share this correction'
-                    : widget.movable
-                    ? 'Add it to OpenStreetMap'
-                    : 'Tell OpenStreetMap',
+            // Only for a change of the user's own: something they placed, or
+            // a correction. An untouched import *is* what OSM has.
+            if (subject.canPublish)
+              FilledButton.tonalIcon(
+                onPressed: () => unawaited(_publish(subject)),
+                icon: const Icon(Icons.cloud_upload_outlined, size: 18),
+                label: Text(
+                  report?.sentAt != null
+                      ? 'Publish again…'
+                      : widget.movable
+                      ? 'Publish to OpenStreetMap…'
+                      : 'Publish this change…',
+                ),
               ),
-            ),
           ],
         ),
       ],
@@ -381,5 +384,129 @@ class _ImportedPointEditorSheetState
     if (moved) return 'it at ${formatLatLng(widget.origLat!, widget.origLng!)}';
     if (renamed) return 'it as “${widget.origName ?? 'unnamed'}”';
     return 'something different';
+  }
+}
+
+/// One labelled value with the buttons that change it.
+class _Fact extends StatelessWidget {
+  const _Fact({
+    required this.label,
+    required this.value,
+    required this.actions,
+    this.dim = false,
+  });
+
+  final String label;
+  final String value;
+  final List<Widget> actions;
+  final bool dim;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    // A Wrap, not a Row: at a large system font the buttons drop below the
+    // value instead of being clipped by the sheet (see `editor_sheet.dart`).
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 4,
+        children: [
+          ConstrainedBox(
+            constraints: BoxConstraints(minWidth: scaledPx(context, 160)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(label, style: theme.textTheme.labelSmall),
+                Text(
+                  value,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: dim ? theme.colorScheme.onSurfaceVariant : null,
+                    fontStyle: dim ? FontStyle.italic : null,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ...actions,
+        ],
+      ),
+    );
+  }
+}
+
+/// A changed value, and whether to publish it too.
+typedef _Edited = ({String value, bool publish});
+
+/// Edit one value, then **Save** or **Save & publish…** — the second only
+/// saves first and then opens the publish sheet, so nothing leaves the device
+/// without that sheet's own Send.
+class _EditValueDialog extends StatefulWidget {
+  const _EditValueDialog({
+    required this.title,
+    required this.initial,
+    required this.hint,
+    required this.validate,
+    this.keyboard,
+    this.capitalization = TextCapitalization.none,
+  });
+
+  final String title;
+  final String initial;
+  final String hint;
+  final String? Function(String) validate;
+  final TextInputType? keyboard;
+  final TextCapitalization capitalization;
+
+  @override
+  State<_EditValueDialog> createState() => _EditValueDialogState();
+}
+
+class _EditValueDialogState extends State<_EditValueDialog> {
+  late final TextEditingController _text = TextEditingController(
+    text: widget.initial,
+  );
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  void _done({required bool publish}) {
+    if (widget.validate(_text.text) != null) return;
+    Navigator.pop<_Edited>(context, (value: _text.text, publish: publish));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final error = widget.validate(_text.text);
+    return AlertDialog(
+      title: Text(widget.title),
+      content: TextField(
+        controller: _text,
+        autofocus: true,
+        keyboardType: widget.keyboard,
+        textCapitalization: widget.capitalization,
+        decoration: InputDecoration(hintText: widget.hint, errorText: error),
+        onChanged: (_) => setState(() {}),
+        onSubmitted: (_) => _done(publish: false),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        OutlinedButton(
+          onPressed: error == null ? () => _done(publish: true) : null,
+          child: const Text('Save & publish…'),
+        ),
+        FilledButton(
+          onPressed: error == null ? () => _done(publish: false) : null,
+          child: const Text('Save'),
+        ),
+      ],
+    );
   }
 }

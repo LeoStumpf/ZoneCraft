@@ -38,7 +38,7 @@ migrations on a real map.
 | `TILE_URL` | Base-map tile URL template, e.g. `https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=KEY`. Unset = OpenStreetMap's community servers. |
 | `TILE_ATTRIBUTION` | The attribution line shown for it, verbatim (it must carry its own `©`). |
 | `TILE_ALLOWS_PREFETCH=true` | **Re-enables** the viewport prefetch and the *Download this area* button. Off by default because OpenStreetMap's tile policy forbids them on the community servers — and so do MapTiler and Thunderforest on their cheaper plans. Set it only when the provider you pointed `TILE_URL` at says in writing that you may; the script refuses it without a `TILE_URL`. |
-| `OSM_API_URL` | Where *Tell OpenStreetMap* sends notes. Unset = the real database. **Use `https://master.apis.dev.openstreetmap.org` to test** — a note filed against the live database to see whether a button works is one a volunteer has to close by hand. |
+| `OSM_API_URL` | Where *Publish to OpenStreetMap* sends notes. Unset = the real database. **Use `https://master.apis.dev.openstreetmap.org` to test** — a note filed against the live database to see whether a button works is one a volunteer has to close by hand. |
 
 The key belongs in `TILE_URL` in your environment, never in the repo. Leave all three tile
 variables unset for a policy-compliant build against `tile.openstreetmap.org`.

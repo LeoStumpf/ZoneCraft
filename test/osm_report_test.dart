@@ -81,27 +81,24 @@ void main() {
     });
   });
 
-  group('which kinds a subject can honestly report', () {
-    test('an untouched import cannot claim a correction', () {
-      // "It is in the wrong place" quotes the corrected position. Without one
-      // there is nothing to say, so the chip is not offered at all rather than
-      // producing a sentence with a hole in it.
+  group('only a change of the user\'s own can be published', () {
+    test('an untouched import has nothing to publish', () {
+      // It *is* what OSM has. The one thing that can be said about it — that
+      // it is gone — is said by deleting it, not from the editor.
       const untouched = OsmReportSubject(
         lat: 48.1,
         lng: 11.5,
         osmType: 'node',
         osmId: 7,
       );
-      expect(untouched.availableKinds, [
-        OsmReportKind.gone,
-        OsmReportKind.other,
-      ]);
-      expect(untouched.defaultKind, OsmReportKind.gone);
+      expect(untouched.availableKinds, isEmpty);
+      expect(untouched.canPublish, isFalse);
+      expect(untouched.canReportGone, isTrue);
     });
 
-    test('a moved point opens on the move', () {
+    test('a moved point publishes the move, and only that', () {
+      expect(munich.availableKinds, [OsmReportKind.movedHere]);
       expect(munich.defaultKind, OsmReportKind.movedHere);
-      expect(munich.availableKinds, contains(OsmReportKind.movedHere));
     });
 
     test('a renamed-but-not-moved point offers only the rename', () {
@@ -116,28 +113,30 @@ void main() {
         osmType: 'node',
         osmId: 7,
       );
-      expect(renamed.availableKinds, isNot(contains(OsmReportKind.movedHere)));
-      expect(renamed.defaultKind, OsmReportKind.wrongName);
+      expect(renamed.availableKinds, [OsmReportKind.wrongName]);
     });
 
-    test('a hand-placed point can only be missing', () {
+    test('a hand-placed point can only be new', () {
       // It has no upstream, so "it is not there any more" would be about
-      // nothing.
+      // nothing — deleting it offers no note.
       const manual = OsmReportSubject(lat: 48.1, lng: 11.5, name: 'My bench');
-      expect(manual.availableKinds, [
-        OsmReportKind.missing,
-        OsmReportKind.other,
-      ]);
+      expect(manual.availableKinds, [OsmReportKind.missing]);
+      expect(manual.canReportGone, isFalse);
     });
 
-    test('bare ground can only say "something else"', () {
-      const place = OsmReportSubject.place(48.1, 11.5);
-      expect(place.availableKinds, [
-        OsmReportKind.missing,
-        OsmReportKind.other,
-      ]);
-      expect(place.positionCorrected, isFalse);
-      expect(place.nameCorrected, isFalse);
+    test('a correction put back to what OSM has is nothing to publish', () {
+      const back = OsmReportSubject(
+        lat: 48.1,
+        lng: 11.5,
+        name: 'Kranz',
+        origLat: 48.1,
+        origLng: 11.5,
+        origName: 'Kranz',
+        edited: true,
+        osmType: 'node',
+        osmId: 7,
+      );
+      expect(back.canPublish, isFalse);
     });
   });
 
@@ -220,6 +219,54 @@ void main() {
       );
     });
 
+    test('a move says where OSM has it and where it really is', () {
+      final text = composeOsmReportText(OsmReportKind.movedHere, munich);
+      expect(text, contains('OpenStreetMap has this at 48.137180, 11.575000'));
+      expect(text, contains('about 24 m north of there, at 48.137400'));
+    });
+
+    test('a move and a rename are one note, not two', () {
+      const both = OsmReportSubject(
+        lat: 48.1374,
+        lng: 11.575,
+        name: 'Oak bench',
+        origLat: 48.13718,
+        origLng: 11.575,
+        origName: 'Gate bench',
+        edited: true,
+        osmType: 'node',
+        osmId: 7,
+      );
+      expect(both.availableKinds, [OsmReportKind.movedHere]);
+      final text = composeOsmReportText(OsmReportKind.movedHere, both);
+      expect(text, contains('24 m north'));
+      expect(text, contains('named “Gate bench”, but on the ground it is'));
+    });
+
+    test('a new place carries the tags a mapper would type', () {
+      const manual = OsmReportSubject(
+        lat: 48.1,
+        lng: 11.5,
+        name: 'My bench',
+        categoryLabel: 'Benches',
+        tagKey: 'amenity',
+        tagValue: 'bench',
+      );
+      final text = composeOsmReportText(OsmReportKind.missing, manual);
+      expect(text, contains('Suggested tags:\namenity=bench\nname=My bench'));
+    });
+
+    test('a category with no tag says so rather than guessing', () {
+      const manual = OsmReportSubject(
+        lat: 48.1,
+        lng: 11.5,
+        name: 'Hill spot',
+        categoryLabel: 'Picnic spots',
+      );
+      final text = composeOsmReportText(OsmReportKind.missing, manual);
+      expect(text, contains('Category: Picnic spots (no OpenStreetMap tag'));
+    });
+
     test('a hand-placed POI in a preset category suggests its tag', () {
       const manual = OsmReportSubject(
         lat: 48.137400,
@@ -273,7 +320,7 @@ void main() {
       // a heading, a link and an empty line rather than a guess.
       final text = composeOsmReportText(
         OsmReportKind.other,
-        const OsmReportSubject.place(48.1, 11.5),
+        const OsmReportSubject(lat: 48.1, lng: 11.5),
       );
       expect(text.trim(), osmReportTrailer);
     });
