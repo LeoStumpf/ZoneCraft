@@ -410,6 +410,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
       // an hour nobody can predict.
       health: ref.read(tileHealthProvider),
     );
+    // Post-frame: a provider may not be written while the tree is building,
+    // and initState runs inside a build.
+    final tiles = _tileProvider;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.read(mapTileProviderProvider.notifier).publish(tiles);
+    });
     // Captured here, not read in `dispose()`. Riverpod forbids touching `ref`
     // once a widget is unmounting — and `dispose()` is exactly where the last
     // camera save happens. In debug that assert fired on every teardown; in

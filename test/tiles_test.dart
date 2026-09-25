@@ -109,4 +109,41 @@ void main() {
       expect(tiles.every((t) => t.x >= 0), isTrue);
     });
   });
+
+  group('tileWindow', () {
+    test('centres the place: its tile holds it at the window middle', () {
+      const lat = 48.137, lng = 11.575, z = 17;
+      final tiles = tileWindow(lat, lng, z, 128);
+      expect(tiles, isNotEmpty);
+      expect(tiles.length, lessThanOrEqualTo(4));
+      // The tile containing the place is in the list, and the window's middle
+      // (64, 64) falls inside it.
+      final home = tiles.singleWhere(
+        (t) => t.x == tileXFor(lng, z) && t.y == tileYFor(lat, z),
+      );
+      expect(64, inInclusiveRange(home.left, home.left + 256));
+      expect(64, inInclusiveRange(home.top, home.top + 256));
+    });
+
+    test('the tiles cover the whole window', () {
+      final tiles = tileWindow(48.137, 11.575, 17, 128);
+      final minLeft = tiles.map((t) => t.left).reduce((a, b) => a < b ? a : b);
+      final minTop = tiles.map((t) => t.top).reduce((a, b) => a < b ? a : b);
+      final maxRight = tiles
+          .map((t) => t.left + 256)
+          .reduce((a, b) => a > b ? a : b);
+      final maxBottom = tiles
+          .map((t) => t.top + 256)
+          .reduce((a, b) => a > b ? a : b);
+      expect(minLeft, lessThanOrEqualTo(0));
+      expect(minTop, lessThanOrEqualTo(0));
+      expect(maxRight, greaterThanOrEqualTo(128));
+      expect(maxBottom, greaterThanOrEqualTo(128));
+    });
+
+    test('wraps at the antimeridian', () {
+      final tiles = tileWindow(0, 179.9999, 3, 128);
+      expect(tiles.map((t) => t.x).toSet(), containsAll(<int>{7, 0}));
+    });
+  });
 }

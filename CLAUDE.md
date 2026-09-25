@@ -483,6 +483,16 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   Locate me) and switches only once there is a fix; a failure is printed beside the button,
   since a snackbar would land behind the modal sheet. POI *sets* are not rows, so they do
   not make "Stack order" a choice — on a POI layer it would otherwise be the default.
+  **A POI row is told apart by where it is**: `poiRowSubtitle` (pure, tested) prints
+  distance from you / from the centre, the point's own subtitle only when it differs from its
+  heading (a station's modes, never "Benches" under Benches) and "edited" for a hand
+  correction; its leading `PoiThumbnail` (`ui/poi_thumbnail.dart`) is **at most four cached
+  tile `Image`s, never a `FlutterMap` per row**, placed by the pure `tileWindow`
+  (`geo/tiles.dart`). It reads the map's own `CachedTileProvider`, published as
+  `mapTileProviderProvider` (same cache, same client, same `User-Agent`), at **zoom 16 on
+  purpose** — the zoom the map is read at, so a thumbnail is mostly tiles already cached and
+  the list fetches next to nothing; `Image` defers loading during a fling, and only visible
+  rows build, so what is fetched is what is looked at (viewing, not prefetching).
 - **A reshaped border outline is flagged** (`BorderAreas.editedAt`, schema v23; null =
   untouched OSM geometry). Reshaping forks the area from upstream while it keeps its
   `osmId`, so re-import dedup then keeps the edited version — which is why the fork is

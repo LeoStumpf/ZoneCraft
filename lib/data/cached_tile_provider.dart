@@ -68,6 +68,19 @@ class CachedTileProvider extends TileProvider {
     );
   }
 
+  /// The same cache-first image for a tile named by its URL, for a picture
+  /// that is not a flutter_map layer — the Elements list's thumbnails. Going
+  /// through here rather than a plain network image is the point: a place's
+  /// thumbnail is served from the tiles the map already cached, works offline
+  /// for everywhere you have looked, and sends the app's own `User-Agent`.
+  ImageProvider imageFor(String url) => _CachedTileImage(
+    url: url,
+    repo: _repo,
+    client: _client,
+    headers: headers,
+    health: health,
+  );
+
   /// Best-effort offline prefetch: fetch [url] and store it if it isn't cached
   /// already. Returns true if a tile was actually downloaded. Never throws.
   Future<bool> prefetch(String url) async {

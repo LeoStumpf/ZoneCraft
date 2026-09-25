@@ -70,7 +70,14 @@ area where it has one, searchable, and sorted by the **Sort** button above the s
 by name, by size, in stack order, by **distance from you** or by **distance from the map
 centre**. The sort applies inside each type of place too, so "which bench is nearest" is one
 tap. Distance from you asks for your location the first time you choose it, exactly as
-**Locate me** does, and never before. Each row offers **Edit**,
+**Locate me** does, and never before.
+
+Each place in the list carries a **small map of the streets around it**, with the place marked
+in the middle, and a line saying how far it is from you and from the map centre — so two
+unnamed benches are still two different benches. The little maps are the same tiles the map
+itself has shown, so they cost nothing extra and work offline wherever you have looked;
+somewhere you have never looked shows a plain square. A place you corrected by hand says
+**edited**. Each row offers **Edit**,
 **Zoom to**, **Rename**, **Delete**, and **Bring to front / Send to back**. On a places layer
 the points are filed by what they are, never by how they arrived — a category across every
 import of it *and* your own category of the same thing (a bench you placed sits with the

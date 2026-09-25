@@ -408,4 +408,55 @@ void main() {
       }
     });
   });
+
+  group('a POI row says where it is', () {
+    ObjectSummary bench({String subtitle = 'Benches', bool edited = false}) =>
+        ObjectSummary(
+          ref: const ObjectRef(
+            kind: ObjectKind.poiPoint,
+            id: 'b',
+            layerId: 'L',
+          ),
+          title: 'Unnamed POI',
+          subtitle: subtitle,
+          center: const LatLng(48.137, 11.575),
+          fitPoints: const [LatLng(48.137, 11.575)],
+          sortName: '',
+          isEdited: edited,
+        );
+
+    test('distances from you and from the centre, not its own heading', () {
+      expect(
+        poiRowSubtitle(
+          bench(),
+          groupLabel: 'Benches',
+          myPosition: const LatLng(48.138, 11.575),
+          mapCenter: const LatLng(48.147, 11.575),
+        ),
+        '110 m from you · 1.1 km from centre',
+      );
+    });
+
+    test('a station keeps its modes; a correction says so', () {
+      expect(
+        poiRowSubtitle(
+          bench(subtitle: 'Bus, Tram', edited: true),
+          groupLabel: 'Tram',
+        ),
+        'Bus, Tram · edited',
+      );
+    });
+
+    test('with nothing known, nothing is claimed', () {
+      expect(poiRowSubtitle(bench(), groupLabel: 'Benches'), '');
+    });
+
+    test('formatDistance', () {
+      expect(formatDistance(43), '40 m');
+      expect(formatDistance(999), '1.0 km');
+      expect(formatDistance(1440), '1.4 km');
+      expect(formatDistance(12345), '12 km');
+      expect(formatDistance(double.infinity), '?');
+    });
+  });
 }

@@ -91,11 +91,17 @@ class ElementRow extends ListRow {
   const ElementRow(
     this.summary, {
     this.inGroup = false,
+    this.groupLabel,
     this.canMoveBack = false,
     this.canMoveForward = false,
   });
   final ObjectSummary summary;
   final bool inGroup;
+
+  /// The heading this POI sits under, so its row does not repeat it: a
+  /// bench's subtitle saying "Benches" under "Benches" tells you nothing,
+  /// while a station's "Bus, Tram" under "Tram" does.
+  final String? groupLabel;
 
   /// Whether the z-order menu offers "Send backward" / "Bring forward".
   /// **Computed from stack order, not display order**: sorting the list by
@@ -193,11 +199,12 @@ ElementRows buildElementRows({
     }
   }
 
-  ElementRow row(ObjectSummary s, {bool inGroup = false}) {
+  ElementRow row(ObjectSummary s, {bool inGroup = false, String? groupLabel}) {
     final f = zFlags[s.ref] ?? (false, false);
     return ElementRow(
       s,
       inGroup: inGroup,
+      groupLabel: groupLabel,
       canMoveBack: f.$1,
       canMoveForward: f.$2,
     );
@@ -290,7 +297,12 @@ List<ListRow> _poiRows({
   required bool searching,
   required bool Function(ObjectSummary) matches,
   required Set<String> expandedGroups,
-  required ElementRow Function(ObjectSummary, {bool inGroup}) row,
+  required ElementRow Function(
+    ObjectSummary, {
+    bool inGroup,
+    String? groupLabel,
+  })
+  row,
   required List<ObjectSummary> Function(List<ObjectSummary>) sorted,
 }) {
   final rows = <ListRow>[];
@@ -310,7 +322,10 @@ List<ListRow> _poiRows({
     final expanded = searching || expandedGroups.contains(g.key);
     rows.add(GroupHeaderRow(g, expanded: expanded, shown: shown.length));
     if (expanded) {
-      rows.addAll([for (final p in sorted(shown)) row(p, inGroup: true)]);
+      rows.addAll([
+        for (final p in sorted(shown))
+          row(p, inGroup: true, groupLabel: g.label),
+      ]);
     }
   }
   return rows;
@@ -330,4 +345,36 @@ List<T> _stableSorted<T>(List<T> rows, int Function(T, T) compare) {
     return c != 0 ? c : a.$1.compareTo(b.$1);
   });
   return [for (final e in indexed) e.$2];
+}
+
+/// The second line of a POI's row: how far it is from you and from the map
+/// centre, what it is when that is not already its heading, and whether you
+/// corrected it — enough to tell one unnamed bench from the next.
+///
+/// Pure, so the wording is tested rather than eyeballed.
+String poiRowSubtitle(
+  ObjectSummary s, {
+  String? groupLabel,
+  LatLng? myPosition,
+  LatLng? mapCenter,
+}) {
+  final parts = [
+    if (s.subtitle.isNotEmpty && s.subtitle != groupLabel) s.subtitle,
+    if (myPosition != null)
+      '${formatDistance(distanceMeters(myPosition, s.center))} from you',
+    if (mapCenter != null)
+      '${formatDistance(distanceMeters(mapCenter, s.center))} from centre',
+    if (s.isEdited) 'edited',
+  ];
+  return parts.join(' · ');
+}
+
+/// "40 m", "1.4 km", "12 km" — metres rounded to 10 below a kilometre, since
+/// a phone's fix is not better than that and "43 m" claims it is.
+String formatDistance(double meters) {
+  if (!meters.isFinite) return '?';
+  final tens = (meters / 10).round() * 10;
+  if (tens < 1000) return '$tens m';
+  if (meters < 10000) return '${(meters / 1000).toStringAsFixed(1)} km';
+  return '${(meters / 1000).round()} km';
 }

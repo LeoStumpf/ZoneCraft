@@ -96,3 +96,40 @@ List<TileCoord> tilesCovering({
   }
   return out;
 }
+
+/// One tile of a [tileWindow]: which tile, and where its top-left corner sits
+/// in the window, in tile pixels (256 to a tile).
+typedef WindowTile = ({int x, int y, double left, double top});
+
+/// The tiles, and their offsets, that fill a square window [windowPx] tile
+/// pixels wide centred on ([lat], [lng]) at zoom [z] — what an Elements row's
+/// thumbnail draws, so the place sits in the middle whatever tile it falls in.
+///
+/// A window no wider than a tile touches at most four. Columns wrap at the
+/// antimeridian; rows off the top or bottom of the world are left out (the
+/// window shows blank there, as the map does).
+List<WindowTile> tileWindow(double lat, double lng, int z, double windowPx) {
+  final n = 1 << z;
+  final world = 256.0 * n;
+  final clampedLat = lat.clamp(-mercatorMaxLat, mercatorMaxLat);
+  final latRad = clampedLat * math.pi / 180.0;
+  final px = (lng + 180.0) / 360.0 * world;
+  final py =
+      (1.0 - math.log(math.tan(latRad) + 1.0 / math.cos(latRad)) / math.pi) /
+      2.0 *
+      world;
+  final ox = px - windowPx / 2, oy = py - windowPx / 2;
+  final x0 = (ox / 256).floor(), x1 = ((ox + windowPx) / 256).ceil() - 1;
+  final y0 = (oy / 256).floor(), y1 = ((oy + windowPx) / 256).ceil() - 1;
+  return [
+    for (var ty = y0; ty <= y1; ty++)
+      if (ty >= 0 && ty < n)
+        for (var tx = x0; tx <= x1; tx++)
+          (
+            x: ((tx % n) + n) % n,
+            y: ty,
+            left: tx * 256 - ox,
+            top: ty * 256 - oy,
+          ),
+  ];
+}

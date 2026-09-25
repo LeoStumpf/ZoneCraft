@@ -252,6 +252,7 @@ ObjectSummary _pointSummary(
     center: at,
     fitPoints: [at],
     sortName: name ?? '',
+    isEdited: p.editedAt != null,
   );
 }
 

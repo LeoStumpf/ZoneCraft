@@ -20,6 +20,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart' hide Circle;
 
+import '../data/cached_tile_provider.dart';
 import '../data/database.dart';
 import '../data/repository.dart';
 import '../data/tile_health.dart';
@@ -741,6 +742,22 @@ final myPositionProvider = NotifierProvider<MapPointNotifier, LatLng?>(
 final mapCenterProvider = NotifierProvider<MapPointNotifier, LatLng?>(
   MapPointNotifier.new,
 );
+
+/// The map's tile provider, published by the map screen once it has built
+/// one, so a picture elsewhere (an Elements row's thumbnail) reads the same
+/// cache through the same HTTP client. Null until then — a thumbnail shows a
+/// blank square rather than opening a second client.
+class MapTileProviderNotifier extends Notifier<CachedTileProvider?> {
+  @override
+  CachedTileProvider? build() => null;
+
+  void publish(CachedTileProvider provider) => state = provider;
+}
+
+final mapTileProviderProvider =
+    NotifierProvider<MapTileProviderNotifier, CachedTileProvider?>(
+      MapTileProviderNotifier.new,
+    );
 
 final pendingFocusProvider =
     NotifierProvider<PendingFocusNotifier, MapFocusRequest?>(

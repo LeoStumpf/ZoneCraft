@@ -72,6 +72,7 @@ class ObjectSummary {
     required this.sortName,
     this.sizeMeasure,
     this.isPending = false,
+    this.isEdited = false,
     this.colorArgb,
     this.colorShade = 0,
   });
@@ -113,6 +114,10 @@ class ObjectSummary {
   /// The object exists but its data never arrived — the row offers a retry
   /// rather than a zoom. Only POI imports (radius or box) can be pending.
   final bool isPending;
+
+  /// An imported POI the user has corrected by hand (`PoiPoints.editedAt`) —
+  /// the row says so, since the name or place shown is no longer OSM's.
+  final bool isEdited;
 }
 
 /// The canonical icon for a `Layers.type` — shared by the drawer, the Elements

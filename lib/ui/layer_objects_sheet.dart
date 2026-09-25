@@ -34,6 +34,7 @@ import 'layer_actions.dart' show emptyStateActions;
 import 'element_color_dialog.dart';
 import 'object_summary.dart';
 import 'poi_groups.dart';
+import 'poi_thumbnail.dart';
 import 'transit_modes_sheet.dart'
     show TransitModeShortcuts, transitTallyProvider;
 
@@ -364,6 +365,8 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
                       summaries: summaries,
                       tallyVisible: tally?.visible,
                       tallySetIds: tally?.setIds,
+                      myPosition: myPosition,
+                      mapCenter: mapCenter,
                     ),
                   ),
           ),
@@ -380,6 +383,8 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
     required List<ObjectSummary> summaries,
     required int? tallyVisible,
     required Set<String>? tallySetIds,
+    required LatLng? myPosition,
+    required LatLng? mapCenter,
   }) {
     switch (row) {
       case ElementRow():
@@ -392,6 +397,8 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
               row,
               canEdit: canEdit,
               isSelected: selectedIds.contains(row.summary.ref.id),
+              myPosition: myPosition,
+              mapCenter: mapCenter,
             ),
           ],
         );
@@ -522,6 +529,8 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
     ElementRow row, {
     required bool canEdit,
     required bool isSelected,
+    required LatLng? myPosition,
+    required LatLng? mapCenter,
   }) {
     final s = row.summary;
     final kind = ColoredElement.forObjectKindName(s.ref.kind.name);
@@ -535,17 +544,28 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
           ? Border(left: BorderSide(color: scheme.primary, width: 4))
           : null,
       // A POI sits under its type's heading, which already carries the icon;
-      // the indent says which heading. Everything else shows the *element's*
-      // icon, not the layer's: a POI layer's rows are of different
-      // kinds, and one shared icon would make the list unreadable.
+      // the indent says which heading, and its place is a thumbnail of the
+      // map around it — for an unnamed bench, the only thing that tells it
+      // from the next one. Everything else shows the *element's* icon, not
+      // the layer's: a POI layer's rows are of different kinds, and one shared
+      // icon would make the list unreadable.
       contentPadding: row.inGroup
-          ? const EdgeInsets.only(left: 40, right: 16)
+          ? const EdgeInsets.only(left: 24, right: 16)
           : null,
       leading: isPoint
-          ? null
+          ? PoiThumbnail(s.center)
           : Icon(s.isPending ? Icons.refresh : typeIcon(s.ref.kind.layerType)),
       title: Text(s.title, overflow: TextOverflow.ellipsis),
-      subtitle: Text(s.subtitle),
+      subtitle: Text(
+        isPoint
+            ? poiRowSubtitle(
+                s,
+                groupLabel: row.groupLabel,
+                myPosition: myPosition,
+                mapCenter: mapCenter,
+              )
+            : s.subtitle,
+      ),
       onTap: () => Navigator.pop(
         context,
         ElementResult(
