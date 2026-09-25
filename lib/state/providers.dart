@@ -632,7 +632,7 @@ void clearTransientModesIn(ProviderContainer c) {
   c.read(freeLineCenterPlacementProvider.notifier).arm(on: false);
   c.read(freeAreaPlacementProvider.notifier).arm(null);
   c.read(heightPlacementProvider.notifier).arm(on: false);
-  c.read(poiPointPlacementProvider.notifier).arm(on: false);
+  c.read(poiMoveProvider.notifier).cancel();
   c.read(borderReshapeProvider.notifier).arm(on: false);
 }
 
@@ -846,23 +846,55 @@ final mapRequestProvider = NotifierProvider<MapRequestNotifier, MapRequest?>(
   MapRequestNotifier.new,
 );
 
-/// While a POI is selected, whether the next map tap moves it.
-///
-/// Armed for imported points as well as hand-placed ones. Moving an import is
-/// no longer forbidden, it is *recorded*: `Repository.movePoiPoint` captures
-/// what OSM returned and stamps `PoiPoints.editedAt`, so the correction can
-/// never pass itself off as upstream data.
-class PoiPointPlacementNotifier extends Notifier<bool> {
-  @override
-  bool build() => false;
+/// A POI being moved on the map: which one, where it was, and where the pin
+/// is now.
+@immutable
+class PoiMove {
+  const PoiMove({required this.pointId, required this.from, required this.to});
 
-  void arm({required bool on}) => state = on;
+  final String pointId;
+
+  /// Where the point is stored — its own marker stays drawn here, as the
+  /// ghost the move is measured from.
+  final LatLng from;
+
+  /// Where the drag handle is. Nothing is written until Save.
+  final LatLng to;
+
+  bool get moved => from != to;
 }
 
-final poiPointPlacementProvider =
-    NotifierProvider<PoiPointPlacementNotifier, bool>(
-      PoiPointPlacementNotifier.new,
-    );
+/// **Moving a POI is a mode, not a write.** The editor's Move arms it; the map
+/// then shows a draggable pin, a dashed line back to where the point is
+/// stored, and a banner with **Cancel / Save / Save & publish**. Only Save
+/// writes — one `movePoiPoint`, one undo step — so a drag you did not mean
+/// costs nothing, and "save and publish" is asked at the moment the new
+/// position is decided, like every other edit.
+///
+/// Armed for imported points as well as hand-placed ones. Moving an import is
+/// not forbidden, it is *recorded*: `Repository.movePoiPoint` captures what
+/// OSM returned and stamps `PoiPoints.editedAt`, so the correction can never
+/// pass itself off as upstream data. A tap on the map while armed drops the
+/// pin there — the fallback for anyone who finds dragging fiddly.
+class PoiMoveNotifier extends Notifier<PoiMove?> {
+  @override
+  PoiMove? build() => null;
+
+  void start(String pointId, LatLng at) =>
+      state = PoiMove(pointId: pointId, from: at, to: at);
+
+  void moveTo(LatLng to) {
+    final m = state;
+    if (m == null || !to.latitude.isFinite || !to.longitude.isFinite) return;
+    state = PoiMove(pointId: m.pointId, from: m.from, to: to);
+  }
+
+  void cancel() => state = null;
+}
+
+final poiMoveProvider = NotifierProvider<PoiMoveNotifier, PoiMove?>(
+  PoiMoveNotifier.new,
+);
 
 /// A position that arrived from outside the app — a `zonecraft://` link, or
 /// text pasted into the "Paste coordinates" box.

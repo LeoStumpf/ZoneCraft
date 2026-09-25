@@ -19,6 +19,7 @@ import 'dart:async';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:latlong2/latlong.dart' show LatLng;
 
 import '../data/osm_report.dart';
 import '../data/repository.dart';
@@ -125,13 +126,16 @@ class _ImportedPointEditorSheetState
     extends ConsumerState<ImportedPointEditorSheet> {
   Repository get _repo => ref.read(repositoryProvider);
 
-  void _armPlacement() {
-    ref.read(poiPointPlacementProvider.notifier).arm(on: true);
-    _toast(
-      widget.movable
-          ? 'Tap the map to move this POI'
-          : 'Tap the map where it really is',
-    );
+  /// Starts moving on the map — a draggable pin, a line back to where the
+  /// point is, and the map's own Cancel / Save / Save & publish banner. A
+  /// second press puts the pin away again.
+  void _toggleMove() {
+    final moves = ref.read(poiMoveProvider.notifier);
+    if (ref.read(poiMoveProvider)?.pointId == widget.id) {
+      moves.cancel();
+      return;
+    }
+    moves.start(widget.id, LatLng(widget.lat, widget.lng));
   }
 
   /// This point as a note would describe it — optionally as it will be once
@@ -163,9 +167,9 @@ class _ImportedPointEditorSheetState
   }
 
   Future<void> _publish(OsmReportSubject subject) async {
-    // Disarm first: the sheet covers the map, and a tap landing behind it
-    // would move the point the user is in the middle of describing.
-    ref.read(poiPointPlacementProvider.notifier).arm(on: false);
+    // Put a pending move away first: the sheet covers the map, and a pin left
+    // on it would be a second, unsaved position for the same point.
+    ref.read(poiMoveProvider.notifier).cancel();
     if (!subject.canPublish) {
       _toast('Nothing to publish — it matches OpenStreetMap');
       return;
@@ -239,7 +243,7 @@ class _ImportedPointEditorSheetState
   }
 
   void _close() {
-    ref.read(poiPointPlacementProvider.notifier).arm(on: false);
+    ref.read(poiMoveProvider.notifier).cancel();
     ref.read(selectedPoiPointProvider.notifier).select(null);
   }
 
@@ -254,7 +258,7 @@ class _ImportedPointEditorSheetState
         .where((r) => r.poiPointId == widget.id)
         .firstOrNull;
     final name = widget.name?.trim();
-    final placing = ref.watch(poiPointPlacementProvider);
+    final moving = ref.watch(poiMoveProvider)?.pointId == widget.id;
     return EditorSheet(
       children: [
         Row(
@@ -301,15 +305,20 @@ class _ImportedPointEditorSheetState
               icon: const Icon(Icons.edit_outlined, size: 18),
               label: const Text('Edit'),
             ),
-            TextButton.icon(
-              onPressed: _armPlacement,
-              icon: Icon(
-                Icons.open_with,
-                size: 18,
-                color: placing ? theme.colorScheme.primary : null,
+            // Toggled, not a one-shot: while the pin is out, this is how it
+            // goes away again besides the banner's Cancel.
+            if (moving)
+              FilledButton.tonalIcon(
+                onPressed: _toggleMove,
+                icon: const Icon(Icons.open_with, size: 18),
+                label: const Text('Moving…'),
+              )
+            else
+              TextButton.icon(
+                onPressed: _toggleMove,
+                icon: const Icon(Icons.open_with, size: 18),
+                label: const Text('Move'),
               ),
-              label: const Text('Move'),
-            ),
           ],
         ),
         const SizedBox(height: 4),

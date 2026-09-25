@@ -344,6 +344,16 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
     (`amenity=bench`, `name=…`); a category with no tag says so rather than guessing. Rows show
     `PoiPublishState` (not published / in your OSM list / sent to OSM), from the newest report
     per `poiPointId`.
+  - **Moving a POI is a mode, not a write** (`poiMoveProvider`, `ui/poi_move.dart`). The
+    editor's Move puts out a `_dragHandle` pin whose drags only update the mode's `to`; the
+    POI's own marker stays at `from` as the ghost, a dashed `Polyline` joins them, and
+    `PoiMoveBanner` says "Moved 24 m north-east" with Cancel / Save / Save & publish. Only
+    Save writes — one `movePoiPoint`, sealed as one undo step — and "publish" composes via
+    `osmSubjectFor(point, sets, lat:, lng:)` from the row read **before** the write (the row
+    that comes back has forgotten where it was). A map tap while armed drops the pin there
+    (the old tap-to-place, kept as the fallback), double-tap zoom is off while armed
+    (`tapPlaces`), and the pin is put away when the selection moves to another point or any
+    transient mode is cleared. `poiPointPlacementProvider` is gone.
   - **Notes, not edits, and that is not a stopgap.** `parseOverpassResponse` keeps no tag map
     and no element `version`, and uses `out center`, so a `PUT` would strip tags off live OSM
     objects. A note is the only report this data model can make honestly — and it is the

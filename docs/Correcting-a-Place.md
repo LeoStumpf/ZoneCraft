@@ -12,8 +12,12 @@ Open the point (Select by tapping, or from the Elements list). Its editor shows 
 with the button that changes it:
 
 - **Name** — shown as text, with **Edit**.
-- **Position** — shown as coordinates, with **Edit** (type a new one) and **Move** (tap the map
-  where it really is).
+- **Position** — shown as coordinates, with **Edit** (type a new one) and **Move**.
+
+**Move** puts a pin on the map. Drag it to where the place really is — or just tap there. A
+dashed line runs back to where the place is now, and a banner says how far and which way
+(*"Moved 24 m north-east"*), with **Cancel**, **Save** and **Save & publish…**. Nothing changes
+until you press Save, and one Undo takes the whole move back.
 
 **Edit** opens a small dialog with **Save** and **Save & publish…** — the second saves and then
 opens the publish sheet below, describing the change you just made.

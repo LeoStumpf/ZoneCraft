@@ -148,21 +148,36 @@ String poiCategoryLabel(List<PoiSet> sets, String setId) {
       set.categoryKey;
 }
 
-/// Everything an OpenStreetMap note needs to know about [p], as it is now.
+/// Everything an OpenStreetMap note needs to know about [p] — as it is now,
+/// or as it will be once a change being saved right now has landed ([name],
+/// [lat], [lng]), so "Save & publish" can compose from the new values without
+/// waiting for the row to come back.
 ///
-/// One builder, read by the point editor and by every delete, so a note
-/// written from the Elements list and one written from the editor describe
-/// the same point in the same words.
-OsmReportSubject osmSubjectFor(PoiPoint p, List<PoiSet> sets) {
+/// For an import the original is what OSM returned: the stored `orig*` once
+/// the point is a fork, else its current values — exactly what the repository
+/// records as `orig*` on a first edit. A hand-placed point has no original.
+///
+/// One builder, read by every delete and by the map's move banner, so a note
+/// written from any of them describes the same point in the same words.
+OsmReportSubject osmSubjectFor(
+  PoiPoint p,
+  List<PoiSet> sets, {
+  String? name,
+  double? lat,
+  double? lng,
+}) {
   final tag = poiCategoryTag(sets, p.poiSetId);
+  final hand = poiSetOf(sets, p.poiSetId)?.isManual ?? false;
+  final forked = p.editedAt != null;
+  final changing = name != null || lat != null || lng != null;
   return OsmReportSubject(
-    lat: p.lat,
-    lng: p.lng,
-    name: p.name,
-    origLat: p.origLat,
-    origLng: p.origLng,
-    origName: p.origName,
-    edited: p.editedAt != null,
+    lat: lat ?? p.lat,
+    lng: lng ?? p.lng,
+    name: name == null ? p.name : (name.isEmpty ? null : name),
+    origLat: hand ? null : (forked ? p.origLat : p.lat),
+    origLng: hand ? null : (forked ? p.origLng : p.lng),
+    origName: hand ? null : (forked ? p.origName : p.name),
+    edited: !hand && (forked || changing),
     categoryLabel: poiCategoryLabel(sets, p.poiSetId),
     tagKey: tag?.tagKey,
     tagValue: tag?.tagValue,

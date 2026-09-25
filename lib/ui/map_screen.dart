@@ -77,6 +77,8 @@ import 'two_finger_gestures.dart';
 import 'poi_import_dialog.dart';
 import 'poi_category_dialog.dart';
 import 'poi_icons.dart';
+import 'osm_report_sheet.dart';
+import 'poi_move.dart';
 import 'poi_layer.dart';
 import 'paint_order.dart';
 import 'area_geometry.dart';
@@ -1302,6 +1304,68 @@ class _MapScreenState extends ConsumerState<MapScreen>
         ),
       ),
     );
+  }
+
+  /// The pin a moving POI is dragged by: a ringed dot with a move glyph, so it
+  /// reads as "grab me" rather than as another POI.
+  Widget _movePin() {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: 34,
+      height: 34,
+      decoration: BoxDecoration(
+        color: scheme.primary,
+        shape: BoxShape.circle,
+        border: Border.all(color: kMapDisc, width: 3),
+        boxShadow: const [BoxShadow(blurRadius: 4, color: Colors.black38)],
+      ),
+      child: Icon(Icons.open_with, size: 18, color: scheme.onPrimary),
+    );
+  }
+
+  /// Ends a POI move: writes the new position (one undo step) and, when
+  /// [publish], opens the publish sheet on the change just made.
+  ///
+  /// The row and its sets are read **before** the write, so the note is
+  /// composed from what the point was and what it is becoming — the row that
+  /// comes back afterwards would already have forgotten the first half.
+  Future<void> _finishPoiMove({required bool publish}) async {
+    final move = ref.read(poiMoveProvider);
+    if (move == null) return;
+    ref.read(poiMoveProvider.notifier).cancel();
+    if (!move.moved) return;
+    final point = (ref.read(poiPointsProvider).asData?.value ?? const [])
+        .where((p) => p.id == move.pointId)
+        .firstOrNull;
+    final sets = ref.read(poiSetsProvider).asData?.value ?? const <PoiSet>[];
+    final repo = ref.read(repositoryProvider);
+    await repo.movePoiPoint(
+      id: move.pointId,
+      lat: move.to.latitude,
+      lng: move.to.longitude,
+    );
+    await repo.undo.sealStep(label: 'Move POI');
+    if (!publish || point == null || !mounted) return;
+    final subject = osmSubjectFor(
+      point,
+      sets,
+      lat: move.to.latitude,
+      lng: move.to.longitude,
+    );
+    if (!subject.canPublish) {
+      _hint('Nothing to publish — it matches OpenStreetMap');
+      return;
+    }
+    final result = await showOsmReportSheet(context, subject);
+    if (!mounted) return;
+    switch (result.outcome) {
+      case OsmReportOutcomeKind.cancelled:
+        return;
+      case OsmReportOutcomeKind.saved:
+        _hint('Kept in your OpenStreetMap list');
+      case OsmReportOutcomeKind.sent:
+        _hint('Sent to OpenStreetMap — thank you');
+    }
   }
 
   /// The name drawn under labelled markers, haloed the way osm-carto haloes
@@ -3417,21 +3481,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// this coordinate", writing [latlng] to the armed point and disarming.
   /// Returns whether the tap was consumed.
   Future<bool> _consumeArmedPlacement(LatLng latlng) async {
-    // Placement mode: move the selected POI. An imported one is allowed now
-    // and records the fork; see `Repository.movePoiPoint`.
-    if (ref.read(poiPointPlacementProvider)) {
-      final selId = ref.read(selectedPoiPointProvider);
-      if (selId != null) {
-        await ref
-            .read(repositoryProvider)
-            .movePoiPoint(
-              id: selId,
-              lat: latlng.latitude,
-              lng: latlng.longitude,
-            );
-        ref.read(poiPointPlacementProvider.notifier).arm(on: false);
-        return true;
-      }
+    // Moving a POI: a tap drops the pin there — the fallback to dragging it.
+    // Nothing is written until the banner's Save.
+    if (ref.read(poiMoveProvider) != null) {
+      ref.read(poiMoveProvider.notifier).moveTo(latlng);
+      return true;
     }
 
     // Placement mode: relocate the selected circle's centre.
@@ -4227,6 +4281,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
   Widget build(BuildContext context) {
     // Triggers one-time seeding of a default layer.
     ref.watch(seedProvider);
+    // A pin left out for a point that is no longer the one being edited would
+    // be an unsaved position nobody can see the editor for.
+    ref.listen(selectedPoiPointProvider, (_, id) {
+      final move = ref.read(poiMoveProvider);
+      if (move != null && move.pointId != id) {
+        ref.read(poiMoveProvider.notifier).cancel();
+      }
+    });
+    final poiMove = ref.watch(poiMoveProvider);
     // Read through [_myPosition]; watched so a fix taken elsewhere (the
     // Elements list's distance sort) puts the marker on the map too.
     ref.watch(myPositionProvider);
@@ -4349,7 +4412,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     // [_interactionOptions]. View shows, Edit selects; neither places.
     final tapPlaces =
         (mode != MapMode.view && mode != MapMode.edit) ||
-        ref.watch(poiPointPlacementProvider) ||
+        ref.watch(poiMoveProvider) != null ||
         ref.watch(circlePlacementProvider) ||
         ref.watch(heightPlacementProvider) ||
         ref.watch(freeLineCenterPlacementProvider) ||
@@ -5175,6 +5238,22 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                   ),
                             ],
                           ),
+                        // A POI being moved: a dashed line from where it is
+                        // stored (its own marker, still drawn there, is the
+                        // ghost) to the pin.
+                        if (poiMove != null && poiMove.moved)
+                          PolylineLayer(
+                            polylines: [
+                              Polyline(
+                                points: [poiMove.from, poiMove.to],
+                                strokeWidth: 3,
+                                color: kMapInk,
+                                pattern: StrokePattern.dashed(
+                                  segments: const [10, 8],
+                                ),
+                              ),
+                            ],
+                          ),
                         // Draggable handles for the object being edited: drag to
                         // move a point (persisted on release), long-press for its
                         // menu. Circle/subspace/freehand points and the
@@ -5182,6 +5261,17 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         if (hasSelection)
                           DragMarkers(
                             markers: [
+                              // The moving POI's pin. Its drags change the
+                              // mode's state only, never the row — Save writes.
+                              if (poiMove != null)
+                                _dragHandle(
+                                  poiMove.to,
+                                  key: const ValueKey('poi-move'),
+                                  core: _movePin(),
+                                  onMoved: (ll) => ref
+                                      .read(poiMoveProvider.notifier)
+                                      .moveTo(ll),
+                                ),
                               if (selectedCircle != null) ...[
                                 _dragHandle(
                                   LatLng(
@@ -5524,6 +5614,20 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               );
                             },
                           ),
+                          // Moving a POI: how far, and the three ways out.
+                          if (poiMove != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: PoiMoveBanner(
+                                move: poiMove,
+                                onCancel: () =>
+                                    ref.read(poiMoveProvider.notifier).cancel(),
+                                onSave: () =>
+                                    unawaited(_finishPoiMove(publish: false)),
+                                onSaveAndPublish: () =>
+                                    unawaited(_finishPoiMove(publish: true)),
+                              ),
+                            ),
                           // Add-mode banner: what to tap, plus Undo / Edit last / Done.
                           if (mode == MapMode.add && _placeLayerId != null)
                             Padding(

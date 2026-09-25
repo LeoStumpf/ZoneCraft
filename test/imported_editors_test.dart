@@ -246,6 +246,21 @@ void main() {
       expect(find.widgetWithText(TextButton, 'Move'), findsOneWidget);
     });
 
+    testWidgets('Move puts a pin out on the map, and takes it back', (
+      tester,
+    ) async {
+      await pump(tester, poiSheet(name: 'Alte Post'));
+      await tester.tap(find.widgetWithText(TextButton, 'Move'));
+      await tester.pump();
+      final move = container.read(poiMoveProvider)!;
+      expect(move.pointId, 'p1');
+      expect(move.from, const LatLng(48.001, 11.002));
+      expect(repo.calls, isEmpty, reason: 'moving writes nothing until Save');
+      await tester.tap(find.text('Moving…'));
+      await tester.pump();
+      expect(container.read(poiMoveProvider), isNull);
+    });
+
     testWidgets('delete asks first, and can tell OSM an import is gone', (
       tester,
     ) async {
