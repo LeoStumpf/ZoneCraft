@@ -68,10 +68,12 @@ reaching an element must never depend on either. It opens the **Elements** list 
 layer holds: each element with its ground length or
 area where it has one, sortable by name or size, searchable. Each row offers **Edit**,
 **Zoom to**, **Rename**, **Delete**, and **Bring to front / Send to back**. On a places layer
-the points are filed by type — a category across every import of it, a station under its
-main mode — and a station type's heading carries the same tick box as **Stations…**. Imports
-themselves are collapsed under **Imports**; a **failed import's retry row floats to the top**
-so no fold can hide it. A border area's row offers **Convert to freehand area…**.
+the points are filed by what they are, never by how they arrived — a category across every
+import of it *and* your own category of the same thing (a bench you placed sits with the
+imported benches), a station under its main mode — and a station type's heading carries the
+same tick box as **Stations…**. A heading's menu offers **Zoom to**, **Edit category** for a
+category of your own, and **Delete** for everything under it. The only trace of an import is
+a **failed one's retry row, which floats to the top** so no fold can hide it. A border area's row offers **Convert to freehand area…**.
 
 ## Folders
 

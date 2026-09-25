@@ -457,11 +457,19 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   `ObjectSummary` per element, now with `sortName` + a per-kind `sizeMeasure`, and lines /
   areas quoting their ground length / area from `geo/measure.dart`), `ui/poi_groups.dart`
   (a POI layer's *points* filed under `PoiTypeGroup`s — a category across every import of
-  it, a station's `primaryTransitMode` — the same pick `transitIconFor` makes, so icon and
-  group can't disagree — or a hand-made category, which is its own group and appears
-  nowhere else), and `ui/elements_list_model.dart` (`buildElementRows`: sort, search, which
-  groups are open). The **Imports** section holds the sets, collapsed; a **pending import's
-  retry row floats to the top** so no fold can hide it. A station group's heading carries the
+  it **and every hand-made set that is the same thing**, a station's `primaryTransitMode` —
+  the same pick `transitIconFor` makes, so icon and group can't disagree — or a hand-made
+  category of the user's own, one group per name), and `ui/elements_list_model.dart`
+  (`buildElementRows`: sort, search, which groups are open). **There is no Imports section**:
+  a finished import is not a row, and the only trace of one is a **pending import's retry
+  row, floating to the top** so no fold can hide it. `poiSetCatalogueCategory`
+  (`data/poi_sets.dart`) is **the one rule for "this hand-made set is a bench"** — a
+  catalogue key *and* a name that agrees (empty, or the catalogue label up to case and
+  plural); the icon alone is not enough. The list files by it and `poiCategoryTag` reports
+  by it, so a set is never listed as Benches and sent to OSM as something else.
+  `deletePoiPoints` (a heading's "Delete N POIs") drops an import it empties — nothing
+  could show or remove it any more — and keeps a hand-made category, which is where the
+  next point goes. A station group's heading carries the
   visibility tick box (`setPoiVisibleModes`, the same write as the Stations sheet; the
   Rail-only/Show-all/Hide-all `TransitModeShortcuts` are shared). **Z-order menu flags are
   computed from stack order, never display order**, so "Bring to front" stays right under a

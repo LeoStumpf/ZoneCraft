@@ -1817,6 +1817,51 @@ class Repository {
     return (_db.delete(_db.poiPoints)..where((p) => p.id.equals(id))).go();
   }
 
+  /// Removes a whole type group's POIs in one undo step — the Elements list's
+  /// "Delete all" on a heading.
+  ///
+  /// An **import** left holding nothing goes with its points: the list no
+  /// longer shows imports, so an empty one would be a row nobody can see or
+  /// remove, still counted as an element. A **hand-made** category is kept
+  /// even when emptied — it is where the next bench you place goes, and
+  /// removing it is its own, separately worded action.
+  Future<void> deletePoiPoints(Iterable<String> ids) {
+    final list = ids.toList();
+    if (list.isEmpty) return Future.value();
+    return _db.undo.group('Delete POIs', () async {
+      await _db.transaction(() async {
+        // Chunked: a city's bus stops are thousands of ids, and one `IN (...)`
+        // per chunk keeps well inside SQLite's bound-variable limit.
+        final setIds = <String>{};
+        for (var i = 0; i < list.length; i += 500) {
+          final chunk = list.sublist(i, math.min(i + 500, list.length));
+          setIds.addAll(
+            await (_db.selectOnly(_db.poiPoints, distinct: true)
+                  ..addColumns([_db.poiPoints.poiSetId])
+                  ..where(_db.poiPoints.id.isIn(chunk)))
+                .map((r) => r.read(_db.poiPoints.poiSetId)!)
+                .get(),
+          );
+          await (_db.delete(
+            _db.poiPoints,
+          )..where((p) => p.id.isIn(chunk))).go();
+        }
+        for (final setId in setIds) {
+          final set = await (_db.select(
+            _db.poiSets,
+          )..where((s) => s.id.equals(setId))).getSingleOrNull();
+          if (set == null || set.isManual) continue;
+          final left =
+              await (_db.select(_db.poiPoints)
+                    ..where((p) => p.poiSetId.equals(setId))
+                    ..limit(1))
+                  .get();
+          if (left.isEmpty) await deletePoiSet(setId);
+        }
+      });
+    });
+  }
+
   // --- OSM reports (the outbox) ---------------------------------------------
 
   /// Every report, newest first — the outbox screen's whole data source.

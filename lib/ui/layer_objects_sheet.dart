@@ -163,7 +163,6 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
   ElementSort? _sort;
   final _search = TextEditingController();
   final _expanded = <String>{};
-  bool _importsExpanded = false;
 
   @override
   void initState() {
@@ -217,7 +216,6 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
       sort: sort,
       query: _search.text,
       expandedGroups: _expanded,
-      importsExpanded: _importsExpanded,
     );
 
     // The headline number: POIs on a POI layer (the tally when stations are
@@ -364,14 +362,6 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
           padding: const EdgeInsets.only(top: 4),
           child: TransitModeShortcuts(layer: layer),
         );
-      case SectionRow():
-        return _SectionHeader(
-          row.title,
-          row.blurb,
-          trailing: row.trailing,
-          expanded: row.expanded,
-          onTap: () => setState(() => _importsExpanded = !_importsExpanded),
-        );
       case NoMatchesRow():
         return Padding(
           padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
@@ -394,9 +384,12 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
     final theme = Theme.of(context);
     final g = row.group;
     final mode = g.mode;
-    final manualSet = g.manualSetId == null
-        ? null
-        : summaries.where((s) => s.ref.id == g.manualSetId).firstOrNull;
+    // The hand-made sets behind the heading — usually one, the category the
+    // user named; a heading that merges them with imports still edits them.
+    final manualSets = [
+      for (final s in summaries)
+        if (g.manualSetIds.contains(s.ref.id)) s,
+    ];
     return ListTile(
       leading: Icon(g.icon),
       title: Text(g.label, overflow: TextOverflow.ellipsis),
@@ -428,27 +421,49 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
               switch (value) {
                 case 'zoom':
                   Navigator.pop(context, ElementResult.focus(g.fitPoints));
-                case 'edit' when manualSet != null:
-                  Navigator.pop(
-                    context,
-                    ElementResult(ElementAction.edit, manualSet),
-                  );
-                case 'delete' when manualSet != null:
-                  await _delete(context, ref, manualSet);
+                case 'deleteAll':
+                  await _deleteGroupPoints(context, ref, g);
+                case 'deleteCategory':
+                  await _deleteCategory(context, ref, g);
+                default:
+                  final set = manualSets
+                      .where((s) => value == 'edit:${s.ref.id}')
+                      .firstOrNull;
+                  if (set != null) {
+                    Navigator.pop(
+                      context,
+                      ElementResult(ElementAction.edit, set),
+                    );
+                  }
               }
             },
             itemBuilder: (_) => [
               if (g.points.isNotEmpty)
                 const PopupMenuItem(value: 'zoom', child: Text('Zoom to')),
-              // A hand-made category is its own set: this heading is where it
-              // is renamed, re-iconed or removed.
-              if (manualSet != null) ...[
-                const PopupMenuItem(
-                  value: 'edit',
-                  child: Text('Edit category'),
+              // The heading is the only place a hand-made category is
+              // renamed or re-iconed now that sets have no rows of their own.
+              for (final s in manualSets)
+                PopupMenuItem(
+                  value: 'edit:${s.ref.id}',
+                  child: Text(
+                    manualSets.length == 1
+                        ? 'Edit category'
+                        : 'Edit “${s.title}”',
+                  ),
                 ),
-                const PopupMenuItem(value: 'delete', child: Text('Delete')),
-              ],
+              if (g.points.isNotEmpty)
+                PopupMenuItem(
+                  value: 'deleteAll',
+                  child: Text('Delete ${_plural(g.points.length, 'POI')}…'),
+                ),
+              // The user's own category, removed with what they placed in it;
+              // imported points under the same heading are not theirs to lose
+              // this way and stay.
+              if (manualSets.isNotEmpty)
+                const PopupMenuItem(
+                  value: 'deleteCategory',
+                  child: Text('Delete category…'),
+                ),
             ],
           ),
         ],
@@ -573,6 +588,79 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
       ),
     );
   }
+
+  /// Removes every POI under one type heading, after asking.
+  Future<void> _deleteGroupPoints(
+    BuildContext context,
+    WidgetRef ref,
+    PoiTypeGroup g,
+  ) async {
+    final n = _plural(g.points.length, 'POI');
+    final ok = await _confirm(
+      context,
+      title: 'Delete $n from ${g.label}?',
+      body: g.manualSetIds.isEmpty
+          ? 'Undo will bring them back.'
+          : 'Your category stays, so you can place new ones. '
+                'Undo will bring these back.',
+    );
+    if (ok != true) return;
+    await ref.read(repositoryProvider).deletePoiPoints([
+      for (final p in g.points) p.ref.id,
+    ]);
+    clearSelection(ref);
+  }
+
+  /// Removes the user's own category under a heading — every hand-made set
+  /// in it, and the POIs placed there — as one undo step.
+  Future<void> _deleteCategory(
+    BuildContext context,
+    WidgetRef ref,
+    PoiTypeGroup g,
+  ) async {
+    final mixed = g.setIds.length > g.manualSetIds.length;
+    final ok = await _confirm(
+      context,
+      title: 'Delete your category ${g.label}?',
+      body: mixed
+          ? 'The POIs you placed go with it; imported ones stay. '
+                'Undo will bring it back.'
+          : g.points.isEmpty
+          ? 'Undo will bring it back.'
+          : 'Its ${_plural(g.points.length, 'POI')} go with it. '
+                'Undo will bring them back.',
+    );
+    if (ok != true) return;
+    final repo = ref.read(repositoryProvider);
+    await repo.undo.group('Delete category', () async {
+      for (final id in g.manualSetIds) {
+        await repo.deletePoiSet(id);
+      }
+    });
+    clearSelection(ref);
+  }
+
+  Future<bool?> _confirm(
+    BuildContext context, {
+    required String title,
+    required String body,
+  }) => showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(title),
+      content: Text(body),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Delete'),
+        ),
+      ],
+    ),
+  );
 
   /// Copies one imported border area, or one generated height fill, into a
   /// freehand area layer, so it becomes geometry the user owns. Reads the
@@ -744,62 +832,6 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
 }
 
 String _plural(int n, String noun) => '$n $noun${n == 1 ? '' : 's'}';
-
-/// Names one part of a list that holds several, so none is read as another.
-/// With [onTap] it is a collapsible heading, and says so with a chevron.
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader(
-    this.title,
-    this.blurb, {
-    this.trailing,
-    this.expanded,
-    this.onTap,
-  });
-
-  final String title;
-  final String blurb;
-  final String? trailing;
-  final bool? expanded;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    title.toUpperCase(),
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.primary,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                ),
-                if (trailing != null)
-                  Text(trailing!, style: theme.textTheme.bodySmall),
-                if (expanded != null)
-                  Icon(
-                    expanded! ? Icons.expand_less : Icons.expand_more,
-                    size: 18,
-                    color: theme.colorScheme.primary,
-                  ),
-              ],
-            ),
-            Text(blurb, style: theme.textTheme.bodySmall),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 class _EmptyState extends StatelessWidget {
   const _EmptyState({required this.scrollController, required this.layer});

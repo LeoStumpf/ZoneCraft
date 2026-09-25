@@ -21,7 +21,6 @@ import 'package:latlong2/latlong.dart';
 
 import '../data/database.dart';
 import '../data/layer_types.dart';
-import '../data/overpass.dart' show poiCategories;
 import '../data/poi_sets.dart';
 import '../data/transit.dart';
 import '../state/providers.dart';
@@ -37,7 +36,11 @@ import 'poi_layer.dart' show poiIconFor;
 /// cafés, the bus stops, the pins they placed: so the rows are the points,
 /// filed under the kind of thing they are. Two imports of the same category
 /// land in **one** group (the repository already de-duplicates a re-import
-/// against the layer, so a merged group holds each place once), and a station
+/// against the layer, so a merged group holds each place once) — and so does a
+/// hand-made category that *is* that category (a "Bench" set beside a bench
+/// import: they are all benches, see [poiSetCatalogueCategory]). How a point
+/// arrived is deliberately not a heading anywhere: the list has no Imports
+/// section, only kinds of thing. A station
 /// served by several modes is filed under its [primaryTransitMode] — the same
 /// pick its marker icon makes.
 ///
@@ -49,10 +52,12 @@ enum PoiGroupKind {
   /// or, for `station:none`, the stations OSM gave no mode.
   station,
 
-  /// One Overpass category ("Cafés") across every radius import of it.
+  /// One catalogue category ("Benches") across every radius import of it and
+  /// every hand-made category that is the same thing.
   category,
 
-  /// One hand-made category: that set *is* the type.
+  /// A hand-made category that is none of the catalogue's — every set of that
+  /// name, since two "Swimming spots" are one kind of place.
   manual,
 }
 
@@ -66,11 +71,12 @@ class PoiTypeGroup {
     required this.icon,
     required this.setIds,
     required this.points,
+    this.manualSetIds = const {},
     this.mode,
   });
 
   /// Stable across rebuilds — what the sheet remembers as expanded.
-  /// `station:<mode>` / `station:none` / `category:<key>` / `manual:<setId>`.
+  /// `station:<mode>` / `station:none` / `category:<key>` / `manual:<name>`.
   final String key;
   final PoiGroupKind kind;
   final String label;
@@ -80,14 +86,16 @@ class PoiTypeGroup {
   /// other kinds. Its presence is what puts a visibility tick box on the row.
   final TransitMode? mode;
 
-  /// Every set that contributed a point — a category group merges imports.
+  /// Every set that contributed a point — a category group merges imports
+  /// and hand-made sets.
   final Set<String> setIds;
+
+  /// The hand-made sets among [setIds] — what the heading's "Edit category"
+  /// edits. Empty for a group of nothing but imports.
+  final Set<String> manualSetIds;
 
   /// The rows under the heading, `ObjectKind.poiPoint`, sorted by name.
   final List<ObjectSummary> points;
-
-  /// The one set behind a hand-made category (its Edit / Delete target).
-  String? get manualSetId => kind == PoiGroupKind.manual ? setIds.single : null;
 
   List<LatLng> get fitPoints => [for (final p in points) p.center];
 }
@@ -100,7 +108,8 @@ const String _noneKey = 'station:none';
 /// its heading is where that category is renamed or deleted.
 ///
 /// Order: station modes in catalogue order with the mode-less stations last,
-/// then categories by label, then hand-made categories by label (then id).
+/// then every other group by label — a hand-made category is a kind of place
+/// like any other, not an appendix.
 List<PoiTypeGroup> poiTypeGroups({
   required Layer layer,
   required List<PoiSet> sets,
@@ -115,29 +124,10 @@ List<PoiTypeGroup> poiTypeGroups({
 
   final stationRows = <String, List<ObjectSummary>>{};
   final stationSets = <String, Set<String>>{};
-  final categoryRows = <String, List<ObjectSummary>>{};
-  final categorySets = <String, Set<String>>{};
-  final manual = <PoiTypeGroup>[];
+  final kinds = <String, _Pending>{};
 
   for (final s in mine) {
     final pts = pointsBySet[s.id] ?? const <PoiPoint>[];
-    if (s.isManual) {
-      final label = _manualLabel(s);
-      manual.add(
-        PoiTypeGroup(
-          key: 'manual:${s.id}',
-          kind: PoiGroupKind.manual,
-          label: label,
-          icon: poiSetIcon(s),
-          setIds: {s.id},
-          points: _sorted([
-            for (final p in pts)
-              _pointSummary(p, layer.id, label, 'Unnamed POI'),
-          ]),
-        ),
-      );
-      continue;
-    }
     if (s.isPending) continue;
     if (s.isStationImport) {
       for (final p in pts) {
@@ -155,15 +145,42 @@ List<PoiTypeGroup> poiTypeGroups({
       }
       continue;
     }
-    final label = _categoryLabel(s.categoryKey);
-    final key = 'category:${s.categoryKey}';
-    (categoryRows[key] ??= []).addAll([
-      for (final p in pts) _pointSummary(p, layer.id, label, 'Unnamed POI'),
+    final category = poiSetCatalogueCategory(s);
+    final _Pending group;
+    if (category != null) {
+      group = kinds.putIfAbsent(
+        'category:${category.key}',
+        () => _Pending(
+          PoiGroupKind.category,
+          category.label,
+          poiIconFor(category.key),
+        ),
+      );
+    } else {
+      // Only a hand-made set can land here: an import's key is always a
+      // catalogue key, bar an old one whose category has since been renamed —
+      // which keeps its own group under its raw key, as it always did.
+      final label = s.isManual ? _manualLabel(s) : s.categoryKey;
+      group = kinds.putIfAbsent(
+        s.isManual
+            ? 'manual:${singularName(label)}'
+            : 'category:${s.categoryKey}',
+        () => _Pending(
+          s.isManual ? PoiGroupKind.manual : PoiGroupKind.category,
+          label,
+          poiSetIcon(s),
+        ),
+      );
+    }
+    group.setIds.add(s.id);
+    if (s.isManual) group.manualSetIds.add(s.id);
+    group.points.addAll([
+      for (final p in pts)
+        _pointSummary(p, layer.id, group.label, 'Unnamed POI'),
     ]);
-    (categorySets[key] ??= {}).add(s.id);
   }
 
-  final groups = <PoiTypeGroup>[
+  final stations = <PoiTypeGroup>[
     for (final m in transitModes)
       if (stationRows.containsKey('station:${m.key}'))
         PoiTypeGroup(
@@ -186,28 +203,32 @@ List<PoiTypeGroup> poiTypeGroups({
       ),
   ];
 
-  final categories = [
-    for (final e in categoryRows.entries)
+  final others = [
+    for (final e in kinds.entries)
       PoiTypeGroup(
         key: e.key,
-        kind: PoiGroupKind.category,
-        label: _categoryLabel(e.key.substring('category:'.length)),
-        icon: poiIconFor(e.key.substring('category:'.length)),
-        setIds: categorySets[e.key]!,
-        points: _sorted(e.value),
+        kind: e.value.kind,
+        label: e.value.label,
+        icon: e.value.icon,
+        setIds: e.value.setIds,
+        manualSetIds: e.value.manualSetIds,
+        points: _sorted(e.value.points),
       ),
   ]..sort((a, b) => compareNamed(a.label, b.label, a.key, b.key));
-  manual.sort((a, b) => compareNamed(a.label, b.label, a.key, b.key));
 
-  return [...groups, ...categories, ...manual];
+  return [...stations, ...others];
 }
 
-/// The human name of an Overpass category ("Cafés"), falling back to the raw
-/// key so an old set whose category has since been renamed still says
-/// something.
-String _categoryLabel(String categoryKey) =>
-    poiCategories.where((c) => c.key == categoryKey).firstOrNull?.label ??
-    categoryKey;
+/// A category or hand-made group while its sets are still being collected.
+class _Pending {
+  _Pending(this.kind, this.label, this.icon);
+  final PoiGroupKind kind;
+  final String label;
+  final IconData icon;
+  final setIds = <String>{};
+  final manualSetIds = <String>{};
+  final points = <ObjectSummary>[];
+}
 
 /// A hand-made category has no OSM tag behind it, so its own name is the only
 /// thing that describes it.

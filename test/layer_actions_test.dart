@@ -195,6 +195,14 @@ void main() {
           isNull,
           reason: id.name,
         );
+        // ...and whether or not a folder exists: only "Move to folder" asks
+        // that. It once shared a case body with the imports, and every import
+        // on a folder-less map was greyed out with "no folders yet".
+        expect(
+          layerActionUnavailable(id, ctx(kPoi)),
+          isNull,
+          reason: '${id.name} without folders',
+        );
       }
     });
 

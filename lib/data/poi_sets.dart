@@ -87,14 +87,48 @@ PoiSet? poiSetOf(List<PoiSet> sets, String setId) =>
 /// The catalogue entry a POI set's category corresponds to, or null.
 ///
 /// For an import this is simply the category it was fetched with. For a
-/// hand-made category it is non-null only when the user picked one of the
-/// dialog's presets, which copy a catalogue key — a category built from a bare
-/// icon has no OSM tag behind it, and a report is better off saying nothing
-/// than suggesting one nobody chose.
+/// hand-made category it is [poiSetCatalogueCategory]'s answer — the same rule
+/// that files it with the imports in the Elements list, so a category is never
+/// listed as "Benches" and reported as something else, or the other way round.
 PoiCategory? poiCategoryTag(List<PoiSet> sets, String setId) {
   final set = poiSetOf(sets, setId);
-  if (set == null) return null;
-  return poiCategories.where((c) => c.key == set.categoryKey).firstOrNull;
+  return set == null ? null : poiSetCatalogueCategory(set);
+}
+
+/// The built-in category [set] **is**, or null when it is none of them.
+///
+/// An import is the category it was fetched with. A hand-made category is one
+/// only when both halves agree: its key is a catalogue key (it was started
+/// from the "Benches" preset, or given the bench icon) **and** its name says
+/// the same thing — empty, or the catalogue's label up to case and a plural
+/// ("Bench", "benches"). The icon alone is not enough: a category called
+/// "Picnic spots" that happens to use the bench icon is the user's own idea,
+/// and filing it under Benches — or reporting it to OSM as `amenity=bench` —
+/// would put words in their mouth.
+PoiCategory? poiSetCatalogueCategory(PoiSet set) {
+  final c = poiCategories.where((c) => c.key == set.categoryKey).firstOrNull;
+  if (c == null || !set.isManual) return c;
+  final label = set.label?.trim() ?? '';
+  if (label.isEmpty) return c;
+  return singularName(label) == singularName(c.label) ? c : null;
+}
+
+/// [name] lower-cased with an English plural ending taken off, so "Benches",
+/// "Bench" and "bench" compare equal — and "Cafés"/"Café", "Pharmacies"/
+/// "Pharmacy". Deliberately crude: it only has to make one name agree with
+/// the catalogue's label for the same thing, never to be correct English.
+String singularName(String name) {
+  final n = name.trim().toLowerCase();
+  if (n.endsWith('ies') && n.length > 4) {
+    return '${n.substring(0, n.length - 3)}y';
+  }
+  if (n.endsWith('ches') || n.endsWith('shes') || n.endsWith('xes')) {
+    return n.substring(0, n.length - 2);
+  }
+  if (n.endsWith('s') && !n.endsWith('ss') && n.length > 1) {
+    return n.substring(0, n.length - 1);
+  }
+  return n;
 }
 
 /// The human name of the category a POI's set imported ("Cafés"), for the

@@ -80,7 +80,6 @@ ElementRows build({
   ElementSort sort = ElementSort.stack,
   String query = '',
   Set<String> expanded = const {},
-  bool importsExpanded = false,
 }) => buildElementRows(
   layer: on ?? layer('circles'),
   summaries: summaries,
@@ -88,7 +87,6 @@ ElementRows build({
   sort: sort,
   query: query,
   expandedGroups: expanded,
-  importsExpanded: importsExpanded,
 );
 
 List<String> ids(ElementRows r) => [
@@ -125,17 +123,14 @@ void main() {
     });
 
     test('kinds without a size fall back to name', () {
-      final sets = [
-        sum(ObjectKind.poiSet, 'x', name: 'Cafés'),
-        sum(ObjectKind.poiSet, 'y', name: 'Benches'),
+      final unsized = [
+        sum(ObjectKind.circle, 'y', name: 'B'),
+        sum(ObjectKind.circle, 'z', name: 'A'),
       ];
-      final r = build(
-        on: layer('poi'),
-        summaries: sets,
-        sort: ElementSort.size,
-        importsExpanded: true,
-      );
-      expect(ids(r), ['y', 'x']);
+      expect(ids(build(summaries: unsized, sort: ElementSort.size)), [
+        'z',
+        'y',
+      ]);
     });
 
     test('z-order flags come from stack order whatever the sort', () {
@@ -233,12 +228,10 @@ void main() {
         GroupHeaderRow,
         GroupHeaderRow,
         GroupHeaderRow,
-        SectionRow,
       ]);
       final header = r.rows[1] as GroupHeaderRow;
       expect(header.expanded, isFalse);
       expect(header.shown, 2);
-      expect((r.rows.last as SectionRow).expanded, isFalse);
     });
 
     test('an expanded group lists its points, indented', () {
@@ -253,18 +246,16 @@ void main() {
       expect(rows.single.inGroup, isTrue);
     });
 
-    test('the Imports section holds the imports but not a hand-made set', () {
+    test('a finished import is not a row: points are filed by type only', () {
       final r = build(
         on: layer('poi'),
         summaries: sets,
         groups: [stations, handmade],
-        importsExpanded: true,
       );
-      final section = r.rows.whereType<SectionRow>().single;
-      expect(section.trailing, '1');
-      final imports = r.rows.whereType<ElementRow>().toList();
-      expect(imports.map((x) => x.summary.ref.id), ['S']);
-      expect(imports.single.inGroup, isFalse);
+      expect(
+        r.rows.whereType<ElementRow>().map((x) => x.summary.ref.kind),
+        isNot(contains(ObjectKind.poiSet)),
+      );
     });
 
     test('station tools appear once, before the first station group', () {
@@ -293,15 +284,14 @@ void main() {
       expect((r.rows.last as ElementRow).summary.ref.id, 's1');
     });
 
-    test('a search that matches only an import still shows it', () {
+    test('a search never matches an import, only what it holds', () {
       final r = build(
         on: layer('poi'),
         summaries: sets,
         groups: [stations],
         query: 'import',
       );
-      expect(r.rows.map((x) => x.runtimeType), [SectionRow, ElementRow]);
-      expect((r.rows.first as SectionRow).expanded, isTrue);
+      expect(r.rows.single, isA<NoMatchesRow>());
     });
 
     test('a failed import floats to the top, above everything', () {
@@ -319,7 +309,7 @@ void main() {
         groups: [stations],
       );
       expect((r.rows.first as ElementRow).summary.ref.id, 'P');
-      // …and is not listed a second time under Imports.
+      // …and is listed exactly once.
       expect(
         r.rows.whereType<ElementRow>().where((x) => x.summary.ref.id == 'P'),
         hasLength(1),

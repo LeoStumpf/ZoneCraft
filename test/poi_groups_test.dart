@@ -189,7 +189,7 @@ void main() {
     expect(cafes.setIds, {first, second});
     expect(cafes.points.map((p) => p.title), ['Aroma', 'Zum Kaffee']);
     expect(cafes.points.first.subtitle, 'Cafés');
-    expect(cafes.manualSetId, isNull);
+    expect(cafes.manualSetIds, isEmpty);
     expect(groups.last.points.single.title, 'Unnamed POI');
     expect(groups.last.points.single.sortName, '');
   });
@@ -230,10 +230,10 @@ void main() {
 
     expect(groups.map((g) => g.label), ['Apples', 'Zebra']);
     expect(groups.first.kind, PoiGroupKind.manual);
-    expect(groups.first.manualSetId, filled);
+    expect(groups.first.manualSetIds, {filled});
     expect(groups.first.points.map((p) => p.title), ['Granny', 'Unnamed POI']);
     expect(groups.first.points.first.subtitle, 'Apples');
-    expect(groups.last.manualSetId, empty);
+    expect(groups.last.manualSetIds, {empty});
     expect(groups.last.points, isEmpty);
   });
 
@@ -257,7 +257,7 @@ void main() {
     expect((await groupsOf(otherLayer)).single.key, 'category:restaurant');
   });
 
-  test('stations first, then categories, then hand-made', () async {
+  test('stations first, then every other kind by name', () async {
     final layerId = await repo.createLayer(
       name: 'M',
       colorArgb: 0xFF123456,
@@ -279,12 +279,117 @@ void main() {
 
     final groups = await groupsOf(layerId);
 
+    // A hand-made category is a kind of place like any other: "Aardvark"
+    // sorts before "Cafés", it is not an appendix after the imports.
     expect(groups.map((g) => g.kind), [
       PoiGroupKind.station,
-      PoiGroupKind.category,
       PoiGroupKind.manual,
+      PoiGroupKind.category,
     ]);
   });
+
+  Future<String> manualSet(String layerId, String key, String? label) =>
+      repo.createPoiSet(
+        layerId: layerId,
+        source: kPoiSourceManual,
+        categoryKey: key,
+        centerLat: 48.1,
+        centerLng: 11.5,
+        radiusMeters: 0,
+        label: label,
+        iconKey: key,
+      );
+
+  test('a hand-placed bench is filed with the imported benches', () async {
+    final layerId = await repo.createLayer(
+      name: 'P',
+      colorArgb: 0xFF123456,
+      type: kPoi,
+    );
+    final imported = await radiusImport(layerId, 'bench');
+    await repo.fillPoiSet(imported, [poi('bench', 'By the lake', 1)]);
+    // Started from the "Benches" preset, and typed by hand as "Bench".
+    final preset = await manualSet(layerId, 'bench', 'Benches');
+    final typed = await manualSet(layerId, 'bench', 'bench');
+    await repo.addManualPoiPoint(poiSetId: preset, lat: 48.1, lng: 11.5);
+    await repo.addManualPoiPoint(
+      poiSetId: typed,
+      lat: 48.1,
+      lng: 11.5,
+      label: 'Mine',
+    );
+
+    final groups = await groupsOf(layerId);
+
+    final benches = groups.single;
+    expect(benches.key, 'category:bench');
+    expect(benches.kind, PoiGroupKind.category);
+    expect(benches.label, 'Benches');
+    expect(benches.setIds, {imported, preset, typed});
+    expect(benches.manualSetIds, {preset, typed});
+    expect(benches.points.map((p) => p.title), [
+      'By the lake',
+      'Mine',
+      'Unnamed POI',
+    ]);
+    expect(benches.points.map((p) => p.subtitle).toSet(), {'Benches'});
+  });
+
+  test('a category of the user\'s own keeps its own heading', () async {
+    final layerId = await repo.createLayer(
+      name: 'P',
+      colorArgb: 0xFF123456,
+      type: kPoi,
+    );
+    final imported = await radiusImport(layerId, 'bench');
+    await repo.fillPoiSet(imported, [poi('bench', 'By the lake', 1)]);
+    // The bench *icon* on a category named for something else is the user's
+    // own idea, not a bench.
+    final picnic = await manualSet(layerId, 'bench', 'Picnic spots');
+    // Two sets with one name are one kind of place.
+    final swimA = await manualSet(layerId, 'water', 'Swimming spots');
+    final swimB = await manualSet(layerId, 'pin', 'swimming spot');
+
+    final groups = await groupsOf(layerId);
+
+    expect(groups.map((g) => g.label), [
+      'Benches',
+      'Picnic spots',
+      'Swimming spots',
+    ]);
+    expect(groups[0].setIds, {imported});
+    expect(groups[1].kind, PoiGroupKind.manual);
+    expect(groups[1].manualSetIds, {picnic});
+    expect(groups[2].manualSetIds, {swimA, swimB});
+  });
+
+  test(
+    'deleting a group drops emptied imports but keeps own categories',
+    () async {
+      final layerId = await repo.createLayer(
+        name: 'P',
+        colorArgb: 0xFF123456,
+        type: kPoi,
+      );
+      final imported = await radiusImport(layerId, 'bench');
+      await repo.fillPoiSet(imported, [poi('bench', 'By the lake', 1)]);
+      final mine = await manualSet(layerId, 'bench', 'Bench');
+      await repo.addManualPoiPoint(poiSetId: mine, lat: 48.1, lng: 11.5);
+      final cafes = await radiusImport(layerId, 'cafe');
+      await repo.fillPoiSet(cafes, [poi('cafe', 'Aroma', 2)]);
+
+      final benches = (await groupsOf(layerId)).first;
+      await repo.deletePoiPoints([for (final p in benches.points) p.ref.id]);
+
+      final left = await db.select(db.poiSets).get();
+      // The empty import is gone — nothing in the list could show or remove it —
+      // while the user's own category stays, ready for the next bench.
+      expect(left.map((s) => s.id).toSet(), {mine, cafes});
+      final groups = await groupsOf(layerId);
+      expect(groups.map((g) => g.label), ['Benches', 'Cafés']);
+      expect(groups.first.points, isEmpty);
+    },
+  );
 
   test('a layer that holds no POIs has no groups', () async {
     final layerId = await repo.createLayer(name: 'C', colorArgb: 0xFF0000FF);

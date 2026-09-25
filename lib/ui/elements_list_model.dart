@@ -48,20 +48,6 @@ sealed class ListRow {
   const ListRow();
 }
 
-/// A collapsible heading over the POI layer's imports.
-class SectionRow extends ListRow {
-  const SectionRow({
-    required this.title,
-    required this.blurb,
-    required this.trailing,
-    required this.expanded,
-  });
-  final String title;
-  final String blurb;
-  final String trailing;
-  final bool expanded;
-}
-
 /// The "Rail only / Show all / Hide all" shortcuts above the station groups.
 class StationToolsRow extends ListRow {
   const StationToolsRow();
@@ -137,8 +123,14 @@ bool _stackable(ObjectKind kind) {
 /// Builds the rows.
 ///
 /// [summaries] are the layer's elements in stack order, as
-/// `layerSummariesProvider` yields them — including the POI *sets*, which land
-/// in the Imports section; the POI *points* come as [poiGroups].
+/// `layerSummariesProvider` yields them — including the POI *sets*, of which
+/// only a pending import is listed (as its retry row); the POI *points* come
+/// as [poiGroups].
+///
+/// There is no Imports section. When and how a point arrived is bookkeeping
+/// nobody reads — the list files everything by what it *is*, and an import
+/// that finished has nothing left to say. One that did not is the exception,
+/// because it is a job still waiting on the user.
 ElementRows buildElementRows({
   required Layer layer,
   required List<ObjectSummary> summaries,
@@ -146,7 +138,6 @@ ElementRows buildElementRows({
   required ElementSort sort,
   required String query,
   required Set<String> expandedGroups,
-  required bool importsExpanded,
 }) {
   final q = query.trim().toLowerCase();
   final searching = q.isNotEmpty;
@@ -209,8 +200,8 @@ ElementRows buildElementRows({
     }
   }
 
-  // A failed import must surface: its retry row goes above everything, so a
-  // collapsed Imports section can never hide it.
+  // A failed import must surface: its retry row goes above everything, so no
+  // folded group can hide it.
   final pending = [
     for (final s in summaries)
       if (s.isPending && matches(s)) row(s),
@@ -223,31 +214,22 @@ ElementRows buildElementRows({
 
   final rows = <ListRow>[...pending];
   for (final kind in kinds) {
-    final mine = [
-      for (final s in summaries)
-        if (s.ref.kind == kind && !s.isPending) s,
-    ];
     if (kind == ObjectKind.poiSet) {
-      if (mine.isEmpty && poiGroups.isEmpty) continue;
-      // A hand-made category is not an import: its group heading is where it
-      // is renamed or deleted, so it has no second row under "Imports".
-      final manualSetIds = {for (final g in poiGroups) ?g.manualSetId};
       rows.addAll(
         _poiRows(
           groups: poiGroups,
-          sets: sorted([
-            for (final s in mine)
-              if (!manualSetIds.contains(s.ref.id)) s,
-          ], kind),
           searching: searching,
           matches: matches,
           expandedGroups: expandedGroups,
-          importsExpanded: importsExpanded,
           row: row,
         ),
       );
       continue;
     }
+    final mine = [
+      for (final s in summaries)
+        if (s.ref.kind == kind && !s.isPending) s,
+    ];
     final shown = [
       for (final s in sorted(mine, kind))
         if (matches(s)) s,
@@ -264,11 +246,9 @@ ElementRows buildElementRows({
 
 List<ListRow> _poiRows({
   required List<PoiTypeGroup> groups,
-  required List<ObjectSummary> sets,
   required bool searching,
   required bool Function(ObjectSummary) matches,
   required Set<String> expandedGroups,
-  required bool importsExpanded,
   required ElementRow Function(ObjectSummary, {bool inGroup}) row,
 }) {
   final rows = <ListRow>[];
@@ -289,24 +269,6 @@ List<ListRow> _poiRows({
     rows.add(GroupHeaderRow(g, expanded: expanded, shown: shown.length));
     if (expanded) rows.addAll([for (final p in shown) row(p, inGroup: true)]);
   }
-
-  final shownSets = [
-    for (final s in sets)
-      if (matches(s)) s,
-  ];
-  if (shownSets.isEmpty) return rows;
-  final expanded = searching || importsExpanded;
-  rows.add(
-    SectionRow(
-      title: 'Imports',
-      blurb:
-          'How the points above arrived — deleting an import removes its '
-          'points',
-      trailing: '${shownSets.length}',
-      expanded: expanded,
-    ),
-  );
-  if (expanded) rows.addAll([for (final s in shownSets) row(s)]);
   return rows;
 }
 

@@ -18,6 +18,7 @@ import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zonecraft/data/database.dart';
+import 'package:zonecraft/data/overpass.dart' show PoiResult;
 import 'package:zonecraft/data/repository.dart';
 import 'package:zonecraft/data/undo_journal.dart';
 import 'package:zonecraft/data/undo_triggers.dart';
@@ -381,6 +382,45 @@ void main() {
         expect(db.undo.state.canUndo, isTrue);
         expect(db.undo.state.canRedo, isFalse);
       },
+    );
+  });
+
+  test('deleting a POI group, emptied import and all, is one undo', () async {
+    final l = await repo.createLayer(
+      name: 'P',
+      colorArgb: 0xFF2196F3,
+      type: 'poi',
+    );
+    final set = await repo.createPoiSet(
+      layerId: l,
+      source: 'radius',
+      categoryKey: 'bench',
+      centerLat: 48,
+      centerLng: 11,
+      radiusMeters: 500,
+    );
+    await repo.fillPoiSet(set, [
+      for (final id in [1, 2])
+        PoiResult(
+          lat: 48,
+          lng: 11,
+          categoryKey: 'bench',
+          osmType: 'node',
+          osmId: id,
+        ),
+    ]);
+    final ids = [for (final p in await db.select(db.poiPoints).get()) p.id];
+    await db.undo.sealStep();
+
+    await repo.deletePoiPoints(ids);
+    expect(await db.select(db.poiSets).get(), isEmpty);
+    expect(db.undo.state.undoLabel, 'Delete POIs');
+
+    await db.undo.undo();
+    expect((await db.select(db.poiSets).get()).single.id, set);
+    expect(
+      (await db.select(db.poiPoints).get()).map((p) => p.id).toSet(),
+      ids.toSet(),
     );
   });
 }

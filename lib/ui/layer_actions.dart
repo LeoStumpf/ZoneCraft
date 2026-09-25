@@ -250,17 +250,19 @@ String? layerActionUnavailable(LayerActionId id, LayerActionContext c) {
     case LayerActionId.importBordersVisible:
     case LayerActionId.importFeature:
     case LayerActionId.importTrack:
+    case LayerActionId.export:
+    case LayerActionId.combine:
+    case LayerActionId.moveOutOfFolder:
+    case LayerActionId.delete:
+      return null;
+
+    // Its own case, never folded into the group above: sharing one body with
+    // the imports once made every import answer "there are no folders yet".
     case LayerActionId.moveToFolder:
       if (!c.anyFolder) {
         return 'There are no folders yet — make one from the layers menu '
             'first.';
       }
-      return null;
-
-    case LayerActionId.export:
-    case LayerActionId.combine:
-    case LayerActionId.moveOutOfFolder:
-    case LayerActionId.delete:
       return null;
   }
 }

@@ -218,4 +218,64 @@ void main() {
       expect(kept, contains(exclave));
     });
   });
+
+  group('what category a set is', () {
+    PoiSet cat(String source, String key, String? label) =>
+        set(source).copyWith(categoryKey: key, label: Value(label));
+
+    test('an import is the category it was fetched with', () {
+      expect(
+        poiSetCatalogueCategory(cat(kPoiSourceRadius, 'bench', null))?.key,
+        'bench',
+      );
+    });
+
+    test('a hand-made set is one when its name agrees', () {
+      for (final label in [null, '', 'Benches', 'bench', ' BENCH ']) {
+        expect(
+          poiSetCatalogueCategory(cat(kPoiSourceManual, 'bench', label))?.key,
+          'bench',
+          reason: '$label',
+        );
+      }
+      expect(
+        poiSetCatalogueCategory(cat(kPoiSourceManual, 'cafe', 'Café'))?.key,
+        'cafe',
+      );
+      expect(
+        poiSetCatalogueCategory(
+          cat(kPoiSourceManual, 'pharmacy', 'Pharmacy'),
+        )?.key,
+        'pharmacy',
+      );
+    });
+
+    test('…and is not when the name says something else', () {
+      expect(
+        poiSetCatalogueCategory(cat(kPoiSourceManual, 'bench', 'Picnic spots')),
+        isNull,
+      );
+      // An icon with no catalogue entry has no tag at all.
+      expect(
+        poiSetCatalogueCategory(cat(kPoiSourceManual, 'pin', 'Benches')),
+        isNull,
+      );
+    });
+
+    test('the OSM tag follows the same rule as the list', () {
+      final mine = cat(kPoiSourceManual, 'bench', 'Picnic spots');
+      expect(poiCategoryTag([mine], mine.id), isNull);
+      final bench = cat(kPoiSourceManual, 'bench', 'Bench');
+      expect(poiCategoryTag([bench], bench.id)?.tagValue, 'bench');
+    });
+
+    test('singularName', () {
+      expect(singularName('Benches'), 'bench');
+      expect(singularName('Cafés'), 'café');
+      expect(singularName('Pharmacies'), 'pharmacy');
+      expect(singularName('Toilets'), 'toilet');
+      expect(singularName('Glass'), 'glass');
+      expect(singularName('Post boxes'), 'post box');
+    });
+  });
 }
