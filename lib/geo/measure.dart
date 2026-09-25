@@ -31,6 +31,14 @@ const Distance _haversine = Distance(calculator: Haversine());
 
 bool _finite(LatLng p) => p.latitude.isFinite && p.longitude.isFinite;
 
+/// Ground distance from [a] to [b], in metres (Haversine) — what an Elements
+/// row quotes as "120 m from you" and what the distance sorts order by.
+/// Infinity when either point is not finite, so a bad row sorts last instead
+/// of throwing.
+double distanceMeters(LatLng a, LatLng b) => _finite(a) && _finite(b)
+    ? _haversine.as(LengthUnit.Meter, a, b)
+    : double.infinity;
+
 /// Length of [pts] along the ground, in metres: the Haversine sum of its
 /// segments. Fewer than two usable points is a length of zero.
 double polylineLengthMeters(List<LatLng> pts) {

@@ -86,4 +86,17 @@ void main() {
       expect(polygonAreaSquareMeters([square[0], square[1], square[0]]), 0);
     });
   });
+
+  test('distanceMeters: ground distance, and a bad point sorts last', () {
+    // One degree of latitude is about 111 km anywhere.
+    expect(
+      distanceMeters(const LatLng(48, 11), const LatLng(49, 11)),
+      closeTo(111195, 200),
+    );
+    expect(distanceMeters(const LatLng(48, 11), const LatLng(48, 11)), 0);
+    expect(
+      distanceMeters(const LatLng(48, 11), const LatLng(double.nan, 11)),
+      double.infinity,
+    );
+  });
 }

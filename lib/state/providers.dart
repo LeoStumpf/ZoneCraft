@@ -718,6 +718,30 @@ class PendingFocusNotifier extends Notifier<MapFocusRequest?> {
   void clear() => state = null;
 }
 
+/// A point on the map the rest of the UI can measure against, or null.
+class MapPointNotifier extends Notifier<LatLng?> {
+  @override
+  LatLng? build() => null;
+
+  void set(LatLng? point) {
+    if (point != state) state = point;
+  }
+}
+
+/// The user's last known position — the Locate-me marker. Null until they
+/// opt in, and again after they hide it; nothing reads the device's location
+/// without a press.
+final myPositionProvider = NotifierProvider<MapPointNotifier, LatLng?>(
+  MapPointNotifier.new,
+);
+
+/// Where the map is centred, kept current by the map's event stream. Unlike
+/// `AppSettings.lastLat/lastLng`, which are written only when the app pauses,
+/// this is right *now* — what "distance from map centre" has to mean.
+final mapCenterProvider = NotifierProvider<MapPointNotifier, LatLng?>(
+  MapPointNotifier.new,
+);
+
 final pendingFocusProvider =
     NotifierProvider<PendingFocusNotifier, MapFocusRequest?>(
       PendingFocusNotifier.new,

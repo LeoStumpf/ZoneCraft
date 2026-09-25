@@ -474,6 +474,15 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   Rail-only/Show-all/Hide-all `TransitModeShortcuts` are shared). **Z-order menu flags are
   computed from stack order, never display order**, so "Bring to front" stays right under a
   name or size sort. Sort and expansion are per-visit state, deliberately not persisted.
+  **The sort is a labelled button** ("Sort: Name ▾"), and it orders the POIs *inside* each
+  type group too (the groups keep their fixed order). The two distance sorts measure from
+  `myPositionProvider` (the Locate-me fix, which `map_screen._myPosition` now reads and
+  writes) and `mapCenterProvider` (written from the map's event stream — **not**
+  `AppSettings.lastLat`, which is only saved on pause). Choosing "Distance from you" with no
+  fix is itself the opt-in: it runs `currentPosition()` (`data/location.dart`, shared with
+  Locate me) and switches only once there is a fix; a failure is printed beside the button,
+  since a snackbar would land behind the modal sheet. POI *sets* are not rows, so they do
+  not make "Stack order" a choice — on a POI layer it would otherwise be the default.
 - **A reshaped border outline is flagged** (`BorderAreas.editedAt`, schema v23; null =
   untouched OSM geometry). Reshaping forks the area from upstream while it keeps its
   `osmId`, so re-import dedup then keeps the edited version — which is why the fork is

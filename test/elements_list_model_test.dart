@@ -46,12 +46,13 @@ ObjectSummary sum(
   String subtitle = '',
   double? size,
   bool pending = false,
+  LatLng at = const LatLng(48, 11),
 }) => ObjectSummary(
   ref: ObjectRef(kind: kind, id: id, layerId: 'L'),
   title: name ?? '${kind.name} $id',
   subtitle: subtitle,
-  center: const LatLng(48, 11),
-  fitPoints: const [LatLng(48, 11)],
+  center: at,
+  fitPoints: [at],
   sortName: name ?? '',
   sizeMeasure: size,
   isPending: pending,
@@ -80,6 +81,8 @@ ElementRows build({
   ElementSort sort = ElementSort.stack,
   String query = '',
   Set<String> expanded = const {},
+  LatLng? me,
+  LatLng? centre,
 }) => buildElementRows(
   layer: on ?? layer('circles'),
   summaries: summaries,
@@ -87,6 +90,8 @@ ElementRows build({
   sort: sort,
   query: query,
   expandedGroups: expanded,
+  myPosition: me,
+  mapCenter: centre,
 );
 
 List<String> ids(ElementRows r) => [
@@ -169,6 +174,8 @@ void main() {
       expect(canSortByStack(areas), isFalse);
       expect(canSortBySize(areas), isTrue);
       expect(canSortBySize([sum(ObjectKind.poiSet, 's')]), isFalse);
+      // Sets are not rows any more, so they cannot make stack order a choice.
+      expect(canSortByStack([sum(ObjectKind.poiSet, 's')]), isFalse);
     });
   });
 
@@ -314,6 +321,91 @@ void main() {
         r.rows.whereType<ElementRow>().where((x) => x.summary.ref.id == 'P'),
         hasLength(1),
       );
+    });
+  });
+
+  group('distance sorts', () {
+    // Three points along a meridian: north, middle, south.
+    final north = sum(
+      ObjectKind.circle,
+      'n',
+      name: 'A north',
+      at: const LatLng(48.2, 11),
+    );
+    final middle = sum(
+      ObjectKind.circle,
+      'm',
+      name: 'C middle',
+      at: const LatLng(48.1, 11),
+    );
+    final south = sum(
+      ObjectKind.circle,
+      's',
+      name: 'B south',
+      at: const LatLng(48.0, 11),
+    );
+    final rows = [north, middle, south];
+
+    test('nearest to you first', () {
+      final r = build(
+        summaries: rows,
+        sort: ElementSort.distanceFromMe,
+        me: const LatLng(47.9, 11),
+      );
+      expect(ids(r), ['s', 'm', 'n']);
+    });
+
+    test('nearest to the map centre first, measured from its own point', () {
+      final r = build(
+        summaries: rows,
+        sort: ElementSort.distanceFromCenter,
+        me: const LatLng(47.9, 11),
+        centre: const LatLng(48.21, 11),
+      );
+      expect(ids(r), ['n', 'm', 's']);
+    });
+
+    test('with nothing to measure from, it is by name', () {
+      for (final sort in [
+        ElementSort.distanceFromMe,
+        ElementSort.distanceFromCenter,
+      ]) {
+        expect(ids(build(summaries: rows, sort: sort)), ['n', 's', 'm']);
+      }
+    });
+
+    test('the POIs inside a group follow the sort too', () {
+      PoiTypeGroup benches() => poiGroup('category:bench', [
+        sum(
+          ObjectKind.poiPoint,
+          'b1',
+          name: 'Alpha',
+          at: const LatLng(48.2, 11),
+        ),
+        sum(
+          ObjectKind.poiPoint,
+          'b2',
+          name: 'Beta',
+          at: const LatLng(48.0, 11),
+        ),
+      ]);
+      List<String> pointIds(ElementSort sort) => ids(
+        build(
+          on: layer('poi'),
+          groups: [benches()],
+          expanded: {'category:bench'},
+          sort: sort,
+          me: const LatLng(47.9, 11),
+        ),
+      );
+      expect(pointIds(ElementSort.name), ['b1', 'b2']);
+      expect(pointIds(ElementSort.distanceFromMe), ['b2', 'b1']);
+    });
+
+    test('every sort has a label', () {
+      for (final s in ElementSort.values) {
+        expect(elementSortLabel(s), isNotEmpty);
+      }
     });
   });
 }

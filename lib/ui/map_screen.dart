@@ -25,7 +25,6 @@ import 'package:app_links/app_links.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_dragmarker/flutter_map_dragmarker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart' hide Circle;
 import 'package:share_plus/share_plus.dart';
@@ -268,9 +267,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
   static const _hitTest = geoDistance;
 
   /// The user's last known position, shown as a marker. Null until the user
-  /// opts in via the "Locate me" button. We never request location at launch,
-  /// and [_hideMyLocation] puts it back to null so the opt-in is reversible.
-  LatLng? _myPosition;
+  /// opts in via the "Locate me" button (or the Elements list's "distance from
+  /// you" sort). We never request location at launch, and [_hideMyLocation]
+  /// puts it back to null so the opt-in is reversible.
+  ///
+  /// Lives in [myPositionProvider] so the Elements list can measure from the
+  /// same fix the marker shows; `build` watches it.
+  LatLng? get _myPosition => ref.read(myPositionProvider);
+  set _myPosition(LatLng? v) => ref.read(myPositionProvider.notifier).set(v);
   bool _locating = false;
   bool _mapReady = false;
 
@@ -897,38 +901,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// services / a bad (non-finite) fix / any error. Has no side effects on the
   /// map camera — callers decide what to do with the result.
   Future<LatLng?> _getCurrentPosition() async {
-    try {
-      // Service + permission live in `data/location.dart`.
-      final problem = await ensureLocationReady();
-      if (problem != null) {
-        _hint(problem);
-        return null;
-      }
-
-      // A time limit, because indoors or with a cold GPS `getCurrentPosition`
-      // simply never returns — and the caller's `_locating` flag would keep the
-      // button disabled for the rest of the session. The plugin throws
-      // TimeoutException, which the catch below turns into a hint.
-      final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          timeLimit: Duration(seconds: 20),
-        ),
-      );
-      // Guard against a non-finite fix: a NaN LatLng would corrupt the map
-      // camera and crash every subsequent projection.
-      if (!pos.latitude.isFinite || !pos.longitude.isFinite) {
-        _hint('Could not get a valid location fix. Try again outdoors.');
-        return null;
-      }
-      return LatLng(pos.latitude, pos.longitude);
-      // geolocator throws a family of typed errors (service off, permission gone,
-      // timeout) that all end in the same hint; the non-finite guard above is the
-      // only case worth its own message.
-      // ignore: avoid_catches_without_on_clauses
-    } catch (e) {
-      _hint('Could not get your location.');
-      return null;
-    }
+    final result = await currentPosition();
+    if (result.problem != null) _hint(result.problem!);
+    return result.fix;
   }
 
   /// Runs the quick-toggle FAB and, for a toggle, says what is now true.
@@ -4283,6 +4258,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
   Widget build(BuildContext context) {
     // Triggers one-time seeding of a default layer.
     ref.watch(seedProvider);
+    // Read through [_myPosition]; watched so a fix taken elsewhere (the
+    // Elements list's distance sort) puts the marker on the map too.
+    ref.watch(myPositionProvider);
 
     // "Zoom to"/"Edit" from the layers drawer: it has no MapController, so it
     // posts a focus request here. Applied post-frame (never move the camera
@@ -4775,6 +4753,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         ),
                         onMapReady: () {
                           _mapReady = true;
+                          final centre = _mapController.camera.center;
+                          WidgetsBinding.instance.addPostFrameCallback(
+                            (_) => ref
+                                .read(mapCenterProvider.notifier)
+                                .set(centre),
+                          );
                           _schedulePrefetch();
                         },
                         // Rotation is tracked off the event stream, not
@@ -4790,6 +4774,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           }
                           final r = event.camera.rotation;
                           if (r != _rotation) setState(() => _rotation = r);
+                          // What the Elements list measures "from map centre"
+                          // against. Events arrive from gestures and the
+                          // controller, never mid-build, so writing here is safe.
+                          ref
+                              .read(mapCenterProvider.notifier)
+                              .set(event.camera.center);
                         },
                         onPositionChanged: (camera, _) {
                           // Recover from a degenerate gesture that produced a

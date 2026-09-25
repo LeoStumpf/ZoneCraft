@@ -15,10 +15,12 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import 'package:flutter/foundation.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../data/database.dart';
 import '../data/layer_types.dart';
 import '../data/repository.dart' show ColoredElement;
+import '../geo/measure.dart';
 import '../state/providers.dart';
 import 'object_summary.dart';
 import 'poi_groups.dart';
@@ -42,7 +44,23 @@ enum ElementSort {
   /// Largest first by [ObjectSummary.sizeMeasure]; kinds without a size fall
   /// back to name.
   size,
+
+  /// Nearest first to the user's position; by name while there is no fix.
+  distanceFromMe,
+
+  /// Nearest first to the centre of the map as it is now; by name before the
+  /// map has reported one.
+  distanceFromCenter,
 }
+
+/// What the sort control calls [sort].
+String elementSortLabel(ElementSort sort) => switch (sort) {
+  ElementSort.stack => 'Stack order',
+  ElementSort.name => 'Name',
+  ElementSort.size => 'Size',
+  ElementSort.distanceFromMe => 'Distance from you',
+  ElementSort.distanceFromCenter => 'Distance from map centre',
+};
 
 sealed class ListRow {
   const ListRow();
@@ -106,8 +124,14 @@ class ElementRows {
 }
 
 /// Whether [sort] is even a choice for these rows.
-bool canSortByStack(List<ObjectSummary> summaries) =>
-    summaries.any((s) => _stackable(s.ref.kind));
+///
+/// A POI *set* is stacked but never listed (only a pending one's retry row
+/// is, and that floats to the top whatever the sort), so it does not make
+/// "Stack order" a choice — on a POI layer it would be the default, and an
+/// order nothing on screen follows.
+bool canSortByStack(List<ObjectSummary> summaries) => summaries.any(
+  (s) => _stackable(s.ref.kind) && s.ref.kind != ObjectKind.poiSet,
+);
 
 bool canSortBySize(List<ObjectSummary> summaries) =>
     summaries.any((s) => s.sizeMeasure != null);
@@ -121,6 +145,12 @@ bool _stackable(ObjectKind kind) {
 }
 
 /// Builds the rows.
+///
+/// The sort applies everywhere a list of like things is shown — the elements
+/// of each kind *and* the POIs inside each type group; the groups themselves
+/// keep their fixed order (stations by mode, then by name), since a heading is
+/// not somewhere you are standing near. [myPosition] and [mapCenter] are what
+/// the two distance sorts measure from.
 ///
 /// [summaries] are the layer's elements in stack order, as
 /// `layerSummariesProvider` yields them — including the POI *sets*, of which
@@ -138,6 +168,8 @@ ElementRows buildElementRows({
   required ElementSort sort,
   required String query,
   required Set<String> expandedGroups,
+  LatLng? myPosition,
+  LatLng? mapCenter,
 }) {
   final q = query.trim().toLowerCase();
   final searching = q.isNotEmpty;
@@ -180,6 +212,10 @@ ElementRows buildElementRows({
             ? ElementSort.size
             : ElementSort.name,
       ElementSort.name => ElementSort.name,
+      ElementSort.distanceFromMe =>
+        myPosition == null ? ElementSort.name : ElementSort.distanceFromMe,
+      ElementSort.distanceFromCenter =>
+        mapCenter == null ? ElementSort.name : ElementSort.distanceFromCenter,
     };
     switch (effective) {
       case ElementSort.stack:
@@ -197,6 +233,10 @@ ElementRows buildElementRows({
           }
           return y.compareTo(x); // largest first
         });
+      case ElementSort.distanceFromMe:
+        return _byDistance(rows, myPosition!);
+      case ElementSort.distanceFromCenter:
+        return _byDistance(rows, mapCenter!);
     }
   }
 
@@ -222,6 +262,7 @@ ElementRows buildElementRows({
           matches: matches,
           expandedGroups: expandedGroups,
           row: row,
+          sorted: (points) => sorted(points, ObjectKind.poiPoint),
         ),
       );
       continue;
@@ -250,6 +291,7 @@ List<ListRow> _poiRows({
   required bool Function(ObjectSummary) matches,
   required Set<String> expandedGroups,
   required ElementRow Function(ObjectSummary, {bool inGroup}) row,
+  required List<ObjectSummary> Function(List<ObjectSummary>) sorted,
 }) {
   final rows = <ListRow>[];
   var toolsAdded = false;
@@ -267,9 +309,18 @@ List<ListRow> _poiRows({
     }
     final expanded = searching || expandedGroups.contains(g.key);
     rows.add(GroupHeaderRow(g, expanded: expanded, shown: shown.length));
-    if (expanded) rows.addAll([for (final p in shown) row(p, inGroup: true)]);
+    if (expanded) {
+      rows.addAll([for (final p in sorted(shown)) row(p, inGroup: true)]);
+    }
   }
   return rows;
+}
+
+/// Nearest to [from] first. Each distance is computed once, not per
+/// comparison: a city's bus stops are thousands of rows.
+List<ObjectSummary> _byDistance(List<ObjectSummary> rows, LatLng from) {
+  final d = {for (final s in rows) s.ref: distanceMeters(from, s.center)};
+  return _stableSorted(rows, (a, b) => d[a.ref]!.compareTo(d[b.ref]!));
 }
 
 List<T> _stableSorted<T>(List<T> rows, int Function(T, T) compare) {

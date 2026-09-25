@@ -23,6 +23,7 @@ import 'package:latlong2/latlong.dart' show LatLng;
 
 import '../data/database.dart';
 import '../data/layer_types.dart';
+import '../data/location.dart' show currentPosition;
 import '../data/repository.dart' show ColoredElement, ZMove;
 import '../data/transit.dart' show transitMaskWith;
 import '../state/providers.dart';
@@ -164,6 +165,36 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
   final _search = TextEditingController();
   final _expanded = <String>{};
 
+  /// True while "Distance from you" is waiting on its first fix.
+  bool _locating = false;
+
+  /// Why the last "Distance from you" found no position — shown beside the
+  /// sort button, because a snackbar would land *behind* this modal sheet.
+  String? _sortProblem;
+
+  /// Applies [choice]. "Distance from you" with no fix yet is the press that
+  /// opts in to location, exactly as Locate me is: the fix is asked for now,
+  /// and the sort only switches once there is one to measure from.
+  Future<void> _chooseSort(ElementSort choice) async {
+    setState(() => _sortProblem = null);
+    if (choice != ElementSort.distanceFromMe ||
+        ref.read(myPositionProvider) != null) {
+      setState(() => _sort = choice);
+      return;
+    }
+    if (_locating) return;
+    setState(() => _locating = true);
+    final result = await currentPosition();
+    if (!mounted) return;
+    final fix = result.fix;
+    if (fix != null) ref.read(myPositionProvider.notifier).set(fix);
+    setState(() {
+      _locating = false;
+      if (fix != null) _sort = choice;
+      _sortProblem = result.problem;
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -202,11 +233,16 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
 
     final stackable = canSortByStack(summaries);
     final sizable = canSortBySize(summaries);
+    final myPosition = ref.watch(myPositionProvider);
+    final mapCenter = ref.watch(mapCenterProvider);
     final sort = _sort ?? (stackable ? ElementSort.stack : ElementSort.name);
     final choices = [
       if (stackable) ElementSort.stack,
       ElementSort.name,
       if (sizable) ElementSort.size,
+      // Offered with or without a fix: choosing it is how you give one.
+      ElementSort.distanceFromMe,
+      if (mapCenter != null) ElementSort.distanceFromCenter,
     ];
 
     final model = buildElementRows(
@@ -216,6 +252,8 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
       sort: sort,
       query: _search.text,
       expandedGroups: _expanded,
+      myPosition: myPosition,
+      mapCenter: mapCenter,
     );
 
     // The headline number: POIs on a POI layer (the tally when stations are
@@ -256,30 +294,38 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
                   ),
                 ),
                 Text(count, style: theme.textTheme.bodySmall),
-                if (choices.length > 1)
-                  PopupMenuButton<ElementSort>(
-                    icon: const Icon(Icons.sort),
-                    tooltip: 'Sort',
-                    initialValue: sort,
-                    onSelected: (v) => setState(() => _sort = v),
-                    itemBuilder: (_) => [
-                      for (final c in choices)
-                        CheckedPopupMenuItem(
-                          value: c,
-                          checked: c == sort,
-                          child: Text(switch (c) {
-                            ElementSort.stack => 'Stack order',
-                            ElementSort.name => 'By name',
-                            ElementSort.size => 'By size',
-                          }),
-                        ),
-                    ],
-                  )
-                else
-                  const SizedBox(width: 12),
+                const SizedBox(width: 12),
               ],
             ),
           ),
+          if (!empty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              // A labelled button beside the search field, not an unlabelled
+              // icon in the title row: the sort used to be a glyph nobody
+              // recognised as one, and the list gave no sign of its order.
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  _SortButton(
+                    sort: sort,
+                    choices: choices,
+                    locating: _locating,
+                    hasFix: myPosition != null,
+                    onSelected: _chooseSort,
+                  ),
+                  if (_sortProblem != null)
+                    Text(
+                      _sortProblem!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.error,
+                      ),
+                    ),
+                ],
+              ),
+            ),
           if (!empty)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -832,6 +878,77 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
 }
 
 String _plural(int n, String noun) => '$n $noun${n == 1 ? '' : 's'}';
+
+/// The list's sort, named: "Sort: Name ▾". Opens the choices, each with a
+/// tick on the current one.
+class _SortButton extends StatelessWidget {
+  const _SortButton({
+    required this.sort,
+    required this.choices,
+    required this.locating,
+    required this.hasFix,
+    required this.onSelected,
+  });
+
+  final ElementSort sort;
+  final List<ElementSort> choices;
+  final bool locating;
+
+  /// Whether "Distance from you" can sort straight away, or will first ask
+  /// for the device's position — which its menu line says.
+  final bool hasFix;
+  final ValueChanged<ElementSort> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return PopupMenuButton<ElementSort>(
+      tooltip: 'Sort',
+      initialValue: sort,
+      onSelected: onSelected,
+      itemBuilder: (_) => [
+        for (final c in choices)
+          CheckedPopupMenuItem(
+            value: c,
+            checked: c == sort,
+            child: c == ElementSort.distanceFromMe && !hasFix
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(elementSortLabel(c)),
+                      Text(
+                        'Asks for your location',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
+                  )
+                : Text(elementSortLabel(c)),
+          ),
+      ],
+      child: Chip(
+        avatar: locating
+            ? const SizedBox.square(
+                dimension: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.sort, size: 18),
+        label: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                locating ? 'Finding you…' : 'Sort: ${elementSortLabel(sort)}',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const Icon(Icons.arrow_drop_down, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _EmptyState extends StatelessWidget {
   const _EmptyState({required this.scrollController, required this.layer});

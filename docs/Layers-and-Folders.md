@@ -66,7 +66,11 @@ single colour, because its fill is the complement and belongs to no element.
 Every layer row carries a list button (≡), always, whatever the layer's type or state:
 reaching an element must never depend on either. It opens the **Elements** list of what the
 layer holds: each element with its ground length or
-area where it has one, sortable by name or size, searchable. Each row offers **Edit**,
+area where it has one, searchable, and sorted by the **Sort** button above the search field —
+by name, by size, in stack order, by **distance from you** or by **distance from the map
+centre**. The sort applies inside each type of place too, so "which bench is nearest" is one
+tap. Distance from you asks for your location the first time you choose it, exactly as
+**Locate me** does, and never before. Each row offers **Edit**,
 **Zoom to**, **Rename**, **Delete**, and **Bring to front / Send to back**. On a places layer
 the points are filed by what they are, never by how they arrived — a category across every
 import of it *and* your own category of the same thing (a bench you placed sits with the

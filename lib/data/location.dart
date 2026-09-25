@@ -15,6 +15,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
 
 /// The device's location, as the one thing the app asks of it: "may I?".
 ///
@@ -48,4 +49,40 @@ Future<String?> ensureLocationReady() async {
     return 'Location permission denied. ZoneCraft works fine without it.';
   }
   return null;
+}
+
+/// One position fix, asked for now: the permission gate, a fix under a time
+/// limit, and a check that it is a real number.
+///
+/// Returns the fix, or a ready-to-show sentence saying why there is none —
+/// never both. Shared by the map's Locate me and the Elements list's "distance
+/// from you" sort, so the two cannot grow different ideas of what a usable fix
+/// is. Has no side effects: the caller decides what to do with the result.
+Future<({LatLng? fix, String? problem})> currentPosition() async {
+  try {
+    final problem = await ensureLocationReady();
+    if (problem != null) return (fix: null, problem: problem);
+    // A time limit, because indoors or with a cold GPS `getCurrentPosition`
+    // simply never returns. The plugin throws TimeoutException, which the
+    // catch below turns into a sentence.
+    final pos = await Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(
+        timeLimit: Duration(seconds: 20),
+      ),
+    );
+    // A NaN LatLng would corrupt the map camera and crash every subsequent
+    // projection.
+    if (!pos.latitude.isFinite || !pos.longitude.isFinite) {
+      return (
+        fix: null,
+        problem: 'Could not get a valid location fix. Try again outdoors.',
+      );
+    }
+    return (fix: LatLng(pos.latitude, pos.longitude), problem: null);
+    // geolocator throws a family of typed errors (service off, permission
+    // gone, timeout) that all end in the same sentence.
+    // ignore: avoid_catches_without_on_clauses
+  } catch (_) {
+    return (fix: null, problem: 'Could not get your location.');
+  }
 }
