@@ -37,7 +37,7 @@ layer's *type* can never use is hidden rather than greyed.
 | **Select by tapping** (✎) | Turns the map into a chooser: a tap opens whatever you tapped. Reaches anything you can see, on any visible layer. | Always; greyed until some visible layer holds something. |
 | **The layer's own switch** | Changes with the layer: **Fill outside / Fill inside** on a region layer, **Colour areas** on a borders layer, the **station filter** on a places layer that holds a station import. Lit while the switch is on. | Only where the layer has one. |
 | **Find a place by name** | Searches OpenStreetMap for a city, river or coastline and imports its outline. | Only on line and area layers. |
-| **Import what is nearby** | Fetches places or transit stops from OpenStreetMap into this layer and keeps them on the device. | Only on layers that can hold imported points. |
+| **Import an area** | Fetches places or transit stops inside a box you mark from OpenStreetMap into this layer, and keeps them on the device. | Only on layers that can hold imported points. |
 | **Add** (＋) | Arms the map: the next tap places a new element where you point. Its icon shows which kind. Long-press to place one at the centre instead. | Always. |
 | **Hide and show the tools** | Clears the screen down to the map: the column above it, the undo buttons and the layer name all go, and come back. | Always — it is the one thing that survives its own press, along with the layers menu. |
 

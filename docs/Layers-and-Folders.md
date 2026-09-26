@@ -40,7 +40,7 @@ the bottom row — in the app's own words:
 | **Stations…** | Choose which kinds of station are shown on the map. Places layers holding a station import. |
 | **Colour areas** | Give each area a colour, chosen so no two neighbours match. Borders layers. |
 | **Show names** | Print each area's name across it. Borders layers. |
-| **Import nearby POIs…** | Fetch places of one kind — cafés, benches — around a point. |
+| **Import POIs…** | Fetch places of one kind — cafés, benches — inside a box you draw. |
 | **Import transit stations…** | Fetch public-transport stops inside a box you draw. |
 | **Import borders in view…** | Fetch administrative areas covering the current view. |
 | **Import map feature…** | Search OpenStreetMap by name and import the shape it finds. |

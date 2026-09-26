@@ -231,10 +231,10 @@ const List<MapControl> mapControls = [
     id: MapControlId.osmImport,
     area: MapControlArea.bottom,
     icon: Icons.cloud_download_outlined,
-    name: 'Import what is nearby',
+    name: 'Import an area',
     what:
-        'Fetches places or transit stops from OpenStreetMap into this layer '
-        'and keeps them on the device.',
+        'Fetches places or transit stops inside a box you mark from '
+        'OpenStreetMap into this layer, and keeps them on the device.',
     sometimes: 'Only on layers that can hold imported points.',
   ),
   MapControl(

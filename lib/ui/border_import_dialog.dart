@@ -16,15 +16,12 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
 
 import '../data/borders.dart';
-import '../geo/coords.dart';
-import 'hit_test.dart' show geoDistance;
 import 'object_summary.dart' show formatMeters;
+import 'bbox_fields.dart';
 import 'theme.dart';
-import 'transit_import_dialog.dart'
-    show bboxDiagonalMeters, validateLat, validateLng;
+import 'transit_import_dialog.dart' show bboxDiagonalMeters;
 
 /// The area to import borders for. The **level** isn't asked here — it belongs
 /// to the layer, chosen when the layer was created, because one layer holds one
@@ -114,60 +111,30 @@ class BorderImportSheet extends StatefulWidget {
 }
 
 class _BorderImportSheetState extends State<BorderImportSheet> {
-  late final TextEditingController _south;
-  late final TextEditingController _west;
-  late final TextEditingController _north;
-  late final TextEditingController _east;
+  late final BboxControllers _box = BboxControllers(widget.initial);
 
   @override
   void initState() {
     super.initState();
-    String f(double v) => v.toStringAsFixed(5);
-    _south = TextEditingController(text: f(widget.initial.south));
-    _west = TextEditingController(text: f(widget.initial.west));
-    _north = TextEditingController(text: f(widget.initial.north));
-    _east = TextEditingController(text: f(widget.initial.east));
-    for (final c in [_south, _west, _north, _east]) {
-      c.addListener(_boxChanged);
-    }
+    _box.addListener(_boxChanged);
     WidgetsBinding.instance.addPostFrameCallback(
-      (_) => widget.onPreview(_boxOrNull()),
+      (_) => widget.onPreview(_box.box),
     );
   }
 
   void _boxChanged() {
     setState(() {});
-    widget.onPreview(_boxOrNull());
-  }
-
-  /// The box as typed, or null while it is not a usable one — the same
-  /// "usable" [checkBorderBbox] means, so the map stops drawing a box exactly
-  /// when the sheet stops accepting one.
-  LatLngBounds? _boxOrNull() {
-    final s = _v(_south), w = _v(_west), n = _v(_north), e = _v(_east);
-    if (s == null || w == null || n == null || e == null) return null;
-    if (![s, w, n, e].every((v) => v.isFinite)) return null;
-    if (s >= n || w >= e) return null;
-    return LatLngBounds(LatLng(s, w), LatLng(n, e));
+    widget.onPreview(_box.box);
   }
 
   @override
   void dispose() {
-    for (final c in [_south, _west, _north, _east]) {
-      c.dispose();
-    }
+    _box.dispose();
     super.dispose();
   }
 
-  double? _v(TextEditingController c) => parseDecimal(c.text.trim());
-
-  BorderBboxVerdict get _verdict => checkBorderBbox(
-    _v(_south),
-    _v(_west),
-    _v(_north),
-    _v(_east),
-    level: widget.level,
-  );
+  BorderBboxVerdict get _verdict =>
+      checkBorderBbox(_box.s, _box.w, _box.n, _box.e, level: widget.level);
 
   bool get _canImport =>
       _verdict == BorderBboxVerdict.ok || _verdict == BorderBboxVerdict.warn;
@@ -176,27 +143,10 @@ class _BorderImportSheetState extends State<BorderImportSheet> {
     if (!_canImport) return;
     widget.onDone(
       BorderImportConfig(
-        south: _v(_south)!,
-        west: _v(_west)!,
-        north: _v(_north)!,
-        east: _v(_east)!,
-      ),
-    );
-  }
-
-  Widget _coord(TextEditingController c, String label, bool isLat) {
-    return Expanded(
-      child: TextFormField(
-        controller: c,
-        keyboardType: const TextInputType.numberWithOptions(
-          decimal: true,
-          signed: true,
-        ),
-        decoration: InputDecoration(
-          labelText: label,
-          isDense: true,
-          errorText: isLat ? validateLat(c.text) : validateLng(c.text),
-        ),
+        south: _box.s!,
+        west: _box.w!,
+        north: _box.n!,
+        east: _box.e!,
       ),
     );
   }
@@ -235,25 +185,7 @@ class _BorderImportSheetState extends State<BorderImportSheet> {
                     ),
                   ],
                 ),
-                Text('Area', style: theme.textTheme.labelLarge),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    _coord(_south, 'South', true),
-                    const SizedBox(width: 8),
-                    _coord(_north, 'North', true),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    _coord(_west, 'West', false),
-                    const SizedBox(width: 8),
-                    _coord(_east, 'East', false),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                _sizeLine(theme),
+                BboxFields(box: _box),
                 const SizedBox(height: 16),
                 Text('Level', style: theme.textTheme.labelLarge),
                 const SizedBox(height: 4),
@@ -303,33 +235,6 @@ class _BorderImportSheetState extends State<BorderImportSheet> {
 
   TextStyle? _warnStyle(ThemeData theme) =>
       theme.textTheme.bodySmall?.copyWith(color: warningColor(context));
-
-  /// The box's own state: unusable numbers, or its size.
-  Widget _sizeLine(ThemeData theme) {
-    final s = _v(_south), w = _v(_west), n = _v(_north), e = _v(_east);
-    if (s == null ||
-        w == null ||
-        n == null ||
-        e == null ||
-        ![s, w, n, e].every((v) => v.isFinite)) {
-      return Text(
-        'Enter four numbers to define the area.',
-        style: _errStyle(theme),
-      );
-    }
-    if (s >= n || w >= e) {
-      return Text(
-        'South must be below north, and west below east.',
-        style: _errStyle(theme),
-      );
-    }
-    final width = geoDistance.as(LengthUnit.Meter, LatLng(s, w), LatLng(s, e));
-    final height = geoDistance.as(LengthUnit.Meter, LatLng(s, w), LatLng(n, w));
-    return Text(
-      '${formatMeters(width)} × ${formatMeters(height)}',
-      style: theme.textTheme.bodySmall,
-    );
-  }
 
   /// One honest line about what this box costs at this level — always naming
   /// the limit, so "too large" says what it is too large *for*.

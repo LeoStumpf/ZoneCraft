@@ -34,16 +34,21 @@ extension PoiSetKind on PoiSet {
   /// A public-transport station import over a bounding box.
   bool get isStationImport => source == kPoiSourceBox;
 
-  /// Fetched from Overpass (radius or box) — a snapshot, not hand-placed.
+  /// A category import over a bounding box — what every new category import
+  /// is. Not a station import: nothing filters its markers by mode.
+  bool get isAreaImport => source == kPoiSourceArea;
+
+  /// Fetched from Overpass (radius, area or box) — a snapshot, not hand-placed.
   bool get isImport => !isManual;
 
   /// An import that hasn't succeeded yet: the Elements list shows it as a
   /// retry row. A manual set is never pending — nothing was ever fetched.
   bool get isPending => isImport && fetchedAt == null;
 
-  /// The imported box of a station import, or null on the other kinds.
-  List<double>? get bbox =>
-      isStationImport && south != null ? [south!, west!, north!, east!] : null;
+  /// The imported box of a station or area import, or null on the other kinds.
+  List<double>? get bbox => (isStationImport || isAreaImport) && south != null
+      ? [south!, west!, north!, east!]
+      : null;
 }
 
 /// **The one drawn == tappable predicate for a POI marker.** `poi_layer`

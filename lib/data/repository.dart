@@ -1414,8 +1414,12 @@ class Repository {
   /// Creates a POI set of the given [source] on a `poi` layer and returns its
   /// id. What the set then holds depends on the kind (see [PoiSets.source]):
   ///
+  /// * [kPoiSourceArea] — [categoryKey] within [bbox] (required); the centre
+  ///   and radius are derived from the box, as for a station import. Points
+  ///   via [fillPoiSet].
   /// * [kPoiSourceRadius] — [categoryKey] within [radiusMeters] of the centre;
-  ///   the points go in via [fillPoiSet].
+  ///   the points go in via [fillPoiSet]. Legacy: only a file carrying one
+  ///   creates it now.
   /// * [kPoiSourceBox] — stations within [bbox] (`[south, west, north, east]`,
   ///   required) of the modes in [modeMask], shown per [visibleModeMask]; the
   ///   centre and radius passed are **ignored** and derived from the box, so a
@@ -1440,7 +1444,7 @@ class Repository {
     int modeMask = 0,
     int visibleModeMask = -1,
   }) async {
-    if (source == kPoiSourceBox) {
+    if (source == kPoiSourceBox || source == kPoiSourceArea) {
       if (bbox == null || bbox.length != 4) {
         throw ArgumentError('A box import needs its box');
       }
@@ -2872,9 +2876,10 @@ class Repository {
                     LatLng(s.centerLat, s.centerLng),
                     for (final p in pts) LatLng(p.lat, p.lng),
                   ],
-                  // A box set's radius is derived from its box on the way back
-                  // in; writing it would be a second formula to keep equal.
-                  radiusMeters: box ? null : s.radiusMeters,
+                  // A box or area set's radius is derived from its box on the
+                  // way back in; writing it would be a second formula to keep
+                  // equal.
+                  radiusMeters: s.bbox != null ? null : s.radiusMeters,
                   categoryKey: s.categoryKey,
                   pointLabels: [for (final p in pts) p.name],
                   pointOsmIds: identified
@@ -3234,16 +3239,19 @@ class Repository {
         if (o.coords.isEmpty) return false;
         final r = o.radiusMeters;
         // Which kind of set this is follows from what the file carries: a
-        // box means a station import, `manual` a hand-made category, and
+        // box around stations means a station import, a box around any other
+        // category an area import (v6), `manual` a hand-made category, and
         // anything else a radius import — so a v3 file needs no `source` key
         // and a v2 one (which never had it) reads the same way.
         final manual = o.manual ?? false;
         final box = o.bbox;
         final source = manual
             ? kPoiSourceManual
-            : box != null
+            : box == null
+            ? kPoiSourceRadius
+            : o.categoryKey == kTransitStationCategoryKey
             ? kPoiSourceBox
-            : kPoiSourceRadius;
+            : kPoiSourceArea;
         // A search radius is what the set was fetched with, not what its POIs
         // are — so when a file doesn't carry a usable one, derive it from how
         // far the POIs actually reach. Dropping the set (and every POI in it)

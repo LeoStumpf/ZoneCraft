@@ -998,8 +998,8 @@ class _EmptyHint extends StatelessWidget {
   Widget build(BuildContext context) {
     final hint = switch (layer.type) {
       'poi' =>
-        'No POIs yet — fetch a category around the map centre or '
-            'the transit stations of an area, or place your own.',
+        'No POIs yet — fetch a category or the transit stations of an '
+            'area, or place your own.',
       'borders' =>
         'No areas yet — import every boundary that crosses the '
             'part of the map in view.',

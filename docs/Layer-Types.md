@@ -44,7 +44,7 @@ region to invert. On an empty layer the switch is greyed: there is nothing to in
 
 | In the app | What it imports |
 |---|---|
-| **Places layer** | *Import cafés, benches or stations from OpenStreetMap, or place your own markers.* One OSM category within a radius, or every public-transport **station** in a box you tap out — with which types serve it (bus, tram, subway, light rail, train, monorail, ferry). Drawn as icon markers that collapse into count badges when they would overlap. You can also name a category of your own and place its points by hand. |
+| **Places layer** | *Import cafés, benches or stations from OpenStreetMap, or place your own markers.* One OSM category, or every public-transport **station**, in a box you tap out — with which types serve it (bus, tram, subway, light rail, train, monorail, ferry). Drawn as icon markers that collapse into count badges when they would overlap. You can also name a category of your own and place its points by hand. |
 | **Borders layer** | *Download real district, city or country outlines once and keep them offline.* Administrative areas of one OSM `admin_level`, chosen when the layer is created. Whole relations come down and are assembled on the phone; **nothing is cut to the box** — it limits what is downloaded, not what is kept. Optional neighbour-distinct colouring and name plates; any area can be **converted to a freehand area** you can then edit. |
 
 Imports run once, on your explicit request, and are stored offline. They never refetch and

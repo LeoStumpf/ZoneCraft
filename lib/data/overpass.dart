@@ -401,6 +401,16 @@ List<PoiResult> poisWithinRadius(
   return [for (final e in scored.take(cap)) e.value];
 }
 
+/// The [cap] POIs of [pois] nearest (centerLat, centerLng), nearest first —
+/// [poisWithinRadius] with no radius, for a box whose every hit is wanted but
+/// only so many can be seeded.
+List<PoiResult> nearestPois(
+  double centerLat,
+  double centerLng,
+  Iterable<PoiResult> pois, {
+  int cap = 60,
+}) => poisWithinRadius(centerLat, centerLng, double.infinity, pois, cap: cap);
+
 double _haversineMeters(double lat1, double lon1, double lat2, double lon2) {
   const earthRadius = 6371000.0;
   double rad(double d) => d * math.pi / 180;
@@ -463,7 +473,7 @@ Future<OverpassOutcome<List<PoiResult>>> fetchPois({
     maxBytes: poiMaxResponseBytes,
     oversizeMessage:
         'That search returns too much data — pick a smaller '
-        'radius.',
+        'area.',
     preferEndpoint: preferEndpoint,
     onProgress: onProgress,
     cancel: cancel,

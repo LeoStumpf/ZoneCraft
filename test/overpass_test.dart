@@ -132,6 +132,23 @@ void main() {
     });
   });
 
+  group('nearestPois', () {
+    test('keeps the nearest, with no radius to cut at', () {
+      const here = (lat: 48.137, lng: 11.575);
+      final pois = [
+        for (var i = 1; i <= 5; i++)
+          PoiResult(
+            lat: here.lat + i * 0.1,
+            lng: here.lng,
+            categoryKey: 'cafe',
+            name: 'P$i',
+          ),
+      ];
+      final res = nearestPois(here.lat, here.lng, pois.reversed, cap: 3);
+      expect(res.map((p) => p.name), ['P1', 'P2', 'P3']);
+    });
+  });
+
   group('poisWithinRadius', () {
     // ~111 m per 0.001° of latitude near the equator.
     const here = (lat: 0.0, lng: 0.0);

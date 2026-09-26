@@ -647,9 +647,9 @@ List<LayerAction> layerActionsFor(
     LayerActionId.importPois => LayerAction(
       id: id,
       icon: Icons.travel_explore,
-      label: 'Import nearby POIs…',
+      label: 'Import POIs…',
       description:
-          'Fetch places of one kind — cafés, benches — around a point.',
+          'Fetch places of one kind — cafés, benches — inside a box you draw.',
       needsMap: true,
       run: () async => request(MapRequestKind.importPois),
     ),

@@ -182,20 +182,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// Null on every other type.
   String? _placePoiSetId;
 
-  /// Buffered first corner of a station or border import box. While set, the live second
+  /// Buffered first corner of a POI, station or border import box. While set, the live second
   /// corner is the map centre (a phone has no hover), so the rubber band
   /// follows as you pan.
   LatLng? _pendingBoxA;
-
-  /// The circle an Overpass import is about to search, while its sheet is open.
-  ///
-  /// Only the radius is stored: the centre is [_importCircleCentre] when Add
-  /// mode aimed at a tap, and otherwise the **live** map centre, which is also
-  /// what the fetch reads once the sheet closes. Keeping it live rather than
-  /// snapshotting it is what makes the ring honest — pan while choosing and the
-  /// ring follows, because the search would too.
-  double? _importCircleRadius;
-  LatLng? _importCircleCentre;
 
   /// The box a station or borders import is about to cover, while its sheet is
   /// open. The rubber band drawn during the two corner taps used to vanish the
@@ -1785,6 +1775,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     Widget Function(void Function(T?) done, ValueChanged<LatLngBounds?> preview)
     build,
   ) async {
+    // "Tap one corner of the area" is answered by now, and left up it would
+    // sit over the sheet's Import button for its remaining seconds.
+    ScaffoldMessenger.of(context).clearSnackBars();
     setState(() => _importBoxPreview = initial);
     final result = await _showImportSheet<T>(
       (done) => build(done, (b) {
@@ -1795,19 +1788,23 @@ class _MapScreenState extends ConsumerState<MapScreen>
     return result;
   }
 
-  /// Imports nearby POIs into [layer]: prompts for a category + radius,
-  /// fetches POIs of that type around the map centre **once**, then creates —
+  /// Starts a POI import on [layer]: arms the two-corner box, exactly as a
+  /// station or border import does (the banner also offers the visible map).
+  Future<void> _importPois(Layer layer) =>
+      _enterAddMode(layer, placeType: _kPlacePois);
+
+  /// Imports POIs over [box] into [layer]: prompts for a category (the box
+  /// stays editable), fetches that type in the box **once**, then creates —
   /// per layer type — one named circle per POI (circles), appended named
-  /// points (subspace; the nearest-to-centre promotes to main when the
+  /// points (subspace; the nearest to the box centre promotes to main when the
   /// subspace has none yet), or a stored offline POI set with markers (poi).
-  /// The search centre defaults to the map centre; Add mode passes the tap.
   /// One import, one undo step. The writes straddle a network call — a set row
   /// is created before it and filled after — so the idle rule alone would split
   /// them into two steps and Back would leave an empty category behind.
-  Future<void> _importPois(Layer layer, {LatLng? at}) => ref
+  Future<void> _importPoisIn(Layer layer, LatLngBounds box) => ref
       .read(repositoryProvider)
       .undo
-      .group('Import POIs', () => _runPoiImport(layer, at: at));
+      .group('Import POIs', () => _runPoiImport(layer, box));
 
   /// Runs a [MapRequest] posted from outside the map (see [mapRequestProvider]).
   ///
@@ -1843,10 +1840,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
     }
   }
 
-  /// The import FAB on a POI layer: nearby POIs of one category (a circle
-  /// around the map centre), or the public-transport stations of a box you
-  /// mark with two corners. One button, because both fill the same layer
-  /// with the same kind of row — a station is a POI (v27).
+  /// The import FAB on a POI layer: POIs of one category, or the
+  /// public-transport stations — both over a box you mark with two corners
+  /// (or the visible map). One button, because both fill the same layer with
+  /// the same kind of row — a station is a POI (v27).
   Future<void> _pickPoiImport(Layer layer) async {
     final choice = await showModalBottomSheet<String>(
       context: context,
@@ -1858,14 +1855,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
             const Divider(height: 1),
             ListTile(
               leading: const Icon(Icons.travel_explore),
-              title: const Text('Nearby POIs'),
-              subtitle: const Text('One category around the map centre'),
+              title: const Text('POIs in an area'),
+              subtitle: const Text('One category · tap two corners'),
               onTap: () => Navigator.pop(ctx, 'pois'),
             ),
             ListTile(
               leading: const Icon(Icons.directions_transit),
               title: const Text('Transit stations'),
-              subtitle: const Text('Tap two corners of an area'),
+              subtitle: const Text('Every station · tap two corners'),
               onTap: () => Navigator.pop(ctx, 'stations'),
             ),
           ],
@@ -1880,61 +1877,52 @@ class _MapScreenState extends ConsumerState<MapScreen>
     }
   }
 
-  Future<void> _runPoiImport(Layer layer, {LatLng? at}) async {
+  Future<void> _runPoiImport(Layer layer, LatLngBounds initial) async {
     final isCircleLayer = layer.type == 'circles';
     final isPoiLayer = layerHolds(layer, kPoi);
-    setState(() => _importCircleCentre = at);
-    final config = await _showImportSheet<PoiImportConfig>(
-      (done) => PoiImportSheet(
+    final config = await _showBoxImportSheet<PoiImportConfig>(
+      initial,
+      (done, preview) => PoiImportSheet(
+        initial: initial,
         needsCircleRadius: isCircleLayer,
         allCategories: isPoiLayer,
-        onPreview: (r) {
-          if (mounted) setState(() => _importCircleRadius = r);
-        },
+        onPreview: preview,
         onDone: done,
       ),
     );
-    // The ring belongs to the sheet, not to the import: it comes down the
-    // moment the choosing is over, cancelled or not.
-    if (mounted) {
-      setState(() {
-        _importCircleRadius = null;
-        _importCircleCentre = null;
-      });
-    }
     if (config == null || !mounted) return;
 
-    final center = at ?? _mapController.camera.center;
-    final r = config.searchRadiusMeters;
+    final b = config.box;
+    final bbox = [b.south, b.west, b.north, b.east];
     if (isPoiLayer) {
       // A POI layer stores the fetch as an offline set, through the same
-      // pending-row lifecycle a station import uses (see [_runRadiusImport]).
+      // pending-row lifecycle a station import uses (see [_runCategoryImport]).
       final sid = await ref
           .read(repositoryProvider)
           .createPoiSet(
             layerId: layer.id,
-            source: kPoiSourceRadius,
+            source: kPoiSourceArea,
             categoryKey: config.category.key,
-            centerLat: center.latitude,
-            centerLng: center.longitude,
-            radiusMeters: r,
+            // Derived from the box inside createPoiSet; these are placeholders.
+            centerLat: 0,
+            centerLng: 0,
+            radiusMeters: 0,
+            bbox: bbox,
             label: config.category.label,
           );
       if (!mounted) return;
-      await _runRadiusImport(
+      await _runCategoryImport(
         setId: sid,
         fresh: true,
         category: config.category,
-        center: center,
-        radiusMeters: r,
+        bbox: bbox,
       );
       return;
     }
 
-    final within = await _fetchPoisAround(
+    final within = await _fetchPoisIn(
       category: config.category,
-      center: center,
-      radiusMeters: r,
+      bbox: bbox,
       // Circle/subspace seeding keeps the default tighter cap so the created
       // geometry stays manageable.
       cap: 60,
@@ -1942,7 +1930,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (within == null || !mounted) return;
     final label = config.category.label.toLowerCase();
     if (within.isEmpty) {
-      _hint('No $label found within ${r.round()} m.');
+      _hint('No $label found in this area.');
       return;
     }
 
@@ -1975,7 +1963,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final existing = subspaces.where((s) => s.layerId == layer.id).firstOrNull;
     final subId = existing?.id ?? await repo.createSubspace(layerId: layer.id);
     var hasMain = points.any((pt) => pt.subspaceId == subId && pt.isMain);
-    // `within` is nearest-first, so the first point promotes to main when none.
+    // `within` is nearest the box centre first, so the first point promotes
+    // to main when none.
     for (var i = 0; i < within.length; i++) {
       final makeMain = !hasMain;
       await repo.addSubspacePoint(
@@ -1995,48 +1984,46 @@ class _MapScreenState extends ConsumerState<MapScreen>
     );
   }
 
-  /// Fetches one category around [center] with the shared progress dialog and
-  /// returns what lies within [radiusMeters], nearest first — or null when the
-  /// fetch was cancelled or failed (already reported as a hint).
+  /// Fetches one category in [bbox] (`[south, west, north, east]`) with the
+  /// shared progress dialog and returns the [cap] nearest its centre — or null
+  /// when the fetch was cancelled or failed (already reported as a hint).
   ///
-  /// The lower half of a radius import, without any set row: the circle and
+  /// The lower half of a POI import, without any set row: the circle and
   /// subspace seeding paths want the POIs and nothing else.
-  Future<List<PoiResult>?> _fetchPoisAround({
+  Future<List<PoiResult>?> _fetchPoisIn({
     required PoiCategory category,
-    required LatLng center,
-    required double radiusMeters,
+    required List<double> bbox,
     required int cap,
   }) async {
-    final r = radiusMeters;
-    // Bounding box from the centre + search radius (N/S/E/W offsets).
-    final north = _hitTest.offset(center, r, 0).latitude;
-    final south = _hitTest.offset(center, r, 180).latitude;
-    final east = _hitTest.offset(center, r, 90).longitude;
-    final west = _hitTest.offset(center, r, -90).longitude;
-    final outcome = await _fetchWithProgress<List<PoiResult>>(
-      title: 'Importing ${category.label.toLowerCase()}',
-      message: 'Preparing the query…',
-      fetch: (progress, cancel, preferEndpoint) => fetchPois(
-        south: south,
-        west: west,
-        north: north,
-        east: east,
-        categories: [category],
-        client: _tileClient,
-        preferEndpoint: preferEndpoint,
-        onProgress: progress.report,
-        cancel: cancel,
-      ),
-    );
+    final outcome = await _fetchCategory(category, bbox);
     if (outcome == null || !outcome.ok) return null;
-    return poisWithinRadius(
-      center.latitude,
-      center.longitude,
-      r,
+    return nearestPois(
+      (bbox[0] + bbox[2]) / 2,
+      (bbox[1] + bbox[3]) / 2,
       outcome.value!,
       cap: cap,
     );
   }
+
+  /// One category over [bbox], behind the shared progress dialog.
+  Future<OverpassOutcome<List<PoiResult>>?> _fetchCategory(
+    PoiCategory category,
+    List<double> bbox,
+  ) => _fetchWithProgress<List<PoiResult>>(
+    title: 'Importing ${category.label.toLowerCase()}',
+    message: 'Preparing the query…',
+    fetch: (progress, cancel, preferEndpoint) => fetchPois(
+      south: bbox[0],
+      west: bbox[1],
+      north: bbox[2],
+      east: bbox[3],
+      categories: [category],
+      client: _tileClient,
+      preferEndpoint: preferEndpoint,
+      onProgress: progress.report,
+      cancel: cancel,
+    ),
+  );
 
   /// Runs [fetch] behind the shared progress dialog — a public Overpass
   /// instance can sit on a request for a minute, and an unexplained frozen UI
@@ -2114,38 +2101,21 @@ class _MapScreenState extends ConsumerState<MapScreen>
     return true;
   }
 
-  /// Fills the pending radius set [setId] — fetch, settle, store. [fresh]
-  /// says this import created the row (a retry re-runs an existing one).
-  Future<void> _runRadiusImport({
+  /// Fills the pending category set [setId] over [bbox] — fetch, settle,
+  /// store. [fresh] says this import created the row (a retry re-runs an
+  /// existing one). An old **radius** set passes its circle as [within] (and
+  /// the box around it), so a retry trims to the circle it always meant.
+  Future<void> _runCategoryImport({
     required String setId,
     required bool fresh,
     required PoiCategory category,
-    required LatLng center,
-    required double radiusMeters,
+    required List<double> bbox,
+    ({LatLng center, double radiusMeters})? within,
   }) async {
     final repo = ref.read(repositoryProvider);
-    final r = radiusMeters;
-    final north = _hitTest.offset(center, r, 0).latitude;
-    final south = _hitTest.offset(center, r, 180).latitude;
-    final east = _hitTest.offset(center, r, 90).longitude;
-    final west = _hitTest.offset(center, r, -90).longitude;
     final label = category.label.toLowerCase();
     try {
-      final outcome = await _fetchWithProgress<List<PoiResult>>(
-        title: 'Importing $label',
-        message: 'Preparing the query…',
-        fetch: (progress, cancel, preferEndpoint) => fetchPois(
-          south: south,
-          west: west,
-          north: north,
-          east: east,
-          categories: [category],
-          client: _tileClient,
-          preferEndpoint: preferEndpoint,
-          onProgress: progress.report,
-          cancel: cancel,
-        ),
-      );
+      final outcome = await _fetchCategory(category, bbox);
       if (!await _settleImportRow(
         setId: setId,
         fresh: fresh,
@@ -2154,24 +2124,27 @@ class _MapScreenState extends ConsumerState<MapScreen>
         return;
       }
       // A POI layer stores everything the fetch returned (up to the Overpass
-      // cap), bounded to the searched circle so the import is a single
-      // offline set. Unnamed POIs stay unnamed — the icon carries the type.
-      final within = poisWithinRadius(
-        center.latitude,
-        center.longitude,
-        r,
-        outcome!.value!,
-        cap: overpassResultCap,
-      );
-      final tally = await repo.fillPoiSet(setId, within);
+      // cap) as a single offline set. Unnamed POIs stay unnamed — the icon
+      // carries the type.
+      final circle = within;
+      final pois = circle == null
+          ? outcome!.value!
+          : poisWithinRadius(
+              circle.center.latitude,
+              circle.center.longitude,
+              circle.radiusMeters,
+              outcome!.value!,
+              cap: overpassResultCap,
+            );
+      final tally = await repo.fillPoiSet(setId, pois);
       if (!mounted) return;
-      if (within.isEmpty) {
+      if (pois.isEmpty) {
         // Nothing there: a fresh set would be an empty row that draws
         // nothing, so drop it rather than leave litter behind. A retry that
         // finds nothing keeps its row — now fetched and empty, which is an
         // answer.
         if (fresh) await repo.deletePoiSet(setId);
-        _hint('No $label found within ${r.round()} m.');
+        _hint('No $label found in this area.');
         return;
       }
       if (tally.added == 0 && fresh) await repo.deletePoiSet(setId);
@@ -2226,7 +2199,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
   }
 
   /// Re-runs an import that didn't finish, using the query the row remembers
-  /// — its category and circle, or its box **and the types** — because a
+  /// — its category and box (or an old set's circle), or its box **and the
+  /// types** — because a
   /// retry has to ask the same question, or the row would come back holding
   /// something other than what was asked for. One retry, one undo step.
   Future<void> retryImport(PoiSet set) {
@@ -2249,14 +2223,34 @@ class _MapScreenState extends ConsumerState<MapScreen>
       _hint('That category is no longer available.');
       return Future.value();
     }
+    final box = set.bbox;
+    if (box != null) {
+      return repo.undo.group(
+        'Import POIs',
+        () => _runCategoryImport(
+          setId: set.id,
+          fresh: false,
+          category: category,
+          bbox: box,
+        ),
+      );
+    }
+    // An old radius set: the box around its circle, trimmed back to it.
+    final c = LatLng(set.centerLat, set.centerLng);
+    final r = set.radiusMeters;
     return repo.undo.group(
       'Import POIs',
-      () => _runRadiusImport(
+      () => _runCategoryImport(
         setId: set.id,
         fresh: false,
         category: category,
-        center: LatLng(set.centerLat, set.centerLng),
-        radiusMeters: set.radiusMeters,
+        bbox: [
+          _hitTest.offset(c, r, 180).latitude,
+          _hitTest.offset(c, r, -90).longitude,
+          _hitTest.offset(c, r, 0).latitude,
+          _hitTest.offset(c, r, 90).longitude,
+        ],
+        within: (center: c, radiusMeters: r),
       ),
     );
   }
@@ -2537,7 +2531,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final c = _mapController.camera.center;
     switch (layer.type) {
       case 'poi':
-        unawaited(_importPois(layer));
+        unawaited(_importPoisIn(layer, _mapController.camera.visibleBounds));
       case 'borders':
         unawaited(
           _importBorders(layer, box: _mapController.camera.visibleBounds),
@@ -2591,6 +2585,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// v27 stations are POIs, and the box import is one of the ways a POI layer
   /// is filled rather than a kind of layer.
   static const String _kPlaceStations = '\u0000stations';
+
+  /// The Add-mode token for "mark two corners and import one category of POIs
+  /// in between". Not a layer type either: it arms on a `poi` layer and on the
+  /// two layer types a POI import seeds (circles, subspace).
+  static const String _kPlacePois = '\u0000pois';
 
   /// Which manual category to drop POIs into: the only one if there is exactly
   /// one, otherwise a choice, and an offer to create one when there are none.
@@ -2668,9 +2667,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
           .where((l) => l.id == layerId)
           .firstOrNull;
       final b = _mapController.camera.center;
+      final type = _placeType;
       setState(() => _pendingBoxA = null);
       _exitAddMode();
-      if (layer != null) await _importBox(layer, LatLngBounds(a, b));
+      if (layer != null) await _importBox(layer, LatLngBounds(a, b), type);
       return;
     }
     _exitAddMode();
@@ -2679,17 +2679,32 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// The layer types whose Add mode marks two opposite corners of an import
   /// box, rather than placing an object per tap.
   static bool _isBoxImport(String? type) =>
-      type == _kPlaceStations || type == 'borders';
+      type == _kPlacePois || type == _kPlaceStations || type == 'borders';
 
-  /// Runs whichever box import Add mode is armed for.
-  ///
-  /// Reads `_placeType`, not the layer's type: a station import is armed on a
-  /// `poi` layer, and the armed token is the thing that actually decided this
-  /// is a box import (see [_isBoxImport]).
-  Future<void> _importBox(Layer layer, LatLngBounds box) =>
-      (_placeType ?? layer.type) == kBorders
-      ? _importBorders(layer, box: box)
-      : _importStations(layer, box: box);
+  /// Runs whichever box import Add mode was armed for — [type] is the armed
+  /// token, captured by the caller **before** it leaves Add mode (which clears
+  /// `_placeType`). Not the layer's type: a POI or station import is armed on
+  /// a `poi` layer, and the token is what decided which (see [_isBoxImport]).
+  Future<void> _importBox(Layer layer, LatLngBounds box, String? type) =>
+      switch (type ?? layer.type) {
+        kBorders => _importBorders(layer, box: box),
+        _kPlacePois => _importPoisIn(layer, box),
+        _ => _importStations(layer, box: box),
+      };
+
+  /// The Add banner's **Visible map**: import over what is on screen, the
+  /// quickest way to say "whatever I'm looking at" — for POIs, stations and
+  /// borders alike. The sheet that follows still checks the size.
+  Future<void> _importVisibleMap() async {
+    final layerId = _placeLayerId;
+    final type = _placeType;
+    final layer = (ref.read(layersProvider).asData?.value ?? const <Layer>[])
+        .where((l) => l.id == layerId)
+        .firstOrNull;
+    final box = _mapController.camera.visibleBounds;
+    _exitAddMode();
+    if (layer != null) await _importBox(layer, box, type);
+  }
 
   /// Leaves Add mode. For the point-set types the object just built is selected
   /// (so its editor and draggable handles appear) — the long-standing "Done ⇒
@@ -3064,6 +3079,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
         _pushAddStep(
           ObjectRef(kind: ObjectKind.poiPoint, id: pid, layerId: layer.id),
         );
+      case _kPlacePois:
       case _kPlaceStations:
       case 'borders':
         // Two taps mark opposite corners of the import box, then the dialog
@@ -3074,9 +3090,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
           setState(() => _pendingBoxA = latlng);
           return;
         }
+        final type = _placeType;
         setState(() => _pendingBoxA = null);
         _exitAddMode();
-        await _importBox(layer, LatLngBounds(a, latlng));
+        await _importBox(layer, LatLngBounds(a, latlng), type);
     }
   }
 
@@ -4836,11 +4853,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           // An import box's live corner *is* the map centre, so it
                           // has to follow the camera. Only runs while a corner is
                           // buffered.
-                          if (_pendingBoxA != null ||
-                              (_importCircleRadius != null &&
-                                  _importCircleCentre == null)) {
-                            setState(() {});
-                          }
+                          if (_pendingBoxA != null) setState(() {});
                           // Prefetch tiles once the map settles.
                           _schedulePrefetch();
                         },
@@ -5045,28 +5058,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             ],
                           ),
                         ],
-                        // POI import: the circle the query is about to cover,
-                        // drawn while its sheet is open. Same geometry the fetch
-                        // uses, so what you see is what is asked for.
-                        if (_importCircleRadius != null)
-                          PolygonLayer(
-                            polygons: [
-                              Polygon(
-                                points: geodesicCircle(
-                                  _importCircleCentre ??
-                                      _mapController.camera.center,
-                                  _importCircleRadius!,
-                                ),
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.primary.withValues(alpha: 0.12),
-                                borderColor: Theme.of(
-                                  context,
-                                ).colorScheme.primary,
-                                borderStrokeWidth: 2,
-                              ),
-                            ],
-                          ),
                         // The box an import sheet is describing right now.
                         if (_importBoxPreview != null)
                           PolygonLayer(
@@ -5660,14 +5651,25 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                           overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
-                                      TextButton(
-                                        onPressed:
-                                            (_addSteps.isEmpty &&
-                                                _pendingBoxA == null)
-                                            ? null
-                                            : _undoLastAdd,
-                                        child: const Text('Undo'),
-                                      ),
+                                      // Before the first corner there is
+                                      // nothing to undo, and the one other
+                                      // answer to "which area?" is this one.
+                                      if (_isBoxImport(_placeType) &&
+                                          _pendingBoxA == null)
+                                        TextButton(
+                                          onPressed: () =>
+                                              unawaited(_importVisibleMap()),
+                                          child: const Text('Visible map'),
+                                        )
+                                      else
+                                        TextButton(
+                                          onPressed:
+                                              (_addSteps.isEmpty &&
+                                                  _pendingBoxA == null)
+                                              ? null
+                                              : _undoLastAdd,
+                                          child: const Text('Undo'),
+                                        ),
                                       if (_addSteps.isNotEmpty)
                                         TextButton(
                                           onPressed: _editLastAdded,

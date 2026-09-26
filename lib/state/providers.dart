@@ -797,7 +797,7 @@ final pendingImportRetryProvider =
 /// import form draws its preview live) or a mode (Add / Draw arm a banner) —
 /// none of which a popped sheet's context can reach.
 enum MapRequestKind {
-  /// One category of POIs around the map centre (`_importPois`).
+  /// One category of POIs over a box — arms the two corners (`_importPois`).
   importPois,
 
   /// Stations in a box marked by two corner taps (Add mode armed for it).

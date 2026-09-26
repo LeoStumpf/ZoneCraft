@@ -32,7 +32,7 @@ import 'editor_sheet.dart';
 import 'poi_category_dialog.dart';
 import 'poi_icons.dart';
 import 'element_color_dialog.dart';
-import 'object_summary.dart' show formatMeters;
+import 'object_summary.dart' show bboxSizeText, formatMeters;
 
 /// Docked editor for one **POI set** — a category fetched once inside a
 /// circle, a station import fetched once over a box, or a hand-made category
@@ -300,8 +300,11 @@ class _PoiSetEditorSheetState extends ConsumerState<PoiSetEditorSheet> {
               category?.label ?? s.categoryKey,
               '${widget.pointCount} '
                   'POI${widget.pointCount == 1 ? '' : 's'} stored',
-              'within ${formatMeters(s.radiusMeters)} of '
-                  '${formatLatLng(s.centerLat, s.centerLng)}',
+              if (s.bbox case final box?)
+                'an area of ${bboxSizeText(box)}'
+              else
+                'within ${formatMeters(s.radiusMeters)} of '
+                    '${formatLatLng(s.centerLat, s.centerLng)}',
             ].join(' · '),
             style: theme.textTheme.bodySmall,
           ),

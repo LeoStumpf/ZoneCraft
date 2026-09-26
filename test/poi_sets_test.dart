@@ -29,6 +29,8 @@ import 'package:zonecraft/geo/border_areas.dart' show outerRings;
 /// tell the three kinds of set apart. `hit_test_test.dart` proves the painter
 /// and the hit test read the same function; this proves the function.
 void main() {
+  bool boxed(String source) =>
+      source == kPoiSourceBox || source == kPoiSourceArea;
   PoiSet set(String source, {int visible = -1}) => PoiSet(
     id: 's',
     layerId: 'l',
@@ -40,10 +42,10 @@ void main() {
     colorShade: 0,
     zOrder: 0,
     source: source,
-    south: source == kPoiSourceBox ? 47.9 : null,
-    west: source == kPoiSourceBox ? 10.9 : null,
-    north: source == kPoiSourceBox ? 48.1 : null,
-    east: source == kPoiSourceBox ? 11.1 : null,
+    south: boxed(source) ? 47.9 : null,
+    west: boxed(source) ? 10.9 : null,
+    north: boxed(source) ? 48.1 : null,
+    east: boxed(source) ? 11.1 : null,
     modeMask: source == kPoiSourceBox ? 3 : 0,
     visibleModeMask: visible,
   );
@@ -95,7 +97,7 @@ void main() {
   });
 
   group('PoiSetKind', () {
-    test('the three sources are told apart', () {
+    test('the four sources are told apart', () {
       final manual = set(kPoiSourceManual);
       expect(
         (manual.isManual, manual.isImport, manual.isStationImport),
@@ -111,6 +113,12 @@ void main() {
         (box.isManual, box.isImport, box.isStationImport),
         (false, true, true),
       );
+      // A category over a box: an import, but never filtered as stations.
+      final area = set(kPoiSourceArea);
+      expect(
+        (area.isManual, area.isImport, area.isStationImport, area.isAreaImport),
+        (false, true, false, true),
+      );
     });
 
     test('only an import can be pending, and only until fetched', () {
@@ -124,9 +132,17 @@ void main() {
       );
     });
 
-    test('only a box set has a box', () {
+    test('station and area sets have a box, the others none', () {
       expect(set(kPoiSourceBox).bbox, [47.9, 10.9, 48.1, 11.1]);
+      expect(set(kPoiSourceArea).bbox, [47.9, 10.9, 48.1, 11.1]);
       expect(set(kPoiSourceRadius).bbox, isNull);
+      expect(set(kPoiSourceManual).bbox, isNull);
+    });
+
+    test('an area set always draws its points, whatever their modes', () {
+      final area = set(kPoiSourceArea, visible: 0);
+      expect(poiPointVisible(point(0), area), isTrue);
+      expect(poiPointVisible(point(3), area), isTrue);
     });
   });
 

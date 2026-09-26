@@ -304,6 +304,45 @@ void main() {
     );
     await repo.markPoiImportFailed(failed, 'Overpass was busy');
 
+    // …and a category imported over a **box** (v6's `area` set), on its own
+    // layer: a filled one and one that failed. It carries a bbox like a
+    // station import and must come back as an area set, not as stations.
+    ids['areaPois'] = await repo.createLayer(
+      name: 'Benches',
+      colorArgb: 0xFF8D6E63,
+      type: 'poi',
+    );
+    final benches = await repo.createPoiSet(
+      layerId: _id(ids, 'areaPois'),
+      source: kPoiSourceArea,
+      categoryKey: 'bench',
+      centerLat: 0,
+      centerLng: 0,
+      radiusMeters: 0,
+      bbox: [48.10, 11.50, 48.12, 11.53],
+      label: 'Benches',
+    );
+    await repo.fillPoiSet(benches, const [
+      PoiResult(
+        lat: 48.11,
+        lng: 11.51,
+        categoryKey: 'bench',
+        osmType: 'node',
+        osmId: 77,
+      ),
+    ]);
+    final benchRetry = await repo.createPoiSet(
+      layerId: _id(ids, 'areaPois'),
+      source: kPoiSourceArea,
+      categoryKey: 'bench',
+      centerLat: 0,
+      centerLng: 0,
+      radiusMeters: 0,
+      bbox: [48.20, 11.60, 48.22, 11.63],
+      label: 'More benches',
+    );
+    await repo.markPoiImportFailed(benchRetry, 'Overpass was busy');
+
     // borders — a named import, one area reshaped by hand (so it is a fork),
     // and the display toggles on. Hidden, to prove that survives too.
     ids['borders'] = await repo.createLayer(
@@ -487,10 +526,11 @@ void main() {
     final before = await snapshot();
     expect(
       before,
-      hasLength(12),
+      hasLength(13),
       reason:
           'one layer of every type, a second subspace and POI layer '
-          '(the shapes planes and transit became), plus three in a folder',
+          '(the shapes planes and transit became), a third POI layer of '
+          'area imports, plus three in a folder',
     );
 
     final after = await reimport(await repo.exportData());
@@ -660,6 +700,29 @@ void main() {
       expect(retry['lastError'], 'Overpass was busy');
     },
   );
+
+  test('an area import comes back as an area, not as stations', () async {
+    final ids = await seedEverything();
+    final data = await repo.exportData(onlyLayerId: _id(ids, 'areaPois'));
+    final objects = data.layers.single.objects;
+    expect(objects, hasLength(2));
+    final filled = objects.firstWhere((o) => o.pending != true);
+    expect(filled.bbox, [48.10, 11.50, 48.12, 11.53]);
+    expect(filled.categoryKey, 'bench');
+    expect(filled.radiusMeters, isNull, reason: 'derived from the box');
+    expect(filled.pointModeMasks, isNull, reason: 'not a station import');
+    expect(filled.modeMask, isNull);
+
+    final after = await reimport(data);
+    final rows = _objRows(after.single);
+    final back = rows.firstWhere((r) => r['label'] == 'Benches');
+    expect(back['source'], kPoiSourceArea);
+    expect(back['bbox'], [48.10, 11.50, 48.12, 11.53]);
+    expect((back['points']! as List), hasLength(1));
+    final retry = rows.firstWhere((r) => r['label'] == 'More benches');
+    expect(retry['source'], kPoiSourceArea);
+    expect(retry['pending'], isTrue);
+  });
 
   test('freehand geometry is not thinned by our own round-trip', () async {
     final ids = await seedEverything();

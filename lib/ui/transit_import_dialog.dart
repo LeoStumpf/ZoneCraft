@@ -22,6 +22,7 @@ import '../data/transit.dart';
 import '../geo/coords.dart';
 import 'hit_test.dart' show geoDistance;
 import 'object_summary.dart' show formatMeters;
+import 'bbox_fields.dart';
 import 'theme.dart';
 
 /// The area to import, and which station types to fetch for it.
@@ -151,10 +152,7 @@ class TransitImportSheet extends StatefulWidget {
 }
 
 class _TransitImportSheetState extends State<TransitImportSheet> {
-  late final TextEditingController _south;
-  late final TextEditingController _west;
-  late final TextEditingController _north;
-  late final TextEditingController _east;
+  late final BboxControllers _box = BboxControllers(widget.initial);
 
   late int _modes;
 
@@ -166,36 +164,16 @@ class _TransitImportSheetState extends State<TransitImportSheet> {
   @override
   void initState() {
     super.initState();
-    String f(double v) => v.toStringAsFixed(5);
-    _south = TextEditingController(text: f(widget.initial.south));
-    _west = TextEditingController(text: f(widget.initial.west));
-    _north = TextEditingController(text: f(widget.initial.north));
-    _east = TextEditingController(text: f(widget.initial.east));
-    for (final c in [_south, _west, _north, _east]) {
-      c.addListener(_boxChanged);
-    }
+    _box.addListener(_boxChanged);
     _modes = recommendedImportModes(_diagonal);
     WidgetsBinding.instance.addPostFrameCallback(
-      (_) => widget.onPreview(_boxOrNull()),
+      (_) => widget.onPreview(_box.box),
     );
-  }
-
-  /// The box as typed, or null while it is not a usable one. Deliberately the
-  /// same "usable" [checkBbox] means by `malformed`/`misordered`, so the map
-  /// stops showing a box exactly when the sheet stops accepting one.
-  LatLngBounds? _boxOrNull() {
-    final s = _v(_south), w = _v(_west), n = _v(_north), e = _v(_east);
-    if (s == null || w == null || n == null || e == null) return null;
-    if (![s, w, n, e].every((v) => v.isFinite)) return null;
-    if (s >= n || w >= e) return null;
-    return LatLngBounds(LatLng(s, w), LatLng(n, e));
   }
 
   @override
   void dispose() {
-    for (final c in [_south, _west, _north, _east]) {
-      c.dispose();
-    }
+    _box.dispose();
     super.dispose();
   }
 
@@ -203,15 +181,13 @@ class _TransitImportSheetState extends State<TransitImportSheet> {
     setState(() {
       if (!_chosen) _modes = recommendedImportModes(_diagonal);
     });
-    widget.onPreview(_boxOrNull());
+    widget.onPreview(_box.box);
   }
-
-  double? _v(TextEditingController c) => parseDecimal(c.text.trim());
 
   /// NaN while the box is unusable — every threshold comparison then reads
   /// false, so nothing is warned about until there is a box to warn about.
   double get _diagonal {
-    final s = _v(_south), w = _v(_west), n = _v(_north), e = _v(_east);
+    final s = _box.s, w = _box.w, n = _box.n, e = _box.e;
     if (s == null || w == null || n == null || e == null) return double.nan;
     if (s >= n || w >= e) return double.nan;
     return bboxDiagonalMeters(s, w, n, e);
@@ -220,7 +196,7 @@ class _TransitImportSheetState extends State<TransitImportSheet> {
   int get _recommended => recommendedImportModes(_diagonal);
 
   BboxVerdict get _verdict =>
-      checkBbox(_v(_south), _v(_west), _v(_north), _v(_east), modeMask: _modes);
+      checkBbox(_box.s, _box.w, _box.n, _box.e, modeMask: _modes);
 
   bool get _canImport =>
       _verdict == BboxVerdict.ok || _verdict == BboxVerdict.warn;
@@ -234,28 +210,11 @@ class _TransitImportSheetState extends State<TransitImportSheet> {
     if (!_canImport) return;
     widget.onDone(
       TransitImportConfig(
-        south: _v(_south)!,
-        west: _v(_west)!,
-        north: _v(_north)!,
-        east: _v(_east)!,
+        south: _box.s!,
+        west: _box.w!,
+        north: _box.n!,
+        east: _box.e!,
         modeMask: _modes,
-      ),
-    );
-  }
-
-  Widget _coord(TextEditingController c, String label, bool isLat) {
-    return Expanded(
-      child: TextFormField(
-        controller: c,
-        keyboardType: const TextInputType.numberWithOptions(
-          decimal: true,
-          signed: true,
-        ),
-        decoration: InputDecoration(
-          labelText: label,
-          isDense: true,
-          errorText: isLat ? validateLat(c.text) : validateLng(c.text),
-        ),
       ),
     );
   }
@@ -295,25 +254,7 @@ class _TransitImportSheetState extends State<TransitImportSheet> {
                     ),
                   ],
                 ),
-                Text('Area', style: theme.textTheme.labelLarge),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    _coord(_south, 'South', true),
-                    const SizedBox(width: 8),
-                    _coord(_north, 'North', true),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    _coord(_west, 'West', false),
-                    const SizedBox(width: 8),
-                    _coord(_east, 'East', false),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                _sizeLine(theme),
+                BboxFields(box: _box),
                 const SizedBox(height: 16),
                 Row(
                   children: [
@@ -391,34 +332,6 @@ class _TransitImportSheetState extends State<TransitImportSheet> {
 
   TextStyle? _warnStyle(ThemeData theme) =>
       theme.textTheme.bodySmall?.copyWith(color: warningColor(context));
-
-  /// The box's own state: unusable numbers, or its size. What that size *costs*
-  /// depends on the ticks, so it is said under them instead ([_modesLine]).
-  Widget _sizeLine(ThemeData theme) {
-    final s = _v(_south), w = _v(_west), n = _v(_north), e = _v(_east);
-    if (s == null ||
-        w == null ||
-        n == null ||
-        e == null ||
-        ![s, w, n, e].every((v) => v.isFinite)) {
-      return Text(
-        'Enter four numbers to define the area.',
-        style: _errStyle(theme),
-      );
-    }
-    if (s >= n || w >= e) {
-      return Text(
-        'South must be below north, and west below east.',
-        style: _errStyle(theme),
-      );
-    }
-    final width = geoDistance.as(LengthUnit.Meter, LatLng(s, w), LatLng(s, e));
-    final height = geoDistance.as(LengthUnit.Meter, LatLng(s, w), LatLng(n, w));
-    return Text(
-      '${formatMeters(width)} × ${formatMeters(height)}',
-      style: theme.textTheme.bodySmall,
-    );
-  }
 
   /// One tick box per type, each carrying what this box size means for it —
   /// the limit is per type, so the reason belongs next to the type.

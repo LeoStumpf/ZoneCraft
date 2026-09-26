@@ -27,9 +27,9 @@ import 'package:zonecraft/ui/poi_import_dialog.dart';
 import 'package:zonecraft/ui/transit_import_dialog.dart';
 
 /// The import sheets exist to answer "how big is that, on the ground?" *before*
-/// the request goes out — a radius used to be a bare number with nothing to
-/// compare it against, and "too much data — pick a smaller radius" arrived only
-/// after the fetch came back.
+/// the request goes out — a POI radius used to be a bare number with nothing
+/// to compare it against, and "too much data — pick a smaller radius" arrived
+/// only after the fetch came back. All three now take a box.
 ///
 /// What the map draws is whatever `onPreview` last reported, so these tests are
 /// about that callback: it must fire with a usable area, and it must report
@@ -46,89 +46,101 @@ void main() {
   }
 
   group('PoiImportSheet', () {
-    testWidgets('previews the default radius as soon as it opens', (t) async {
-      final seen = <double?>[];
-      await pump(
-        t,
-        PoiImportSheet(
-          needsCircleRadius: false,
-          allCategories: false,
-          onPreview: seen.add,
-          onDone: (_) {},
-        ),
-      );
+    // The same box the station and border sheets take: all three imports ask
+    // "which part of the map?" the same way.
+    final initial = LatLngBounds(
+      const LatLng(48.10, 11.50),
+      const LatLng(48.12, 11.53),
+    );
+
+    PoiImportSheet sheet({
+      ValueChanged<LatLngBounds?>? onPreview,
+      ValueChanged<PoiImportConfig?>? onDone,
+      bool circles = false,
+    }) => PoiImportSheet(
+      initial: initial,
+      needsCircleRadius: circles,
+      allCategories: false,
+      onPreview: onPreview ?? (_) {},
+      onDone: onDone ?? (_) {},
+    );
+
+    // The sheet caps itself at half the screen and scrolls the rest.
+    Future<void> tapButton(WidgetTester t, Finder f) async {
+      await t.ensureVisible(f);
+      await t.pump();
+      await t.tap(f);
+    }
+
+    testWidgets('previews its starting box as soon as it opens', (t) async {
+      final seen = <LatLngBounds?>[];
+      await pump(t, sheet(onPreview: seen.add));
       await t.pump(); // the post-frame callback
-      expect(seen, isNotEmpty);
-      expect(seen.last, 1000, reason: 'the ring is up before the first edit');
+      expect(seen.last?.south, closeTo(48.10, 1e-4));
+      expect(seen.last?.east, closeTo(11.53, 1e-4));
     });
 
-    testWidgets('reports every typed radius, and null when unusable', (
-      t,
-    ) async {
-      final seen = <double?>[];
-      await pump(
-        t,
-        PoiImportSheet(
-          needsCircleRadius: false,
-          allCategories: false,
-          onPreview: seen.add,
-          onDone: (_) {},
-        ),
-      );
-      final field = find.widgetWithText(TextFormField, 'Search radius (m)');
+    testWidgets('reports every edit, and null when unusable', (t) async {
+      final seen = <LatLngBounds?>[];
+      await pump(t, sheet(onPreview: seen.add));
+      final north = find.widgetWithText(TextFormField, 'North');
 
-      await t.enterText(field, '2500');
-      expect(seen.last, 2500);
+      await t.enterText(north, '48.15');
+      expect(seen.last?.north, closeTo(48.15, 1e-9));
 
-      // Past the Overpass ceiling the ring comes down rather than drawing an
-      // area that will be refused.
-      await t.enterText(field, '90000');
+      // South above north: the box comes down rather than drawing an area
+      // that will be refused.
+      await t.enterText(north, '48.00');
       expect(seen.last, isNull);
 
-      await t.enterText(field, '');
+      await t.enterText(north, '');
       expect(seen.last, isNull);
     });
 
-    // The validator has always used `parseDecimal`; submit used `double.parse`,
-    // so in a comma-decimal locale a *valid* entry threw on Import.
-    testWidgets('accepts a comma decimal, the way the validator promises', (
-      t,
-    ) async {
+    testWidgets('a box too large to import cannot be imported', (t) async {
       PoiImportConfig? got;
-      await pump(
-        t,
-        PoiImportSheet(
-          needsCircleRadius: false,
-          allCategories: false,
-          onPreview: (_) {},
-          onDone: (c) => got = c,
-        ),
-      );
-      await t.enterText(
-        find.widgetWithText(TextFormField, 'Search radius (m)'),
-        '1500,5',
-      );
-      await t.tap(find.widgetWithText(FilledButton, 'Import'));
+      await pump(t, sheet(onDone: (c) => got = c));
+      // ~55 km corner to corner: past the 50 km ceiling.
+      await t.enterText(find.widgetWithText(TextFormField, 'North'), '48.60');
+      await t.pump();
+      expect(find.textContaining('too large'), findsOneWidget);
+      await tapButton(t, find.widgetWithText(FilledButton, 'Import'));
+      await t.pump();
+      expect(got, isNull);
+    });
+
+    // In a comma-decimal locale the keyboard types "48,15"; the fields go
+    // through `parseDecimal`, never `double.parse`.
+    testWidgets('accepts a comma decimal and hands back the box', (t) async {
+      PoiImportConfig? got;
+      await pump(t, sheet(onDone: (c) => got = c));
+      await t.enterText(find.widgetWithText(TextFormField, 'North'), '48,15');
+      await tapButton(t, find.widgetWithText(FilledButton, 'Import'));
       await t.pump();
 
       expect(got, isNotNull);
-      expect(got!.searchRadiusMeters, 1500.5);
+      expect(got!.box.north, closeTo(48.15, 1e-9));
+      expect(got!.box.west, closeTo(11.50, 1e-9));
+      expect(got!.circleRadiusMeters, isNull);
     });
 
     testWidgets('cancelling answers exactly once, with null', (t) async {
       final answers = <PoiImportConfig?>[];
-      await pump(
-        t,
-        PoiImportSheet(
-          needsCircleRadius: false,
-          allCategories: false,
-          onPreview: (_) {},
-          onDone: answers.add,
-        ),
-      );
-      await t.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await pump(t, sheet(onDone: answers.add));
+      await tapButton(t, find.widgetWithText(TextButton, 'Cancel'));
       await t.pump();
       expect(answers, [null]);
+    });
+  });
+
+  group('checkPoiBbox', () {
+    test('sizes a box against the 50 km ceiling', () {
+      expect(checkPoiBbox(48.10, 11.50, 48.12, 11.53), PoiBboxVerdict.ok);
+      // ~30 km across: allowed, with a warning.
+      expect(checkPoiBbox(48.0, 11.4, 48.2, 11.7), PoiBboxVerdict.warn);
+      expect(checkPoiBbox(48.0, 11.0, 48.5, 11.5), PoiBboxVerdict.tooLarge);
+      expect(checkPoiBbox(48.2, 11.5, 48.1, 11.6), PoiBboxVerdict.misordered);
+      expect(checkPoiBbox(null, 11.5, 48.1, 11.6), PoiBboxVerdict.malformed);
     });
   });
 

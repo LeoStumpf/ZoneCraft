@@ -299,6 +299,64 @@ void main() {
     expect(rows.single.ref.kind, ObjectKind.poiSet);
   });
 
+  test('an area import row says its box, and fits to it', () async {
+    final layerId = await repo.createLayer(
+      name: 'POI',
+      colorArgb: 0xFF123456,
+      type: 'poi',
+    );
+    final id = await repo.createPoiSet(
+      layerId: layerId,
+      source: kPoiSourceArea,
+      categoryKey: 'bench',
+      centerLat: 0,
+      centerLng: 0,
+      radiusMeters: 0,
+      bbox: [48.0, 11.0, 48.01, 11.02],
+      label: 'Benches',
+    );
+    await repo.fillPoiSet(id, [
+      PoiResult(lat: 48.005, lng: 11.01, categoryKey: 'bench', name: 'A'),
+    ]);
+    final set = await (db.select(
+      db.poiSets,
+    )..where((s) => s.id.equals(id))).getSingle();
+    // The centre and covering radius come from the box, whatever was passed.
+    expect(set.centerLat, closeTo(48.005, 1e-9));
+    expect(set.centerLng, closeTo(11.01, 1e-9));
+    expect(set.radiusMeters, greaterThan(0));
+
+    final row = summariseLayer(
+      await layerById(layerId),
+      poiSets: [set],
+      poiPoints: await db.select(db.poiPoints).get(),
+    ).single;
+    expect(row.subtitle, '1 POI · 1.49 km × 1.11 km');
+    expect(row.fitPoints, [
+      const LatLng(48.0, 11.0),
+      const LatLng(48.01, 11.02),
+    ]);
+  });
+
+  test('an area import needs its box, and only boxed kinds take one', () async {
+    final layerId = await repo.createLayer(
+      name: 'POI',
+      colorArgb: 0xFF123456,
+      type: 'poi',
+    );
+    Future<String> make(String source, List<double>? bbox) => repo.createPoiSet(
+      layerId: layerId,
+      source: source,
+      categoryKey: 'bench',
+      centerLat: 48,
+      centerLng: 11,
+      radiusMeters: 100,
+      bbox: bbox,
+    );
+    expect(make(kPoiSourceArea, null), throwsArgumentError);
+    expect(make(kPoiSourceRadius, [48, 11, 48.1, 11.1]), throwsArgumentError);
+  });
+
   test('updatePoiSet renames a set and clears the name with null', () async {
     final layerId = await repo.createLayer(
       name: 'POI',

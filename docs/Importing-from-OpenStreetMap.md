@@ -10,6 +10,10 @@ import shares three rules:
   service, and requests are paced to about one per second. A failed import is kept as a
   **retry row** at the top of the layer's Elements list, with the error and a **Try again**
   button — nothing is silently dropped.
+- **Every import covers a box.** Places, stations and borders all ask the same way: tap two
+  opposite corners (or tap one and press **Done** for a box reaching the map centre), or
+  press **Visible map** in the banner to take whatever is on screen. The box is drawn on the
+  map, and its four edges stay editable in the import sheet until you press Import.
 - **You see it before you keep it.** A file or feature import is held in front of the map —
   *is this the right file, and is that the right place?* — and asks **Keep / Discard**
   before anything is written.
@@ -18,10 +22,11 @@ import shares three rules:
 
 A **Places layer** holds three kinds of set, any number of each:
 
-### Places of one kind, around a point
+### Places of one kind, in a box
 
-**Import what is nearby → Import nearby POIs…** asks for a category and a radius, then the
-next tap on the map is the centre. Categories (from OpenStreetMap's tags): benches, post
+**Import POIs…** (or the import button → **POIs in an area**) asks for the box, then for a
+category — the box stays drawn and editable while you choose. It can be up to 50 km corner
+to corner; past 25 km the sheet warns that a busy category stops at 400 places. Categories (from OpenStreetMap's tags): benches, post
 boxes, drinking water, toilets, waste baskets, cafés, restaurants, pharmacies, libraries,
 aquariums, zoos, golf courses, foreign consulates, transit stations, hospitals, movie
 theatres.
@@ -32,8 +37,7 @@ skips what the layer already holds.
 
 ### Public-transport stations in a box
 
-**Import transit stations…** fetches every station inside a box you tap out (two corners,
-or Done for a box around the centre), with which **modes** serve each one — bus, tram,
+**Import transit stations…** fetches every station inside a box you tap out, with which **modes** serve each one — bus, tram,
 subway, light rail, train, monorail, ferry. A station's icon is the most significant mode
 that stops there.
 

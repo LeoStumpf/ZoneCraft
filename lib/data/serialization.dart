@@ -352,7 +352,14 @@ class ExportData {
 /// returned for the points that have since been changed. All three are
 /// written only when a set holds at least one such point, so a file from a map
 /// where nothing was corrected is exactly what v4 wrote.
-const int geoJsonSchemaVersion = 5;
+///
+/// v6 adds the **area** POI set: a category import over a box, written as a
+/// `poi` with a `bbox` and no `radiusMeters`, told from a station import by
+/// its `categoryKey` (a station import's is always `transit_station`). No key
+/// is new, so a v5 reader still opens the file — it files such a set as a
+/// station import holding untyped stations, which shows its points under "No
+/// type given" rather than losing them.
+const int geoJsonSchemaVersion = 6;
 
 /// Serialises [data] to a pretty-printed GeoJSON `FeatureCollection`. Each object
 /// becomes a `Feature`; layer attributes ride in a non-standard top-level

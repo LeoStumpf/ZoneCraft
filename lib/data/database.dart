@@ -480,12 +480,18 @@ class HeightPolygonPoints extends Table {
 const kPoiSourceManual = 'manual';
 const kPoiSourceRadius = 'radius';
 const kPoiSourceBox = 'box';
+const kPoiSourceArea = 'area';
 
-/// One set of markers on a `poi` layer. Three kinds share the table, told
+/// One set of markers on a `poi` layer. Four kinds share the table, told
 /// apart by [source]:
 ///
-/// * **radius** — an OSM category fetched once (Overpass) within a bounded
-///   circle (centre + radius) and stored offline; the layer never refetches.
+/// * **area** — an OSM category fetched once (Overpass) within a chosen
+///   bounding box and stored offline; the layer never refetches. What every
+///   category import is since POI imports picked a box like stations and
+///   borders do — so all three imports choose their ground the same way.
+/// * **radius** — the same, over a bounded circle (centre + radius): what a
+///   category import was before `area`. Nothing creates one any more; the
+///   rows that exist keep working (and retry) exactly as they did.
 /// * **box** — every public-transport **station** in a chosen bounding box
 ///   (v27; formerly the `transit` layer type). Line geometry is deliberately
 ///   **not** stored: fetching route relations with geometry proved
@@ -532,8 +538,8 @@ class PoiSets extends Table {
   /// already meant, now said out loud instead of inferred.
   IntColumn get zOrder => integer().withDefault(const Constant(0))();
 
-  /// Which kind of set this is: [kPoiSourceManual], [kPoiSourceRadius] or
-  /// [kPoiSourceBox] (v27; replaced the v25 `is_manual` flag when station
+  /// Which kind of set this is: [kPoiSourceManual], [kPoiSourceRadius],
+  /// [kPoiSourceBox] or [kPoiSourceArea] (v27; replaced the v25 `is_manual` flag when station
   /// imports joined the table — a bool and a nullable box read together in
   /// eight places is exactly the two-copies rule this app keeps avoiding).
   ///
@@ -542,13 +548,15 @@ class PoiSets extends Table {
   /// already ran and nothing may be added to it by hand. A manual set describes
   /// no query at all — [centerLat]/[centerLng]/[radiusMeters] hold the map
   /// centre and 0 purely because the columns are NOT NULL, and the editor does
-  /// not show them. A box set likewise holds its box's centre and half-diagonal
-  /// there; nothing reads them for a box either.
+  /// not show them. A box or area set likewise holds its box's centre and
+  /// half-diagonal there; nothing reads them for a box either. (`area` needed
+  /// no schema change: this is a text column, and the box columns exist.)
   // A literal, not [kPoiSourceRadius]: the schema dump copies the default
   // expression verbatim into a file that cannot see this library's constants.
   TextColumn get source => text().withDefault(const Constant('radius'))();
 
-  /// **Box sets only.** The imported bounding box; null on the other kinds.
+  /// **Box and area sets only.** The imported bounding box; null on the
+  /// other kinds.
   RealColumn get south => real().nullable()();
   RealColumn get west => real().nullable()();
   RealColumn get north => real().nullable()();

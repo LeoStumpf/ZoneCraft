@@ -15,7 +15,8 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   `poi` (markers — since v31 an imported one can be **corrected by hand**, which flags the
   row as a fork and offers to pass the correction to OSM as a note; in three kinds of **set**
   told apart by `PoiSets.source` — see **POI
-  sets** below: a `radius` category import, a `box` **station** import (the former `transit`
+  sets** below: an `area` category import (a `radius` one before that — legacy, still read and
+  retried), a `box` **station** import (the former `transit`
   type, folded in at v27) and a `manual` hand-made category; rendered as icon markers that
   collapse into count-badge clusters when they'd overlap — no region compositing; the import
   FAB offers both imports),
@@ -35,8 +36,18 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   data. The GeoJSON reader still translates a v1/v2 file's `plane`/`transitstop` kinds and
   `planes`/`transit` layer types (`legacyLayerType`); `track` objects and layers are skipped.
 - **POI sets** (`data/poi_sets.dart`): `PoiSets.source` is the **one** discriminator
-  (`manual` / `radius` / `box`), replacing the v25 `isManual` bool; read it through the
-  `PoiSetKind` extension (`isManual`, `isStationImport`, `isImport`, `isPending`, `bbox`). A
+  (`manual` / `radius` / `box` / `area`), replacing the v25 `isManual` bool; read it through the
+  `PoiSetKind` extension (`isManual`, `isStationImport`, `isAreaImport`, `isImport`,
+  `isPending`, `bbox`). **Every import covers a box** — a category (`area`), stations (`box`)
+  and borders are all armed the same way: two corner taps (`_kPlacePois` / `_kPlaceStations` /
+  `borders`, `_isBoxImport`) or the Add banner's **Visible map**, then a sheet built on the
+  shared `BboxFields` (`ui/bbox_fields.dart`) with the box drawn live. People found a radius
+  for POIs beside a box for stations odd, and the POI query was a box underneath anyway.
+  `area` needed **no schema change** (text column, box columns exist) and is kept apart from
+  `box` because `isStationImport` drives the mode filter — a bench import must never be
+  filtered as stations. `_importBox` takes the armed token **as an argument**, captured before
+  `_exitAddMode` clears `_placeType`. An old `radius` set still shows "within X m" and retries
+  over its circle (`_runCategoryImport(within:)`); nothing creates one. A
   box set stores its bbox, `modeMask` (types **fetched**) and `visibleModeMask` (types
   **shown**), and its points carry `PoiPoints.modeMask`; its NOT NULL centre/radius are
   derived from the box (`boxCoveringRadiusMeters`, used by the repository **and** the
@@ -423,7 +434,7 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   layers (`data/geo_import.dart`). There is **one routine** for both scopes —
   `Repository.exportData({onlyLayerId})` and `importLayerFlow` — so a per-layer file and a
   whole-DB file differ only in how many layers they hold.
-- **The GeoJSON export is a fixed point** (format schema **v5**, `geoJsonSchemaVersion`):
+- **The GeoJSON export is a fixed point** (format schema **v6**, `geoJsonSchemaVersion`):
   `export → import → export` must be byte-identical, and `test/export_roundtrip_test.dart`
   asserts exactly that against real rows for all seven types, alongside a whole-DB and a
   per-layer round-trip. **Anything the DB stores and the UI shows has to survive the trip** —
@@ -433,9 +444,11 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   station import keeps its box, masks and per-point modes (a box set writes **no**
   `radiusMeters` — it is derived), a border area keeps its import's `setLabel`, and a failed
   import comes back as its retry row, and a layer in a folder comes back in it. Format is
-  **v5** (`geoJsonSchemaVersion`): a layer names its folder and the folders ride in
+  **v6** (`geoJsonSchemaVersion`); since v4 a layer names its folder and the folders ride in
   `zonecraft.folders`, both written only when there are folders — so a file from a map without
-  them is what v3 wrote. **v5** adds `pointOrigLat`/`pointOrigLng`/`pointOrigNames`: what OSM
+  them is what v3 wrote. **v6** carries the `area` POI set: a `poi` with a `bbox` whose
+  `categoryKey` is not `transit_station` — how the reader tells it from a station import, so
+  no new key. **v5** adds `pointOrigLat`/`pointOrigLng`/`pointOrigNames`: what OSM
   returned for a POI somebody has since corrected by hand, written only when a set holds one,
   so an untouched import still exports exactly what v4 wrote. The *flag* travels, not the
   timestamp — and it has to, because the row keeps its `osmId`, so a file whose corrections
@@ -657,7 +670,7 @@ clear-all, offline cache, import/export), opt-in locate-me (the app's only use o
 persisted camera, offline resilience (cache-first tiles; **no** prefetch on the community OSM
 servers — see `data/tile_source.dart`), and import/export
 (whole-DB + per-layer + external GeoJSON/KML/KMZ/GPX; freeline imports prompt for their
-inclusion-circle radius). Drift schema is **v31**, GeoJSON format **v5**.
+inclusion-circle radius). Drift schema is **v31**, GeoJSON format **v6**.
 
 `planning/PLAN.md` has no open roadmap items; future polish ideas are listed there.
 `planning/PRODUCTION_AUDIT.md` records the production-readiness pass (what was found, what

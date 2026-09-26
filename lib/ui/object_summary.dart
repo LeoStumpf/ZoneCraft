@@ -677,6 +677,15 @@ const List<String> _months = [
 
 String _shortDate(DateTime d) => '${d.day} ${_months[d.month - 1]}';
 
+/// "2.4 km × 3.1 km" — the size of an imported box (`[south, west, north,
+/// east]`), as a station or area import's row and editor print it.
+String bboxSizeText(List<double> box) {
+  final sw = LatLng(box[0], box[1]);
+  final width = geoDistance.as(LengthUnit.Meter, sw, LatLng(box[0], box[3]));
+  final height = geoDistance.as(LengthUnit.Meter, sw, LatLng(box[2], box[1]));
+  return '${formatMeters(width)} × ${formatMeters(height)}';
+}
+
 ObjectSummary _poiSetSummary(
   PoiSet s,
   String layerId,
@@ -691,9 +700,7 @@ ObjectSummary _poiSetSummary(
     final box = s.bbox!;
     final sw = LatLng(box[0], box[1]);
     final ne = LatLng(box[2], box[3]);
-    final width = geoDistance.as(LengthUnit.Meter, sw, LatLng(box[0], box[3]));
-    final height = geoDistance.as(LengthUnit.Meter, sw, LatLng(box[2], box[1]));
-    final size = '${formatMeters(width)} × ${formatMeters(height)}';
+    final size = bboxSizeText(box);
     // Which types were asked for is part of what this row *is*: a set
     // holding only trains looks identical to a failed bus import otherwise.
     final partial = s.modeMask & transitAllModesMask != transitAllModesMask;
@@ -723,18 +730,18 @@ ObjectSummary _poiSetSummary(
     );
   }
 
+  // An area import says its box; an old radius import its circle.
+  final box = s.bbox;
+  final extent = box != null
+      ? bboxSizeText(box)
+      : 'within ${formatMeters(s.radiusMeters)}';
   final String subtitle;
   if (s.isManual) {
     subtitle = '${_plural(count, 'POI')} · placed by hand';
   } else if (s.isPending) {
-    subtitle = [
-      ?s.lastError,
-      'within ${formatMeters(s.radiusMeters)}',
-      'tap to try again',
-    ].join(' · ');
+    subtitle = [?s.lastError, extent, 'tap to try again'].join(' · ');
   } else {
-    subtitle =
-        '${_plural(count, 'POI')} · within ${formatMeters(s.radiusMeters)}';
+    subtitle = '${_plural(count, 'POI')} · $extent';
   }
   return ObjectSummary(
     ref: ref,
@@ -745,7 +752,9 @@ ObjectSummary _poiSetSummary(
         : _titleOr(s.label, 'POI set', index),
     subtitle: subtitle,
     center: center,
-    fitPoints: s.isManual && count == 0
+    fitPoints: box != null
+        ? [LatLng(box[0], box[1]), LatLng(box[2], box[3])]
+        : s.isManual && count == 0
         ? [center]
         : _ringAround(center, s.radiusMeters),
     sortName: _sortName(s.label),

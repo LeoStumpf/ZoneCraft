@@ -14,70 +14,94 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 
 import '../data/overpass.dart';
 import '../geo/coords.dart';
-import 'editor_sheet.dart' show scaledPx;
+import 'bbox_fields.dart';
+import 'object_summary.dart' show formatMeters;
+import 'theme.dart';
+import 'transit_import_dialog.dart' show bboxDiagonalMeters;
 
-/// The user's choices from the POI import dialog.
+/// The user's choices from the POI import sheet.
 class PoiImportConfig {
   const PoiImportConfig({
     required this.category,
-    required this.searchRadiusMeters,
+    required this.box,
     this.circleRadiusMeters,
   });
 
   /// Which POI category to fetch.
   final PoiCategory category;
 
-  /// How far from the map centre to pull POIs.
-  final double searchRadiusMeters;
+  /// The area to fetch it in.
+  final LatLngBounds box;
 
   /// For circle layers: the radius of each created circle. Null otherwise.
   final double? circleRadiusMeters;
 }
 
-/// The smallest and largest search radius the dialog offers, in metres.
-///
-/// The ceiling is Overpass's practical limit for this query, not a UI choice —
-/// it is the same 25 km the validator has always enforced, now also the end of
-/// the slider so the refusal is visible before the request rather than after
-/// it.
-const double kMinPoiSearchRadius = 100;
-const double kMaxPoiSearchRadius = 25000;
+/// The widest box a POI import accepts, corner to corner, and where it starts
+/// warning. 50 km is the span the old 25 km search radius covered, so nothing
+/// that used to be importable stopped being so when the circle became a box.
+const double kMaxPoiBoxDiagonal = 50000;
+const double kWarnPoiBoxDiagonal = 25000;
 
-/// Asks for a POI category + search radius (and, when [needsCircleRadius], a
+/// Whether a box is usable for a POI import, and small enough.
+enum PoiBboxVerdict { ok, warn, tooLarge, malformed, misordered }
+
+/// The verdict for a POI import over this box — the same shape as the station
+/// and border checks, so the three sheets refuse the same way.
+PoiBboxVerdict checkPoiBbox(
+  double? south,
+  double? west,
+  double? north,
+  double? east,
+) {
+  if (south == null || west == null || north == null || east == null) {
+    return PoiBboxVerdict.malformed;
+  }
+  if (![south, west, north, east].every((v) => v.isFinite)) {
+    return PoiBboxVerdict.malformed;
+  }
+  if (south >= north || west >= east) return PoiBboxVerdict.misordered;
+  final d = bboxDiagonalMeters(south, west, north, east);
+  if (!d.isFinite) return PoiBboxVerdict.malformed;
+  if (d > kMaxPoiBoxDiagonal) return PoiBboxVerdict.tooLarge;
+  if (d > kWarnPoiBoxDiagonal) return PoiBboxVerdict.warn;
+  return PoiBboxVerdict.ok;
+}
+
+/// Asks for a POI category over a box (and, when [needsCircleRadius], a
 /// per-circle radius). [allCategories] offers the full catalogue (POI layers
 /// show unnamed street furniture just fine); by default only the seedable
 /// named-place categories are listed.
 ///
-/// Lives in a **bottom sheet over the live map**, not a dialog, because the
-/// number being typed here is a distance on the ground: [onPreview] reports
-/// every change so the caller can draw the ring that is about to be searched.
-/// A radius used to be a bare text field defaulting to 1000 with nothing on
-/// screen to compare it against, and "too much data — pick a smaller radius"
-/// arrived only after the request came back.
+/// A **box**, like the station and border imports, because all three answer
+/// the same question — "which part of the map?" — and asking it three ways
+/// was the thing people found odd. It used to be a radius around the map
+/// centre; the query was a box underneath all along, trimmed to a circle on
+/// the phone.
+///
+/// Lives in a **bottom sheet over the live map**: [onPreview] reports the box
+/// on every edit (null while unusable) so the caller can draw it.
 ///
 /// Calls [onDone] exactly once — with the config, or null when cancelled.
 class PoiImportSheet extends StatefulWidget {
   const PoiImportSheet({
     super.key,
+    required this.initial,
     required this.needsCircleRadius,
     required this.allCategories,
     required this.onPreview,
     required this.onDone,
   });
 
+  final LatLngBounds initial;
   final bool needsCircleRadius;
   final bool allCategories;
-
-  /// The search radius in metres as it currently stands, or null while the
-  /// field holds something unusable. Called on every edit.
-  final ValueChanged<double?> onPreview;
-
+  final ValueChanged<LatLngBounds?> onPreview;
   final ValueChanged<PoiImportConfig?> onDone;
 
   @override
@@ -88,67 +112,36 @@ class _PoiImportSheetState extends State<PoiImportSheet> {
   final _formKey = GlobalKey<FormState>();
   late List<PoiCategory> _choices;
   late PoiCategory _category;
+  late final BboxControllers _box = BboxControllers(widget.initial);
+  final _circleRadius = TextEditingController(text: '100');
 
   @override
   void initState() {
     super.initState();
     _choices = widget.allCategories ? poiCategories : seedablePoiCategories;
     _category = _choices.first;
-    // Draw the default straight away: the sheet opening is itself an answer to
-    // "how far is 1000 m from here".
+    _box.addListener(_boxChanged);
     WidgetsBinding.instance.addPostFrameCallback(
-      (_) => widget.onPreview(_radiusOrNull()),
+      (_) => widget.onPreview(_box.box),
     );
   }
-
-  /// The search radius as typed, or null if it is not a usable number.
-  ///
-  /// Goes through [parseDecimal], never `double.parse`: in a comma-decimal
-  /// locale "1,5" is what the keyboard produces, and the old code validated
-  /// with one and parsed with the other — so a valid entry could throw on
-  /// submit.
-  double? _radiusOrNull() {
-    final n = parseDecimal(_searchRadius.text.trim());
-    if (n == null || !n.isFinite || n <= 0 || n > kMaxPoiSearchRadius) {
-      return null;
-    }
-    return n;
-  }
-
-  void _onRadiusTyped(String _) {
-    setState(() {});
-    widget.onPreview(_radiusOrNull());
-  }
-
-  /// The slider is logarithmic: the interesting range spans two and a half
-  /// decades, and a linear one would spend nine tenths of its travel between
-  /// 3 km and 25 km while the 100 m–1 km end — where most imports live — sat
-  /// in the first few pixels.
-  static double _toSlider(double m) =>
-      (math.log(m.clamp(kMinPoiSearchRadius, kMaxPoiSearchRadius)) -
-          math.log(kMinPoiSearchRadius)) /
-      (math.log(kMaxPoiSearchRadius) - math.log(kMinPoiSearchRadius));
-
-  static double _fromSlider(double t) {
-    final v = math.exp(
-      math.log(kMinPoiSearchRadius) +
-          t * (math.log(kMaxPoiSearchRadius) - math.log(kMinPoiSearchRadius)),
-    );
-    // Round to something a person would have typed, so the field does not
-    // fill with 1473.9182.
-    if (v < 1000) return (v / 10).round() * 10;
-    return (v / 100).round() * 100;
-  }
-
-  final _searchRadius = TextEditingController(text: '1000');
-  final _circleRadius = TextEditingController(text: '100');
 
   @override
   void dispose() {
-    _searchRadius.dispose();
+    _box.dispose();
     _circleRadius.dispose();
     super.dispose();
   }
+
+  void _boxChanged() {
+    setState(() {});
+    widget.onPreview(_box.box);
+  }
+
+  PoiBboxVerdict get _verdict => checkPoiBbox(_box.s, _box.w, _box.n, _box.e);
+
+  bool get _canImport =>
+      _verdict == PoiBboxVerdict.ok || _verdict == PoiBboxVerdict.warn;
 
   String? _validateMeters(String? v, {required double max}) {
     final n = parseDecimal((v ?? '').trim());
@@ -158,16 +151,17 @@ class _PoiImportSheetState extends State<PoiImportSheet> {
   }
 
   void _submit() {
+    final box = _box.box;
+    if (!_canImport || box == null) return;
     if (!_formKey.currentState!.validate()) return;
-    final search = parseDecimal(_searchRadius.text.trim());
+    // The validator accepted it through `parseDecimal`; re-reading it the same
+    // way is what keeps that promise true in a comma-decimal locale.
     final circle = parseDecimal(_circleRadius.text.trim());
-    // The validator already accepted both through `parseDecimal`; re-reading
-    // them the same way is what keeps that promise true.
-    if (search == null || (widget.needsCircleRadius && circle == null)) return;
+    if (widget.needsCircleRadius && circle == null) return;
     widget.onDone(
       PoiImportConfig(
         category: _category,
-        searchRadiusMeters: search,
+        box: box,
         circleRadiusMeters: widget.needsCircleRadius ? circle : null,
       ),
     );
@@ -175,16 +169,15 @@ class _PoiImportSheetState extends State<PoiImportSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final radius = _radiusOrNull();
+    final theme = Theme.of(context);
     return Material(
-      color: scheme.surface,
+      color: theme.colorScheme.surface,
       elevation: 8,
       child: SafeArea(
         top: false,
         child: ConstrainedBox(
           // Half the viewport at most: the other half is the point — it is
-          // where the ring being described is drawn.
+          // where the box being described is drawn.
           constraints: BoxConstraints(
             maxHeight: MediaQuery.of(context).size.height * 0.5,
           ),
@@ -200,8 +193,8 @@ class _PoiImportSheetState extends State<PoiImportSheet> {
                     children: [
                       Expanded(
                         child: Text(
-                          'Import nearby POIs',
-                          style: Theme.of(context).textTheme.titleMedium,
+                          'Import POIs',
+                          style: theme.textTheme.titleMedium,
                         ),
                       ),
                       IconButton(
@@ -221,43 +214,10 @@ class _PoiImportSheetState extends State<PoiImportSheet> {
                     onChanged: (c) =>
                         setState(() => _category = c ?? _category),
                   ),
-                  const SizedBox(height: 8),
-                  // Field and slider drive the same value from both ends: type
-                  // an exact number, or drag until the ring on the map looks
-                  // right. Neither is authoritative — the text is.
-                  Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 12,
-                    children: [
-                      SizedBox(
-                        width: scaledPx(context, 140),
-                        child: TextFormField(
-                          controller: _searchRadius,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Search radius (m)',
-                            isDense: true,
-                          ),
-                          onChanged: _onRadiusTyped,
-                          validator: (v) =>
-                              _validateMeters(v, max: kMaxPoiSearchRadius),
-                        ),
-                      ),
-                      Text(
-                        radius == null
-                            ? 'Drag or type a radius'
-                            : 'The ring on the map is what will be searched',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                  Slider(
-                    value: _toSlider(radius ?? kMinPoiSearchRadius),
-                    onChanged: (t) {
-                      _searchRadius.text = _fromSlider(t).round().toString();
-                      _onRadiusTyped(_searchRadius.text);
-                    },
-                  ),
+                  const SizedBox(height: 12),
+                  BboxFields(box: _box),
+                  const SizedBox(height: 4),
+                  _costLine(theme),
                   if (widget.needsCircleRadius) ...[
                     const SizedBox(height: 8),
                     TextFormField(
@@ -281,7 +241,7 @@ class _PoiImportSheetState extends State<PoiImportSheet> {
                       ),
                       const SizedBox(width: 8),
                       FilledButton(
-                        onPressed: radius == null ? null : _submit,
+                        onPressed: _canImport ? _submit : null,
                         child: const Text('Import'),
                       ),
                     ],
@@ -293,5 +253,37 @@ class _PoiImportSheetState extends State<PoiImportSheet> {
         ),
       ),
     );
+  }
+
+  /// What this box costs — always naming the limit, so "too large" says what
+  /// it is too large *for*.
+  Widget _costLine(ThemeData theme) {
+    switch (_verdict) {
+      case PoiBboxVerdict.tooLarge:
+        return Text(
+          'This area is too large — at most '
+          '${formatMeters(kMaxPoiBoxDiagonal)} across. Pick a smaller one.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.error,
+            fontWeight: FontWeight.w500,
+          ),
+        );
+      case PoiBboxVerdict.warn:
+        return Text(
+          'A big area — this may take a minute, and a busy category stops at '
+          '$overpassResultCap places. A smaller area is quicker.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: warningColor(context),
+          ),
+        );
+      case PoiBboxVerdict.ok:
+        return Text(
+          'The box on the map is what will be searched.',
+          style: theme.textTheme.bodySmall,
+        );
+      case PoiBboxVerdict.malformed:
+      case PoiBboxVerdict.misordered:
+        return const SizedBox.shrink();
+    }
   }
 }
