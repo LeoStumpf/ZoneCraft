@@ -283,10 +283,11 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   screen is underneath the FAB row and the system navigation bar — the credit was there and
   invisible, and it also starts collapsed behind an (i). ODbL attribution is the one
   obligation here that is a licence term rather than an acceptable-use courtesy, so it is a
-  permanently visible bottom-left pill (padded 72 to clear the FAB row) whose tap opens
-  `_showCredits` — OpenStreetMap plus the terrain sources Tilezen's list requires be named.
+  permanently visible bottom-left pill whose tap opens `_showCredits` — OpenStreetMap plus the terrain sources Tilezen's list requires be named.
   The pill prints the tile source's own line verbatim: it already carries its `©`, and a
-  keyed provider's names two parties.
+  keyed provider's names two parties. It lives in the Scaffold's `bottomNavigationBar` slot
+  (`extendBody: true`), **under** the FAB row: the Scaffold lifts the FABs by the pill's real
+  height, one line or two, where a fixed padding in the body Stack floated it above them.
 - **Redirecting the tiles does not grant prefetching.** `TILE_URL` and
   `TILE_ALLOWS_PREFETCH` are separate defines because leaving `tile.openstreetmap.org` says
   nothing about the next provider's terms — MapTiler forbids "batch or excessive bulk

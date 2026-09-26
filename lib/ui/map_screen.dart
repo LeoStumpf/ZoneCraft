@@ -4746,6 +4746,32 @@ class _MapScreenState extends ConsumerState<MapScreen>
     return Scaffold(
       key: _scaffoldKey,
       drawer: const LayersDrawer(),
+      // The map runs on under the credit below: the slot is only there to
+      // lift the FAB row, not to take a strip of the screen.
+      extendBody: true,
+      // The licence credit, bottom-left and under the button row. Not in the
+      // body Stack: there it had to be padded up past the FAB row and floated
+      // *above* the buttons, and not bottom-right, where flutter_map puts its
+      // own and where the FAB row and system bar made it invisible — the one
+      // thing ODbL attribution cannot be. In this slot the Scaffold places the
+      // FABs on top of it at whatever height the credit wraps to. Gone while a
+      // sheet is up, like the FABs, or every editor would be pushed up by it.
+      bottomNavigationBar: settings == null || bottomSheet != null
+          ? null
+          : SafeArea(
+              top: false,
+              child: Align(
+                alignment: Alignment.bottomLeft,
+                heightFactor: 1,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+                  child: _MapAttribution(
+                    text: _tiles.attribution,
+                    onTap: () => _showCredits(context, _tiles),
+                  ),
+                ),
+              ),
+            ),
       // No app bar: the map is full-bleed and the only chrome is the menu
       // button floating at the top-left (below).
       body: settings == null
@@ -5551,28 +5577,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           ),
                         ],
                       ],
-                    ),
-                  ),
-                ),
-                // The licence credit. Bottom-left and always on screen: the
-                // bottom-right corner, where flutter_map's own attribution
-                // control puts itself, is where this screen's FAB row and the
-                // system navigation bar are — so the credit rendered there was
-                // simply invisible, which is the one thing ODbL attribution
-                // cannot be. The padding clears the FAB row.
-                SafeArea(
-                  child: Align(
-                    alignment: Alignment.bottomLeft,
-                    child: Padding(
-                      padding: const EdgeInsets.only(
-                        left: 8,
-                        right: 8,
-                        bottom: 72,
-                      ),
-                      child: _MapAttribution(
-                        text: _tiles.attribution,
-                        onTap: () => _showCredits(context, _tiles),
-                      ),
                     ),
                   ),
                 ),
