@@ -5959,6 +5959,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
       // Read from the sheet itself rather than from a second list of the
       // things that raise one: that list forgot the import sheet, and the
       // buttons landed on top of the form asking for the import's corners.
+      // Snug on the credit: the standard location leaves its full 16 dp
+      // margin above a bottom bar, which under a one-line credit read as the
+      // buttons floating loose rather than sitting on the row below them.
+      floatingActionButtonLocation: settings == null
+          ? null
+          : const _FabOverCredit(),
       floatingActionButton: bottomSheet != null
           ? null
           : MapFabColumn(
@@ -6145,6 +6151,34 @@ class _ActiveLayerChip extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// [FloatingActionButtonLocation.endFloat], lowered by [kFabCreditGap] dp so
+/// the button row sits on the credit in the bottom bar.
+///
+/// More than the Scaffold's own 16 dp margin, and still about 5 dp of visible
+/// gap on a Pixel 4a: a small FAB is padded out to a 48 dp tap target, and the
+/// credit carries 4 dp of its own above its translucent pill. Measured on the
+/// device rather than derived — the sum of those paddings looked tighter on
+/// paper than it did on the screen.
+class _FabOverCredit extends StandardFabLocation
+    with FabEndOffsetX, FabFloatOffsetY {
+  const _FabOverCredit();
+
+  static const double kFabCreditGap = 20;
+
+  @override
+  double getOffsetY(
+    ScaffoldPrelayoutGeometry scaffoldGeometry,
+    double adjustment,
+  ) {
+    // Only when the credit is there to sit on: with a snackbar up the
+    // Scaffold is already lifting the buttons clear of it.
+    if (scaffoldGeometry.snackBarSize.height > 0) {
+      return super.getOffsetY(scaffoldGeometry, adjustment);
+    }
+    return super.getOffsetY(scaffoldGeometry, adjustment) + kFabCreditGap;
   }
 }
 
