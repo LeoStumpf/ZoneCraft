@@ -19,7 +19,7 @@ import 'package:flutter/material.dart';
 import '../state/map_mode.dart';
 import 'layer_actions.dart';
 import 'map_controls.dart';
-import 'theme.dart' show MapChrome;
+import 'theme.dart' show MapLabel;
 
 /// The Add button's label for a layer type. A nested ternary got unreadable at
 /// seven types; this is the same mapping as a switch.
@@ -208,9 +208,10 @@ class MapFabColumn extends StatelessWidget {
 
   /// [button] with its one-word [caption] underneath, when captions are on.
   ///
-  /// The word sits on a small chrome pill, so it reads as part of the button
-  /// rather than as another map label, and the slot is a fixed width so a row
-  /// of them lines up whatever the words are.
+  /// The word is haloed like the map's own labels (no box, per the user) and
+  /// sits right under its button with a wide gap to the next, so proximity
+  /// says which button it names; the slot is a fixed width so a row of them
+  /// lines up whatever the words are.
   Widget _captioned(Widget button, String? caption) {
     if (!captions || caption == null) return button;
     return Builder(
@@ -220,24 +221,15 @@ class MapFabColumn extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             button,
-            const SizedBox(height: 3),
-            // On a pill of the chrome's own paper, not haloed onto the map: a
-            // haloed word is exactly what the map's street and POI names look
-            // like, and "Search" read as part of the café label under it.
-            MapChrome(
-              radius: 8,
-              elevation: 1,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                child: Text(
-                  caption,
-                  maxLines: 1,
-                  overflow: TextOverflow.fade,
-                  softWrap: false,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
-                ),
+            // Tight under its own button and well clear of the next one:
+            // with the gap above and below about equal, a caption could as
+            // well belong to the button beneath it.
+            Transform.translate(
+              offset: const Offset(0, -2),
+              child: MapLabel(
+                caption,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ],
@@ -285,7 +277,7 @@ class MapFabColumn extends StatelessWidget {
               ),
               _cap(MapControlId.download),
             ),
-            SizedBox(height: captions ? 6 : 12),
+            SizedBox(height: captions ? 14 : 12),
           ],
           // First in the column, because on a fresh install it is
           // the only button that can get you to your own town: the
@@ -299,7 +291,7 @@ class MapFabColumn extends StatelessWidget {
             ),
             _cap(MapControlId.goToPlace),
           ),
-          SizedBox(height: captions ? 6 : 12),
+          SizedBox(height: captions ? 14 : 12),
           // (The compass lives on the map itself, top-right, and only
           // while the map is rotated — see the map chrome above.)
           // A toggle, lit while the marker is up, in the shape the
@@ -331,7 +323,7 @@ class MapFabColumn extends StatelessWidget {
             ),
             _cap(MapControlId.locate),
           ),
-          SizedBox(height: captions ? 6 : 12),
+          SizedBox(height: captions ? 14 : 12),
           // Next to Locate on purpose: both answer "where am I", one
           // for you and one for the person you are meeting. Any
           // *other* place is shared by long-pressing it.
@@ -350,7 +342,7 @@ class MapFabColumn extends StatelessWidget {
             ),
             _cap(MapControlId.share),
           ),
-          SizedBox(height: captions ? 6 : 12),
+          SizedBox(height: captions ? 14 : 12),
           _captioned(
             FloatingActionButton.small(
               heroTag: 'probe',
@@ -366,7 +358,7 @@ class MapFabColumn extends StatelessWidget {
             ),
             _cap(MapControlId.elevation),
           ),
-          SizedBox(height: captions ? 6 : 12),
+          SizedBox(height: captions ? 14 : 12),
           _captioned(
             FloatingActionButton.small(
               heroTag: 'distance',
@@ -382,7 +374,7 @@ class MapFabColumn extends StatelessWidget {
             ),
             _cap(MapControlId.distance),
           ),
-          SizedBox(height: captions ? 6 : 12),
+          SizedBox(height: captions ? 14 : 12),
         ],
         // Bottom row, left to right: Edit, the per-type quick toggle,
         // up to two import buttons, Add, and finally the tools toggle.
