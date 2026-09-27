@@ -69,9 +69,31 @@ SYSTEM_IMAGE="system-images;android-34;google_apis;x86_64"
 die() { echo "ERROR: $*" >&2; exit 1; }
 note() { echo "==> $*"; }
 
-# The serial of the running emulator, or empty.
+# The port the screenshot AVDs boot on. Not 5554: that is where the shared
+# `zc` AVD — used by other projects and other sessions — lives.
+SHOT_PORT=5580
+
+# The serial of the running emulator for [avd], or empty.
+#
+# By AVD name, never "the first emulator": `adb devices` also lists the shared
+# `zc` AVD, and picking that up meant uninstalling the app there, switching its
+# animations off and freezing its status bar — under someone else's session —
+# while shooting at 1080x2340, the one size Play rejects.
 emu_serial() {
-  "$ADB" devices | awk '/^emulator-/ {print $1; exit}'
+  local want="$1" s
+  for s in $("$ADB" devices | awk '/^emulator-/ {print $1}'); do
+    if [ "$("$ADB" -s "$s" emu avd name 2>/dev/null | head -1 | tr -d '\r')" = "$want" ]; then
+      echo "$s"
+      return
+    fi
+  done
+}
+
+# The AVD a saved profile shoots on.
+profile_avd() {
+  local avd _rest
+  read -r avd _rest <<<"$(profile_spec "$1")"
+  echo "$avd"
 }
 
 wait_for_boot() {
@@ -171,18 +193,18 @@ for k, v in want.items():
 open(cfg, 'w').writelines(lines)
 PY
 
-  if [ -z "$(emu_serial)" ]; then
-    note "booting $avd"
-    nohup "$EMULATOR" -avd "$avd" -no-boot-anim -no-snapshot-save \
-      -gpu swiftshader_indirect >/dev/null 2>&1 &
+  if [ -z "$(emu_serial "$avd")" ]; then
+    note "booting $avd on port $SHOT_PORT"
+    nohup "$EMULATOR" -avd "$avd" -port "$SHOT_PORT" -no-boot-anim \
+      -no-snapshot-save -gpu swiftshader_indirect >/dev/null 2>&1 &
   else
-    note "an emulator is already running — reusing it"
+    note "$avd is already running — reusing it"
   fi
-  local serial; serial="$(emu_serial)"
+  local serial; serial="$(emu_serial "$avd")"
   local i=0
   while [ -z "$serial" ]; do
     i=$((i + 1)); [ "$i" -gt 120 ] && die "no emulator appeared"
-    sleep 1; serial="$(emu_serial)"
+    sleep 1; serial="$(emu_serial "$avd")"
   done
   wait_for_boot "$serial"
 
@@ -251,8 +273,8 @@ cmd_shoot() {
   [ -n "$name" ] || die "usage: screenshots.sh shoot <NN-name>"
   [ -f "$STATE" ] || die "run 'screenshots.sh setup' first"
   local profile; profile="$(cat "$STATE")"
-  local serial; serial="$(emu_serial)"
-  [ -n "$serial" ] || die "no emulator running"
+  local serial; serial="$(emu_serial "$(profile_avd "$profile")")"
+  [ -n "$serial" ] || die "no $(profile_avd "$profile") emulator running"
 
   local dir="$OUT_ROOT/$profile"
   mkdir -p "$dir"
@@ -265,7 +287,10 @@ cmd_shoot() {
 }
 
 cmd_finish() {
-  local serial; serial="$(emu_serial)"
+  local serial=""
+  if [ -f "$STATE" ]; then
+    serial="$(emu_serial "$(profile_avd "$(cat "$STATE")")")"
+  fi
   [ -n "$serial" ] && exit_demo_mode "$serial"
   rm -f "$STATE"
   cmd_verify

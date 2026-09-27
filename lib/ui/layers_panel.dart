@@ -513,10 +513,14 @@ class _FolderTile extends ConsumerWidget {
       dense: true,
       contentPadding: const EdgeInsets.only(left: 4, right: 4),
       horizontalTitleGap: 4,
+      // Both leading buttons compact: at full size they took 96 dp before the
+      // name, which left a phone about five characters — "Commute" broke as
+      // "Commu / te".
       leading: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           IconButton(
+            visualDensity: VisualDensity.compact,
             tooltip: folder.isCollapsed ? 'Show what is in it' : 'Fold away',
             icon: Icon(
               folder.isCollapsed ? Icons.chevron_right : Icons.expand_more,
@@ -526,6 +530,7 @@ class _FolderTile extends ConsumerWidget {
             ),
           ),
           IconButton(
+            visualDensity: VisualDensity.compact,
             tooltip: folder.isVisible ? 'Hide' : 'Show',
             icon: Icon(
               folder.isVisible
@@ -549,7 +554,7 @@ class _FolderTile extends ConsumerWidget {
           ),
           const SizedBox(width: 2),
           const Icon(Icons.folder_outlined, size: 18),
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
           Expanded(
             child: Text(
               folder.name,

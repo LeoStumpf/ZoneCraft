@@ -231,7 +231,8 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
         ),
         Text(
           'Fills one half of an inclusion circle, split by the drawn line. '
-          'Use the layer’s Invert to fill the other half. Set the circle’s '
+          'Turn on the layer’s Fill outside to fill the other half. Set the '
+          'circle’s '
           'radius below and move its centre by tapping the map.',
           style: Theme.of(context).textTheme.bodySmall,
         ),

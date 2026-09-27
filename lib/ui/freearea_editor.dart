@@ -188,8 +188,8 @@ class _FreeAreaEditorSheetState extends ConsumerState<FreeAreaEditorSheet> {
           ],
         ),
         Text(
-          'Fills the inside of the drawn shape. Use the layer’s Invert to '
-          'fill the outside instead.',
+          'Fills the inside of the drawn shape. Turn on the layer’s Fill '
+          'outside to fill everything else instead.',
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 8),
