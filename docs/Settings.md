@@ -79,9 +79,11 @@ deliberately **not** here — see [Correcting a Place](Correcting-a-Place.md).
 
 ## Tips
 
-> The map's buttons are icons without labels. Pressing one of the layer switches answers
-> with a line saying what is now true — a few times each, then it stops. "What the buttons
-> do" in the layers menu explains all of them at any time.
+> The map’s buttons are icons, with a one-word caption each while Button captions is on.
+> Pressing one of the layer switches answers with a line saying what is now true — a few
+> times each, then it stops. “What the buttons do” in the layers menu explains all of them at
+> any time.
 
-**Explain what buttons do** (off stops the tips now) and **Show all tips again**, which also
-brings back the welcome sheet.
+**Button captions** (one word under each map button; on by default), **Explain what buttons
+do** (off stops the tips now) and **Show all tips again**, which also brings back the welcome
+sheet.

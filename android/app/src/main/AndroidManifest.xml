@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- Map tiles + Overpass overlays. Declared here (not only in the debug
          overlay) so the release build can reach the network. -->
     <uses-permission android:name="android.permission.INTERNET"/>
@@ -36,6 +37,16 @@
         android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher">
+        <!-- geolocator ships a location foreground service for background
+             tracking, which ZoneCraft never starts: it reads one position, on
+             a press, while the app is open. The service is inert without the
+             FOREGROUND_SERVICE_LOCATION permission, but its presence in the
+             merged manifest contradicts the promise above and invites Play's
+             foreground-service declaration. Removed at merge time;
+             test/android_manifest_test.dart pins it. -->
+        <service
+            android:name="com.baseflow.geolocator.GeolocatorLocationService"
+            tools:node="remove"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"

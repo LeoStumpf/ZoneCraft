@@ -1,12 +1,12 @@
 # ZoneCraft — Privacy Policy
 
-_Last updated: 2026-09-20_
+_Last updated: 2026-09-27_
 
 ZoneCraft is an offline-first map tool. It has **no account system**, shows **no advertising**,
 and does **not** sell, rent or share your personal data. There is no ZoneCraft server. Nothing
 you create is uploaded anywhere — with exactly one exception, which never happens by itself: if
-you write a correction to OpenStreetMap and press Send, that correction goes to OpenStreetMap.
-It is described in full under *Sending a correction to OpenStreetMap* below.
+you publish a change of your own to OpenStreetMap and press **Send now**, that note goes to
+OpenStreetMap. It is described in full under *Sending a note to OpenStreetMap* below.
 
 This policy explains the limited data the app handles, and is written to be read — not to be
 skimmed past.
@@ -22,7 +22,7 @@ skimmed past.
 | Data collected about you | None |
 | Data sold or shared for advertising | Never |
 | Where your content lives | On your device only |
-| Anything sent off the device | Only a correction you write and press Send on |
+| Anything sent off the device | Only an OpenStreetMap note you read, edit and press Send now on |
 | Advertising ID / device identifier | Not used |
 | Analytics, crash reporting or usage tracking | None |
 | Backed up to Google Drive | No — deliberately switched off |
@@ -40,22 +40,30 @@ the map — but they do imply which areas you have looked at, so they are worth 
 
 ## Location
 
-The app reads your position in exactly one place, which you start yourself.
+The app reads your position only when you ask it to, in three places — each one started by a
+press of your own:
 
-**"Locate me"** requests **foreground (precise or approximate) location** to centre the map on
-your position and read the terrain elevation there. That position is used only to move the map
-and **is not stored**. Nothing else in the app reads your position: there is no recording, no
-tracking and no background use.
+- **"Locate me"** centres the map on your position and reads the terrain elevation there.
+- **"Share my location"** puts your position in a message and hands it to Android's share
+  sheet. Where it goes next is the app *you* pick — a chat, an email — and ZoneCraft sees none
+  of it.
+- **Sorting the Elements list by "Distance from you"** measures each place from your position.
+
+Each asks for **foreground (precise or approximate) location**. The position is used for that
+one purpose and **is not stored** — it is kept in memory while the app is open, so a second
+press does not have to wait for a new fix, and forgotten when the app closes. There is no
+recording, no tracking and no background use.
 
 Location is:
 
-- requested **only** when you use that feature — never at launch;
+- requested **only** when you use one of those features — never at launch;
 - **never read in the background.** The app has no background-location permission and runs no
   background service;
-- never transmitted to us or to any third party, because there is nowhere for it to go.
+- never transmitted to us or to any third party by the app. The one way it leaves the device
+  is "Share my location", which gives it to the app you choose, because you asked to.
 
-You can decline the permission and use every other feature normally — "Locate me" is the only
-thing that stops working.
+You can decline the permission and use every other feature normally — only those three stop
+working.
 
 The one indirect exposure worth stating plainly: after "Locate me", the app fetches the
 elevation tile covering your position from the public elevation dataset listed below. That
@@ -70,15 +78,21 @@ address — and whatever the request itself contains (the map area you are viewi
 coordinates you probe, the text you search for) — is necessarily visible to the service being
 asked. Each of these is an independent data controller under its own policy:
 
-- **OpenStreetMap tile servers** (`tile.openstreetmap.org`) — the base map. Contacted only for
-  the tiles you are actually looking at; tiles already viewed are re-served from your device.
-  See the [OSMF Privacy Policy](https://wiki.osmfoundation.org/wiki/Privacy_Policy).
+- **The map tile provider** — the base map. The version on Google Play draws it from
+  **Geoapify** (`maps.geoapify.com`), a commercial tile service that renders OpenStreetMap data;
+  see the [Geoapify Privacy Policy](https://www.geoapify.com/privacy-policy/). A build without a
+  provider configured — for example one you compile yourself — uses **OpenStreetMap's own tile
+  servers** (`tile.openstreetmap.org`) instead; see the
+  [OSMF Privacy Policy](https://wiki.osmfoundation.org/wiki/Privacy_Policy). About → *Where the
+  data comes from* names the one your copy uses. Either way it is contacted only for the tiles
+  you are actually looking at; tiles already viewed are re-served from your device.
 - **Overpass API** — the **points of interest**, **public-transport station** and
   **administrative border** imports. Contacted only when you start an import, never on a timer
   and never as the map moves. The app tries `overpass-api.de`, `overpass.kumi.systems` and
   `overpass.private.coffee` in turn until one answers, and remembers which one did.
-- **Nominatim** (`nominatim.openstreetmap.org`) — OpenStreetMap's geocoder, used by **"Import a
-  feature by name"**. It receives the search text you submit. Contacted only when you run a
+- **Nominatim** (`nominatim.openstreetmap.org`) — OpenStreetMap's geocoder, used by the map's
+  **Search** (go to a town, street or landmark) and by **"Import a feature by name"**. It
+  receives the search text you submit. Contacted only when you run a
   search — never as you type — and a repeated search is answered from memory without contacting
   it again.
 - **AWS Terrain Tiles** (`s3.amazonaws.com/elevation-tiles-prod`) — public elevation data, used
@@ -91,19 +105,25 @@ The app sends nothing identifying with these requests beyond what any HTTP clien
 IP address, and a `User-Agent` naming the application and its version. No advertising ID, no
 device identifier, no cookies, no analytics.
 
-## Sending a correction to OpenStreetMap
+## Sending a note to OpenStreetMap
 
 Everything else in this policy describes the app *reading* from someone else's server. This is
 the exception, and it is worth reading before you use it.
 
-If you correct an imported point — move a bench that is in the wrong place, fix a name, mark
-something as gone — the app offers to pass the correction on to OpenStreetMap as a **note**: a
-public message to the volunteers who maintain the map. It is entirely optional, and the app
-does nothing of the kind unless you ask it to.
+If you change a place yourself — add one that is missing, move a bench that is in the wrong
+place, fix a name, or delete one that is gone — the app offers to pass that change on to
+OpenStreetMap as a **note**: a public message to the volunteers who maintain the map. You get
+there from **Save & publish…**, **Delete & tell OSM…** or **Publish to OpenStreetMap…** in a
+place's editor, or **Report to OSM…** on a circle or nearest-point point that came from an
+imported place. It is entirely optional, and the app does nothing of the kind unless you ask
+it to.
 
-**What is sent, when you press Send:** the text you wrote, the coordinates the note is about,
-and the same `User-Agent` every other request carries. Nothing else — no name, no email
-address, no account, no device identifier.
+The app drafts the note for you — what the place is, what changed, where — and shows you the
+exact text in an editable box before anything is sent.
+
+**What is sent, when you press Send now:** that text as you left it, the coordinates the note
+is about, and the same `User-Agent` every other request carries. Nothing else — no name, no
+email address, no account, no device identifier, and no signature naming the app.
 
 **It is public and it is permanent.** A note appears on openstreetmap.org for anyone to read,
 and it stays in the project's history even after it is closed. This is a contribution to a
@@ -115,8 +135,9 @@ is not linked to you — which also means nobody can write back to you about it,
 a link to each note you send under **OpenStreetMap outbox** in the menu, for you to follow.
 
 **Nothing is ever sent by itself.** There is no timer, no sending when a connection returns, no
-sending at launch. A note leaves your device when you press Send and at no other moment. If you
-would rather not send anything from the app at all, you can keep your reports in the outbox and
+sending at launch. A note leaves your device when you press Send now and at no other moment. If
+you would rather not send anything from the app at all, choose **Keep in my list** to put the
+report in the outbox instead, and
 **export them as a file** to file yourself under your own OpenStreetMap account — or simply
 never open the form.
 
@@ -131,7 +152,7 @@ three left alone; nothing here is contacted except to answer something you asked
 ## What the app can see about your device
 
 Android hides other installed apps from an app unless it declares, in advance and in its
-manifest, the specific kinds of thing it needs to hand work to. ZoneCraft declares two, and
+manifest, the specific kinds of thing it needs to hand work to. ZoneCraft declares three, and
 they are worth naming because they are the only way it can observe anything at all about what
 else is on your phone:
 
@@ -139,11 +160,14 @@ else is on your phone:
   whether *something* on the device can open an `https` address. The answer it gets is yes or
   no — not a list of your apps, not which browser, and nothing about any other app you have
   installed. If the answer is no, the address stays as plain selectable text.
+- **Writing an email.** So that the contact address on the *Servers and limits* screen can
+  open your mail app, the app asks whether something can handle a `mailto:` address. Again the
+  answer is yes or no, and nothing else.
 - **The system text menu.** A default of every Flutter app: when you select text inside
   ZoneCraft, Android's "share / translate / search" menu is populated by whatever handles
   plain text on your device.
 
-Neither is a query for the list of installed applications, and ZoneCraft does not hold the
+None of them is a query for the list of installed applications, and ZoneCraft does not hold the
 Android permission that would allow one (`QUERY_ALL_PACKAGES`). Nothing about your device is
 recorded, and nothing is transmitted anywhere — these answers are used once, on screen, and
 discarded.

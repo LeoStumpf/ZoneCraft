@@ -232,7 +232,9 @@ class _PoiImportSheetState extends State<PoiImportSheet> {
                     const SizedBox(height: 8),
                     TextFormField(
                       controller: _circleRadius,
-                      keyboardType: TextInputType.number,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       decoration: const InputDecoration(
                         labelText: 'Circle radius (m)',
                         helperText: 'Radius of each created circle',

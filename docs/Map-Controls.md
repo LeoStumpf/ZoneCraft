@@ -40,7 +40,8 @@ layer's *type* can never use is hidden rather than greyed.
 | **Add** (＋) | Arms the map: the next tap places a new element of the active layer’s kind where you point. On a line or area layer it asks first: point by point, or drawn with your finger. Long-press to place one at the centre instead. | Always. |
 | **Hide and show the tools** | Clears the screen down to the map: the column above it, the undo buttons and the layer name all go, and come back. | Always — it is the one thing that survives its own press, along with the layers menu. |
 
-The **map credit** at the bottom left is always visible; tap it for the full list of sources
+The **map credit** sits at the bottom left, under the button row, whenever the map is showing
+(an open editor covers it); tap it for the full list of sources
 (OpenStreetMap, and the terrain data behind ground-height layers).
 
 ## Why the switch is named by its result

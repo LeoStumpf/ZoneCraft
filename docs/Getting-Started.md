@@ -33,8 +33,8 @@ every one of them; the short version:
 - **Across the top** — the layers menu, undo and redo, the active-layer chip, and a compass
   (only while the map is rotated).
 - **Up the right-hand side** — the tools: go to a place, locate me, share my location, measure
-  elevation, measure distance, draw with your finger, and — only in a build pointed at a
-  provider that allows it — download this area.
+  elevation, measure distance, and — only in a build pointed at a provider that allows it —
+  download this area. (Drawing a line or area by finger is part of **Add** on those layers.)
 - **Along the bottom** — select by tapping, the layer's own switch, the imports the layer
   can take, Add, and a button that hides and shows the tools.
 
@@ -42,8 +42,9 @@ The bottom-left pill is the map credit; tap it for every source the map is drawn
 
 ## The tips
 
-The map's buttons are icons without labels, so the first few times you press one of the
-layer switches the app answers with a line saying what is now true. Each tip shows three
+Each map button carries a one-word caption under it (**Settings → Tips → Button captions**
+turns them off for a cleaner map). The first few times you press one of the layer switches
+the app also answers with a line saying what is now true. Each tip shows three
 times and then stops. **Settings → Tips** switches them off sooner, or hands them all back.
 
 A button that is **greyed** cannot do anything right now — an empty layer has no outside to

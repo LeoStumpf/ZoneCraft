@@ -907,7 +907,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// map camera — callers decide what to do with the result.
   Future<LatLng?> _getCurrentPosition() async {
     final result = await currentPosition();
-    if (result.problem != null) _hint(result.problem!);
+    final remedy = result.remedy;
+    if (result.problem != null) {
+      _hint(
+        result.problem!,
+        action: remedy == null
+            ? null
+            : SnackBarAction(label: remedy.label, onPressed: remedy.open),
+      );
+    }
     return result.fix;
   }
 
@@ -939,7 +947,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (show && mounted) _hint(message);
   }
 
-  void _hint(String message) {
+  void _hint(String message, {SnackBarAction? action}) {
     if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
     // A snackbar is laid out at the bottom of the Scaffold whatever sits in
@@ -947,7 +955,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     // so with an editor open every hint landed on the editor's own controls
     // (the first-selection tip covered Reset and the position row). While a
     // sheet is up the hint goes to the banner column at the top instead.
-    if (_sheetUp) {
+    // A hint with an action is a snackbar even over a sheet: the top banner
+    // has no button, and a remedy nobody can press is just the refusal again.
+    if (_sheetUp && action == null) {
       _topHintTimer?.cancel();
       setState(() => _topHint = message);
       _topHintTimer = Timer(const Duration(seconds: 4), () {
@@ -956,7 +966,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
       return;
     }
     if (_topHint != null) setState(() => _topHint = null);
-    messenger.showSnackBar(SnackBar(content: Text(message)));
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        action: action,
+        duration: action == null
+            ? const Duration(milliseconds: 4000)
+            : const Duration(seconds: 8),
+      ),
+    );
   }
 
   /// Whether the Scaffold's sheet slot is taken — the same question

@@ -1111,7 +1111,15 @@ class AppDatabase extends _$AppDatabase {
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) => m.createAll(),
-    onUpgrade: (m, from, to) async {
+    // One transaction around the whole chain. Drift does not wrap `onUpgrade`
+    // itself, so a block that threw half-way used to leave a file that was
+    // half v(N) and half v(N+1) — and that is the file `openDatabaseSafely`
+    // then sets aside for someone to recover by hand. Rolled back, it is the
+    // untouched old version instead, which the next build that fixes the
+    // migration can simply open. SQLite runs DDL inside a transaction; foreign
+    // keys are still off here (`beforeOpen` turns them on), as the v27/v30
+    // copies need.
+    onUpgrade: (m, from, to) => transaction(() async {
       if (from < 2) {
         await m.addColumn(layers, layers.type);
         await m.addColumn(layers, layers.isInverted);
@@ -1674,7 +1682,7 @@ class AppDatabase extends _$AppDatabase {
         }
         await m.addColumn(appSettings, appSettings.fabCaptions);
       }
-    },
+    }),
     beforeOpen: (details) async {
       // Required for the element -> Layers ON DELETE CASCADE to fire.
       await customStatement('PRAGMA foreign_keys = ON');

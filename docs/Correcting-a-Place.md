@@ -31,6 +31,13 @@ would silently beat whatever OpenStreetMap says next time — and, in an exporte
 arrive on another phone looking like "what OSM says". So the flag travels with an export, the
 original values alongside it, and a re-import keeps your corrected version knowingly.
 
+## A circle or point that started from a place
+
+A circle centred on an imported place, or a nearest-point point made from one, remembers which
+OpenStreetMap place it came from. If you then move it or rename it — because the place is not
+where OpenStreetMap says — its editor offers **Report to OSM…**, which opens the same publish
+sheet below with the old and new position filled in.
+
 ## Deleting a place
 
 **Delete** always asks first. For an imported place the question offers a third answer,

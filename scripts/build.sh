@@ -119,6 +119,28 @@ if [ -n "${OSM_API_URL:-}" ]; then
   echo "==> OSM API: $OSM_API_URL (reports do NOT go to openstreetmap.org)"
 fi
 
+# --- bundle guards -----------------------------------------------------------
+# A bundle exists only to be uploaded to Play, so refuse the two ways it can
+# come out wrong without anything failing. Checked before the tests so the
+# answer arrives in a second, not after a full test run.
+if [ "$BUNDLE" -eq 1 ]; then
+  # build.gradle.kts falls back to the debug key when key.properties is absent,
+  # which is right for `--release` smoke builds and wrong for this: Play refuses
+  # a debug-signed bundle, and only after the upload.
+  if [ ! -f android/key.properties ]; then
+    echo "!!! --bundle without android/key.properties: refusing." >&2
+    echo "    The bundle would be signed with the debug key, which Play rejects." >&2
+    exit 1
+  fi
+  # Without TILE_URL the store build draws its map from OpenStreetMap's donated
+  # tile servers — a decision to make on purpose, not by a missing file.
+  if [ -z "${TILE_URL:-}" ]; then
+    echo "!!! --bundle without TILE_URL: refusing." >&2
+    echo "    Set it (or check $ZONECRAFT_ENV) — see planning/RELEASE.md, 'Tile provider'." >&2
+    exit 1
+  fi
+fi
+
 # --- checks ------------------------------------------------------------------
 if [ "$SKIP_CHECKS" -eq 0 ]; then
   # Formatting first, because it is the cheapest check and because a drifted

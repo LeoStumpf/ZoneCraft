@@ -107,14 +107,29 @@ Future<void> main() async {
     return;
   }
 
+  final recovery = opened!;
   runApp(
-    ProviderScope(
-      observers: [ErrorLogObserver()],
-      overrides: [databaseProvider.overrideWithValue(database)],
-      child: ZoneCraftApp(recovery: opened!),
+    // Keyed by [providerScopeGeneration], so "Try again" on the data-error
+    // screen gets a **new** container. Clearing the failure alone left every
+    // stream provider sitting in `AsyncError`, which each read site turns into
+    // an empty list — the empty map that screen exists to prevent, one tap
+    // later. The database is an override *value*, so a new container reuses
+    // the open connection rather than closing it.
+    ValueListenableBuilder<int>(
+      valueListenable: providerScopeGeneration,
+      builder: (context, generation, _) => ProviderScope(
+        key: ValueKey(generation),
+        observers: [ErrorLogObserver()],
+        overrides: [databaseProvider.overrideWithValue(database)],
+        child: ZoneCraftApp(recovery: recovery),
+      ),
     ),
   );
 }
+
+/// Bumped to throw the whole provider container away and build a fresh one —
+/// see the `runApp` call in [main].
+final providerScopeGeneration = ValueNotifier<int>(0);
 
 /// The app when it has no database to show — the one case where ZoneCraft
 /// starts without a `ProviderScope`, because every provider would fail.
@@ -167,7 +182,13 @@ final class ErrorLogObserver extends ProviderObserver {
       stackTrace,
       context: context.provider.name ?? 'Loading data',
     );
-    firstFailure.value ??= error;
+    // Only the database streams take the map down. Every one of them is a
+    // `StreamProvider` and nothing else is; a throw in a derived provider (a
+    // border outline that fails to decode, say) is a bug in one drawing, and
+    // replacing the whole app with "your map could not be loaded" for it would
+    // tell the user their data is in danger when it is not. That one is
+    // recorded — About → Recent errors — and the map carries on.
+    if (context.provider is StreamProvider) firstFailure.value ??= error;
   }
 }
 
@@ -276,7 +297,11 @@ class _Root extends StatefulWidget {
 }
 
 class _RootState extends State<_Root> {
-  late bool _recoveryAcknowledged = !widget.recovery.recovered;
+  /// Static, because "Try again" rebuilds the whole provider scope and with it
+  /// this state: the recovery notice was read once, and must not come back.
+  static bool _acknowledged = false;
+
+  bool get _recoveryAcknowledged => _acknowledged || !widget.recovery.recovered;
 
   @override
   Widget build(BuildContext context) {
@@ -287,7 +312,7 @@ class _RootState extends State<_Root> {
       return DatabaseRecoveredScreen(
         quarantinedPath: widget.recovery.quarantinedPath,
         error: widget.recovery.error,
-        onContinue: () => setState(() => _recoveryAcknowledged = true),
+        onContinue: () => setState(() => _acknowledged = true),
       );
     }
     return ValueListenableBuilder<Object?>(
@@ -296,7 +321,10 @@ class _RootState extends State<_Root> {
         if (failure != null) {
           return DataUnavailableScreen(
             error: failure,
-            onRetry: () => ErrorLogObserver.firstFailure.value = null,
+            onRetry: () {
+              ErrorLogObserver.firstFailure.value = null;
+              providerScopeGeneration.value++;
+            },
           );
         }
         return child!;

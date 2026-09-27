@@ -19,6 +19,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../app_info.dart';
+import '../data/osm_notes.dart' show osmApiHost;
+import '../data/service_overrides.dart' show redactSecrets;
 import '../data/tile_source.dart';
 import 'error_screen.dart';
 import 'external_link.dart';
@@ -74,7 +76,12 @@ class _AboutScreenState extends State<AboutScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final prefetches = TileSource.configured.allowsPrefetch;
+    final tiles = TileSource.configured;
+    final prefetches = tiles.allowsPrefetch;
+    // The build's own tile host, not OpenStreetMap's: a keyed build draws its
+    // map from a commercial provider, and naming the wrong server here is a
+    // privacy statement that is false.
+    final tileHost = Uri.tryParse(tiles.urlTemplate)?.host ?? '';
 
     return Scaffold(
       appBar: AppBar(title: const Text('About')),
@@ -126,12 +133,22 @@ class _AboutScreenState extends State<AboutScreen> {
               ),
               _Service(
                 icon: Icons.map_outlined,
-                name: 'OpenStreetMap tiles',
-                urls: const ['tile.openstreetmap.org'],
-                body:
-                    'The base map. Map data and tiles © OpenStreetMap '
-                    'contributors, licensed under the Open Database License '
-                    '(ODbL).',
+                name: tiles.isCommunityOsm
+                    ? 'OpenStreetMap tiles'
+                    : 'Map tiles',
+                urls: [
+                  tileHost.isEmpty
+                      ? redactSecrets(tiles.urlTemplate)
+                      : tileHost,
+                ],
+                body: tiles.isCommunityOsm
+                    ? 'The base map. Map data and tiles © OpenStreetMap '
+                          'contributors, licensed under the Open Database '
+                          'License (ODbL).'
+                    : 'The base map, drawn by a commercial tile provider '
+                          'from OpenStreetMap data. Map data © OpenStreetMap '
+                          'contributors, licensed under the Open Database '
+                          'License (ODbL).',
                 canOpen: _canOpenLinks,
               ),
               _Service(
@@ -155,8 +172,9 @@ class _AboutScreenState extends State<AboutScreen> {
                 name: 'Nominatim',
                 urls: const ['nominatim.openstreetmap.org'],
                 body:
-                    'Finds a place by name when you import a feature such '
-                    'as a city border or a river.',
+                    'Finds a place by name — when you search the map, and '
+                    'when you import a feature such as a city border or a '
+                    'river.',
                 canOpen: _canOpenLinks,
               ),
               _Service(
@@ -169,6 +187,17 @@ class _AboutScreenState extends State<AboutScreen> {
                     'of the U.S. Geological Survey, ETOPO1 courtesy of NOAA. '
                     'The same credit sits on the map itself, where the data is '
                     'actually shown.',
+                canOpen: _canOpenLinks,
+              ),
+              _Service(
+                icon: Icons.volunteer_activism_outlined,
+                name: 'OpenStreetMap notes',
+                urls: [osmApiHost],
+                body:
+                    'Only when you publish a change of your own — a place '
+                    'you added, moved, renamed or deleted — and press Send '
+                    'now. The note is the text you read and edited, and the '
+                    'point it is about.',
                 canOpen: _canOpenLinks,
               ),
             ],
@@ -216,11 +245,6 @@ class _AboutScreenState extends State<AboutScreen> {
                     'box, so a box drawn wholly within a single district '
                     'matches nothing at all.',
               ),
-              const _Limit(
-                'Border layers cannot be exported yet.',
-                'Every other layer type exports to GeoJSON or KML, from the '
-                    'layer menu or from Settings.',
-              ),
             ],
           ),
 
@@ -228,7 +252,8 @@ class _AboutScreenState extends State<AboutScreen> {
             'Privacy',
             'ZoneCraft has no accounts, no analytics, no crash reporting and '
                 'no advertising identifier. Nothing you draw or import leaves '
-                'the device unless you export it yourself. The services above '
+                'the device unless you export it yourself, or press Send on '
+                'a note to OpenStreetMap. The services above '
                 'necessarily see the request you make and your IP address, '
                 'as any web request would — and if you would rather they '
                 'did not, Settings → Data sources points any of the three '

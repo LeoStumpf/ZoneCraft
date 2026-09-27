@@ -29,26 +29,74 @@ import 'package:latlong2/latlong.dart';
 /// `PRIVACY.md` all promise that the app never reads your position while it is
 /// not open, and this is the file that has to keep that true.
 
+/// Where the user has to go to make location work, when the app cannot ask.
+///
+/// Both are dead ends from inside the app: with location services off there
+/// is nothing to request, and once Android has recorded "don't ask again"
+/// `requestPermission` returns at once without showing anything. A sentence
+/// alone left the user pressing Locate me and reading the same refusal; the
+/// remedy is the button that takes them to the one screen that fixes it.
+enum LocationRemedy {
+  /// The system's location switch.
+  locationSettings('Turn on'),
+
+  /// ZoneCraft's own page in the system settings, where the permission is.
+  appSettings('Open settings');
+
+  const LocationRemedy(this.label);
+
+  /// The action's label, beside the sentence that explains it.
+  final String label;
+
+  /// Opens the settings screen this remedy names.
+  Future<void> open() async {
+    try {
+      switch (this) {
+        case LocationRemedy.locationSettings:
+          await Geolocator.openLocationSettings();
+        case LocationRemedy.appSettings:
+          await Geolocator.openAppSettings();
+      }
+      // A device with no such settings screen: nothing better to do than
+      // leave the sentence the user already has.
+      // ignore: avoid_catches_without_on_clauses
+    } catch (_) {}
+  }
+}
+
 /// Checks that location can be used, asking for permission if it has not been
 /// asked yet.
 ///
-/// Returns null when good, or a ready-to-show sentence explaining why not.
-/// A message rather than an enum because every caller does the same thing with
-/// it — put it in a snackbar — and an enum would just move the wording to two
-/// places.
-Future<String?> ensureLocationReady() async {
+/// Returns a null problem when good, or a ready-to-show sentence explaining
+/// why not — plus, when the fix is outside the app, the [LocationRemedy] that
+/// gets the user there.
+Future<({String? problem, LocationRemedy? remedy})>
+ensureLocationReady() async {
   if (!await Geolocator.isLocationServiceEnabled()) {
-    return 'Location services are off. Enable them to use location.';
+    return (
+      problem: 'Location is switched off on this phone.',
+      remedy: LocationRemedy.locationSettings,
+    );
   }
   var permission = await Geolocator.checkPermission();
   if (permission == LocationPermission.denied) {
     permission = await Geolocator.requestPermission();
   }
-  if (permission == LocationPermission.denied ||
-      permission == LocationPermission.deniedForever) {
-    return 'Location permission denied. ZoneCraft works fine without it.';
+  if (permission == LocationPermission.deniedForever) {
+    return (
+      problem:
+          'Location permission is off for ZoneCraft. It can be allowed in '
+          'the app settings.',
+      remedy: LocationRemedy.appSettings,
+    );
   }
-  return null;
+  if (permission == LocationPermission.denied) {
+    return (
+      problem: 'Location permission denied. ZoneCraft works fine without it.',
+      remedy: null,
+    );
+  }
+  return (problem: null, remedy: null);
 }
 
 /// One position fix, asked for now: the permission gate, a fix under a time
@@ -58,10 +106,13 @@ Future<String?> ensureLocationReady() async {
 /// never both. Shared by the map's Locate me and the Elements list's "distance
 /// from you" sort, so the two cannot grow different ideas of what a usable fix
 /// is. Has no side effects: the caller decides what to do with the result.
-Future<({LatLng? fix, String? problem})> currentPosition() async {
+Future<({LatLng? fix, String? problem, LocationRemedy? remedy})>
+currentPosition() async {
   try {
-    final problem = await ensureLocationReady();
-    if (problem != null) return (fix: null, problem: problem);
+    final ready = await ensureLocationReady();
+    if (ready.problem != null) {
+      return (fix: null, problem: ready.problem, remedy: ready.remedy);
+    }
     // A time limit, because indoors or with a cold GPS `getCurrentPosition`
     // simply never returns. The plugin throws TimeoutException, which the
     // catch below turns into a sentence.
@@ -76,13 +127,18 @@ Future<({LatLng? fix, String? problem})> currentPosition() async {
       return (
         fix: null,
         problem: 'Could not get a valid location fix. Try again outdoors.',
+        remedy: null,
       );
     }
-    return (fix: LatLng(pos.latitude, pos.longitude), problem: null);
+    return (
+      fix: LatLng(pos.latitude, pos.longitude),
+      problem: null,
+      remedy: null,
+    );
     // geolocator throws a family of typed errors (service off, permission
     // gone, timeout) that all end in the same sentence.
     // ignore: avoid_catches_without_on_clauses
   } catch (_) {
-    return (fix: null, problem: 'Could not get your location.');
+    return (fix: null, problem: 'Could not get your location.', remedy: null);
   }
 }

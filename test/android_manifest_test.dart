@@ -198,4 +198,20 @@ void main() {
     expect(schemes, contains('mailto'));
     expect(schemes, contains('https'), reason: 'the About screen links');
   });
+
+  // PRIVACY.md and the Data safety form both say location is read once, on a
+  // press, in the foreground. geolocator's manifest brings a location
+  // foreground service along anyway; left in, it is a component a reviewer
+  // reads as background tracking.
+  test("geolocator's foreground service is removed at merge time", () {
+    final removed = manifest
+        .findAllElements('service')
+        .where(
+          (s) =>
+              s.getAttribute('android:name') ==
+              'com.baseflow.geolocator.GeolocatorLocationService',
+        );
+    expect(removed, hasLength(1));
+    expect(removed.single.getAttribute('tools:node'), 'remove');
+  });
 }

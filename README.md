@@ -41,7 +41,7 @@ never refetch and never poll.
 
 | Type | What it imports |
 |---|---|
-| **Points of interest** | One OSM category (cafés, benches, drinking water, toilets…) within a radius — or every public-transport **station** in a box you tap out, plus which types serve each one (bus, tram, subway, light rail, train, monorail, ferry). Drawn as icon markers that collapse into count badges when they would overlap. For a station import, per-layer tick boxes switch types on and off; a station stays visible while at least one ticked type stops there, so "Rail only" keeps the big interchanges. **Line geometry is deliberately never fetched** — it proved unobtainable from the public API at any useful scale. You can also name a category of your own and place its points by hand. |
+| **Points of interest** | One OSM category (cafés, benches, drinking water, toilets…) in a box you tap out (or the visible map) — or every public-transport **station** in one, plus which types serve each one (bus, tram, subway, light rail, train, monorail, ferry). Drawn as icon markers that collapse into count badges when they would overlap. For a station import, per-layer tick boxes switch types on and off; a station stays visible while at least one ticked type stops there, so "Rail only" keeps the big interchanges. **Line geometry is deliberately never fetched** — it proved unobtainable from the public API at any useful scale. You can also name a category of your own and place its points by hand. |
 | **Borders** | Administrative areas of one OSM `admin_level`, chosen when the layer is created. Whole relations come down (a clipped boundary has no fillable interior) and are assembled on the device. **Nothing is cut to the box** — it limits the download, not the result — so an area may reach well past it. Optional neighbour-distinct colouring and name plates; any area can be **converted to a freehand area** you can then edit. |
 
 ## Features
@@ -66,8 +66,11 @@ never refetch and never poll.
   places one object, with Undo / Edit / Done in a banner.
 - Points are **draggable handles** — drag to move with a live region reshape, long-press for
   the per-point menu, long-press the map to insert a vertex.
-- A docked **editor sheet** writes every change live while the map stays interactive. It
-  collapses to a grip bar so you can reach the map behind it.
+- A docked **editor sheet** stays out of the map's way: it collapses to a grip bar so you can
+  reach the map behind it. Sliders and switches apply at once; a position or a name is shown as
+  a fact with **Edit** (a small dialog with Save) and **Move** (a pin you drag, then Save or
+  Cancel), and a circle's or nearest-point's editor has **Reset** to go back to how it was
+  when you opened it.
 - Coordinates use one **"lat, lng"** field that accepts values pasted straight from Google
   Maps, and number entry accepts either decimal separator (`1.5` and `1,5` both work).
 

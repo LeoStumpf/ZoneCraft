@@ -22,6 +22,13 @@ correction columns and the outbox, purely additively. v32 (also additive) lets a
 subspace point seeded from a POI import remember its OpenStreetMap element, gives folders a
 colour, a transparency and a colour override, and adds the button-captions setting.
 
+**The whole upgrade runs in one transaction.** Drift does not wrap `onUpgrade` itself, so a
+block that threw half-way used to leave a file that was part old version, part new. Now a
+failure rolls back to the untouched old file, which a later build that fixes the migration can
+simply open. If the database still cannot be opened, the app moves it aside, starts with an
+empty map and says so — with a **Send the old file** button, because the set-aside copy sits in
+the app's private folder where no file manager can reach it.
+
 Installing with `scripts/build.sh --install` (adb `-r`) keeps the app's data, so every
 install on the developer phone exercises the migration path on a real map.
 

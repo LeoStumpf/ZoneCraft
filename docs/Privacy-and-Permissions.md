@@ -9,7 +9,7 @@ in the repository, and it is written to be read. This page is the short version.
 | Data collected about you | None |
 | Data sold or shared for advertising | Never |
 | Where your content lives | On your device only |
-| Anything sent off the device | Only a correction you write and press Send on |
+| Anything sent off the device | Only an OpenStreetMap note you read, edit and press Send now on |
 | Advertising ID / device identifier | Not used |
 | Analytics, crash reporting or usage tracking | None |
 | Backed up to Google Drive | No — deliberately switched off |
@@ -23,17 +23,19 @@ kept in memory for the current run, with a Copy button, never written to disk an
 
 ## Location
 
-Read in exactly one place, which you start yourself: **Locate me**. It asks for foreground
-location the first time you press it — never at launch — moves the map, reads the ground
-height there, and does not store the position. There is no background location, no
+Read only when you ask, in three places: **Locate me**, **Share my location** (which hands
+your position to the app you pick in the share sheet), and the Elements list's **Distance
+from you** sort. Foreground location is asked for the first time you use one of them — never
+at launch — and the position is kept in memory only, never stored. There is no background location, no
 recording, no tracking. Decline the permission and everything else works.
 
 ## What leaves the phone
 
 Only requests for what you are looking at or asked for, each to a service named on the About
-screen: map tiles from OpenStreetMap (or a provider you configure), imports through Overpass,
+screen: map tiles (from Geoapify in the Play Store build, OpenStreetMap's own servers in a
+build without a provider, or a server you configure), imports through Overpass,
 place search through Nominatim, terrain tiles for ground height, and — only when you press
-**Send** — one note to OpenStreetMap containing what you typed and a position. Every request
+**Send now** — one note to OpenStreetMap containing what you typed and a position. Every request
 carries the app's name and version and nothing that identifies you.
 
 Details of what each service can see, and what the app asks of them in return, are in

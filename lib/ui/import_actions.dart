@@ -535,7 +535,9 @@ Future<double?> askFreeLineRadius(
               TextField(
                 controller: controller,
                 autofocus: true,
-                keyboardType: TextInputType.number,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 decoration: InputDecoration(
                   labelText: 'Radius (m)',
                   errorText: error,

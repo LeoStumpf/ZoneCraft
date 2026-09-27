@@ -55,5 +55,6 @@ never poll. [Importing from OpenStreetMap](Importing-from-OpenStreetMap.md) has 
 Tap anything with **Select by tapping** on (or long-press it in the default mode) and its
 editor docks at the bottom: a circle's centre and radius, a nearest-point's points, a line's
 vertices, an imported place's name and position, a border area's outline. Every number is
-typeable, and coordinates take one *"lat, lng"* field that accepts values pasted straight
-from Google Maps — with either decimal separator.
+typeable. A position is changed with **Edit** — one *"lat, lng"* field that accepts values
+pasted straight from Google Maps, with either decimal separator — or **Move**, which puts out
+a pin to drag and only writes when you press Save.

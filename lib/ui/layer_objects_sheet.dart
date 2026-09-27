@@ -23,7 +23,7 @@ import 'package:latlong2/latlong.dart' show LatLng;
 
 import '../data/database.dart';
 import '../data/layer_types.dart';
-import '../data/location.dart' show currentPosition;
+import '../data/location.dart' show LocationRemedy, currentPosition;
 import '../data/repository.dart' show ColoredElement, ZMove;
 import '../data/transit.dart' show transitMaskWith;
 import '../state/providers.dart';
@@ -173,12 +173,16 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
   /// Why the last "Distance from you" found no position — shown beside the
   /// sort button, because a snackbar would land *behind* this modal sheet.
   String? _sortProblem;
+  LocationRemedy? _sortRemedy;
 
   /// Applies [choice]. "Distance from you" with no fix yet is the press that
   /// opts in to location, exactly as Locate me is: the fix is asked for now,
   /// and the sort only switches once there is one to measure from.
   Future<void> _chooseSort(ElementSort choice) async {
-    setState(() => _sortProblem = null);
+    setState(() {
+      _sortProblem = null;
+      _sortRemedy = null;
+    });
     if (choice != ElementSort.distanceFromMe ||
         ref.read(myPositionProvider) != null) {
       setState(() => _sort = choice);
@@ -194,6 +198,7 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
       _locating = false;
       if (fix != null) _sort = choice;
       _sortProblem = result.problem;
+      _sortRemedy = result.remedy;
     });
   }
 
@@ -324,6 +329,11 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.error,
                       ),
+                    ),
+                  if (_sortRemedy case final remedy?)
+                    TextButton(
+                      onPressed: remedy.open,
+                      child: Text(remedy.label),
                     ),
                 ],
               ),

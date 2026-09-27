@@ -14,8 +14,11 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../app_info.dart';
 import '../data/error_log.dart';
@@ -180,6 +183,18 @@ class DatabaseRecoveredScreen extends StatelessWidget {
               icon: const Icon(Icons.copy_all_outlined),
               label: const Text('Copy details'),
             ),
+            if (path != null) ...[
+              const SizedBox(height: 8),
+              // The path above is inside the app's private folder, which no
+              // file manager can reach without root — so on its own it tells
+              // the user where their map is and gives them no way to get it.
+              // Sharing is the one way out of that folder the app can offer.
+              OutlinedButton.icon(
+                onPressed: () => _shareOldDatabase(context, path),
+                icon: const Icon(Icons.ios_share_outlined),
+                label: const Text('Send the old file'),
+              ),
+            ],
             const SizedBox(height: 8),
             OutlinedButton(
               onPressed: onContinue,
@@ -189,6 +204,36 @@ class DatabaseRecoveredScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Hands the set-aside database — and the `-wal`/`-shm` sidecars that moved
+/// with it, when they exist — to the share sheet.
+Future<void> _shareOldDatabase(BuildContext context, String path) async {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  try {
+    final files = [
+      for (final p in [path, '$path-wal', '$path-shm'])
+        if (File(p).existsSync())
+          XFile(p, mimeType: 'application/octet-stream'),
+    ];
+    if (files.isEmpty) {
+      messenger?.showSnackBar(
+        const SnackBar(content: Text('The old file is no longer there')),
+      );
+      return;
+    }
+    await SharePlus.instance.share(
+      ShareParams(
+        subject: 'ZoneCraft database that would not open',
+        files: files,
+      ),
+    );
+    // A missing file, a share sheet with no target, a platform error — the
+    // user needs the same sentence for each.
+    // ignore: avoid_catches_without_on_clauses
+  } catch (e) {
+    messenger?.showSnackBar(SnackBar(content: Text('Could not share: $e')));
   }
 }
 

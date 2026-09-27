@@ -23,9 +23,13 @@ map never zooms on its own from a tap.
 - **Handles.** A selected object's points are draggable, and the region reshapes live as you
   drag. Long-press a handle for its menu (delete, make main, …). Long-press the map to insert
   a vertex on a line or area.
-- **The editor sheet** docks at the bottom and writes every change live while the map stays
-  interactive. It collapses to a grip bar so you can reach the map behind it. Every number is
-  typeable; coordinates take one *"lat, lng"* field.
+- **The editor sheet** docks at the bottom while the map stays interactive, and collapses to
+  a grip bar so you can reach the map behind it. Sliders and switches apply at once; every
+  number is typeable. A position is shown as coordinates with **Edit** (a dialog taking one
+  *"lat, lng"* field, with Save) and **Move**, which leaves the point's old spot marked and
+  puts out a pin to drag — nothing changes until you press **Save** in the banner, and
+  **Cancel** leaves it where it was. Circle and nearest-point editors also have **Reset**,
+  which puts everything back to how it was when the editor opened, as one undo step.
 - **Border outlines** are reshaped in a mode of their own (the area's editor → **Reshape outline**),
   because a boundary carries hundreds of vertices where a drawn area carries eight. A
   reshaped outline is flagged as edited — see [Importing from OpenStreetMap](Importing-from-OpenStreetMap.md).

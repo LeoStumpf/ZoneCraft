@@ -15,9 +15,11 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:zonecraft/data/error_log.dart';
+import 'package:zonecraft/main.dart' show ErrorLogObserver;
 import 'package:zonecraft/ui/error_screen.dart';
 
 void main() {
@@ -166,6 +168,16 @@ void main() {
 
       expect(find.text('/data/zonecraft.broken-2026.sqlite'), findsOneWidget);
       expect(find.textContaining('do not reinstall'), findsOneWidget);
+      // The path is in the app's private folder, which no file manager
+      // reaches — sharing is the only way the file can get to anyone.
+      expect(find.text('Send the old file'), findsOneWidget);
+    });
+
+    testWidgets('nothing to send when nothing was moved aside', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(home: DatabaseRecoveredScreen(onContinue: () {})),
+      );
+      expect(find.text('Send the old file'), findsNothing);
     });
 
     testWidgets('the error log screen says so when there is nothing to show', (
@@ -188,6 +200,36 @@ void main() {
 
       expect(find.textContaining('Saving'), findsOneWidget);
       expect(find.byTooltip('Copy all'), findsOneWidget);
+    });
+  });
+
+  group('ErrorLogObserver', () {
+    tearDown(() => ErrorLogObserver.firstFailure.value = null);
+
+    // A bug in a derived provider is one broken drawing, not a database that
+    // will not open; taking the whole map down for it told the user their
+    // data was in danger when it was not.
+    test('a failing derived provider is logged but does not take the map '
+        'down', () {
+      final broken = Provider<int>((ref) => throw StateError('decode'));
+      final container = ProviderContainer(observers: [ErrorLogObserver()]);
+      addTearDown(container.dispose);
+
+      expect(() => container.read(broken), throwsA(anything));
+      expect(ErrorLog.instance.entries, isNotEmpty);
+      expect(ErrorLogObserver.firstFailure.value, isNull);
+    });
+
+    test('a failing database stream does', () async {
+      final broken = StreamProvider<int>(
+        (ref) => Stream<int>.error(StateError('no such table')),
+      );
+      final container = ProviderContainer(observers: [ErrorLogObserver()]);
+      addTearDown(container.dispose);
+
+      container.listen(broken, (_, _) {});
+      await Future<void>.delayed(Duration.zero);
+      expect(ErrorLogObserver.firstFailure.value, isA<StateError>());
     });
   });
 }

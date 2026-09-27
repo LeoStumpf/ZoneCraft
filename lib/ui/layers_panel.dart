@@ -542,21 +542,12 @@ class _FolderTile extends ConsumerWidget {
         children: [
           // The folder's colour: the rail down its members, and — with "Use
           // folder colour" — the colour they are all drawn in.
-          GestureDetector(
+          _SwatchButton(
+            label: 'Folder colour',
+            color: folder.colorArgb == null ? null : Color(folder.colorArgb!),
             onTap: () => unawaited(pickFolderColor(context, repo, folder)),
-            child: Container(
-              width: 20,
-              height: 20,
-              decoration: BoxDecoration(
-                color: folder.colorArgb == null
-                    ? null
-                    : Color(folder.colorArgb!),
-                shape: BoxShape.circle,
-                border: Border.all(color: kSwatchRing),
-              ),
-            ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 2),
           const Icon(Icons.folder_outlined, size: 18),
           const SizedBox(width: 6),
           Expanded(
@@ -885,19 +876,12 @@ class _LayerTile extends ConsumerWidget {
       ),
       title: Row(
         children: [
-          GestureDetector(
+          _SwatchButton(
+            label: 'Layer colour',
+            color: Color(layer.colorArgb),
             onTap: () => pickLayerColor(context, ref, layer),
-            child: Container(
-              width: 20,
-              height: 20,
-              decoration: BoxDecoration(
-                color: Color(layer.colorArgb),
-                shape: BoxShape.circle,
-                border: Border.all(color: kSwatchRing),
-              ),
-            ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 2),
           Icon(typeIcon(layer.type), size: 16),
           const SizedBox(width: 6),
           Expanded(
@@ -1051,6 +1035,52 @@ class _BasemapTile extends ConsumerWidget {
                 value: opacity,
                 onChanged: (v) => repo.updateBasemapOpacity(v),
               ),
+      ),
+    );
+  }
+}
+
+/// A row's colour dot, which is also the button that recolours it.
+///
+/// The dot stays 20 dp — the row is short of width for the name already — but
+/// the tap area around it is 32 dp and opaque, and it is announced as a
+/// button: a bare 20 dp `GestureDetector` was hard to hit and read as nothing
+/// at all to a screen reader.
+class _SwatchButton extends StatelessWidget {
+  const _SwatchButton({
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String label;
+  final Color? color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: SizedBox(
+          width: 32,
+          height: 32,
+          child: Center(
+            child: Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                border: Border.all(color: kSwatchRing),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
