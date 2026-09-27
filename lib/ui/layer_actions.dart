@@ -47,6 +47,7 @@ import 'import_actions.dart';
 import 'object_summary.dart';
 import 'theme.dart';
 import 'transit_modes_sheet.dart';
+import 'confirm_delete.dart';
 
 /// Everything a layer's menu can offer, in the order it is offered.
 enum LayerActionId {
@@ -742,6 +743,13 @@ List<LayerAction> layerActionsFor(
       run: () async {
         final messenger = ScaffoldMessenger.maybeOf(context);
         final container = ProviderScope.containerOf(context);
+        if (!await confirmDelete(
+          context,
+          title: 'Delete “${layer.name}”?',
+          body: 'The layer and everything on it go. Undo will bring it back.',
+        )) {
+          return;
+        }
         await repo.deleteLayer(layer.id);
         await _offerUndo(
           container,
@@ -893,6 +901,19 @@ Future<void> deleteFolderFlow(
 }) async {
   final messenger = ScaffoldMessenger.maybeOf(context);
   final container = ProviderScope.containerOf(context);
+  if (!await confirmDelete(
+    context,
+    title: 'Delete the folder “${folder.name}”?',
+    body: layerCount == 0
+        ? 'Undo will bring it back.'
+        : layerCount == 1
+        ? 'Its layer moves out and stays as it is. Undo will bring the '
+              'folder back.'
+        : 'Its $layerCount layers move out and stay as they are. Undo will '
+              'bring the folder back.',
+  )) {
+    return;
+  }
   await ref.read(repositoryProvider).deleteFolder(folder.id);
   await _offerUndo(
     container,

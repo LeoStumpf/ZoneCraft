@@ -28,6 +28,7 @@ import '../geo/coords.dart';
 import 'editor_sheet.dart';
 import 'element_color_dialog.dart';
 import '../state/providers.dart';
+import 'confirm_delete.dart';
 
 /// Docked bottom-sheet editor for a freehand area (closed polygon). Lists the
 /// ring's ordered points — each a single "lat, lng" field with a place-by-tap
@@ -125,6 +126,7 @@ class _FreeAreaEditorSheetState extends ConsumerState<FreeAreaEditorSheet> {
   }
 
   Future<void> _deletePoint(FreeAreaPoint p) async {
+    if (!await confirmDelete(context, title: 'Remove this point?')) return;
     await _repo.deleteFreeAreaPoint(p.id);
   }
 
@@ -182,6 +184,9 @@ class _FreeAreaEditorSheetState extends ConsumerState<FreeAreaEditorSheet> {
               icon: const Icon(Icons.delete_outline),
               color: Theme.of(context).colorScheme.error,
               onPressed: () async {
+                if (!await confirmDelete(context, title: 'Delete this area?')) {
+                  return;
+                }
                 await _repo.deleteFreeArea(id);
                 _close();
               },

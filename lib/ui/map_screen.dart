@@ -61,6 +61,7 @@ import '../state/providers.dart';
 import 'external_link.dart';
 import 'border_reshape.dart';
 import 'camera_viewport.dart';
+import 'confirm_delete.dart';
 import 'editor_sheet_host.dart';
 import 'go_to_place_dialog.dart';
 import 'hit_test.dart';
@@ -1501,6 +1502,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
           label: Value(name.isEmpty ? null : name),
         );
       case 'remove':
+        if (!await confirmDelete(context, title: 'Remove this point?')) return;
         final wasMain = p.isMain;
         final remaining = siblings.where((q) => q.id != p.id).toList();
         await repo.deleteSubspacePoint(p.id);
@@ -1529,6 +1531,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       ),
     ]);
     if (selected == 'remove' && mounted) {
+      if (!await confirmDelete(context, title: 'Remove this point?')) return;
       await onRemove();
       if (mounted) _hint('Point removed.');
     }
@@ -1551,6 +1554,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
         if (name == null || !mounted) return;
         await repo.updateCircle(c.id, label: Value(name.isEmpty ? null : name));
       case 'delete':
+        if (!await confirmDelete(context, title: 'Delete this circle?')) return;
         await repo.deleteCircle(c.id);
         if (mounted) _hint('Circle deleted.');
     }
@@ -1607,6 +1611,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final repo = ref.read(repositoryProvider);
     final marked = _markedPoints.toList();
     if (marked.isEmpty) return;
+    if (!await confirmDelete(
+      context,
+      title: 'Remove ${marked.length} point${marked.length == 1 ? '' : 's'}?',
+    )) {
+      return;
+    }
     final subId = ref.read(selectedSubspaceProvider);
     final lineId = ref.read(selectedFreeLineProvider);
     final areaId = ref.read(selectedFreeAreaProvider);
@@ -3822,9 +3832,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
           lng: latlng.longitude,
         );
       case 'shareCoords':
-        await _sharePlace(latlng);
+        final place = _placeUnder(hits, latlng);
+        await _sharePlace(place.at, suggestedName: place.name);
       case 'copyCoords':
-        await _copyPlace(latlng);
+        final place = _placeUnder(hits, latlng);
+        await _copyPlace(place.at, suggestedName: place.name);
       case 'pasteCoords':
         final point = await showPastePlaceDialog(context);
         if (point == null || !mounted) return;
@@ -3833,6 +3845,29 @@ class _MapScreenState extends ConsumerState<MapScreen>
   }
 
   // --- Sharing a position ---------------------------------------------------
+
+  /// What "Share this place" shares for a long-press at [at]: the POI under
+  /// the finger when there is one — its own position and its name (or, for
+  /// an unnamed one, its category), so the share dialog opens already filled
+  /// in — else the bare coordinate with no name.
+  ({LatLng at, String? name}) _placeUnder(List<HitCandidate> hits, LatLng at) {
+    for (final h in hits) {
+      if (h.ref.kind != ObjectKind.poiPoint) continue;
+      final p = (ref.read(poiPointsProvider).asData?.value ?? const [])
+          .where((x) => x.id == h.ref.id)
+          .firstOrNull;
+      if (p == null) continue;
+      final sets = ref.read(poiSetsProvider).asData?.value ?? const [];
+      final name = p.name?.trim();
+      return (
+        at: LatLng(p.lat, p.lng),
+        name: name != null && name.isNotEmpty
+            ? name
+            : poiCategoryLabel(sets, p.poiSetId),
+      );
+    }
+    return (at: at, name: null);
+  }
 
   /// Opens the share sheet with [at] as a ZoneCraft message.
   ///
@@ -5627,6 +5662,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               ),
                             ),
                           // Add-mode banner: what to tap, plus Undo / Edit last / Done.
+                          // Text above, buttons below: on one row the buttons
+                          // took the width and "Tap one corner of the area"
+                          // ellipsised down to a few letters — the one thing
+                          // on the banner that says what to do.
                           if (mode == MapMode.add && _placeLayerId != null)
                             Padding(
                               padding: const EdgeInsets.only(bottom: 8),
@@ -5634,56 +5673,83 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                 child: Padding(
                                   padding: const EdgeInsets.fromLTRB(
                                     12,
+                                    6,
                                     4,
-                                    4,
-                                    4,
+                                    2,
                                   ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(
-                                        Icons.touch_app_outlined,
-                                        size: 16,
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Flexible(
-                                        child: Text(
-                                          _addBannerText(
-                                            _placeType,
-                                            _addSteps.length,
-                                          ),
-                                          overflow: TextOverflow.ellipsis,
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 360,
+                                    ),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            const Padding(
+                                              padding: EdgeInsets.only(top: 2),
+                                              child: Icon(
+                                                Icons.touch_app_outlined,
+                                                size: 16,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Flexible(
+                                              child: Text(
+                                                _addBannerText(
+                                                  _placeType,
+                                                  _addSteps.length,
+                                                ),
+                                                maxLines: 3,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                      ),
-                                      // Before the first corner there is
-                                      // nothing to undo, and the one other
-                                      // answer to "which area?" is this one.
-                                      if (_isBoxImport(_placeType) &&
-                                          _pendingBoxA == null)
-                                        TextButton(
-                                          onPressed: () =>
-                                              unawaited(_importVisibleMap()),
-                                          child: const Text('Visible map'),
-                                        )
-                                      else
-                                        TextButton(
-                                          onPressed:
-                                              (_addSteps.isEmpty &&
-                                                  _pendingBoxA == null)
-                                              ? null
-                                              : _undoLastAdd,
-                                          child: const Text('Undo'),
+                                        Wrap(
+                                          alignment: WrapAlignment.end,
+                                          spacing: 0,
+                                          children: [
+                                            // Before the first corner there is
+                                            // nothing to undo, and the one other
+                                            // answer to "which area?" is this one.
+                                            if (_isBoxImport(_placeType) &&
+                                                _pendingBoxA == null)
+                                              TextButton(
+                                                onPressed: () => unawaited(
+                                                  _importVisibleMap(),
+                                                ),
+                                                child: const Text(
+                                                  'Visible map',
+                                                ),
+                                              )
+                                            else
+                                              TextButton(
+                                                onPressed:
+                                                    (_addSteps.isEmpty &&
+                                                        _pendingBoxA == null)
+                                                    ? null
+                                                    : _undoLastAdd,
+                                                child: const Text('Undo'),
+                                              ),
+                                            if (_addSteps.isNotEmpty)
+                                              TextButton(
+                                                onPressed: _editLastAdded,
+                                                child: const Text('Edit'),
+                                              ),
+                                            TextButton(
+                                              onPressed: _finishAdd,
+                                              child: const Text('Done'),
+                                            ),
+                                          ],
                                         ),
-                                      if (_addSteps.isNotEmpty)
-                                        TextButton(
-                                          onPressed: _editLastAdded,
-                                          child: const Text('Edit'),
-                                        ),
-                                      TextButton(
-                                        onPressed: _finishAdd,
-                                        child: const Text('Done'),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),

@@ -34,6 +34,7 @@ import 'element_color_dialog.dart';
 import 'import_actions.dart' show convertRingsToFreehandFlow;
 import '../data/service_credits.dart';
 import 'service_credit_line.dart';
+import 'confirm_delete.dart';
 
 /// Docked bottom-sheet editor for a height region: an elevation threshold
 /// applied inside a bounded circle. Lets the user set the centre (typed or
@@ -203,6 +204,12 @@ class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
               icon: const Icon(Icons.delete_outline),
               color: Theme.of(context).colorScheme.error,
               onPressed: () async {
+                if (!await confirmDelete(
+                  context,
+                  title: 'Delete this height area?',
+                )) {
+                  return;
+                }
                 await _repo.deleteHeightRegion(id);
                 _close();
               },

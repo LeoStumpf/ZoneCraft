@@ -166,4 +166,41 @@ void main() {
     expect(ServiceOverride.nominatim.builtInDefault, defaultNominatimHost);
     expect(ServiceOverride.overpass.builtInDefault, overpassEndpoints.first);
   });
+
+  group('redactSecrets', () {
+    test('hides a provider key but keeps the template readable', () {
+      expect(
+        redactSecrets(
+          'https://maps.geoapify.com/v1/tile/osm-carto/{z}/{x}/{y}.png'
+          '?apiKey=0123456789abcdef',
+        ),
+        'https://maps.geoapify.com/v1/tile/osm-carto/{z}/{x}/{y}.png'
+        '?apiKey=YOUR_API_KEY',
+      );
+      expect(
+        redactSecrets('https://t.test/{z}/{x}/{y}.png?style=a&key=s3cret'),
+        'https://t.test/{z}/{x}/{y}.png?style=a&key=YOUR_API_KEY',
+      );
+      expect(
+        redactSecrets('https://t.test/{z}/{x}/{y}?access_token=pk.abc'),
+        'https://t.test/{z}/{x}/{y}?access_token=YOUR_API_KEY',
+      );
+    });
+
+    test('leaves a keyless URL exactly as it was', () {
+      const osm = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+      expect(redactSecrets(osm), osm);
+      expect(
+        redactSecrets('https://t.test/{z}/{x}/{y}.png?style=dark'),
+        'https://t.test/{z}/{x}/{y}.png?style=dark',
+      );
+    });
+
+    test('what Settings shows never carries a key', () {
+      for (final which in ServiceOverride.values) {
+        expect(which.displayDefault, isNot(contains('apiKey=0')));
+        expect(which.displayDefault, redactSecrets(which.builtInDefault));
+      }
+    });
+  });
 }

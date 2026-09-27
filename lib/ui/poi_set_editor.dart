@@ -33,6 +33,7 @@ import 'poi_category_dialog.dart';
 import 'poi_icons.dart';
 import 'element_color_dialog.dart';
 import 'object_summary.dart' show bboxSizeText, formatMeters;
+import 'confirm_delete.dart';
 
 /// Docked editor for one **POI set** — a category fetched once inside a
 /// circle, a station import fetched once over a box, or a hand-made category
@@ -181,6 +182,14 @@ class _PoiSetEditorSheetState extends ConsumerState<PoiSetEditorSheet> {
               icon: const Icon(Icons.delete_outline),
               color: Theme.of(context).colorScheme.error,
               onPressed: () async {
+                if (!await confirmDelete(
+                  context,
+                  title: s.isManual
+                      ? 'Delete this category and its POIs?'
+                      : 'Delete this import?',
+                )) {
+                  return;
+                }
                 await _repo.deletePoiSet(s.id);
                 _close();
               },

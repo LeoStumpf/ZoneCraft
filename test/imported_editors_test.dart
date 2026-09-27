@@ -453,6 +453,9 @@ void main() {
         PoiSetEditorSheet(set: set(), pointCount: 2, layers: [layerOf('poi')]),
       );
       await tester.tap(find.byTooltip('Delete import'));
+      await tester.pumpAndSettle();
+      // Every delete asks first (`confirmDelete`).
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
       await tester.pump();
       expect(repo.calls, contains('deletePoiSet ps1'));
       expect(container.read(selectedPoiSetProvider), isNull);
@@ -737,6 +740,9 @@ void main() {
         ),
       );
       await tester.tap(find.byTooltip('Delete area'));
+      await tester.pumpAndSettle();
+      // Every delete asks first (`confirmDelete`).
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
       await tester.pump();
       expect(repo.calls, contains('deleteBorderArea ba1'));
       expect(container.read(selectedBorderAreaProvider), isNull);

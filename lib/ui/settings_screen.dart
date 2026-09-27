@@ -549,7 +549,7 @@ class _ServiceOverrideFieldState extends State<_ServiceOverrideField> {
         const SizedBox(height: 4),
         Text(widget.which.help, style: theme.textTheme.bodySmall),
         Text(
-          'Default: ${widget.which.builtInDefault}',
+          'Default: ${widget.which.displayDefault}',
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),

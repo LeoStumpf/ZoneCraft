@@ -44,6 +44,7 @@ import '../data/repository.dart';
 import '../state/providers.dart';
 import 'external_link.dart';
 import 'import_actions.dart';
+import 'confirm_delete.dart';
 
 class OsmReportsScreen extends ConsumerStatefulWidget {
   const OsmReportsScreen({super.key, this.client});
@@ -164,6 +165,19 @@ class _OsmReportsScreenState extends ConsumerState<OsmReportsScreen> {
   }
 
   Future<void> _delete(OsmReport report) async {
+    if (!await confirmDelete(
+      context,
+      title: report.sentAt == null
+          ? 'Discard this report?'
+          : 'Remove this report from the list?',
+      body: report.sentAt == null
+          ? 'It has not been sent, so what you wrote is gone for good.'
+          : 'The note stays on OpenStreetMap; only this device\'s record of '
+                'it goes.',
+      action: report.sentAt == null ? 'Discard' : 'Remove',
+    )) {
+      return;
+    }
     await _repo.deleteOsmReport(report.id);
     _toast(
       report.sentAt == null

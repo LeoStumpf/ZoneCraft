@@ -304,10 +304,16 @@ void main() {
       centerLng: 11.5,
       radiusMeters: 100,
     );
+    final folderId = await repo.createFolder(name: 'F');
+    await repo.moveLayerToFolder(layerId, folderId);
     await repo.updateUncertainty(0);
     await repo.saveCamera(48.1, 11.5, 12);
 
     final seededId = await repo.clearAll();
+
+    // Folders go too — the layer cascade never reached them, so a wipe used
+    // to leave an empty folder behind.
+    expect(await repo.watchFolders().first, isEmpty);
 
     // Exactly one fresh layer, no objects left.
     final layers = await repo.watchLayers().first;

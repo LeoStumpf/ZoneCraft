@@ -25,6 +25,7 @@ import '../data/overpass_client.dart' show overpassEndpoints;
 import '../data/place_search.dart' show defaultNominatimHost;
 import '../data/tile_source.dart';
 import '../data/service_credits.dart';
+import '../data/service_overrides.dart' show redactSecrets;
 import 'external_link.dart';
 
 /// What ZoneCraft asks of other people's servers, and how to reach its author.
@@ -189,7 +190,7 @@ class _ServicePolicyScreenState extends State<ServicePolicyScreen> {
           _Who(
             icon: Icons.map_outlined,
             what: 'The base map',
-            who: tileHost.isEmpty ? tiles.urlTemplate : tileHost,
+            who: tileHost.isEmpty ? redactSecrets(tiles.urlTemplate) : tileHost,
             note: tiles.isCommunityOsm
                 ? 'OpenStreetMap’s own servers, run on donations. Map data '
                       'and tiles © OpenStreetMap contributors (ODbL).'

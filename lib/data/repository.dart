@@ -2622,6 +2622,10 @@ class Repository {
     // the in-memory log purely to throw it away a moment later.
     final id = await _db.undo.suspended(() async {
       await _db.delete(_db.layers).go(); // cascades to every element table
+      // Folders are not a layer's children (a layer points at its folder, not
+      // the other way round), so the cascade never reached them and a wipe
+      // left empty folders behind.
+      await _db.delete(_db.folders).go();
       await _db
           .delete(_db.appSettings)
           .go(); // reverts to column defaults on read

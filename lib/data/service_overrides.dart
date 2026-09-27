@@ -43,10 +43,11 @@ enum ServiceOverride {
   /// settings field asserts nothing — see [TileSource.resolve].
   tiles(
     label: 'Map tiles',
-    hint: 'https://tiles.example.org/{z}/{x}/{y}.png',
+    hint: 'https://tiles.example.org/{z}/{x}/{y}.png?apiKey=YOUR_API_KEY',
     help:
-        'A {z}/{x}/{y} template. Offline downloading stays off whatever you '
-        'put here.',
+        'A {z}/{x}/{y} template. If your provider needs a key, paste your own '
+        'into the URL where it says YOUR_API_KEY. Offline downloading stays '
+        'off whatever you put here.',
   ),
 
   /// A full Overpass `/api/interpreter` URL, tried ahead of the public ones.
@@ -96,6 +97,12 @@ enum ServiceOverride {
   /// back the same, a geocoder host carrying a scheme becomes an unresolvable
   /// name — and leaves "is that server actually there" to the request, which is
   /// the only thing that can really answer it.
+  /// [builtInDefault] as it may be **shown**: with any key the build carries
+  /// replaced by a placeholder. A keyed build's tile URL holds the provider
+  /// key in its query, and Settings printed it verbatim — on a screen people
+  /// screenshot when asking for help.
+  String get displayDefault => redactSecrets(builtInDefault);
+
   String? validate(String value) {
     final v = value.trim();
     if (v.isEmpty) return null; // empty = use the default
@@ -117,3 +124,26 @@ enum ServiceOverride {
     }
   }
 }
+
+/// The query parameters that carry a credential in the tile URLs providers
+/// hand out (Geoapify `apiKey`, MapTiler `key`, Thunderforest `apikey`,
+/// Mapbox `access_token`, …). Matched case-insensitively.
+const _secretParams = {
+  'apikey',
+  'api_key',
+  'key',
+  'token',
+  'access_token',
+  'accesstoken',
+};
+
+/// [url] with the value of every credential-carrying query parameter replaced
+/// by `YOUR_API_KEY`, for display. Works on templates as well as URLs — the
+/// `{z}/{x}/{y}` placeholders are left alone, and nothing is parsed, so a
+/// template `Uri.parse` would reject still comes back readable.
+String redactSecrets(String url) => url.replaceAllMapped(
+  RegExp(r'([?&])([^=&#]+)=([^&#]*)'),
+  (m) => _secretParams.contains(m[2]!.toLowerCase())
+      ? '${m[1]}${m[2]}=YOUR_API_KEY'
+      : m[0]!,
+);

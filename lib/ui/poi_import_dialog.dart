@@ -18,6 +18,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 
 import '../data/overpass.dart';
+import '../data/poi_sets.dart' show kTransitStationCategoryKey;
 import '../geo/coords.dart';
 import 'bbox_fields.dart';
 import 'object_summary.dart' show formatMeters;
@@ -118,7 +119,16 @@ class _PoiImportSheetState extends State<PoiImportSheet> {
   @override
   void initState() {
     super.initState();
-    _choices = widget.allCategories ? poiCategories : seedablePoiCategories;
+    // A POI layer imports stations through their own entry (every station
+    // type, with the mode filter), so offering "Transit stations" again here
+    // made a second, filterless route to the same rows. Seeding circles or a
+    // subspace keeps it: stations are exactly what those get seeded with.
+    _choices = widget.allCategories
+        ? [
+            for (final c in poiCategories)
+              if (c.key != kTransitStationCategoryKey) c,
+          ]
+        : seedablePoiCategories;
     _category = _choices.first;
     _box.addListener(_boxChanged);
     WidgetsBinding.instance.addPostFrameCallback(

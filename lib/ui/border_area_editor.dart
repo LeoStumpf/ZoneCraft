@@ -30,6 +30,7 @@ import 'element_color_dialog.dart';
 import 'import_actions.dart' show convertRingsToFreehandFlow;
 import 'hit_test.dart' show geoDistance;
 import 'object_summary.dart' show formatMeters;
+import 'confirm_delete.dart';
 
 /// Docked editor for one imported administrative area.
 ///
@@ -154,6 +155,9 @@ class _BorderAreaEditorSheetState extends ConsumerState<BorderAreaEditorSheet> {
               icon: const Icon(Icons.delete_outline),
               color: Theme.of(context).colorScheme.error,
               onPressed: () async {
+                if (!await confirmDelete(context, title: 'Delete this area?')) {
+                  return;
+                }
                 await _repo.deleteBorderArea(a.id);
                 _close();
               },

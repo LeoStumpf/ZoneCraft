@@ -28,6 +28,7 @@ import '../geo/coords.dart';
 import '../state/providers.dart';
 import 'editor_sheet.dart';
 import 'element_color_dialog.dart';
+import 'confirm_delete.dart';
 
 /// Docked bottom-sheet editor for a circle. Unlike a dialog, this sits below the
 /// map (which stays interactive) and applies every change live to the database,
@@ -199,6 +200,12 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
               icon: const Icon(Icons.delete_outline),
               color: Theme.of(context).colorScheme.error,
               onPressed: () async {
+                if (!await confirmDelete(
+                  context,
+                  title: 'Delete this circle?',
+                )) {
+                  return;
+                }
                 await _repo.deleteCircle(widget.circle.id);
                 _close();
               },

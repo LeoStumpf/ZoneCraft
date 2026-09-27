@@ -28,6 +28,7 @@ import '../geo/coords.dart';
 import '../state/providers.dart';
 import 'editor_sheet.dart';
 import 'element_color_dialog.dart';
+import 'confirm_delete.dart';
 
 /// Docked bottom-sheet editor for a "closest subspace" object. Lists the
 /// object's points — each a single "lat, lng" field with a "main" radio, a
@@ -122,6 +123,7 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
   }
 
   Future<void> _deletePoint(SubspacePoint p) async {
+    if (!await confirmDelete(context, title: 'Remove this point?')) return;
     final wasMain = p.isMain;
     final remaining = widget.points.where((q) => q.id != p.id).toList();
     await _repo.deleteSubspacePoint(p.id);
@@ -186,6 +188,12 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
               icon: const Icon(Icons.delete_outline),
               color: Theme.of(context).colorScheme.error,
               onPressed: () async {
+                if (!await confirmDelete(
+                  context,
+                  title: 'Delete this subspace and all its points?',
+                )) {
+                  return;
+                }
                 await _repo.deleteSubspace(id);
                 _close();
               },

@@ -30,6 +30,7 @@ import '../state/providers.dart';
 import 'editor_sheet.dart';
 import 'element_color_dialog.dart';
 import 'region_geometry.dart';
+import 'confirm_delete.dart';
 
 /// Docked bottom-sheet editor for a freehand line (polyline). Lists the line's
 /// ordered points — each a single "lat, lng" field with a place-by-tap button
@@ -166,6 +167,7 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
   }
 
   Future<void> _deletePoint(FreeLinePoint p) async {
+    if (!await confirmDelete(context, title: 'Remove this point?')) return;
     await _repo.deleteFreeLinePoint(p.id);
   }
 
@@ -224,6 +226,9 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
               icon: const Icon(Icons.delete_outline),
               color: Theme.of(context).colorScheme.error,
               onPressed: () async {
+                if (!await confirmDelete(context, title: 'Delete this line?')) {
+                  return;
+                }
                 await _repo.deleteFreeLine(id);
                 _close();
               },
