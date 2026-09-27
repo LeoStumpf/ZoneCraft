@@ -36,11 +36,23 @@ import 'theme.dart';
 /// Left-hand drawer for managing layers: list, choose active, visibility,
 /// reorder, colour, rename, inverse, delete, and add. Replaces the old bottom
 /// sheet so the map stays usable alongside it.
-class LayersDrawer extends ConsumerWidget {
+class LayersDrawer extends ConsumerStatefulWidget {
   const LayersDrawer({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<LayersDrawer> createState() => _LayersDrawerState();
+}
+
+class _LayersDrawerState extends ConsumerState<LayersDrawer> {
+  /// Whether a row is being dragged — while one is, every open folder's end
+  /// row grows into a labelled drop slot. At rest it is a 6 dp line (or one
+  /// line of text in an empty folder), and hitting a target that thin with a
+  /// finger-sized row took pixel aiming: the drop kept landing above the
+  /// folder or past it.
+  bool _dragging = false;
+
+  @override
+  Widget build(BuildContext context) {
     final layersAsync = ref.watch(layersProvider);
     final poiSets =
         ref.watch(poiSetsProvider).asData?.value ?? const <PoiSet>[];
@@ -260,6 +272,8 @@ class LayersDrawer extends ConsumerWidget {
                         // is a boundary, and the default would make it a thing
                         // you can pick up.
                         buildDefaultDragHandles: false,
+                        onReorderStart: (_) => setState(() => _dragging = true),
+                        onReorderEnd: (_) => setState(() => _dragging = false),
                         // `moveDrawerRows` works out the new parent as well as
                         // the new order — a drop joins whatever the row above
                         // it belongs to — and returns the list unchanged when
@@ -323,7 +337,25 @@ class LayersDrawer extends ConsumerWidget {
                                 key: ValueKey(row.id),
                                 folder: row.folder,
                                 end: true,
-                                child: row.isEmpty
+                                child: _dragging
+                                    ? SizedBox(
+                                        height: 56,
+                                        child: Center(
+                                          child: Text(
+                                            'Drop here to put it in '
+                                            '“${row.folder.name}”',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodySmall
+                                                ?.copyWith(
+                                                  fontStyle: FontStyle.italic,
+                                                ),
+                                          ),
+                                        ),
+                                      )
+                                    : row.isEmpty
                                     ? Padding(
                                         padding: const EdgeInsets.fromLTRB(
                                           24,
@@ -465,7 +497,9 @@ class _FolderTile extends ConsumerWidget {
     final subtitle = StringBuffer(
       '${layers.length} layer${layers.length == 1 ? '' : 's'}',
     );
-    if (elementCount > 0) subtitle.write(' · $elementCount');
+    if (elementCount > 0) {
+      subtitle.write(' · $elementCount element${elementCount == 1 ? '' : 's'}');
+    }
     if (folder.isInverted) subtitle.write(' · inverted');
     if (!folder.isVisible) subtitle.write(' · hidden');
     if (folder.overrideColor && folder.colorArgb != null) {
@@ -528,7 +562,7 @@ class _FolderTile extends ConsumerWidget {
           Expanded(
             child: Text(
               folder.name,
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.titleSmall,
             ),
@@ -592,6 +626,10 @@ class _FolderTile extends ConsumerWidget {
                 value: 'opacity',
                 child: Text('Transparency…'),
               ),
+              // The two tick boxes sit between dividers: a checked item is
+              // indented for its tick, and next to plain items that read as
+              // misalignment rather than as a group of switches.
+              const PopupMenuDivider(),
               // A tick box, because it is a mode the folder is in: on, every
               // layer inside draws in the folder's colour; off, each draws in
               // its own again (nothing about the layers was changed).
@@ -638,6 +676,7 @@ class _FolderTile extends ConsumerWidget {
                         ],
                       ),
               ),
+              const PopupMenuDivider(),
               PopupMenuItem(
                 value: 'export',
                 enabled: layers.isNotEmpty,
@@ -824,10 +863,9 @@ class _LayerTile extends ConsumerWidget {
           : null,
       // Three trailing controls (elements, menu, drag) leave little room for the
       // name, so claw back the default paddings and keep every control compact.
-      // A member of a folder is indented, which is the only thing saying it is
-      // in one — and the amount is small for the same reason: the room is not
-      // there to spend.
-      contentPadding: EdgeInsets.only(left: folder == null ? 4 : 20, right: 4),
+      // The folder band's rail already says a member is in a folder; the old
+      // 16 dp indent on top of it only took room from the name.
+      contentPadding: EdgeInsets.only(left: folder == null ? 4 : 8, right: 4),
       horizontalTitleGap: 4,
       minLeadingWidth: 36,
       // Tap to make active; tap the active layer again to have no active layer.
@@ -865,6 +903,10 @@ class _LayerTile extends ConsumerWidget {
           Expanded(
             child: Text(
               layer.name,
+              // Two lines before an ellipsis: with three trailing controls the
+              // name gets ~80 dp at a large system font, and "Subspac…" does
+              // not say which layer it is.
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: isActive
                   ? const TextStyle(fontWeight: FontWeight.bold)

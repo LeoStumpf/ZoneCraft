@@ -110,6 +110,13 @@ class EditorLayerPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // With only the element's own layer to choose there is nothing to pick,
+    // and on a header row the dropdown was a truncated "Subsp…" taking the
+    // room the title needed. The Spacer keeps the row's buttons where the
+    // Flexible would have pushed them.
+    if (layers.length <= 1 && layers.any((l) => l.id == selectedId)) {
+      return const Spacer();
+    }
     return Flexible(
       child: DropdownButton<String>(
         isExpanded: true,

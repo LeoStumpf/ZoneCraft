@@ -19,7 +19,7 @@ import 'package:flutter/material.dart';
 import '../state/map_mode.dart';
 import 'layer_actions.dart';
 import 'map_controls.dart';
-import 'theme.dart' show MapLabel;
+import 'theme.dart' show MapChrome;
 
 /// The Add button's label for a layer type. A nested ternary got unreadable at
 /// seven types; this is the same mapping as a switch.
@@ -208,30 +208,50 @@ class MapFabColumn extends StatelessWidget {
 
   /// [button] with its one-word [caption] underneath, when captions are on.
   ///
-  /// The word is drawn the way the map draws its own labels — dark ink with a
-  /// light halo — so it reads over any tile without a box of its own, and the
-  /// slot is a fixed width so a row of them lines up whatever the words are.
+  /// The word sits on a small chrome pill, so it reads as part of the button
+  /// rather than as another map label, and the slot is a fixed width so a row
+  /// of them lines up whatever the words are.
   Widget _captioned(Widget button, String? caption) {
     if (!captions || caption == null) return button;
-    return SizedBox(
-      width: _captionWidth,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          button,
-          const SizedBox(height: 2),
-          MapLabel(caption, fontSize: 11, fontWeight: FontWeight.w600),
-        ],
+    return Builder(
+      builder: (context) => SizedBox(
+        width: _captionWidth,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            button,
+            const SizedBox(height: 3),
+            // On a pill of the chrome's own paper, not haloed onto the map: a
+            // haloed word is exactly what the map's street and POI names look
+            // like, and "Search" read as part of the café label under it.
+            MapChrome(
+              radius: 8,
+              elevation: 1,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                child: Text(
+                  caption,
+                  maxLines: 1,
+                  overflow: TextOverflow.fade,
+                  softWrap: false,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  static const double _captionWidth = 54;
+  static const double _captionWidth = 60;
 
   /// The gap between two buttons in the bottom row: the captions' fixed-width
   /// slots already space them, and six of them at the usual 12 dp apart
   /// would run off a phone's edge.
-  double get _rowGap => captions ? 2 : 12;
+  double get _rowGap => captions ? 0 : 12;
 
   String? _cap(MapControlId id) => mapControl(id).caption;
 

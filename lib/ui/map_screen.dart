@@ -166,6 +166,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
   // Shows the "handles are draggable" hint once per app session, the first time
   // an object is selected.
   bool _editHintShown = false;
+
+  /// A hint raised while a sheet holds the bottom of the screen, shown in the
+  /// banner column at the top instead of as a snackbar (see [_hint]).
+  String? _topHint;
+  Timer? _topHintTimer;
   // --- Info chip ------------------------------------------------------------
   // What a tap landed on, shown as a transient chip with one deliberate
   // action: Edit for an element, Zoom in for a cluster badge. The chip *shows*
@@ -542,6 +547,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   @override
   void dispose() {
     _infoTimer?.cancel();
+    _topHintTimer?.cancel();
     _glide.dispose();
     _twoFingerTap.reset();
     _twist.reset();
@@ -935,10 +941,31 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
   void _hint(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..clearSnackBars()
-      ..showSnackBar(SnackBar(content: Text(message)));
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    // A snackbar is laid out at the bottom of the Scaffold whatever sits in
+    // its sheet slot — Flutter lifts it over the FABs, never over a sheet —
+    // so with an editor open every hint landed on the editor's own controls
+    // (the first-selection tip covered Reset and the position row). While a
+    // sheet is up the hint goes to the banner column at the top instead.
+    if (_sheetUp) {
+      _topHintTimer?.cancel();
+      setState(() => _topHint = message);
+      _topHintTimer = Timer(const Duration(seconds: 4), () {
+        if (mounted) setState(() => _topHint = null);
+      });
+      return;
+    }
+    if (_topHint != null) setState(() => _topHint = null);
+    messenger.showSnackBar(SnackBar(content: Text(message)));
   }
+
+  /// Whether the Scaffold's sheet slot is taken — the same question
+  /// `watchHasMapSheet` answers for the build, asked outside it.
+  bool get _sheetUp =>
+      _importSheet != null ||
+      ref.read(pendingImportProvider) != null ||
+      hasAnySelection(ref) ||
+      ref.read(receivedPointProvider) != null;
 
   /// Toggles tap-to-measure-elevation mode. Modes are mutually exclusive by
   /// construction now, so this only has to clear the *scratch* of whichever
@@ -2745,7 +2772,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
       _pendingBoxA = null;
       _addSteps.clear();
     });
-    _hint(_addBannerText(type, 0));
   }
 
   /// The Add-mode token for "mark two corners and import the stations in
@@ -2937,7 +2963,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
       _drawLayerId = layer.id;
       _drawType = layer.type;
     });
-    _hint(_drawBannerText());
   }
 
   /// Leaves Draw mode, selecting the last stroke so its handles and editor
@@ -3382,16 +3407,21 @@ class _MapScreenState extends ConsumerState<MapScreen>
     return showDialog<_ExistingChoice>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('“${layer.name}” already has its $noun'),
+        title: Text('This layer has its $noun'),
         content: Text(
-          'A $noun layer holds one $noun. Start a new layer for another '
-          'one${drawing ? '' : ', or keep adding points to this one'}?',
+          '“${layer.name}” holds one $noun. Start a new layer for another '
+          'one${drawing ? '' : ', or add points to this one'}? Tap outside '
+          'to cancel.',
         ),
+        // Two actions, not three: with Cancel beside them the row did not
+        // fit and Material stacked all three buttons vertically. Tapping
+        // outside or Back cancels, and the text says so.
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
+          if (drawing)
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
           if (!drawing)
             TextButton(
               onPressed: () => Navigator.pop(ctx, _ExistingChoice.extend),
@@ -4916,7 +4946,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
         (selectedBorderArea != null && selectedBorderLayer != null);
     // First selection of the session: point out that handles now drag and that
     // long-press adds/edits — the gestures are otherwise invisible.
-    if (hasSelection && !_editHintShown) {
+    // Only for what has drag handles: a POI, a border area or an import is not
+    // dragged, and telling someone to drag it is wrong advice.
+    final hasHandles =
+        selectedCircle != null ||
+        selectedSubspace != null ||
+        selectedFreeLine != null ||
+        selectedFreeArea != null ||
+        selectedHeightRegion != null;
+    if (hasHandles && !_editHintShown) {
       _editHintShown = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -6042,10 +6080,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                     constraints: const BoxConstraints(
                                       maxWidth: 360,
                                     ),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
+                                    // One Wrap for text and buttons: they
+                                    // share a line while they fit, and the
+                                    // buttons drop below only when the text
+                                    // needs the room.
+                                    child: Wrap(
+                                      alignment: WrapAlignment.end,
                                       crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                                          WrapCrossAlignment.center,
                                       children: [
                                         Row(
                                           mainAxisSize: MainAxisSize.min,
@@ -6072,42 +6114,34 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                             ),
                                           ],
                                         ),
-                                        Wrap(
-                                          alignment: WrapAlignment.end,
-                                          spacing: 0,
-                                          children: [
-                                            // Before the first corner there is
-                                            // nothing to undo, and the one other
-                                            // answer to "which area?" is this one.
-                                            if (_isBoxImport(_placeType) &&
-                                                _pendingBoxA == null)
-                                              TextButton(
-                                                onPressed: () => unawaited(
-                                                  _importVisibleMap(),
-                                                ),
-                                                child: const Text(
-                                                  'Visible map',
-                                                ),
-                                              )
-                                            else
-                                              TextButton(
-                                                onPressed:
-                                                    (_addSteps.isEmpty &&
-                                                        _pendingBoxA == null)
-                                                    ? null
-                                                    : _undoLastAdd,
-                                                child: const Text('Undo'),
-                                              ),
-                                            if (_addSteps.isNotEmpty)
-                                              TextButton(
-                                                onPressed: _editLastAdded,
-                                                child: const Text('Edit'),
-                                              ),
-                                            TextButton(
-                                              onPressed: _finishAdd,
-                                              child: const Text('Done'),
-                                            ),
-                                          ],
+
+                                        // Before the first corner there is
+                                        // nothing to undo, and the one other
+                                        // answer to "which area?" is this one.
+                                        if (_isBoxImport(_placeType) &&
+                                            _pendingBoxA == null)
+                                          TextButton(
+                                            onPressed: () =>
+                                                unawaited(_importVisibleMap()),
+                                            child: const Text('Visible map'),
+                                          )
+                                        else
+                                          TextButton(
+                                            onPressed:
+                                                (_addSteps.isEmpty &&
+                                                    _pendingBoxA == null)
+                                                ? null
+                                                : _undoLastAdd,
+                                            child: const Text('Undo'),
+                                          ),
+                                        if (_addSteps.isNotEmpty)
+                                          TextButton(
+                                            onPressed: _editLastAdded,
+                                            child: const Text('Edit'),
+                                          ),
+                                        TextButton(
+                                          onPressed: _finishAdd,
+                                          child: const Text('Done'),
                                         ),
                                       ],
                                     ),
@@ -6367,6 +6401,39 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                   onDismiss: () => _showInfo(null),
                                 ),
                             },
+                          // A hint raised while a sheet is up (see [_hint]).
+                          // Tap to put it away sooner.
+                          if (_topHint != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: GestureDetector(
+                                onTap: () => setState(() => _topHint = null),
+                                child: MapChrome(
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 360,
+                                    ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 8,
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                            Icons.info_outline,
+                                            size: 16,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Flexible(child: Text(_topHint!)),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),

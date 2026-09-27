@@ -944,7 +944,7 @@ Future<void> deleteFolderFlow(
   final container = ProviderScope.containerOf(context);
   if (!await confirmDelete(
     context,
-    title: 'Delete the folder “${folder.name}”?',
+    title: 'Delete “${folder.name}”?',
     body: layerCount == 0
         ? 'Undo will bring it back.'
         : layerCount == 1
