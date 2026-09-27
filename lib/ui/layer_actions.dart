@@ -1069,6 +1069,31 @@ Future<void> addLayerFlow(
   ref.read(activeLayerProvider.notifier).select(id);
 }
 
+/// A new, empty layer of [like]'s type — the next palette colour, the default
+/// name — in the same folder as [like], made active. For "this layer already
+/// has its area; start another?", which should land where the first one is.
+Future<String> addSiblingLayer(
+  WidgetRef ref,
+  Layer like,
+  List<Layer> layers,
+) async {
+  final repo = ref.read(repositoryProvider);
+  final id = await repo.undo.group('New layer', () async {
+    final id = await repo.createLayer(
+      name: defaultLayerName(like.type, layers),
+      colorArgb: _palette[layers.length % _palette.length].toARGB32(),
+      type: like.type,
+      borderLevel: like.borderLevel,
+    );
+    if (like.folderId != null) {
+      await repo.moveLayerToFolder(id, like.folderId);
+    }
+    return id;
+  });
+  ref.read(activeLayerProvider.notifier).select(id);
+  return id;
+}
+
 /// Picks the admin level for a new borders layer.
 ///
 /// This is the only creation-time sub-choice any layer type has, and it is

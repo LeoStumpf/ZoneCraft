@@ -1227,6 +1227,72 @@ class _MapScreenState extends ConsumerState<MapScreen>
     );
   }
 
+  /// What Add mode has placed so far on the layer it is placing on: the
+  /// point-built object's points (and whether its outline closes), or the
+  /// centres of the circles tapped this session. Null outside Add mode or
+  /// when nothing is down yet.
+  ({List<({LatLng at, bool main})> dots, List<LatLng> outline, bool closed})?
+  _placingPoints({
+    required MapMode mode,
+    required List<Subspace> subspaces,
+    required Map<String, List<SubspacePoint>> subspacePoints,
+    required List<FreeLine> freeLines,
+    required Map<String, List<FreeLinePoint>> freeLinePoints,
+    required List<FreeArea> freeAreas,
+    required Map<String, List<FreeAreaPoint>> freeAreaPoints,
+    required List<Circle> circles,
+  }) {
+    final layerId = _placeLayerId;
+    if (mode != MapMode.add || layerId == null) return null;
+    switch (_placeType) {
+      case kSubspace:
+        final o = subspaces.where((x) => x.layerId == layerId).firstOrNull;
+        final pts = o == null ? null : subspacePoints[o.id];
+        if (pts == null || pts.isEmpty) return null;
+        return (
+          dots: [
+            for (final p in pts) (at: LatLng(p.lat, p.lng), main: p.isMain),
+          ],
+          outline: const <LatLng>[],
+          closed: false,
+        );
+      case kFreeLine:
+        final o = freeLines.where((x) => x.layerId == layerId).firstOrNull;
+        final pts = o == null ? null : freeLinePoints[o.id];
+        if (pts == null || pts.isEmpty) return null;
+        final lls = [for (final p in pts) LatLng(p.lat, p.lng)];
+        return (
+          dots: [for (final ll in lls) (at: ll, main: false)],
+          outline: lls,
+          closed: false,
+        );
+      case kFreeArea:
+        final o = freeAreas.where((x) => x.layerId == layerId).firstOrNull;
+        final pts = o == null ? null : freeAreaPoints[o.id];
+        if (pts == null || pts.isEmpty) return null;
+        final lls = [for (final p in pts) LatLng(p.lat, p.lng)];
+        return (
+          dots: [for (final ll in lls) (at: ll, main: false)],
+          outline: lls,
+          closed: lls.length >= 3,
+        );
+      case kCircles:
+        final ids = {
+          for (final st in _addSteps)
+            if (st.kind == ObjectKind.circle) st.id,
+        };
+        final dots = [
+          for (final c in circles)
+            if (ids.contains(c.id))
+              (at: LatLng(c.centerLat, c.centerLng), main: false),
+        ];
+        if (dots.isEmpty) return null;
+        return (dots: dots, outline: const <LatLng>[], closed: false);
+      default:
+        return null;
+    }
+  }
+
   /// The crosshair core used for a bounding-circle centre handle (freehand-line
   /// inclusion / height region) — reads differently from the plain point dots.
   Widget _crosshairCore() {
@@ -1844,9 +1910,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
       case MapRequestKind.importFile:
         return; // handled above
       case MapRequestKind.enterAdd:
-        await _enterAddMode(layer);
+        await _startAdd(layer);
       case MapRequestKind.enterDraw:
-        _enterDrawMode(layer);
+        await _startDraw(layer);
     }
   }
 
@@ -2779,7 +2845,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       _drawLayerId = layer.id;
       _drawType = layer.type;
     });
-    _hint(_drawBannerText(0));
+    _hint(_drawBannerText());
   }
 
   /// Leaves Draw mode, selecting the last stroke so its handles and editor
@@ -2799,13 +2865,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (last != null) _select(last.kind, last.id);
   }
 
-  String _drawBannerText(int drawn) {
-    final noun = _drawType == 'freearea' ? 'area' : 'line';
-    if (drawn > 0) {
-      return '$drawn $noun${drawn == 1 ? '' : 's'} · draw another';
-    }
-    return 'Drag one finger to draw · two fingers pan';
-  }
+  String _drawBannerText() => 'Drag one finger to draw · two fingers pan';
 
   // --- Draw mode gestures ---------------------------------------------------
   // Raw pointer events, not a gesture recogniser: flutter_map owns the gesture
@@ -2864,6 +2924,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
       _pushAddStep(
         ObjectRef(kind: ObjectKind.freeArea, id: id, layerId: layerId),
       );
+      // One stroke, one shape, and the layer is that shape: drawing ends
+      // and the shape opens in its editor. Staying armed drew a second area
+      // into the same layer, which Add would then never extend.
+      if (mounted) _finishDraw();
     } else {
       // A freehand line splits an inclusion circle, so the circle has to be
       // *visible at the zoom the stroke was drawn at*. The stored-null default
@@ -2893,6 +2957,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       _pushAddStep(
         ObjectRef(kind: ObjectKind.freeLine, id: id, layerId: layerId),
       );
+      if (mounted) _finishDraw();
     }
   }
 
@@ -3127,7 +3192,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       return;
     }
     final layer = _activeLayerNow;
-    if (layer != null) _enterDrawMode(layer);
+    if (layer != null) unawaited(_startDraw(layer));
   }
 
   void _importNearbyForActiveLayer() {
@@ -3146,7 +3211,198 @@ class _MapScreenState extends ConsumerState<MapScreen>
       return;
     }
     final layer = _activeLayerNow;
-    if (layer != null) unawaited(_enterAddMode(layer));
+    if (layer != null) unawaited(_startAdd(layer));
+  }
+
+  /// ✎. On a layer that *is* one element — a subspace, a line, an area — there
+  /// is nothing to choose between, so it opens that element's editor straight
+  /// away instead of arming tap-to-select and waiting for a tap that can only
+  /// ever pick the one thing. Everywhere else it toggles Edit mode.
+  void _toggleEditForActiveLayer() {
+    if (_mode == MapMode.edit) {
+      _enterMode(MapMode.view);
+      return;
+    }
+    final layer = _activeLayerNow;
+    final only = layer == null || _elementCountOf(layer) != 1
+        ? null
+        : _singleElementOf(layer);
+    if (only != null && layer!.isVisible) {
+      _enterMode(MapMode.view);
+      _select(only.kind, only.id);
+      return;
+    }
+    _enterMode(MapMode.edit);
+  }
+
+  // --- "New" on a layer that is one element ---------------------------------
+
+  /// The element a [kSingleElementTypes] layer is made of, or null when it
+  /// has none yet (or is some other type). The first by creation, which is
+  /// the one Add taps points onto.
+  ObjectRef? _singleElementOf(Layer layer) {
+    final String? id = switch (layer.type) {
+      kSubspace =>
+        (ref.read(subspacesProvider).asData?.value ?? const [])
+            .where((s) => s.layerId == layer.id)
+            .firstOrNull
+            ?.id,
+      kFreeLine =>
+        (ref.read(freeLinesProvider).asData?.value ?? const [])
+            .where((l) => l.layerId == layer.id)
+            .firstOrNull
+            ?.id,
+      kFreeArea =>
+        (ref.read(freeAreasProvider).asData?.value ?? const [])
+            .where((a) => a.layerId == layer.id)
+            .firstOrNull
+            ?.id,
+      _ => null,
+    };
+    final kind = ObjectKind.forLayerType(layer.type);
+    if (id == null || kind == null) return null;
+    return ObjectRef(kind: kind, id: id, layerId: layer.id);
+  }
+
+  /// How many elements [layer] holds, for the single-element types.
+  int _elementCountOf(Layer layer) => switch (layer.type) {
+    kSubspace =>
+      (ref.read(subspacesProvider).asData?.value ?? const [])
+          .where((s) => s.layerId == layer.id)
+          .length,
+    kFreeLine =>
+      (ref.read(freeLinesProvider).asData?.value ?? const [])
+          .where((l) => l.layerId == layer.id)
+          .length,
+    kFreeArea =>
+      (ref.read(freeAreasProvider).asData?.value ?? const [])
+          .where((a) => a.layerId == layer.id)
+          .length,
+    _ => 0,
+  };
+
+  static String _elementNoun(String type) => switch (type) {
+    kSubspace => 'subspace',
+    kFreeLine => 'line',
+    _ => 'area',
+  };
+
+  /// "This layer already has its area": a new layer (the answer the model
+  /// expects — one area per layer), more points on the existing one, or
+  /// nothing. [drawing] leaves out "more points": a stroke is a whole new
+  /// shape, so there is nothing to add it *to*.
+  Future<_ExistingChoice?> _askExistingElement(
+    Layer layer, {
+    required bool drawing,
+  }) {
+    final noun = _elementNoun(layer.type);
+    return showDialog<_ExistingChoice>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('“${layer.name}” already has its $noun'),
+        content: Text(
+          'A $noun layer holds one $noun. Start a new layer for another '
+          'one${drawing ? '' : ', or keep adding points to this one'}?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          if (!drawing)
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, _ExistingChoice.extend),
+              child: const Text('Add points'),
+            ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, _ExistingChoice.newLayer),
+            child: const Text('New layer'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// A line or an area can be tapped out point by point or drawn: which?
+  Future<bool?> _askDraw(Layer layer) {
+    final noun = _elementNoun(layer.type);
+    return showModalBottomSheet<bool>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(title: Text('New $noun')),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.touch_app_outlined),
+              title: const Text('By points'),
+              subtitle: const Text('Tap the map where each corner goes'),
+              onTap: () => Navigator.pop(ctx, false),
+            ),
+            ListTile(
+              leading: const Icon(Icons.gesture),
+              title: const Text('By drawing'),
+              subtitle: const Text('Trace it with one finger'),
+              onTap: () => Navigator.pop(ctx, true),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Resolves "a new layer?" for a single-element layer that already has its
+  /// element. Returns the layer to go on with — [layer] itself, or the fresh
+  /// sibling — and whether the answer was "more points on this one"; null
+  /// when the user backed out.
+  Future<({Layer layer, bool extend})?> _resolveSingleElement(
+    Layer layer, {
+    required bool drawing,
+  }) async {
+    if (!kSingleElementTypes.contains(layer.type) ||
+        _singleElementOf(layer) == null) {
+      return (layer: layer, extend: false);
+    }
+    final choice = await _askExistingElement(layer, drawing: drawing);
+    if (choice == null || !mounted) return null;
+    if (choice == _ExistingChoice.extend) return (layer: layer, extend: true);
+    final layers = ref.read(layersProvider).asData?.value ?? const <Layer>[];
+    final id = await addSiblingLayer(ref, layer, layers);
+    if (!mounted) return null;
+    // Built from the known values rather than waiting for the stream to
+    // bring the row back: Add and Draw only need its id and type.
+    return (
+      layer: layer.copyWith(id: id, folderId: Value(layer.folderId)),
+      extend: false,
+    );
+  }
+
+  /// What Add does before it arms: on a line or area layer, "by points or
+  /// by drawing?"; on a layer that already has its one element, "a new
+  /// layer?" first. Every other type arms straight away.
+  Future<void> _startAdd(Layer layer) async {
+    final resolved = await _resolveSingleElement(layer, drawing: false);
+    if (resolved == null || !mounted) return;
+    final target = resolved.layer;
+    if (!resolved.extend &&
+        (target.type == kFreeLine || target.type == kFreeArea)) {
+      final draw = await _askDraw(target);
+      if (draw == null || !mounted) return;
+      if (draw) {
+        _enterDrawMode(target);
+        return;
+      }
+    }
+    await _enterAddMode(target);
+  }
+
+  /// The pencil: draw one new line or area — into a new layer when this one
+  /// already has its shape.
+  Future<void> _startDraw(Layer layer) async {
+    final resolved = await _resolveSingleElement(layer, drawing: true);
+    if (resolved == null || !mounted) return;
+    _enterDrawMode(resolved.layer);
   }
 
   void _addAtMapCentreForActiveLayer() {
@@ -4615,6 +4871,20 @@ class _MapScreenState extends ConsumerState<MapScreen>
               .firstOrNull;
     _syncReshapeDraft(selectedBorderShape, armed: reshapeArmed);
     final reshapeDraft = _reshapeDraftShape(selectedBorderShape);
+    // While Add is placing points, the points placed so far — as the same
+    // black dots the editor's handles use, plus the outline of a line or an
+    // area. Without them a subspace showed nothing until its second point
+    // made a cell, and a tapped line was invisible until Done.
+    final placing = _placingPoints(
+      mode: mode,
+      subspaces: subspaces,
+      subspacePoints: subspacePoints,
+      freeLines: freeLines,
+      freeLinePoints: freeLinePoints,
+      freeAreas: freeAreas,
+      freeAreaPoints: freeAreaPoints,
+      circles: circles,
+    );
     final hasSelection =
         selectedCircle != null ||
         selectedSubspace != null ||
@@ -5087,6 +5357,36 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               ),
                             ],
                           ),
+                        if (placing != null) ...[
+                          if (placing.outline.length >= 2)
+                            PolylineLayer(
+                              polylines: [
+                                Polyline(
+                                  points: [
+                                    ...placing.outline,
+                                    if (placing.closed) placing.outline.first,
+                                  ],
+                                  color: kMapInk,
+                                  strokeWidth: 1.5,
+                                ),
+                              ],
+                            ),
+                          MarkerLayer(
+                            markers: [
+                              for (final d in placing.dots)
+                                Marker(
+                                  point: d.at,
+                                  width: 24,
+                                  height: 24,
+                                  child: IgnorePointer(
+                                    child: Center(
+                                      child: _editPointDot(main: d.main),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
                         // A file's geometry, before any of it is written. Drawn
                         // over everything in a colour that is not a layer colour:
                         // this is a question, not content.
@@ -5814,19 +6114,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                       const SizedBox(width: 6),
                                       Flexible(
                                         child: Text(
-                                          _drawBannerText(_addSteps.length),
+                                          _drawBannerText(),
                                           overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
                                       TextButton(
-                                        onPressed: _addSteps.isEmpty
-                                            ? null
-                                            : _undoLastAdd,
-                                        child: const Text('Undo'),
-                                      ),
-                                      TextButton(
                                         onPressed: _finishDraw,
-                                        child: const Text('Done'),
+                                        child: const Text('Cancel'),
                                       ),
                                     ],
                                   ),
@@ -6058,9 +6352,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
               onToggleProbe: _toggleProbe,
               onToggleDistance: _toggleDistance,
               onToggleDraw: _toggleDrawForActiveLayer,
-              onToggleEdit: () => _enterMode(
-                mode == MapMode.edit ? MapMode.view : MapMode.edit,
-              ),
+              onToggleEdit: _toggleEditForActiveLayer,
               onQuickToggle: () => quickToggle == null
                   ? null
                   : unawaited(_runQuickToggle(quickToggle)),
@@ -6481,3 +6773,6 @@ class _TileFailureBanner extends StatelessWidget {
     );
   }
 }
+
+/// The answers to "this layer already has its area".
+enum _ExistingChoice { newLayer, extend }

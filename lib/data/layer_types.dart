@@ -72,6 +72,13 @@ const kMixedContentTypes = <String>[
 /// markers, and pressing it wrote `isInverted` and left the map untouched.
 const kInvertibleTypes = <String>[kCircles, kSubspace, kFreeLine, kFreeArea];
 
+/// The types whose layer is **one element**: a subspace, a line or an area is
+/// built point by point into the layer's single object, and Add taps more
+/// points onto it rather than starting a second one. So a second "new" on
+/// such a layer is really a question — another layer, or more points on this
+/// one — and ✎ on it has only one thing to open.
+const kSingleElementTypes = <String>{kSubspace, kFreeLine, kFreeArea};
+
 /// Every type a *layer* can be. Used by the new-layer picker and by tests that
 /// want to be exhaustive.
 const kAllLayerTypes = <String>[

@@ -19,7 +19,6 @@ import 'package:flutter/material.dart';
 import '../state/map_mode.dart';
 import 'layer_actions.dart';
 import 'map_controls.dart';
-import 'object_summary.dart';
 
 /// The Add button's label for a layer type. A nested ternary got unreadable at
 /// seven types; this is the same mapping as a switch.
@@ -436,11 +435,11 @@ class MapFabColumn extends StatelessWidget {
               // rather than asserts.
               onPressed: onToggleAdd,
               onLongPress: hasActiveLayer ? onAddAtMapCentre : null,
-              child: Icon(
-                mode == MapMode.add
-                    ? Icons.check
-                    : typeIcon(activeLayerType ?? 'circles'),
-              ),
+              // A plain "add" on every layer. The type's own icon said which
+              // kind a tap would place, but beside the other type-coloured
+              // symbols it did not read as "new" at all; the tooltip and the
+              // active-layer chip already say which kind.
+              child: Icon(mode == MapMode.add ? Icons.check : Icons.add),
             ),
             const SizedBox(width: 12),
             // Last, and beside the column it governs.

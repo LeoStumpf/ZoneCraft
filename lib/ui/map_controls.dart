@@ -243,9 +243,10 @@ const List<MapControl> mapControls = [
     icon: Icons.add,
     name: 'Add',
     what:
-        'Arms the map: the next tap places a new element where you point. '
-        'Its icon shows which kind. Long-press to place one at the centre '
-        'instead.',
+        'Arms the map: the next tap places a new element of the active '
+        'layer’s kind where you point. On a line or area layer it asks '
+        'first: point by point, or drawn with your finger. Long-press to '
+        'place one at the centre instead.',
   ),
   MapControl(
     id: MapControlId.tools,
