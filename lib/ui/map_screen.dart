@@ -3481,7 +3481,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   }
 
   /// Draw mode (Add → By drawing, or a layer menu's Draw): one new line or area —
-  /// already has its shape.
+  /// into a new layer when this one already has its shape.
   Future<void> _startDraw(Layer layer) async {
     final resolved = await _resolveSingleElement(layer, drawing: true);
     if (resolved == null || !mounted) return;
