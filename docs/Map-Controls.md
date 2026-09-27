@@ -28,7 +28,6 @@ layer's *type* can never use is hidden rather than greyed.
 | **Share my location** | Sends where you are to another app. | Always. |
 | **Measure elevation** | Tap anywhere afterwards to read the height of the ground there. | Always. |
 | **Measure distance** | Tap two points afterwards for the distance and bearing between them. | Always. |
-| **Draw with your finger** | Trace a line or an area instead of tapping point by point. One-finger panning is off while this is on. | Only on a layer that holds lines or areas. |
 
 ## Along the bottom
 

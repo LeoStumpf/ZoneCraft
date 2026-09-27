@@ -96,7 +96,6 @@ enum MapControlId {
   share,
   elevation,
   distance,
-  draw,
   edit,
   quickToggle,
   featureImport,
@@ -200,17 +199,6 @@ const List<MapControl> mapControls = [
     what:
         'Tap two points afterwards for the distance and bearing between '
         'them.',
-  ),
-  MapControl(
-    id: MapControlId.draw,
-    caption: 'Draw',
-    area: MapControlArea.tools,
-    icon: Icons.gesture,
-    name: 'Draw with your finger',
-    what:
-        'Trace a line or an area instead of tapping point by point. '
-        'One-finger panning is off while this is on.',
-    sometimes: 'Only on a layer that holds lines or areas.',
   ),
   MapControl(
     id: MapControlId.edit,
@@ -375,7 +363,6 @@ String? unavailableReason(MapControlId id, MapControlState s) {
     case MapControlId.share:
     case MapControlId.elevation:
     case MapControlId.distance:
-    case MapControlId.draw:
     case MapControlId.featureImport:
     case MapControlId.osmImport:
     case MapControlId.tools:

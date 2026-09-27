@@ -62,7 +62,6 @@ class MapFabColumn extends StatelessWidget {
     required this.showingMyLocation,
     required this.hasActiveLayer,
     required this.activeLayerType,
-    required this.canDraw,
     required this.canImportFeature,
     required this.canImportNearby,
     required this.quickToggle,
@@ -73,7 +72,6 @@ class MapFabColumn extends StatelessWidget {
     required this.onShareMyLocation,
     required this.onToggleProbe,
     required this.onToggleDistance,
-    required this.onToggleDraw,
     required this.onToggleEdit,
     required this.onQuickToggle,
     required this.onImportFeature,
@@ -110,7 +108,6 @@ class MapFabColumn extends StatelessWidget {
   /// Decides the Add button's icon and wording only.
   final String? activeLayerType;
 
-  final bool canDraw;
   final bool canImportFeature;
   final bool canImportNearby;
 
@@ -130,7 +127,6 @@ class MapFabColumn extends StatelessWidget {
   final VoidCallback onShareMyLocation;
   final VoidCallback onToggleProbe;
   final VoidCallback onToggleDistance;
-  final VoidCallback onToggleDraw;
   final VoidCallback onToggleEdit;
   final VoidCallback onQuickToggle;
   final VoidCallback onImportFeature;
@@ -367,26 +363,6 @@ class MapFabColumn extends StatelessWidget {
             _cap(MapControlId.distance),
           ),
           SizedBox(height: captions ? 6 : 12),
-          // Freehand layers only: there is nothing to draw into on a
-          // circle, a subspace or an import layer.
-          if (canDraw) ...[
-            _captioned(
-              FloatingActionButton.small(
-                heroTag: 'draw',
-                tooltip: mapControl(MapControlId.draw).name,
-                backgroundColor: mode == MapMode.draw
-                    ? Theme.of(context).colorScheme.primary
-                    : null,
-                foregroundColor: mode == MapMode.draw
-                    ? Theme.of(context).colorScheme.onPrimary
-                    : null,
-                onPressed: () => onToggleDraw(),
-                child: const Icon(Icons.gesture),
-              ),
-              _cap(MapControlId.draw),
-            ),
-            SizedBox(height: captions ? 6 : 12),
-          ],
         ],
         // Bottom row, left to right: Edit, the per-type quick toggle,
         // up to two import buttons, Add, and finally the tools toggle.

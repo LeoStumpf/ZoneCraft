@@ -3278,15 +3278,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
         .firstOrNull;
   }
 
-  void _toggleDrawForActiveLayer() {
-    if (_mode == MapMode.draw) {
-      _finishDraw();
-      return;
-    }
-    final layer = _activeLayerNow;
-    if (layer != null) unawaited(_startDraw(layer));
-  }
-
   void _importNearbyForActiveLayer() {
     final layer = _activeLayerNow;
     if (layer == null) return;
@@ -3489,7 +3480,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     await _enterAddMode(target);
   }
 
-  /// The pencil: draw one new line or area — into a new layer when this one
+  /// Draw mode (Add → By drawing, or a layer menu's Draw): one new line or area —
   /// already has its shape.
   Future<void> _startDraw(Layer layer) async {
     final resolved = await _resolveSingleElement(layer, drawing: true);
@@ -6409,7 +6400,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
               showingMyLocation: _myPosition != null,
               hasActiveLayer: activeLayer != null,
               activeLayerType: activeLayer?.type,
-              canDraw: canDraw,
               canImportFeature: canImportFeature,
               canImportNearby: isCircleLayer || isSubspaceLayer || isPoiLayer,
               quickToggle: quickToggle,
@@ -6422,7 +6412,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
               onShareMyLocation: () => unawaited(_shareMyLocation()),
               onToggleProbe: _toggleProbe,
               onToggleDistance: _toggleDistance,
-              onToggleDraw: _toggleDrawForActiveLayer,
               onToggleEdit: _toggleEditForActiveLayer,
               onQuickToggle: () => quickToggle == null
                   ? null
