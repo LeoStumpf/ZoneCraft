@@ -437,7 +437,12 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   drawing ends after one stroke. The Add FAB is always `Icons.add`. While Add places points
   they are drawn as the editor's dots (`_placingPoints`).
 - **Button captions** (`AppSettings.fabCaptions`, default on): one word under each round map
-  button, from `MapControl.caption` / `quickToggleCaption`; `map_controls_test` pins them.
+  button, from `MapControl.caption` / `quickToggleCaption`; `map_controls_test` pins them. Each sits on a
+  small `MapChrome` pill — haloed text read as one more map label.
+- **Nothing is drawn over an open sheet.** Flutter lays a snackbar out above the FABs but never
+  above the Scaffold's sheet slot, so `map_screen._hint` shows its message in the top banner
+  column (`_topHint`) whenever `_sheetUp`. While a drawer row is dragged, each open folder's
+  `FolderEndRow` grows into a 56 dp labelled drop slot (`_LayersDrawerState._dragging`).
 - **A displayed service default is redacted** (`redactSecrets`): a keyed build's tile URL
   carries the provider key, and Settings printed it verbatim.
 - **Number entry goes through `parseDecimal`** (`geo/coords.dart`), never bare
