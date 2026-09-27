@@ -35,52 +35,52 @@ void main() {
     test('holds a pin, not a write, and Cancel forgets it', () {
       final c = ProviderContainer();
       addTearDown(c.dispose);
-      final moves = c.read(poiMoveProvider.notifier);
+      final moves = c.read(pointMoveProvider.notifier);
       moves.start('p1', from);
-      expect(c.read(poiMoveProvider)!.moved, isFalse);
+      expect(c.read(pointMoveProvider)!.moved, isFalse);
       moves.moveTo(to);
-      final m = c.read(poiMoveProvider)!;
+      final m = c.read(pointMoveProvider)!;
       expect((m.pointId, m.from, m.to), ('p1', from, to));
       expect(m.moved, isTrue);
       moves.cancel();
-      expect(c.read(poiMoveProvider), isNull);
+      expect(c.read(pointMoveProvider), isNull);
     });
 
     test('a non-finite drop is ignored', () {
       final c = ProviderContainer();
       addTearDown(c.dispose);
-      c.read(poiMoveProvider.notifier)
+      c.read(pointMoveProvider.notifier)
         ..start('p1', from)
         ..moveTo(const LatLng(double.nan, 11));
-      expect(c.read(poiMoveProvider)!.to, from);
+      expect(c.read(pointMoveProvider)!.to, from);
     });
 
     test('clearing the transient modes puts the pin away', () {
       final c = ProviderContainer();
       addTearDown(c.dispose);
-      c.read(poiMoveProvider.notifier).start('p1', from);
+      c.read(pointMoveProvider.notifier).start('p1', from);
       clearTransientModesIn(c);
-      expect(c.read(poiMoveProvider), isNull);
+      expect(c.read(pointMoveProvider), isNull);
     });
   });
 
   group('the banner', () {
     test('asks for a drag until the pin moves, then measures it', () {
       expect(
-        poiMoveBannerText(const PoiMove(pointId: 'p', from: from, to: from)),
+        pointMoveBannerText(const PointMove(pointId: 'p', from: from, to: from)),
         'Drag the pin, or tap where it really is',
       );
       expect(
-        poiMoveBannerText(const PoiMove(pointId: 'p', from: from, to: to)),
+        pointMoveBannerText(const PointMove(pointId: 'p', from: from, to: to)),
         'Moved 24 m north',
       );
     });
 
     testWidgets('Save is off until the pin has moved', (tester) async {
-      Future<void> show(PoiMove m) => tester.pumpWidget(
+      Future<void> show(PointMove m) => tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: PoiMoveBanner(
+            body: PointMoveBanner(
               move: m,
               onCancel: () {},
               onSave: () {},
@@ -92,9 +92,9 @@ void main() {
       FilledButton save() =>
           tester.widget(find.widgetWithText(FilledButton, 'Save'));
 
-      await show(const PoiMove(pointId: 'p', from: from, to: from));
+      await show(const PointMove(pointId: 'p', from: from, to: from));
       expect(save().onPressed, isNull);
-      await show(const PoiMove(pointId: 'p', from: from, to: to));
+      await show(const PointMove(pointId: 'p', from: from, to: to));
       expect(save().onPressed, isNotNull);
       expect(find.text('Save & publish…'), findsOneWidget);
       expect(find.text('Cancel'), findsOneWidget);

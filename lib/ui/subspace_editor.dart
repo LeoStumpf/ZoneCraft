@@ -27,7 +27,9 @@ import '../data/repository.dart';
 import '../geo/coords.dart';
 import '../state/providers.dart';
 import 'editor_sheet.dart';
+import 'edit_value_dialog.dart';
 import 'element_color_dialog.dart';
+import 'poi_move.dart' show PointMoveButton;
 import 'confirm_delete.dart';
 
 /// Docked bottom-sheet editor for a "closest subspace" object. Lists the
@@ -59,9 +61,13 @@ class SubspaceEditorSheet extends ConsumerStatefulWidget {
 }
 
 class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
-  final Map<String, TextEditingController> _ctl = {};
-  final Map<String, FocusNode> _focus = {};
   late final TextEditingController _label;
+
+  /// The subspace as it was when this editor opened — what **Reset** puts
+  /// back. Taken once: an editor is one sitting, and "abort what I did here"
+  /// means back to how it looked when I started, not to the last keystroke.
+  late List<_PointSnap> _snapshot;
+  late String? _labelSnapshot;
 
   Repository get _repo => ref.read(repositoryProvider);
 
@@ -69,57 +75,100 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
   void initState() {
     super.initState();
     _label = TextEditingController(text: widget.subspace.label ?? '');
+    _snapshot = [for (final p in widget.points) _PointSnap.of(p)];
+    _labelSnapshot = widget.subspace.label;
   }
 
   @override
   void didUpdateWidget(SubspaceEditorSheet old) {
     super.didUpdateWidget(old);
-    // Reflect external changes (e.g. placing a point by map tap) in the fields,
-    // but never while the user is editing one, and prune removed points.
-    final ids = widget.points.map((p) => p.id).toSet();
-    for (final p in widget.points) {
-      final c = _ctl[p.id];
-      if (c != null && !(_focus[p.id]?.hasFocus ?? false)) {
-        final t = formatLatLng(p.lat, p.lng);
-        if (c.text != t) c.text = t;
-      }
-    }
-    for (final id in _ctl.keys.toList()) {
-      if (!ids.contains(id)) {
-        _ctl.remove(id)?.dispose();
-        _focus.remove(id)?.dispose();
-      }
+    // A different subspace in the same slot is a new sitting.
+    if (old.subspace.id != widget.subspace.id) {
+      _snapshot = [for (final p in widget.points) _PointSnap.of(p)];
+      _labelSnapshot = widget.subspace.label;
+      _label.text = widget.subspace.label ?? '';
     }
   }
 
   @override
   void dispose() {
-    for (final c in _ctl.values) {
-      c.dispose();
-    }
-    for (final f in _focus.values) {
-      f.dispose();
-    }
     _label.dispose();
     super.dispose();
   }
 
-  TextEditingController _ctlFor(SubspacePoint p) => _ctl.putIfAbsent(
-    p.id,
-    () => TextEditingController(text: formatLatLng(p.lat, p.lng)),
-  );
+  /// Whether anything differs from [_snapshot] — what enables Reset.
+  bool get _changed {
+    if (widget.subspace.label != _labelSnapshot) return true;
+    if (widget.points.length != _snapshot.length) return true;
+    for (var i = 0; i < _snapshot.length; i++) {
+      if (_PointSnap.of(widget.points[i]) != _snapshot[i]) return true;
+    }
+    return false;
+  }
 
-  FocusNode _focusFor(String id) => _focus.putIfAbsent(id, () => FocusNode());
+  /// Puts the subspace back the way it was when the editor opened: points
+  /// added since go, points removed come back, moved and renamed ones return,
+  /// and the main point is the one it was. One undo step, so Reset itself can
+  /// be taken back.
+  Future<void> _reset() async {
+    ref.read(pointMoveProvider.notifier).cancel();
+    final id = widget.subspace.id;
+    final current = {for (final p in widget.points) p.id: p};
+    final keep = {for (final s in _snapshot) s.id};
+    final restored = <_PointSnap>[];
+    await _repo.undo.group('Reset subspace', () async {
+      for (final p in widget.points) {
+        if (!keep.contains(p.id)) await _repo.deleteSubspacePoint(p.id);
+      }
+      String? mainId;
+      for (final snap in _snapshot) {
+        final now = current[snap.id];
+        var rowId = snap.id;
+        if (now == null) {
+          rowId = await _repo.addSubspacePoint(
+            subspaceId: id,
+            lat: snap.lat,
+            lng: snap.lng,
+            label: snap.label,
+          );
+        } else if (_PointSnap.of(now) != snap) {
+          await _repo.updateSubspacePoint(
+            snap.id,
+            lat: snap.lat,
+            lng: snap.lng,
+            label: Value(snap.label),
+          );
+        }
+        if (snap.isMain) mainId = rowId;
+        restored.add(snap.withId(rowId));
+      }
+      if (mainId != null) await _repo.setMainPoint(id, mainId);
+      await _repo.updateSubspace(id, label: Value(_labelSnapshot));
+    });
+    if (!mounted) return;
+    // A point that had to be re-created has a new id; the snapshot follows
+    // it, so a second Reset still knows it.
+    setState(() => _snapshot = restored);
+    _label.text = _labelSnapshot ?? '';
+  }
 
-  void _armPlacement(String pointId, int displayIndex) {
-    ref.read(subspacePlacementProvider.notifier).arm(pointId);
-    ScaffoldMessenger.of(context)
-      ..clearSnackBars()
-      ..showSnackBar(
-        SnackBar(
-          content: Text('Tap the map to place point ${displayIndex + 1}'),
-        ),
-      );
+  Future<void> _editPosition(SubspacePoint p, int index) async {
+    final answer = await showPositionDialog(
+      context,
+      lat: p.lat,
+      lng: p.lng,
+      title: p.label?.trim().isNotEmpty == true
+          ? p.label!.trim()
+          : 'Point ${index + 1}',
+    );
+    if (answer == null || !mounted) return;
+    ref.read(pointMoveProvider.notifier).cancel();
+    await _repo.updateSubspacePoint(
+      p.id,
+      lat: answer.at.latitude,
+      lng: answer.at.longitude,
+    );
+    await _repo.undo.sealStep(label: 'Move point');
   }
 
   Future<void> _deletePoint(SubspacePoint p) async {
@@ -146,7 +195,6 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final armed = ref.watch(subspacePlacementProvider);
     final id = widget.subspace.id;
     final mainId = widget.points.where((p) => p.isMain).firstOrNull?.id;
     final subspaceLayers = widget.layers
@@ -237,18 +285,26 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
               separatorBuilder: (_, _) => const SizedBox(height: 8),
               itemBuilder: (context, i) {
                 final p = widget.points[i];
-                return _pointRow(p, i, armed == p.id);
+                return _pointRow(p, i);
               },
             ),
           ),
         ),
         const SizedBox(height: 8),
-        Row(
+        Wrap(
+          spacing: 8,
           children: [
             TextButton.icon(
               onPressed: widget.onAddPoint,
               icon: const Icon(Icons.add_location_alt_outlined),
               label: const Text('Add point'),
+            ),
+            // Abandon this sitting: back to how the subspace looked when
+            // the editor opened.
+            TextButton.icon(
+              onPressed: _changed ? () => unawaited(_reset()) : null,
+              icon: const Icon(Icons.restart_alt),
+              label: const Text('Reset'),
             ),
           ],
         ),
@@ -309,63 +365,127 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
     );
   }
 
-  Widget _pointRow(SubspacePoint p, int index, bool armed) {
+  Widget _pointRow(SubspacePoint p, int index) {
+    final theme = Theme.of(context);
+    final name = p.label?.trim();
     return Row(
       children: [
         Radio<String>(value: p.id),
         Expanded(
-          child: TextField(
-            controller: _ctlFor(p),
-            focusNode: _focusFor(p.id),
-            decoration: InputDecoration(
-              labelText: p.label != null && p.label!.isNotEmpty
-                  ? '${p.label} (lat, lng)'
-                  : 'Point ${index + 1} (lat, lng)',
-              hintText: '48.137154, 11.575382',
-              isDense: true,
-            ),
-            keyboardType: const TextInputType.numberWithOptions(
-              decimal: true,
-              signed: true,
-            ),
-            onChanged: (s) {
-              final ll = parseLatLng(s);
-              if (ll != null) {
-                logAsyncFailure(
-                  _repo.updateSubspacePoint(
-                    p.id,
-                    lat: ll.latitude,
-                    lng: ll.longitude,
-                  ),
-                  'Moving the point',
-                );
-              }
-            },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                name != null && name.isNotEmpty ? name : 'Point ${index + 1}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelLarge,
+              ),
+              Text(
+                formatLatLng(p.lat, p.lng),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
           ),
         ),
         IconButton(
-          tooltip: 'Rename point ${index + 1}',
-          icon: const Icon(Icons.label_outline),
-          onPressed: () => _renamePoint(p),
+          tooltip: 'Edit the coordinates of point ${index + 1}',
+          icon: const Icon(Icons.edit_location_alt_outlined),
+          onPressed: () => unawaited(_editPosition(p, index)),
         ),
-        IconButton(
-          tooltip: 'Move point ${index + 1} by tapping the map',
-          icon: Icon(armed ? Icons.touch_app : Icons.touch_app_outlined),
-          color: armed ? Theme.of(context).colorScheme.primary : null,
-          onPressed: () => _armPlacement(p.id, index),
+        PointMoveButton(
+          pointId: p.id,
+          lat: p.lat,
+          lng: p.lng,
+          target: PointMoveTarget.subspacePoint,
+          tooltip: 'Move point ${index + 1} on the map',
         ),
-        IconButton(
-          tooltip: 'Delete point ${index + 1}',
-          icon: const Icon(Icons.remove_circle_outline),
-          // Keep at least one point so the object isn't left empty.
-          onPressed: widget.points.length <= 1 ? null : () => _deletePoint(p),
+        PopupMenuButton<String>(
+          tooltip: 'Point ${index + 1} options',
+          icon: const Icon(Icons.more_vert),
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'rename',
+              child: Row(
+                children: [
+                  Icon(Icons.label_outline, size: 18),
+                  SizedBox(width: 8),
+                  Text('Rename…'),
+                ],
+              ),
+            ),
+            PopupMenuItem(
+              value: 'remove',
+              // Keep at least one point so the object isn't left empty.
+              enabled: widget.points.length > 1,
+              child: const Row(
+                children: [
+                  Icon(Icons.remove_circle_outline, size: 18),
+                  SizedBox(width: 8),
+                  Text('Remove'),
+                ],
+              ),
+            ),
+          ],
+          onSelected: (v) {
+            switch (v) {
+              case 'rename':
+                unawaited(_renamePoint(p));
+              case 'remove':
+                logAsyncFailure(_deletePoint(p), 'Removing the point');
+            }
+          },
         ),
       ],
     );
   }
 
   void _close() {
-    ref.read(subspacePlacementProvider.notifier).arm(null);
+    ref.read(pointMoveProvider.notifier).cancel();
     ref.read(selectedSubspaceProvider.notifier).select(null);
   }
+}
+
+/// One point of a subspace as the editor found it, for Reset.
+@immutable
+class _PointSnap {
+  const _PointSnap({
+    required this.id,
+    required this.lat,
+    required this.lng,
+    required this.label,
+    required this.isMain,
+  });
+
+  factory _PointSnap.of(SubspacePoint p) => _PointSnap(
+    id: p.id,
+    lat: p.lat,
+    lng: p.lng,
+    label: p.label,
+    isMain: p.isMain,
+  );
+
+  final String id;
+  final double lat;
+  final double lng;
+  final String? label;
+  final bool isMain;
+
+  _PointSnap withId(String id) =>
+      _PointSnap(id: id, lat: lat, lng: lng, label: label, isMain: isMain);
+
+  @override
+  bool operator ==(Object other) =>
+      other is _PointSnap &&
+      other.id == id &&
+      other.lat == lat &&
+      other.lng == lng &&
+      other.label == label &&
+      other.isMain == isMain;
+
+  @override
+  int get hashCode => Object.hash(id, lat, lng, label, isMain);
 }

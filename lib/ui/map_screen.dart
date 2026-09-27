@@ -29,6 +29,7 @@ import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart' hide Circle;
 import 'package:share_plus/share_plus.dart';
 
+import '../data/osm_report.dart' show OsmReportSubject;
 import '../data/borders.dart';
 import '../data/cached_tile_provider.dart';
 import '../data/database.dart';
@@ -1364,6 +1365,25 @@ class _MapScreenState extends ConsumerState<MapScreen>
     );
   }
 
+  /// A point on the move, where it is stored: its usual dot inside a wide
+  /// ring in the accent colour — the "this one" mark the move is measured
+  /// from.
+  Widget _movingGhost({bool main = false}) {
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: scheme.primary.withValues(alpha: 0.18),
+          border: Border.all(color: scheme.primary, width: 3),
+        ),
+        child: Center(child: _editPointDot(main: main)),
+      ),
+    );
+  }
+
   /// The pin a moving POI is dragged by: a ringed dot with a move glyph, so it
   /// reads as "grab me" rather than as another POI.
   Widget _movePin() {
@@ -1381,35 +1401,48 @@ class _MapScreenState extends ConsumerState<MapScreen>
     );
   }
 
-  /// Ends a POI move: writes the new position (one undo step) and, when
+  /// Ends a point move: writes the new position (one undo step) and, when
   /// [publish], opens the publish sheet on the change just made.
   ///
   /// The row and its sets are read **before** the write, so the note is
   /// composed from what the point was and what it is becoming — the row that
   /// comes back afterwards would already have forgotten the first half.
-  Future<void> _finishPoiMove({required bool publish}) async {
-    final move = ref.read(poiMoveProvider);
+  Future<void> _finishPointMove({required bool publish}) async {
+    final move = ref.read(pointMoveProvider);
     if (move == null) return;
-    ref.read(poiMoveProvider.notifier).cancel();
+    ref.read(pointMoveProvider.notifier).cancel();
     if (!move.moved) return;
-    final point = (ref.read(poiPointsProvider).asData?.value ?? const [])
-        .where((p) => p.id == move.pointId)
-        .firstOrNull;
-    final sets = ref.read(poiSetsProvider).asData?.value ?? const <PoiSet>[];
     final repo = ref.read(repositoryProvider);
-    await repo.movePoiPoint(
-      id: move.pointId,
-      lat: move.to.latitude,
-      lng: move.to.longitude,
-    );
-    await repo.undo.sealStep(label: 'Move POI');
-    if (!publish || point == null || !mounted) return;
-    final subject = osmSubjectFor(
-      point,
-      sets,
-      lat: move.to.latitude,
-      lng: move.to.longitude,
-    );
+    final lat = move.to.latitude;
+    final lng = move.to.longitude;
+    switch (move.target) {
+      case PointMoveTarget.poi:
+        final point = (ref.read(poiPointsProvider).asData?.value ?? const [])
+            .where((p) => p.id == move.pointId)
+            .firstOrNull;
+        final sets =
+            ref.read(poiSetsProvider).asData?.value ?? const <PoiSet>[];
+        await repo.movePoiPoint(id: move.pointId, lat: lat, lng: lng);
+        await repo.undo.sealStep(label: 'Move POI');
+        if (!publish || point == null || !mounted) return;
+        await _publishSubject(osmSubjectFor(point, sets, lat: lat, lng: lng));
+      case PointMoveTarget.subspacePoint:
+        await repo.updateSubspacePoint(move.pointId, lat: lat, lng: lng);
+        await repo.undo.sealStep(label: 'Move point');
+      case PointMoveTarget.circle:
+        await repo.updateCircle(move.pointId, centerLat: lat, centerLng: lng);
+        await repo.undo.sealStep(label: 'Move circle');
+      case PointMoveTarget.freeLinePoint:
+        await repo.updateFreeLinePoint(move.pointId, lat: lat, lng: lng);
+        await repo.undo.sealStep(label: 'Move point');
+      case PointMoveTarget.freeAreaPoint:
+        await repo.updateFreeAreaPoint(move.pointId, lat: lat, lng: lng);
+        await repo.undo.sealStep(label: 'Move point');
+    }
+  }
+
+  /// Opens the publish sheet on [subject] and says how it ended.
+  Future<void> _publishSubject(OsmReportSubject subject) async {
     if (!subject.canPublish) {
       _hint('Nothing to publish — it matches OpenStreetMap');
       return;
@@ -3767,27 +3800,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// this coordinate", writing [latlng] to the armed point and disarming.
   /// Returns whether the tap was consumed.
   Future<bool> _consumeArmedPlacement(LatLng latlng) async {
-    // Moving a POI: a tap drops the pin there — the fallback to dragging it.
+    // Moving a point: a tap drops the pin there — the fallback to dragging it.
     // Nothing is written until the banner's Save.
-    if (ref.read(poiMoveProvider) != null) {
-      ref.read(poiMoveProvider.notifier).moveTo(latlng);
+    if (ref.read(pointMoveProvider) != null) {
+      ref.read(pointMoveProvider.notifier).moveTo(latlng);
       return true;
-    }
-
-    // Placement mode: relocate the selected circle's centre.
-    if (ref.read(circlePlacementProvider)) {
-      final selId = ref.read(selectedCircleProvider);
-      if (selId != null) {
-        await ref
-            .read(repositoryProvider)
-            .updateCircle(
-              selId,
-              centerLat: latlng.latitude,
-              centerLng: latlng.longitude,
-            );
-        ref.read(circlePlacementProvider.notifier).arm(on: false);
-        return true;
-      }
     }
 
     // Placement mode: relocate the selected height region's centre.
@@ -3820,51 +3837,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
         ref.read(freeLineCenterPlacementProvider.notifier).arm(on: false);
         return true;
       }
-    }
-
-    // Placement mode: relocate the armed freehand-line point.
-    final armedLine = ref.read(freeLinePlacementProvider);
-    final selLineId = ref.read(selectedFreeLineProvider);
-    if (armedLine != null && selLineId != null) {
-      await ref
-          .read(repositoryProvider)
-          .updateFreeLinePoint(
-            armedLine,
-            lat: latlng.latitude,
-            lng: latlng.longitude,
-          );
-      ref.read(freeLinePlacementProvider.notifier).arm(null);
-      return true;
-    }
-
-    // Placement mode: relocate the armed freehand-area point.
-    final armedArea = ref.read(freeAreaPlacementProvider);
-    final selAreaId = ref.read(selectedFreeAreaProvider);
-    if (armedArea != null && selAreaId != null) {
-      await ref
-          .read(repositoryProvider)
-          .updateFreeAreaPoint(
-            armedArea,
-            lat: latlng.latitude,
-            lng: latlng.longitude,
-          );
-      ref.read(freeAreaPlacementProvider.notifier).arm(null);
-      return true;
-    }
-
-    // Placement mode: relocate the armed subspace point.
-    final armedSub = ref.read(subspacePlacementProvider);
-    final selSubId = ref.read(selectedSubspaceProvider);
-    if (armedSub != null && selSubId != null) {
-      await ref
-          .read(repositoryProvider)
-          .updateSubspacePoint(
-            armedSub,
-            lat: latlng.latitude,
-            lng: latlng.longitude,
-          );
-      ref.read(subspacePlacementProvider.notifier).arm(null);
-      return true;
     }
 
     return false;
@@ -4595,12 +4567,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
     // A pin left out for a point that is no longer the one being edited would
     // be an unsaved position nobody can see the editor for.
     ref.listen(selectedPoiPointProvider, (_, id) {
-      final move = ref.read(poiMoveProvider);
-      if (move != null && move.pointId != id) {
-        ref.read(poiMoveProvider.notifier).cancel();
+      final move = ref.read(pointMoveProvider);
+      if (move != null &&
+          move.target == PointMoveTarget.poi &&
+          move.pointId != id) {
+        ref.read(pointMoveProvider.notifier).cancel();
       }
     });
-    final poiMove = ref.watch(poiMoveProvider);
+    final pointMove = ref.watch(pointMoveProvider);
     // Read through [_myPosition]; watched so a fix taken elsewhere (the
     // Elements list's distance sort) puts the marker on the map too.
     ref.watch(myPositionProvider);
@@ -4723,13 +4697,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     // [_interactionOptions]. View shows, Edit selects; neither places.
     final tapPlaces =
         (mode != MapMode.view && mode != MapMode.edit) ||
-        ref.watch(poiMoveProvider) != null ||
-        ref.watch(circlePlacementProvider) ||
+        ref.watch(pointMoveProvider) != null ||
         ref.watch(heightPlacementProvider) ||
-        ref.watch(freeLineCenterPlacementProvider) ||
-        ref.watch(freeLinePlacementProvider) != null ||
-        ref.watch(freeAreaPlacementProvider) != null ||
-        ref.watch(subspacePlacementProvider) != null;
+        ref.watch(freeLineCenterPlacementProvider);
     final settings = ref.watch(settingsProvider).asData?.value;
     final uncertainty = settings?.uncertaintyMeters ?? 0;
     final toolsExpanded = settings?.toolsExpanded ?? true;
@@ -5596,15 +5566,44 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         // A POI being moved: a dashed line from where it is
                         // stored (its own marker, still drawn there, is the
                         // ghost) to the pin.
-                        if (poiMove != null && poiMove.moved)
+                        if (pointMove != null && pointMove.moved)
                           PolylineLayer(
                             polylines: [
                               Polyline(
-                                points: [poiMove.from, poiMove.to],
+                                points: [pointMove.from, pointMove.to],
                                 strokeWidth: 3,
                                 color: kMapInk,
                                 pattern: StrokePattern.dashed(
                                   segments: const [10, 8],
+                                ),
+                              ),
+                            ],
+                          ),
+                        // The point being moved, where it is stored: its handle
+                        // is taken off the map for the move (a drag there would
+                        // write straight through the banner's Cancel) and a
+                        // ringed ghost stands in, so it is plain which of eight
+                        // identical dots is the one on the move. A POI needs
+                        // none — its own marker stays where it is.
+                        if (pointMove != null &&
+                            pointMove.target != PointMoveTarget.poi)
+                          MarkerLayer(
+                            markers: [
+                              Marker(
+                                point: pointMove.from,
+                                width: 44,
+                                height: 44,
+                                child: IgnorePointer(
+                                  child: _movingGhost(
+                                    main:
+                                        pointMove.target ==
+                                            PointMoveTarget.subspacePoint &&
+                                        selectedSubspacePoints.any(
+                                          (p) =>
+                                              p.id == pointMove.pointId &&
+                                              p.isMain,
+                                        ),
+                                  ),
                                 ),
                               ),
                             ],
@@ -5618,33 +5617,36 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             markers: [
                               // The moving POI's pin. Its drags change the
                               // mode's state only, never the row — Save writes.
-                              if (poiMove != null)
+                              if (pointMove != null)
                                 _dragHandle(
-                                  poiMove.to,
+                                  pointMove.to,
                                   key: const ValueKey('poi-move'),
                                   core: _movePin(),
                                   onMoved: (ll) => ref
-                                      .read(poiMoveProvider.notifier)
+                                      .read(pointMoveProvider.notifier)
                                       .moveTo(ll),
                                 ),
                               if (selectedCircle != null) ...[
-                                _dragHandle(
-                                  LatLng(
-                                    selectedCircle.centerLat,
-                                    selectedCircle.centerLng,
+                                if (pointMove?.pointId != selectedCircle.id)
+                                  _dragHandle(
+                                    LatLng(
+                                      selectedCircle.centerLat,
+                                      selectedCircle.centerLng,
+                                    ),
+                                    key: ValueKey(
+                                      'circle-${selectedCircle.id}',
+                                    ),
+                                    label: selectedCircle.label,
+                                    onMoved: (ll) => ref
+                                        .read(repositoryProvider)
+                                        .updateCircle(
+                                          selectedCircle.id,
+                                          centerLat: ll.latitude,
+                                          centerLng: ll.longitude,
+                                        ),
+                                    onMenu: (pos) =>
+                                        _showCircleMenu(selectedCircle, pos),
                                   ),
-                                  key: ValueKey('circle-${selectedCircle.id}'),
-                                  label: selectedCircle.label,
-                                  onMoved: (ll) => ref
-                                      .read(repositoryProvider)
-                                      .updateCircle(
-                                        selectedCircle.id,
-                                        centerLat: ll.latitude,
-                                        centerLng: ll.longitude,
-                                      ),
-                                  onMenu: (pos) =>
-                                      _showCircleMenu(selectedCircle, pos),
-                                ),
                                 _radiusHandle(
                                   LatLng(
                                     selectedCircle.centerLat,
@@ -5663,49 +5665,51 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                 ),
                               ],
                               for (final p in selectedSubspacePoints)
-                                _dragHandle(
-                                  LatLng(p.lat, p.lng),
-                                  key: ValueKey('sub-${p.id}'),
-                                  main: p.isMain,
-                                  label: p.label,
-                                  marked: _markedPoints.contains(p.id),
-                                  onTapToggle: () => _toggleMarked(p.id),
-                                  onMoved: (ll) => ref
-                                      .read(repositoryProvider)
-                                      .updateSubspacePoint(
-                                        p.id,
-                                        lat: ll.latitude,
-                                        lng: ll.longitude,
-                                      ),
-                                  onMenu: (pos) => _showSubspacePointMenu(
-                                    p,
-                                    selectedSubspacePoints,
-                                    pos,
-                                  ),
-                                ),
-                              for (final p in selectedFreeLinePoints)
-                                _dragHandle(
-                                  LatLng(p.lat, p.lng),
-                                  key: ValueKey('fl-${p.id}'),
-                                  marked: _markedPoints.contains(p.id),
-                                  onTapToggle: () => _toggleMarked(p.id),
-                                  onMoved: (ll) => ref
-                                      .read(repositoryProvider)
-                                      .updateFreeLinePoint(
-                                        p.id,
-                                        lat: ll.latitude,
-                                        lng: ll.longitude,
-                                      ),
-                                  onMenu: (pos) => _showFreeVertexMenu(
-                                    pos,
-                                    title: 'Line point',
-                                    canRemove:
-                                        selectedFreeLinePoints.length > 2,
-                                    onRemove: () => ref
+                                if (pointMove?.pointId != p.id)
+                                  _dragHandle(
+                                    LatLng(p.lat, p.lng),
+                                    key: ValueKey('sub-${p.id}'),
+                                    main: p.isMain,
+                                    label: p.label,
+                                    marked: _markedPoints.contains(p.id),
+                                    onTapToggle: () => _toggleMarked(p.id),
+                                    onMoved: (ll) => ref
                                         .read(repositoryProvider)
-                                        .deleteFreeLinePoint(p.id),
+                                        .updateSubspacePoint(
+                                          p.id,
+                                          lat: ll.latitude,
+                                          lng: ll.longitude,
+                                        ),
+                                    onMenu: (pos) => _showSubspacePointMenu(
+                                      p,
+                                      selectedSubspacePoints,
+                                      pos,
+                                    ),
                                   ),
-                                ),
+                              for (final p in selectedFreeLinePoints)
+                                if (pointMove?.pointId != p.id)
+                                  _dragHandle(
+                                    LatLng(p.lat, p.lng),
+                                    key: ValueKey('fl-${p.id}'),
+                                    marked: _markedPoints.contains(p.id),
+                                    onTapToggle: () => _toggleMarked(p.id),
+                                    onMoved: (ll) => ref
+                                        .read(repositoryProvider)
+                                        .updateFreeLinePoint(
+                                          p.id,
+                                          lat: ll.latitude,
+                                          lng: ll.longitude,
+                                        ),
+                                    onMenu: (pos) => _showFreeVertexMenu(
+                                      pos,
+                                      title: 'Line point',
+                                      canRemove:
+                                          selectedFreeLinePoints.length > 2,
+                                      onRemove: () => ref
+                                          .read(repositoryProvider)
+                                          .deleteFreeLinePoint(p.id),
+                                    ),
+                                  ),
                               if (selectedFreeLineInclusion != null) ...[
                                 _dragHandle(
                                   selectedFreeLineInclusion.center,
@@ -5739,28 +5743,29 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                 selectedBorderLayer,
                               ),
                               for (final p in selectedFreeAreaPoints)
-                                _dragHandle(
-                                  LatLng(p.lat, p.lng),
-                                  key: ValueKey('fa-${p.id}'),
-                                  marked: _markedPoints.contains(p.id),
-                                  onTapToggle: () => _toggleMarked(p.id),
-                                  onMoved: (ll) => ref
-                                      .read(repositoryProvider)
-                                      .updateFreeAreaPoint(
-                                        p.id,
-                                        lat: ll.latitude,
-                                        lng: ll.longitude,
-                                      ),
-                                  onMenu: (pos) => _showFreeVertexMenu(
-                                    pos,
-                                    title: 'Area point',
-                                    canRemove:
-                                        selectedFreeAreaPoints.length > 3,
-                                    onRemove: () => ref
+                                if (pointMove?.pointId != p.id)
+                                  _dragHandle(
+                                    LatLng(p.lat, p.lng),
+                                    key: ValueKey('fa-${p.id}'),
+                                    marked: _markedPoints.contains(p.id),
+                                    onTapToggle: () => _toggleMarked(p.id),
+                                    onMoved: (ll) => ref
                                         .read(repositoryProvider)
-                                        .deleteFreeAreaPoint(p.id),
+                                        .updateFreeAreaPoint(
+                                          p.id,
+                                          lat: ll.latitude,
+                                          lng: ll.longitude,
+                                        ),
+                                    onMenu: (pos) => _showFreeVertexMenu(
+                                      pos,
+                                      title: 'Area point',
+                                      canRemove:
+                                          selectedFreeAreaPoints.length > 3,
+                                      onRemove: () => ref
+                                          .read(repositoryProvider)
+                                          .deleteFreeAreaPoint(p.id),
+                                    ),
                                   ),
-                                ),
                               if (selectedHeightRegion != null) ...[
                                 _dragHandle(
                                   LatLng(
@@ -5948,17 +5953,20 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             },
                           ),
                           // Moving a POI: how far, and the three ways out.
-                          if (poiMove != null)
+                          if (pointMove != null)
                             Padding(
                               padding: const EdgeInsets.only(bottom: 8),
-                              child: PoiMoveBanner(
-                                move: poiMove,
-                                onCancel: () =>
-                                    ref.read(poiMoveProvider.notifier).cancel(),
+                              child: PointMoveBanner(
+                                move: pointMove,
+                                canPublish:
+                                    pointMove.target == PointMoveTarget.poi,
+                                onCancel: () => ref
+                                    .read(pointMoveProvider.notifier)
+                                    .cancel(),
                                 onSave: () =>
-                                    unawaited(_finishPoiMove(publish: false)),
+                                    unawaited(_finishPointMove(publish: false)),
                                 onSaveAndPublish: () =>
-                                    unawaited(_finishPoiMove(publish: true)),
+                                    unawaited(_finishPointMove(publish: true)),
                               ),
                             ),
                           // Add-mode banner: what to tap, plus Undo / Edit last / Done.

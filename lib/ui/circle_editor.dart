@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:drift/drift.dart' show Value;
@@ -27,7 +28,9 @@ import '../data/repository.dart';
 import '../geo/coords.dart';
 import '../state/providers.dart';
 import 'editor_sheet.dart';
+import 'edit_value_dialog.dart';
 import 'element_color_dialog.dart';
+import 'poi_move.dart' show PointMoveButton;
 import 'confirm_delete.dart';
 
 /// Docked bottom-sheet editor for a circle. Unlike a dialog, this sits below the
@@ -53,9 +56,10 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
   static const _minRadius = 10.0;
   static const _maxRadius = 1000000.0;
 
-  late final TextEditingController _center;
-  final FocusNode _centerFocus = FocusNode();
   late final TextEditingController _label;
+
+  /// The circle as it was when this editor opened — what **Reset** puts back.
+  late ({double lat, double lng, double radius, String? label}) _snapshot;
   // The radius is editable both ways: the log slider for a quick sweep, the
   // field for an exact value ("500 m" is unhittable on a 10 m–1000 km slider).
   late final TextEditingController _radiusField;
@@ -68,9 +72,7 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
   void initState() {
     super.initState();
     final c = widget.circle;
-    _center = TextEditingController(
-      text: formatLatLng(c.centerLat, c.centerLng),
-    );
+    _snapshot = _snap(c);
     _label = TextEditingController(text: c.label ?? '');
     _radius = c.radiusMeters;
     _radiusField = TextEditingController(text: _radiusFieldText(_radius));
@@ -79,10 +81,10 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
   @override
   void didUpdateWidget(CircleEditorSheet old) {
     super.didUpdateWidget(old);
-    // Keep the centre field in sync when the centre is moved by tapping the map.
-    if (!_centerFocus.hasFocus) {
-      final t = formatLatLng(widget.circle.centerLat, widget.circle.centerLng);
-      if (_center.text != t) _center.text = t;
+    // A different circle in the same slot is a new sitting.
+    if (old.circle.id != widget.circle.id) {
+      _snapshot = _snap(widget.circle);
+      _label.text = widget.circle.label ?? '';
     }
     if (widget.circle.radiusMeters != _radius) {
       _radius = widget.circle.radiusMeters;
@@ -92,25 +94,60 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
 
   @override
   void dispose() {
-    _center.dispose();
-    _centerFocus.dispose();
     _label.dispose();
     _radiusField.dispose();
     _radiusFocus.dispose();
     super.dispose();
   }
 
-  void _armPlacement() {
-    ref.read(circlePlacementProvider.notifier).arm(on: true);
-    ScaffoldMessenger.of(context)
-      ..clearSnackBars()
-      ..showSnackBar(
-        const SnackBar(content: Text('Tap the map to place the centre')),
+  static ({double lat, double lng, double radius, String? label}) _snap(
+    Circle c,
+  ) => (
+    lat: c.centerLat,
+    lng: c.centerLng,
+    radius: c.radiusMeters,
+    label: c.label,
+  );
+
+  bool get _changed => _snap(widget.circle) != _snapshot;
+
+  /// Puts the circle back the way it was when the editor opened, as one undo
+  /// step.
+  Future<void> _reset() async {
+    ref.read(pointMoveProvider.notifier).cancel();
+    final s = _snapshot;
+    await _repo.undo.group('Reset circle', () async {
+      await _repo.updateCircle(
+        widget.circle.id,
+        centerLat: s.lat,
+        centerLng: s.lng,
+        radiusMeters: s.radius,
+        label: Value(s.label),
       );
+    });
+    if (!mounted) return;
+    _label.text = s.label ?? '';
+  }
+
+  Future<void> _editCentre() async {
+    final answer = await showPositionDialog(
+      context,
+      lat: widget.circle.centerLat,
+      lng: widget.circle.centerLng,
+      title: 'Centre',
+    );
+    if (answer == null || !mounted) return;
+    ref.read(pointMoveProvider.notifier).cancel();
+    await _repo.updateCircle(
+      widget.circle.id,
+      centerLat: answer.at.latitude,
+      centerLng: answer.at.longitude,
+    );
+    await _repo.undo.sealStep(label: 'Move circle');
   }
 
   void _close() {
-    ref.read(circlePlacementProvider.notifier).arm(on: false);
+    ref.read(pointMoveProvider.notifier).cancel();
     ref.read(selectedCircleProvider.notifier).select(null);
   }
 
@@ -170,7 +207,6 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final armed = ref.watch(circlePlacementProvider);
     final sliderValue =
         (math.log(_radius.clamp(_minRadius, _maxRadius)) / math.ln10).clamp(
           math.log(_minRadius) / math.ln10,
@@ -258,41 +294,46 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
           value: sliderValue.toDouble(),
           onChanged: (v) => _setRadiusFromSlider(math.pow(10, v).toDouble()),
         ),
-        Row(
+        // The centre is a fact with the two ways to change it: typed, or
+        // dragged on the map with the move pin. A live field wrote a new
+        // centre on every keystroke of a half-typed coordinate.
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 4,
           children: [
-            Expanded(
-              child: TextField(
-                controller: _center,
-                focusNode: _centerFocus,
-                decoration: const InputDecoration(
-                  labelText: 'Centre (lat, lng)',
-                  hintText: '48.137154, 11.575382',
-                  isDense: true,
-                ),
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                  signed: true,
-                ),
-                onChanged: (s) {
-                  final p = parseLatLng(s);
-                  if (p != null) {
-                    logAsyncFailure(
-                      _repo.updateCircle(
-                        widget.circle.id,
-                        centerLat: p.latitude,
-                        centerLng: p.longitude,
-                      ),
-                      'Moving the circle',
-                    );
-                  }
-                },
+            ConstrainedBox(
+              constraints: BoxConstraints(minWidth: scaledPx(context, 150)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Centre', style: Theme.of(context).textTheme.labelSmall),
+                  Text(
+                    formatLatLng(
+                      widget.circle.centerLat,
+                      widget.circle.centerLng,
+                    ),
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
               ),
             ),
             IconButton(
-              tooltip: 'Move centre by tapping the map',
-              icon: Icon(armed ? Icons.touch_app : Icons.touch_app_outlined),
-              color: armed ? Theme.of(context).colorScheme.primary : null,
-              onPressed: _armPlacement,
+              tooltip: 'Edit the centre\'s coordinates',
+              icon: const Icon(Icons.edit_location_alt_outlined),
+              onPressed: () => unawaited(_editCentre()),
+            ),
+            PointMoveButton(
+              pointId: widget.circle.id,
+              lat: widget.circle.centerLat,
+              lng: widget.circle.centerLng,
+              target: PointMoveTarget.circle,
+              tooltip: 'Move the centre on the map',
+            ),
+            TextButton.icon(
+              onPressed: _changed ? () => unawaited(_reset()) : null,
+              icon: const Icon(Icons.restart_alt),
+              label: const Text('Reset'),
             ),
           ],
         ),

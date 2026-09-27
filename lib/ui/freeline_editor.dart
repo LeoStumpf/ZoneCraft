@@ -29,6 +29,7 @@ import '../geo/coords.dart';
 import '../state/providers.dart';
 import 'editor_sheet.dart';
 import 'element_color_dialog.dart';
+import 'poi_move.dart' show PointMoveButton;
 import 'region_geometry.dart';
 import 'confirm_delete.dart';
 
@@ -129,17 +130,6 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
 
   FocusNode _focusFor(String id) => _focus.putIfAbsent(id, () => FocusNode());
 
-  void _armPlacement(String pointId, int displayIndex) {
-    ref.read(freeLinePlacementProvider.notifier).arm(pointId);
-    ScaffoldMessenger.of(context)
-      ..clearSnackBars()
-      ..showSnackBar(
-        SnackBar(
-          content: Text('Tap the map to place point ${displayIndex + 1}'),
-        ),
-      );
-  }
-
   void _armCenter() {
     ref.read(freeLineCenterPlacementProvider.notifier).arm(on: true);
     ScaffoldMessenger.of(context)
@@ -184,7 +174,6 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final armed = ref.watch(freeLinePlacementProvider);
     final centerArmed = ref.watch(freeLineCenterPlacementProvider);
     final id = widget.freeLine.id;
     final lineLayers = widget.layers
@@ -255,7 +244,7 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
             separatorBuilder: (_, _) => const SizedBox(height: 8),
             itemBuilder: (context, i) {
               final p = widget.points[i];
-              return _pointRow(p, i, armed == p.id);
+              return _pointRow(p, i);
             },
           ),
         ),
@@ -349,7 +338,7 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
     );
   }
 
-  Widget _pointRow(FreeLinePoint p, int index, bool armed) {
+  Widget _pointRow(FreeLinePoint p, int index) {
     return Row(
       children: [
         Expanded(
@@ -380,11 +369,12 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
             },
           ),
         ),
-        IconButton(
-          tooltip: 'Move point ${index + 1} by tapping the map',
-          icon: Icon(armed ? Icons.touch_app : Icons.touch_app_outlined),
-          color: armed ? Theme.of(context).colorScheme.primary : null,
-          onPressed: () => _armPlacement(p.id, index),
+        PointMoveButton(
+          pointId: p.id,
+          lat: p.lat,
+          lng: p.lng,
+          target: PointMoveTarget.freeLinePoint,
+          tooltip: 'Move point ${index + 1} on the map',
         ),
         PopupMenuButton<String>(
           tooltip: 'Point ${index + 1} options',
@@ -453,7 +443,7 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
   }
 
   void _close() {
-    ref.read(freeLinePlacementProvider.notifier).arm(null);
+    ref.read(pointMoveProvider.notifier).cancel();
     ref.read(selectedFreeLineProvider.notifier).select(null);
   }
 }

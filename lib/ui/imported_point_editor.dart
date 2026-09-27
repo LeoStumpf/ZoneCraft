@@ -25,6 +25,7 @@ import '../data/osm_report.dart';
 import '../data/repository.dart';
 import '../geo/coords.dart' show formatLatLng, parseLatLng;
 import '../state/providers.dart';
+import 'edit_value_dialog.dart';
 import 'editor_sheet.dart';
 import 'osm_report_sheet.dart';
 import 'poi_delete.dart';
@@ -132,8 +133,8 @@ class _ImportedPointEditorSheetState
   /// point is, and the map's own Cancel / Save / Save & publish banner. A
   /// second press puts the pin away again.
   void _toggleMove() {
-    final moves = ref.read(poiMoveProvider.notifier);
-    if (ref.read(poiMoveProvider)?.pointId == widget.id) {
+    final moves = ref.read(pointMoveProvider.notifier);
+    if (ref.read(pointMoveProvider)?.pointId == widget.id) {
       moves.cancel();
       return;
     }
@@ -171,7 +172,7 @@ class _ImportedPointEditorSheetState
   Future<void> _publish(OsmReportSubject subject) async {
     // Put a pending move away first: the sheet covers the map, and a pin left
     // on it would be a second, unsaved position for the same point.
-    ref.read(poiMoveProvider.notifier).cancel();
+    ref.read(pointMoveProvider.notifier).cancel();
     if (!subject.canPublish) {
       _toast('Nothing to publish — it matches OpenStreetMap');
       return;
@@ -189,9 +190,9 @@ class _ImportedPointEditorSheetState
   }
 
   Future<void> _editName() async {
-    final answer = await showDialog<_Edited>(
+    final answer = await showDialog<EditedValue>(
       context: context,
-      builder: (_) => _EditValueDialog(
+      builder: (_) => EditValueDialog(
         title: 'Name',
         initial: widget.name ?? '',
         hint: 'Leave empty to clear',
@@ -209,9 +210,9 @@ class _ImportedPointEditorSheetState
   }
 
   Future<void> _editPosition() async {
-    final answer = await showDialog<_Edited>(
+    final answer = await showDialog<EditedValue>(
       context: context,
-      builder: (_) => _EditValueDialog(
+      builder: (_) => EditValueDialog(
         title: 'Position',
         initial: formatLatLng(widget.lat, widget.lng),
         hint: 'lat, lng',
@@ -245,7 +246,7 @@ class _ImportedPointEditorSheetState
   }
 
   void _close() {
-    ref.read(poiMoveProvider.notifier).cancel();
+    ref.read(pointMoveProvider.notifier).cancel();
     ref.read(selectedPoiPointProvider.notifier).select(null);
   }
 
@@ -260,7 +261,7 @@ class _ImportedPointEditorSheetState
         .where((r) => r.poiPointId == widget.id)
         .firstOrNull;
     final name = widget.name?.trim();
-    final moving = ref.watch(poiMoveProvider)?.pointId == widget.id;
+    final moving = ref.watch(pointMoveProvider)?.pointId == widget.id;
     return EditorSheet(
       children: [
         Row(
@@ -447,81 +448,6 @@ class _Fact extends StatelessWidget {
           ...actions,
         ],
       ),
-    );
-  }
-}
-
-/// A changed value, and whether to publish it too.
-typedef _Edited = ({String value, bool publish});
-
-/// Edit one value, then **Save** or **Save & publish…** — the second only
-/// saves first and then opens the publish sheet, so nothing leaves the device
-/// without that sheet's own Send.
-class _EditValueDialog extends StatefulWidget {
-  const _EditValueDialog({
-    required this.title,
-    required this.initial,
-    required this.hint,
-    required this.validate,
-    this.keyboard,
-    this.capitalization = TextCapitalization.none,
-  });
-
-  final String title;
-  final String initial;
-  final String hint;
-  final String? Function(String) validate;
-  final TextInputType? keyboard;
-  final TextCapitalization capitalization;
-
-  @override
-  State<_EditValueDialog> createState() => _EditValueDialogState();
-}
-
-class _EditValueDialogState extends State<_EditValueDialog> {
-  late final TextEditingController _text = TextEditingController(
-    text: widget.initial,
-  );
-
-  @override
-  void dispose() {
-    _text.dispose();
-    super.dispose();
-  }
-
-  void _done({required bool publish}) {
-    if (widget.validate(_text.text) != null) return;
-    Navigator.pop<_Edited>(context, (value: _text.text, publish: publish));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final error = widget.validate(_text.text);
-    return AlertDialog(
-      title: Text(widget.title),
-      content: TextField(
-        controller: _text,
-        autofocus: true,
-        keyboardType: widget.keyboard,
-        textCapitalization: widget.capitalization,
-        decoration: InputDecoration(hintText: widget.hint, errorText: error),
-        onChanged: (_) => setState(() {}),
-        onSubmitted: (_) => _done(publish: false),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        OutlinedButton(
-          onPressed: error == null ? () => _done(publish: true) : null,
-          child: const Text('Save & publish…'),
-        ),
-        FilledButton(
-          onPressed: error == null ? () => _done(publish: false) : null,
-          child: const Text('Save'),
-        ),
-      ],
     );
   }
 }

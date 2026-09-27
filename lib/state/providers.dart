@@ -395,19 +395,6 @@ final selectedCircleProvider =
       SelectedCircleNotifier.new,
     );
 
-/// While a circle is selected, whether the next map tap relocates its centre.
-/// (Mirrors [heightPlacementProvider].)
-class CirclePlacementNotifier extends Notifier<bool> {
-  @override
-  bool build() => false;
-
-  void arm({required bool on}) => state = on;
-}
-
-final circlePlacementProvider = NotifierProvider<CirclePlacementNotifier, bool>(
-  CirclePlacementNotifier.new,
-);
-
 /// Id of the currently selected subspace, or null. Mutually exclusive with the
 /// other selections (one object of one type is selected at a time).
 class SelectedSubspaceNotifier extends Notifier<String?> {
@@ -422,20 +409,6 @@ final selectedSubspaceProvider =
       SelectedSubspaceNotifier.new,
     );
 
-/// While a subspace is selected, the id of the point the next map tap relocates,
-/// or null for "no placement armed".
-class SubspacePlacementNotifier extends Notifier<String?> {
-  @override
-  String? build() => null;
-
-  void arm(String? pointId) => state = pointId;
-}
-
-final subspacePlacementProvider =
-    NotifierProvider<SubspacePlacementNotifier, String?>(
-      SubspacePlacementNotifier.new,
-    );
-
 /// Id of the currently selected freehand line, or null. Mutually exclusive with
 /// the other object selections (one object of one type is selected at a time).
 class SelectedFreeLineNotifier extends Notifier<String?> {
@@ -448,20 +421,6 @@ class SelectedFreeLineNotifier extends Notifier<String?> {
 final selectedFreeLineProvider =
     NotifierProvider<SelectedFreeLineNotifier, String?>(
       SelectedFreeLineNotifier.new,
-    );
-
-/// While a freehand line is selected, the id of the point the next map tap
-/// relocates, or null for "no placement armed".
-class FreeLinePlacementNotifier extends Notifier<String?> {
-  @override
-  String? build() => null;
-
-  void arm(String? pointId) => state = pointId;
-}
-
-final freeLinePlacementProvider =
-    NotifierProvider<FreeLinePlacementNotifier, String?>(
-      FreeLinePlacementNotifier.new,
     );
 
 /// While a freehand line is selected, whether the next map tap relocates its
@@ -491,20 +450,6 @@ class SelectedFreeAreaNotifier extends Notifier<String?> {
 final selectedFreeAreaProvider =
     NotifierProvider<SelectedFreeAreaNotifier, String?>(
       SelectedFreeAreaNotifier.new,
-    );
-
-/// While a freehand area is selected, the id of the point the next map tap
-/// relocates, or null for "no placement armed".
-class FreeAreaPlacementNotifier extends Notifier<String?> {
-  @override
-  String? build() => null;
-
-  void arm(String? pointId) => state = pointId;
-}
-
-final freeAreaPlacementProvider =
-    NotifierProvider<FreeAreaPlacementNotifier, String?>(
-      FreeAreaPlacementNotifier.new,
     );
 
 /// Id of the currently selected height region, or null. Mutually exclusive with
@@ -626,13 +571,9 @@ void clearTransientModes(WidgetRef ref) =>
 
 /// [clearTransientModes] against the container itself — see [applyUndoIn].
 void clearTransientModesIn(ProviderContainer c) {
-  c.read(circlePlacementProvider.notifier).arm(on: false);
-  c.read(subspacePlacementProvider.notifier).arm(null);
-  c.read(freeLinePlacementProvider.notifier).arm(null);
   c.read(freeLineCenterPlacementProvider.notifier).arm(on: false);
-  c.read(freeAreaPlacementProvider.notifier).arm(null);
   c.read(heightPlacementProvider.notifier).arm(on: false);
-  c.read(poiMoveProvider.notifier).cancel();
+  c.read(pointMoveProvider.notifier).cancel();
   c.read(borderReshapeProvider.notifier).arm(on: false);
 }
 
@@ -846,16 +787,42 @@ final mapRequestProvider = NotifierProvider<MapRequestNotifier, MapRequest?>(
   MapRequestNotifier.new,
 );
 
-/// A POI being moved on the map: which one, where it was, and where the pin
+/// What kind of point a [PointMove] is moving — each is a different row.
+enum PointMoveTarget {
+  /// A `PoiPoints` row: an imported or hand-placed POI or station.
+  poi,
+
+  /// One point of a subspace.
+  subspacePoint,
+
+  /// A circle's centre (the circle's own id).
+  circle,
+
+  /// One vertex of a freehand line.
+  freeLinePoint,
+
+  /// One vertex of a freehand area.
+  freeAreaPoint,
+}
+
+/// A point being moved on the map: which one, where it was, and where the pin
 /// is now.
 @immutable
-class PoiMove {
-  const PoiMove({required this.pointId, required this.from, required this.to});
+class PointMove {
+  const PointMove({
+    required this.pointId,
+    required this.from,
+    required this.to,
+    this.target = PointMoveTarget.poi,
+  });
 
+  /// The row being moved — a POI's, a subspace point's, a circle's…
   final String pointId;
+  final PointMoveTarget target;
 
-  /// Where the point is stored — its own marker stays drawn here, as the
-  /// ghost the move is measured from.
+  /// Where the point is stored. It stays drawn there — a POI as its own
+  /// marker, every other point as a ringed ghost — as what the move is
+  /// measured from, and so it is plain *which* point is moving.
   final LatLng from;
 
   /// Where the drag handle is. Nothing is written until Save.
@@ -864,36 +831,50 @@ class PoiMove {
   bool get moved => from != to;
 }
 
-/// **Moving a POI is a mode, not a write.** The editor's Move arms it; the map
-/// then shows a draggable pin, a dashed line back to where the point is
-/// stored, and a banner with **Cancel / Save / Save & publish**. Only Save
-/// writes — one `movePoiPoint`, one undo step — so a drag you did not mean
-/// costs nothing, and "save and publish" is asked at the moment the new
-/// position is decided, like every other edit.
+/// **Moving a point is a mode, not a write.** An editor's Move arms it; the
+/// map then shows a draggable pin, a dashed line back to where the point is
+/// stored, a ring round the point itself, and a banner with **Cancel / Save**
+/// (and **Save & publish** where the point came from OpenStreetMap). Only
+/// Save writes — one update, one undo step — so a drag you did not mean costs
+/// nothing, and "save and publish" is asked at the moment the new position is
+/// decided, like every other edit.
 ///
-/// Armed for imported points as well as hand-placed ones. Moving an import is
+/// It began as the POI move and is now every point's: a subspace point, a
+/// circle's centre, a line or area vertex. The old "tap the map to place
+/// point 3" armed an invisible state — nothing on the map said which dot
+/// would jump — and wrote on the tap with no way back but Undo.
+///
+/// Armed for imported POIs as well as hand-placed ones. Moving an import is
 /// not forbidden, it is *recorded*: `Repository.movePoiPoint` captures what
 /// OSM returned and stamps `PoiPoints.editedAt`, so the correction can never
 /// pass itself off as upstream data. A tap on the map while armed drops the
 /// pin there — the fallback for anyone who finds dragging fiddly.
-class PoiMoveNotifier extends Notifier<PoiMove?> {
+class PointMoveNotifier extends Notifier<PointMove?> {
   @override
-  PoiMove? build() => null;
+  PointMove? build() => null;
 
-  void start(String pointId, LatLng at) =>
-      state = PoiMove(pointId: pointId, from: at, to: at);
+  void start(
+    String pointId,
+    LatLng at, {
+    PointMoveTarget target = PointMoveTarget.poi,
+  }) => state = PointMove(pointId: pointId, from: at, to: at, target: target);
 
   void moveTo(LatLng to) {
     final m = state;
     if (m == null || !to.latitude.isFinite || !to.longitude.isFinite) return;
-    state = PoiMove(pointId: m.pointId, from: m.from, to: to);
+    state = PointMove(
+      pointId: m.pointId,
+      from: m.from,
+      to: to,
+      target: m.target,
+    );
   }
 
   void cancel() => state = null;
 }
 
-final poiMoveProvider = NotifierProvider<PoiMoveNotifier, PoiMove?>(
-  PoiMoveNotifier.new,
+final pointMoveProvider = NotifierProvider<PointMoveNotifier, PointMove?>(
+  PointMoveNotifier.new,
 );
 
 /// A position that arrived from outside the app — a `zonecraft://` link, or

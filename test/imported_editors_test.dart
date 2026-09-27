@@ -252,13 +252,13 @@ void main() {
       await pump(tester, poiSheet(name: 'Alte Post'));
       await tester.tap(find.widgetWithText(TextButton, 'Move'));
       await tester.pump();
-      final move = container.read(poiMoveProvider)!;
+      final move = container.read(pointMoveProvider)!;
       expect(move.pointId, 'p1');
       expect(move.from, const LatLng(48.001, 11.002));
       expect(repo.calls, isEmpty, reason: 'moving writes nothing until Save');
       await tester.tap(find.text('Moving…'));
       await tester.pump();
-      expect(container.read(poiMoveProvider), isNull);
+      expect(container.read(pointMoveProvider), isNull);
     });
 
     testWidgets('delete asks first, and can tell OSM an import is gone', (
