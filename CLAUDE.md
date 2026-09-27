@@ -356,7 +356,14 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
     (`amenity=bench`, `name=…`); a category with no tag says so rather than guessing. Rows show
     `PoiPublishState` (not published / in your OSM list / sent to OSM), from the newest report
     per `poiPointId`.
-  - **Moving a POI is a mode, not a write** (`poiMoveProvider`, `ui/poi_move.dart`). The
+  - **Moving a point is a mode, not a write** (`pointMoveProvider`, `ui/poi_move.dart`) — for a
+    POI and, since the generalisation, a subspace point, a circle centre and a line/area vertex
+    (`PointMoveTarget`); the non-POI point's own handle leaves the map and a ringed ghost marks
+    it. The old per-point "tap the map to place" providers are gone; editors use
+    `PointMoveButton` and the shared coordinate dialog (`ui/edit_value_dialog.dart`, with a
+    clear button). Subspace and circle editors have **Reset** (snapshot at open, one undo step).
+    A POI-seeded circle/subspace point can **Report to OSM** via `seededPointSubject`.
+  - Originally, for POIs: **Moving a POI is a mode, not a write**. The
     editor's Move puts out a `_dragHandle` pin whose drags only update the mode's `to`; the
     POI's own marker stays at `from` as the ghost, a dashed `Polyline` joins them, and
     `PoiMoveBanner` says "Moved 24 m north-east" with Cancel / Save / Save & publish. Only
@@ -422,6 +429,17 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   additionally go through `placeSearchCache` (a `QueryCache`), because its policy *requires*
   client-side caching and blocks clients that repeat identical queries. **Never add
   autocomplete/per-keystroke geocoding** — the policy forbids it outright.
+- **Every delete asks first** (`confirmDelete`, `ui/confirm_delete.dart`): elements, points,
+  marked points, layers, folders, outbox reports. Never counted by `UiHints`.
+- **A subspace / line / area layer is one element** (`kSingleElementTypes`): ✎ opens it
+  directly; Add on one that already has its element offers a new layer (same folder,
+  `addSiblingLayer`) or more points; Add on a line/area asks *by points / by drawing*, and a
+  drawing ends after one stroke. The Add FAB is always `Icons.add`. While Add places points
+  they are drawn as the editor's dots (`_placingPoints`).
+- **Button captions** (`AppSettings.fabCaptions`, default on): one word under each round map
+  button, from `MapControl.caption` / `quickToggleCaption`; `map_controls_test` pins them.
+- **A displayed service default is redacted** (`redactSecrets`): a keyed build's tile URL
+  carries the provider key, and Settings printed it verbatim.
 - **Number entry goes through `parseDecimal`** (`geo/coords.dart`), never bare
   `double.tryParse` — a comma-decimal locale would otherwise make the field silently no-op.
 - **Editors use the shared shell** (`ui/editor_sheet.dart`): `EditorSheet` (capped at 60 %
@@ -438,7 +456,9 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
 - **The GeoJSON export is a fixed point** (format schema **v6**, `geoJsonSchemaVersion`):
   `export → import → export` must be byte-identical, and `test/export_roundtrip_test.dart`
   asserts exactly that against real rows for all seven types, alongside a whole-DB and a
-  per-layer round-trip. **Anything the DB stores and the UI shows has to survive the trip** —
+  per-layer round-trip. **v7** adds a seeded circle's / subspace point's OSM origin in the
+  per-point lists a POI set already uses (`pointOsmIds`… — one entry for a circle), and a
+  folder's `colorArgb`/`opacity`/`overrideColor`, each written only when set. **Anything the DB stores and the UI shows has to survive the trip** —
   so a hidden layer stays hidden, a `height` region travels **with its generated fill rings**
   (regenerating needs the network and the layer draws *nothing* until it happens), POIs keep
   their `osmType`/`osmId` (dedup identity — without it a re-import draws them all twice), a
@@ -467,7 +487,7 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   placeholder an id-less imported row is stored with (`BorderAreas.osmId` is NOT NULL). Read as
   a real id it made every such area look like the same relation, so a re-import kept one and
   dropped the rest.
-- **Drift schema is at v31**; migrations are append-only `if (from < N)` blocks. (Two
+- **Drift schema is at v32**; migrations are append-only `if (from < N)` blocks. (Two
   exceptions drop tables: v19 *drops* the transit route tables, because route geometry was
   abandoned — see `data/transit.dart`'s header for the measurements behind that — and v27
   copies `planes` → `subspaces` and `transit_*` → `poi_*` then drops them, plus `tracks`.
@@ -476,8 +496,12 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   Earlier blocks that once `createTable`d a dropped table no longer do; the raw `ALTER
   TABLE`s in v22/v26 keep the columns v27 copies on a database old enough to have them.
   **v31** adds the four `poi_points` fork columns and the `osm_reports` outbox, and is purely
-  additive — every existing row reads as untouched, which it is.)
-  v20…v31 are snapshotted in `drift_schemas/` and guarded by `test/migration_test.dart`. **Any schema change must dump a
+  additive — every existing row reads as untouched, which it is. **v32** is additive too:
+  `osm_type/osm_id/orig_*` on `circles` + `subspace_points` (a POI-seeded point remembers its
+  element, `OsmOrigin`), `folders.color_argb/opacity/override_color`, and
+  `app_settings.fab_captions`; the folder columns are added only `if (from >= 30)`, because the
+  v30 block's `createTable(folders)` already builds today's shape.)
+  v20…v32 are snapshotted in `drift_schemas/` and guarded by `test/migration_test.dart`. **Any schema change must dump a
   new snapshot** (`dart run drift_dev schema dump lib/data/database.dart drift_schemas/`, then
   `... schema generate drift_schemas/ test/generated_migrations/`) — a snapshot cannot be
   reconstructed after the version ships, and the test fails until it exists.
@@ -568,7 +592,10 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   out again — which is why merging an inverted line layer into one made the line stop being
   inverted. A folder leaves its members layers. It offers exactly three things: hide the group,
   **Fill outside** the group, and collapse it so seven settled layers take one line.
-  - It **paints nothing**, so it carries no colour and no opacity. Its invert **flips each
+  - It **paints nothing of its own** (v32 gave it a colour, a transparency and a "Use folder
+    colour for all layers" tick box, all folded into the members by `resolveLayers`: opacity
+    *multiplies*, the override replaces the member layer's colour — never its stored row — so
+    elements shade from it as on a recolour). Its invert **flips each
     member's own** rather than compositing them into one region: a member that was already
     inverted goes back to normal, because inverting twice is the identity and that is what
     makes the switch a switch. There is no cross-layer compositing anywhere in the app.
@@ -582,6 +609,10 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
     places it within its folder. Everything order-shaped is pure and tested in
     `ui/layer_tree.dart` under the rule `movedLayerOrder` already lives by — bottom-to-top
     everywhere except `drawerRows`, which *is* the display list.
+  - **An open folder ends in a `FolderEndRow`** (not draggable): above it is inside, below it is
+    after. Without it a layer under an empty folder could never be dropped in (from == to)
+    and a root layer under the last member looked like a member. Members and the end row
+    sit on a `_FolderBand` (rail + wash in the folder colour).
   - **A drop changes the parent of the dropped row only.** Reading the parent off the row above
     for every row swept every layer below the drop into the folder too, because nothing in the
     list says where a folder's members end. A collapsed folder adopts nothing; a folder drags
@@ -671,7 +702,7 @@ clear-all, offline cache, import/export), opt-in locate-me (the app's only use o
 persisted camera, offline resilience (cache-first tiles; **no** prefetch on the community OSM
 servers — see `data/tile_source.dart`), and import/export
 (whole-DB + per-layer + external GeoJSON/KML/KMZ/GPX; freeline imports prompt for their
-inclusion-circle radius). Drift schema is **v31**, GeoJSON format **v6**.
+inclusion-circle radius). Drift schema is **v32**, GeoJSON format **v7**.
 
 `planning/PLAN.md` has no open roadmap items; future polish ideas are listed there.
 `planning/PRODUCTION_AUDIT.md` records the production-readiness pass (what was found, what

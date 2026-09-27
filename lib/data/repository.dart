@@ -32,6 +32,17 @@ import 'serialization.dart';
 import 'service_overrides.dart';
 import 'undo_journal.dart';
 
+/// Which OpenStreetMap element a seeded circle or subspace point came from,
+/// and what the import said about it — so a point later moved or renamed
+/// can say what changed (see `Circles.osmType`).
+typedef OsmOrigin = ({
+  String osmType,
+  int osmId,
+  double lat,
+  double lng,
+  String? name,
+});
+
 /// What an import actually wrote, against what the layer already held.
 ///
 /// [skipped] exists so the result can be *reported*. Silently importing 12 of
@@ -273,7 +284,7 @@ class Repository {
   }
 
   /// A new, empty folder on top of the stack.
-  Future<String> createFolder({required String name}) async {
+  Future<String> createFolder({required String name, int? colorArgb}) async {
     final id = _uuid.v4();
     // One ordering space at the root: a folder sits among the layers that are
     // not in one, so it has to start above both.
@@ -286,7 +297,12 @@ class Repository {
     await _db
         .into(_db.folders)
         .insert(
-          FoldersCompanion.insert(id: id, name: name, sortOrder: top + 1),
+          FoldersCompanion.insert(
+            id: id,
+            name: name,
+            sortOrder: top + 1,
+            colorArgb: Value(colorArgb),
+          ),
         );
     return id;
   }
@@ -297,9 +313,17 @@ class Repository {
     bool? isVisible,
     bool? isInverted,
     bool? isCollapsed,
+    Value<int?> colorArgb = const Value.absent(),
+    double? opacity,
+    bool? overrideColor,
   }) {
     return (_db.update(_db.folders)..where((f) => f.id.equals(id))).write(
       FoldersCompanion(
+        colorArgb: colorArgb,
+        opacity: opacity == null ? const Value.absent() : Value(opacity),
+        overrideColor: overrideColor == null
+            ? const Value.absent()
+            : Value(overrideColor),
         name: name == null ? const Value.absent() : Value(name),
         isVisible: isVisible == null ? const Value.absent() : Value(isVisible),
         isInverted: isInverted == null
@@ -643,6 +667,7 @@ class Repository {
     required double centerLng,
     required double radiusMeters,
     String? label,
+    OsmOrigin? origin,
   }) async {
     final id = _uuid.v4();
     final shade = await _nextColorShade('circles', layerId);
@@ -659,6 +684,11 @@ class Repository {
             label: Value(label),
             colorShade: Value(shade),
             zOrder: Value(z),
+            osmType: Value(origin?.osmType),
+            osmId: Value(origin?.osmId),
+            origLat: Value(origin?.lat),
+            origLng: Value(origin?.lng),
+            origName: Value(origin?.name),
           ),
         );
     return id;
@@ -765,6 +795,7 @@ class Repository {
     required double lng,
     bool isMain = false,
     String? label,
+    OsmOrigin? origin,
   }) async {
     final order = await _maxPointOrder(subspaceId);
     final id = _uuid.v4();
@@ -779,6 +810,11 @@ class Repository {
             sortOrder: order + 1,
             isMain: Value(isMain),
             label: Value(label),
+            osmType: Value(origin?.osmType),
+            osmId: Value(origin?.osmId),
+            origLat: Value(origin?.lat),
+            origLng: Value(origin?.lng),
+            origName: Value(origin?.name),
           ),
         );
     return id;
@@ -2276,6 +2312,7 @@ class Repository {
               basemapVisible: true,
               basemapOpacity: 1.0,
               hintsEnabled: true,
+              fabCaptions: true,
             )
           : rows.first,
     );
@@ -2375,6 +2412,18 @@ class Repository {
           AppSettingsCompanion.insert(
             id: const Value(1),
             hintsEnabled: Value(enabled),
+          ),
+        );
+  }
+
+  /// Shows or hides the one-word captions under the map's round buttons.
+  Future<void> updateFabCaptions({required bool enabled}) {
+    return _db
+        .into(_db.appSettings)
+        .insertOnConflictUpdate(
+          AppSettingsCompanion.insert(
+            id: const Value(1),
+            fabCaptions: Value(enabled),
           ),
         );
   }
@@ -2648,11 +2697,19 @@ class Repository {
   /// GeoJSON/KML serialisation. Layers come out in draw order; child points keep
   /// their stored order. With [onlyLayerId] set, exports just that one layer
   /// (used by the per-layer "Export layer" action).
-  Future<ExportData> exportData({String? onlyLayerId}) async {
+  Future<ExportData> exportData({
+    String? onlyLayerId,
+    String? onlyFolderId,
+  }) async {
     final layersQuery = _db.select(_db.layers)
       ..orderBy([(l) => OrderingTerm(expression: l.sortOrder)]);
     if (onlyLayerId != null) {
       layersQuery.where((l) => l.id.equals(onlyLayerId));
+    }
+    // A folder's export is its members — the same routine, a different
+    // filter, so a folder file and a whole-map file cannot drift apart.
+    if (onlyFolderId != null) {
+      layersQuery.where((l) => l.folderId.equals(onlyFolderId));
     }
     final layers = await layersQuery.get();
     // Only the folders the exported layers actually name: a per-layer export
@@ -2669,6 +2726,9 @@ class Repository {
             name: f.name,
             isVisible: f.isVisible ? null : false,
             isInverted: f.isInverted ? true : null,
+            colorArgb: f.colorArgb,
+            opacity: f.opacity == 1.0 ? null : f.opacity,
+            overrideColor: f.overrideColor ? true : null,
           ),
     ];
     final folderNames = {for (final f in allFolders) f.id: f.name};
@@ -2778,6 +2838,14 @@ class Repository {
                   radiusMeters: c.radiusMeters,
                   label: c.label,
                   colorArgb: c.colorArgb,
+                  // A circle seeded from a POI keeps which element it was,
+                  // one entry in the per-point lists (v7) — the same keys a
+                  // POI set uses, so a reader needs nothing new to find them.
+                  pointOsmIds: c.osmId == null ? null : [c.osmId!],
+                  pointOsmTypes: c.osmId == null ? null : [c.osmType],
+                  pointOrigLat: c.osmId == null ? null : [c.origLat],
+                  pointOrigLng: c.osmId == null ? null : [c.origLng],
+                  pointOrigNames: c.osmId == null ? null : [c.origName],
                 ),
               );
             }
@@ -2787,6 +2855,7 @@ class Repository {
               if (pts.isEmpty) continue;
               var mainIndex = pts.indexWhere((p) => p.isMain);
               if (mainIndex < 0) mainIndex = 0;
+              final seeded = pts.any((p) => p.osmId != null);
               objects.add(
                 ExportObject(
                   kind: 'subspace',
@@ -2798,6 +2867,23 @@ class Repository {
                       : null,
                   label: s.label,
                   colorArgb: s.colorArgb,
+                  // Seeded points' OSM identity (v7), written only when one
+                  // has it, so a hand-made subspace exports as it did in v6.
+                  pointOsmIds: seeded
+                      ? [for (final p in pts) p.osmId ?? 0]
+                      : null,
+                  pointOsmTypes: seeded
+                      ? [for (final p in pts) p.osmType]
+                      : null,
+                  pointOrigLat: seeded
+                      ? [for (final p in pts) p.origLat]
+                      : null,
+                  pointOrigLng: seeded
+                      ? [for (final p in pts) p.origLng]
+                      : null,
+                  pointOrigNames: seeded
+                      ? [for (final p in pts) p.origName]
+                      : null,
                 ),
               );
             }
@@ -3011,14 +3097,21 @@ class Repository {
     final existing = {for (final f in await watchFolders().first) f.name: f.id};
     final folderIds = <String, String>{};
     for (final f in data.folders) {
-      final id = existing[f.name] ?? await createFolder(name: f.name);
+      final id =
+          existing[f.name] ??
+          await createFolder(name: f.name, colorArgb: f.colorArgb);
       folderIds[f.name] = id;
       if (existing[f.name] == null &&
-          (f.isVisible == false || f.isInverted == true)) {
+          (f.isVisible == false ||
+              f.isInverted == true ||
+              f.opacity != null ||
+              f.overrideColor == true)) {
         await updateFolder(
           id,
           isVisible: f.isVisible == false ? false : null,
           isInverted: f.isInverted == true ? true : null,
+          opacity: f.opacity,
+          overrideColor: f.overrideColor == true ? true : null,
         );
       }
     }
@@ -3136,6 +3229,29 @@ class Repository {
     return imported;
   }
 
+  /// The OSM origin a file gives the [i]th point of a circle or subspace
+  /// (v7's per-point lists), or null when it names none — a v6 file, a
+  /// hand-placed point, or an id of 0, which is no identity at all.
+  static OsmOrigin? _originAt(ExportObject o, int i) {
+    final ids = o.pointOsmIds;
+    final types = o.pointOsmTypes;
+    if (ids == null || types == null || i >= ids.length || i >= types.length) {
+      return null;
+    }
+    final id = ids[i];
+    final type = types[i];
+    if (id == 0 || type == null) return null;
+    double? at(List<double?>? xs) => xs != null && i < xs.length ? xs[i] : null;
+    final names = o.pointOrigNames;
+    return (
+      osmType: type,
+      osmId: id,
+      lat: at(o.pointOrigLat) ?? o.coords[i].latitude,
+      lng: at(o.pointOrigLng) ?? o.coords[i].longitude,
+      name: names != null && i < names.length ? names[i] : null,
+    );
+  }
+
   /// Applies an imported element's colour override, if the file carried one.
   /// A file without it leaves the element following its new layer, which is
   /// what an import into a differently-coloured layer should do.
@@ -3167,6 +3283,7 @@ class Repository {
           centerLng: o.coords.first.longitude,
           radiusMeters: r,
           label: o.label,
+          origin: _originAt(o, 0),
         );
         await _applyImportedColor(ColoredElement.circle, cid, o.colorArgb);
       case 'subspace':
@@ -3181,6 +3298,7 @@ class Repository {
             lng: o.coords[i].longitude,
             isMain: i == main,
             label: i < seedNames.length ? seedNames[i] : null,
+            origin: _originAt(o, i),
           );
         }
         await _applyImportedColor(ColoredElement.subspace, sid, o.colorArgb);

@@ -19,6 +19,7 @@ import 'package:flutter/material.dart';
 import '../state/map_mode.dart';
 import 'layer_actions.dart';
 import 'map_controls.dart';
+import 'theme.dart' show MapLabel;
 
 /// The Add button's label for a layer type. A nested ternary got unreadable at
 /// seven types; this is the same mapping as a switch.
@@ -80,7 +81,12 @@ class MapFabColumn extends StatelessWidget {
     required this.onToggleAdd,
     required this.onAddAtMapCentre,
     required this.onToggleTools,
+    this.captions = false,
   });
+
+  /// Whether each round button carries its one-word caption underneath
+  /// (Settings → Button captions).
+  final bool captions;
 
   /// What the map knows about itself, for [unavailableReason].
   final MapControlState controlState;
@@ -204,6 +210,35 @@ class MapFabColumn extends StatelessWidget {
     );
   }
 
+  /// [button] with its one-word [caption] underneath, when captions are on.
+  ///
+  /// The word is drawn the way the map draws its own labels — dark ink with a
+  /// light halo — so it reads over any tile without a box of its own, and the
+  /// slot is a fixed width so a row of them lines up whatever the words are.
+  Widget _captioned(Widget button, String? caption) {
+    if (!captions || caption == null) return button;
+    return SizedBox(
+      width: _captionWidth,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          button,
+          const SizedBox(height: 2),
+          MapLabel(caption, fontSize: 11, fontWeight: FontWeight.w600),
+        ],
+      ),
+    );
+  }
+
+  static const double _captionWidth = 54;
+
+  /// The gap between two buttons in the bottom row: the captions' fixed-width
+  /// slots already space them, and six of them at the usual 12 dp apart
+  /// would run off a phone's edge.
+  double get _rowGap => captions ? 2 : 12;
+
+  String? _cap(MapControlId id) => mapControl(id).caption;
+
   @override
   Widget build(BuildContext context) {
     // Bound to a local so the analyzer can promote it: Dart promotes private
@@ -219,117 +254,138 @@ class MapFabColumn extends StatelessWidget {
           // pre-emptive fetching — not on the community OSM servers.
           // See `data/tile_source.dart`.
           if (allowsPrefetch) ...[
-            FloatingActionButton.small(
-              heroTag: 'download',
-              tooltip: mapControl(MapControlId.download).name,
-              onPressed: downloading ? null : onDownloadArea,
-              child: downloading
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.download_for_offline_outlined),
+            _captioned(
+              FloatingActionButton.small(
+                heroTag: 'download',
+                tooltip: mapControl(MapControlId.download).name,
+                onPressed: downloading ? null : onDownloadArea,
+                child: downloading
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.download_for_offline_outlined),
+              ),
+              _cap(MapControlId.download),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: captions ? 6 : 12),
           ],
           // First in the column, because on a fresh install it is
           // the only button that can get you to your own town: the
           // camera starts over southern Germany wherever you are.
-          FloatingActionButton.small(
-            heroTag: 'goToPlace',
-            tooltip: mapControl(MapControlId.goToPlace).name,
-            onPressed: onGoToPlace,
-            child: Icon(mapControl(MapControlId.goToPlace).icon),
+          _captioned(
+            FloatingActionButton.small(
+              heroTag: 'goToPlace',
+              tooltip: mapControl(MapControlId.goToPlace).name,
+              onPressed: onGoToPlace,
+              child: Icon(mapControl(MapControlId.goToPlace).icon),
+            ),
+            _cap(MapControlId.goToPlace),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: captions ? 6 : 12),
           // (The compass lives on the map itself, top-right, and only
           // while the map is rotated — see the map chrome above.)
           // A toggle, lit while the marker is up, in the shape the
           // probe and distance buttons already use — tapping it again
           // is the only way to put your position away, and the lit
           // state is what says there is something to put away.
-          FloatingActionButton.small(
-            heroTag: 'locate',
-            tooltip: showingMyLocation ? 'Hide my location' : 'Locate me',
-            backgroundColor: showingMyLocation
-                ? Theme.of(context).colorScheme.primary
-                : null,
-            foregroundColor: showingMyLocation
-                ? Theme.of(context).colorScheme.onPrimary
-                : null,
-            onPressed: locating ? null : onToggleMyLocation,
-            child: locating
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Icon(
-                    showingMyLocation
-                        ? Icons.location_disabled
-                        : Icons.my_location,
-                  ),
+          _captioned(
+            FloatingActionButton.small(
+              heroTag: 'locate',
+              tooltip: showingMyLocation ? 'Hide my location' : 'Locate me',
+              backgroundColor: showingMyLocation
+                  ? Theme.of(context).colorScheme.primary
+                  : null,
+              foregroundColor: showingMyLocation
+                  ? Theme.of(context).colorScheme.onPrimary
+                  : null,
+              onPressed: locating ? null : onToggleMyLocation,
+              child: locating
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(
+                      showingMyLocation
+                          ? Icons.location_disabled
+                          : Icons.my_location,
+                    ),
+            ),
+            _cap(MapControlId.locate),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: captions ? 6 : 12),
           // Next to Locate on purpose: both answer "where am I", one
           // for you and one for the person you are meeting. Any
           // *other* place is shared by long-pressing it.
-          FloatingActionButton.small(
-            heroTag: 'share',
-            tooltip: mapControl(MapControlId.share).name,
-            onPressed: sharing ? null : onShareMyLocation,
-            child: sharing
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.ios_share),
+          _captioned(
+            FloatingActionButton.small(
+              heroTag: 'share',
+              tooltip: mapControl(MapControlId.share).name,
+              onPressed: sharing ? null : onShareMyLocation,
+              child: sharing
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.ios_share),
+            ),
+            _cap(MapControlId.share),
           ),
-          const SizedBox(height: 12),
-          FloatingActionButton.small(
-            heroTag: 'probe',
-            tooltip: mapControl(MapControlId.elevation).name,
-            backgroundColor: mode == MapMode.elevation
-                ? Theme.of(context).colorScheme.primary
-                : null,
-            foregroundColor: mode == MapMode.elevation
-                ? Theme.of(context).colorScheme.onPrimary
-                : null,
-            onPressed: onToggleProbe,
-            child: const Icon(Icons.terrain),
+          SizedBox(height: captions ? 6 : 12),
+          _captioned(
+            FloatingActionButton.small(
+              heroTag: 'probe',
+              tooltip: mapControl(MapControlId.elevation).name,
+              backgroundColor: mode == MapMode.elevation
+                  ? Theme.of(context).colorScheme.primary
+                  : null,
+              foregroundColor: mode == MapMode.elevation
+                  ? Theme.of(context).colorScheme.onPrimary
+                  : null,
+              onPressed: onToggleProbe,
+              child: const Icon(Icons.terrain),
+            ),
+            _cap(MapControlId.elevation),
           ),
-          const SizedBox(height: 12),
-          FloatingActionButton.small(
-            heroTag: 'distance',
-            tooltip: mapControl(MapControlId.distance).name,
-            backgroundColor: mode == MapMode.distance
-                ? Theme.of(context).colorScheme.primary
-                : null,
-            foregroundColor: mode == MapMode.distance
-                ? Theme.of(context).colorScheme.onPrimary
-                : null,
-            onPressed: onToggleDistance,
-            child: const Icon(Icons.straighten),
+          SizedBox(height: captions ? 6 : 12),
+          _captioned(
+            FloatingActionButton.small(
+              heroTag: 'distance',
+              tooltip: mapControl(MapControlId.distance).name,
+              backgroundColor: mode == MapMode.distance
+                  ? Theme.of(context).colorScheme.primary
+                  : null,
+              foregroundColor: mode == MapMode.distance
+                  ? Theme.of(context).colorScheme.onPrimary
+                  : null,
+              onPressed: onToggleDistance,
+              child: const Icon(Icons.straighten),
+            ),
+            _cap(MapControlId.distance),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: captions ? 6 : 12),
           // Freehand layers only: there is nothing to draw into on a
           // circle, a subspace or an import layer.
           if (canDraw) ...[
-            FloatingActionButton.small(
-              heroTag: 'draw',
-              tooltip: mapControl(MapControlId.draw).name,
-              backgroundColor: mode == MapMode.draw
-                  ? Theme.of(context).colorScheme.primary
-                  : null,
-              foregroundColor: mode == MapMode.draw
-                  ? Theme.of(context).colorScheme.onPrimary
-                  : null,
-              onPressed: () => onToggleDraw(),
-              child: const Icon(Icons.gesture),
+            _captioned(
+              FloatingActionButton.small(
+                heroTag: 'draw',
+                tooltip: mapControl(MapControlId.draw).name,
+                backgroundColor: mode == MapMode.draw
+                    ? Theme.of(context).colorScheme.primary
+                    : null,
+                foregroundColor: mode == MapMode.draw
+                    ? Theme.of(context).colorScheme.onPrimary
+                    : null,
+                onPressed: () => onToggleDraw(),
+                child: const Icon(Icons.gesture),
+              ),
+              _cap(MapControlId.draw),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: captions ? 6 : 12),
           ],
         ],
         // Bottom row, left to right: Edit, the per-type quick toggle,
@@ -348,108 +404,129 @@ class MapFabColumn extends StatelessWidget {
             // Edit mode: while on, a plain tap selects the object under
             // it. Kept outside the collapsible tools group — selecting
             // by tap must always be one press away.
-            _fab(
-              heroTag: 'editMode',
-              tooltip: mode == MapMode.edit
-                  ? 'Stop selecting by tap'
-                  : 'Select by tapping the map',
-              unavailable: unavailableReason(MapControlId.edit, controlState),
-              lit: mode == MapMode.edit,
-              onPressed: onToggleEdit,
-              child: Icon(
-                mode == MapMode.edit ? Icons.edit : Icons.edit_outlined,
+            _captioned(
+              _fab(
+                heroTag: 'editMode',
+                tooltip: mode == MapMode.edit
+                    ? 'Stop selecting by tap'
+                    : 'Select by tapping the map',
+                unavailable: unavailableReason(MapControlId.edit, controlState),
+                lit: mode == MapMode.edit,
+                onPressed: onToggleEdit,
+                child: Icon(
+                  mode == MapMode.edit ? Icons.edit : Icons.edit_outlined,
+                ),
               ),
+              _cap(MapControlId.edit),
             ),
             if (toggle != null) ...[
-              const SizedBox(width: 12),
-              _fab(
-                heroTag: 'quickToggle',
-                // Label *and* description: the label alone was the
-                // menu entry, ellipsis included, which on a bare icon
-                // answered nothing.
-                tooltip: '${toggle.label} — ${toggle.description}',
-                // Lit while the toggle is on; a plain button for the
-                // one that opens a sheet (the station filter).
-                lit: toggle.checked ?? false,
-                // Two questions, two homes: whether the *map* can use
-                // this button (a layer at all, and a visible one) is
-                // the catalogue's, and whether the switch itself has
-                // anything to act on is the action's — written once
-                // there for the menus that print it too.
-                unavailable:
-                    unavailableReason(MapControlId.quickToggle, controlState) ??
-                    toggle.unavailable,
-                onPressed: onQuickToggle,
-                child: Icon(toggle.icon),
+              SizedBox(width: _rowGap),
+              _captioned(
+                _fab(
+                  heroTag: 'quickToggle',
+                  // Label *and* description: the label alone was the
+                  // menu entry, ellipsis included, which on a bare icon
+                  // answered nothing.
+                  tooltip: '${toggle.label} — ${toggle.description}',
+                  // Lit while the toggle is on; a plain button for the
+                  // one that opens a sheet (the station filter).
+                  lit: toggle.checked ?? false,
+                  // Two questions, two homes: whether the *map* can use
+                  // this button (a layer at all, and a visible one) is
+                  // the catalogue's, and whether the switch itself has
+                  // anything to act on is the action's — written once
+                  // there for the menus that print it too.
+                  unavailable:
+                      unavailableReason(
+                        MapControlId.quickToggle,
+                        controlState,
+                      ) ??
+                      toggle.unavailable,
+                  onPressed: onQuickToggle,
+                  child: Icon(toggle.icon),
+                ),
+                quickToggleCaption(toggle.id.name),
               ),
             ],
             if (canImportFeature) ...[
-              const SizedBox(width: 12),
-              FloatingActionButton.small(
-                heroTag: 'featureImport',
-                tooltip: mapControl(MapControlId.featureImport).name,
-                // Same flow the layers drawer offers, same arguments:
-                // this adds a route to it, it does not fork it. The
-                // full layer list is only for the fallback picker (a
-                // line asked for from an area layer, or vice versa).
-                onPressed: onImportFeature,
-                // A globe with a magnifier: this one searches the
-                // whole world by name. Its neighbour downloads what is
-                // nearby, and a plain magnifier beside it said neither.
-                child: const Icon(Icons.travel_explore),
+              SizedBox(width: _rowGap),
+              _captioned(
+                FloatingActionButton.small(
+                  heroTag: 'featureImport',
+                  tooltip: mapControl(MapControlId.featureImport).name,
+                  // Same flow the layers drawer offers, same arguments:
+                  // this adds a route to it, it does not fork it. The
+                  // full layer list is only for the fallback picker (a
+                  // line asked for from an area layer, or vice versa).
+                  onPressed: onImportFeature,
+                  // A globe with a magnifier: this one searches the
+                  // whole world by name. Its neighbour downloads what is
+                  // nearby, and a plain magnifier beside it said neither.
+                  child: const Icon(Icons.travel_explore),
+                ),
+                _cap(MapControlId.featureImport),
               ),
             ],
             if (canImportNearby) ...[
-              const SizedBox(width: 12),
-              FloatingActionButton.small(
-                heroTag: 'poiImport',
-                tooltip: mapControl(MapControlId.osmImport).name,
-                // Reached only when the layer holds one of the three
-                // types above, which already implies it is non-null.
-                // A POI layer has two imports to choose from; the
-                // seeding types (circles, subspace) only the one.
-                onPressed: onImportNearby,
-                child: const Icon(Icons.cloud_download_outlined),
+              SizedBox(width: _rowGap),
+              _captioned(
+                FloatingActionButton.small(
+                  heroTag: 'poiImport',
+                  tooltip: mapControl(MapControlId.osmImport).name,
+                  // Reached only when the layer holds one of the three
+                  // types above, which already implies it is non-null.
+                  // A POI layer has two imports to choose from; the
+                  // seeding types (circles, subspace) only the one.
+                  onPressed: onImportNearby,
+                  child: const Icon(Icons.cloud_download_outlined),
+                ),
+                _cap(MapControlId.osmImport),
               ),
             ],
             // Add is a sticky *mode*, not an instant create: tapping it
             // arms the map so a tap places the object exactly where you
             // point. Long-press keeps the old one-shot behaviour (place
             // at the map centre, open the editor) as a no-aim fallback.
-            const SizedBox(width: 12),
-            _fab(
-              heroTag: 'add',
-              // The words the label used to carry live in the
-              // tooltip, and the icon still says which type a tap
-              // would place.
-              tooltip: mode == MapMode.add
-                  ? 'Done'
-                  : '${addFabLabel(activeLayerType)} · tap the '
-                        'map to place · long-press for the map '
-                        'centre',
-              lit: mode == MapMode.add,
-              unavailable: unavailableReason(MapControlId.add, controlState),
-              // `activeLayer` is non-null whenever this runs — the
-              // unavailable branch owns the null case — but the two
-              // facts sit a hundred lines apart, so this checks
-              // rather than asserts.
-              onPressed: onToggleAdd,
-              onLongPress: hasActiveLayer ? onAddAtMapCentre : null,
-              // A plain "add" on every layer. The type's own icon said which
-              // kind a tap would place, but beside the other type-coloured
-              // symbols it did not read as "new" at all; the tooltip and the
-              // active-layer chip already say which kind.
-              child: Icon(mode == MapMode.add ? Icons.check : Icons.add),
-            ),
-            const SizedBox(width: 12),
-            // Last, and beside the column it governs.
-            FloatingActionButton.small(
-              heroTag: 'fabsToggle',
-              tooltip: toolsExpanded ? 'Hide tools' : 'Show tools',
-              onPressed: onToggleTools,
-              child: Icon(
-                toolsExpanded ? Icons.unfold_less : Icons.unfold_more,
+            SizedBox(width: _rowGap),
+            _captioned(
+              _fab(
+                heroTag: 'add',
+                // The words the label used to carry live in the
+                // tooltip, and the icon still says which type a tap
+                // would place.
+                tooltip: mode == MapMode.add
+                    ? 'Done'
+                    : '${addFabLabel(activeLayerType)} · tap the '
+                          'map to place · long-press for the map '
+                          'centre',
+                lit: mode == MapMode.add,
+                unavailable: unavailableReason(MapControlId.add, controlState),
+                // `activeLayer` is non-null whenever this runs — the
+                // unavailable branch owns the null case — but the two
+                // facts sit a hundred lines apart, so this checks
+                // rather than asserts.
+                onPressed: onToggleAdd,
+                onLongPress: hasActiveLayer ? onAddAtMapCentre : null,
+                // A plain "add" on every layer. The type's own icon said which
+                // kind a tap would place, but beside the other type-coloured
+                // symbols it did not read as "new" at all; the tooltip and the
+                // active-layer chip already say which kind.
+                child: Icon(mode == MapMode.add ? Icons.check : Icons.add),
               ),
+              mode == MapMode.add ? 'Done' : _cap(MapControlId.add),
+            ),
+            SizedBox(width: _rowGap),
+            // Last, and beside the column it governs.
+            _captioned(
+              FloatingActionButton.small(
+                heroTag: 'fabsToggle',
+                tooltip: toolsExpanded ? 'Hide tools' : 'Show tools',
+                onPressed: onToggleTools,
+                child: Icon(
+                  toolsExpanded ? Icons.unfold_less : Icons.unfold_more,
+                ),
+              ),
+              _cap(MapControlId.tools),
             ),
           ],
         ),

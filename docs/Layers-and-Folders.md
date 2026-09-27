@@ -88,22 +88,28 @@ a **failed one's retry row, which floats to the top** so no fold can hide it. A 
 
 ## Folders
 
-A folder groups layers **without merging them**. Each member keeps its own colour,
-transparency and settings, and can be taken out again unchanged. A folder offers exactly
-three things:
+A folder groups layers **without merging them**. Each member keeps its own settings and
+can be taken out again unchanged. A folder offers:
 
 - **Hide** the whole group (a member is shown when it *and* its folder are shown).
 - **Fill outside** the whole group — which flips each member's *own* switch: a member that
   was already filled outside goes back to inside, because that is what makes a switch a
   switch. Nothing is composited across layers.
+- **Colour** — the folder's swatch, and the rail down its members in the drawer.
+- **Use folder colour for all layers** (a tick box): every member is drawn in the folder's
+  colour, its elements shading from it as they do when a layer is recoloured. Untick it and
+  each layer has its own colour back — the layers themselves were never changed.
+- **Transparency** — multiplies each member's own, so the group fades together.
+- **Export folder…** — every member layer, and the folder itself, in one file.
 - **Collapse** it, so seven settled layers take one line.
 
-A folder paints nothing, so it has no colour and no transparency. Drag a layer onto a
-folder to put it in; drag it out, or use **Move out of folder** for the case a drag cannot
-express (the last member leaving downwards). A folder drags as a block and never lands inside
-another. **Deleting a folder keeps its layers** — getting layers back out is the thing the
-old "combined layer" could never do, so deleting the group must never delete its contents
-by accident.
+In the drawer an open folder is one block: a rail and a wash in its colour run from its
+header down to a closing line under its last member. Drag a layer **above** that line to put
+it in the folder, **below** it to take it out (an empty folder says *"Empty — drag a layer
+here"*); **Move to folder… / Move out of folder** do the same without aiming. A folder drags
+as a block and never lands inside another. **Deleting a folder asks first and keeps its
+layers** — getting layers back out is the thing the old "combined layer" could never do, so
+deleting the group must never delete its contents by accident.
 
 In the drawer a member says *"· inverted (folder)"* when its own switch and the folder's
 differ, so the drawer and the map never appear to contradict each other.

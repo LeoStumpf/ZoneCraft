@@ -473,6 +473,38 @@ Future<void> exportSingleLayer(
   );
 }
 
+/// Exports every layer in [folder] — with the folder itself, so the file
+/// opens as the same group — to GeoJSON or KML, then shares or saves it.
+Future<void> exportFolder(
+  BuildContext context,
+  Repository repo,
+  Folder folder,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final data = await repo.exportData(onlyFolderId: folder.id);
+  if (!context.mounted) return;
+  if (data.objectCount == 0) {
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Nothing to export in this folder')),
+    );
+    return;
+  }
+  if (!await confirmLargeExport(context, data)) return;
+  if (!context.mounted) return;
+  final choice = await askExportChoice(
+    context,
+    title: 'Export “${folder.name}” as',
+  );
+  if (choice == null || !context.mounted) return;
+  await deliverExport(
+    context,
+    data,
+    choice,
+    fileStem: 'zonecraft-${exportSafeName(folder.name)}-${exportStamp()}',
+    subject: 'ZoneCraft folder: ${folder.name}',
+  );
+}
+
 /// Prompts for the inclusion-circle radius applied to freshly imported
 /// freehand lines (the circle within which the line splits the map into two
 /// half-disks). Prefilled with [defaultMeters], the radius the renderer would

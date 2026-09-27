@@ -422,3 +422,38 @@ const int kOsmReportMaxChars = 1000;
 /// promises, and take every other ZoneCraft user's import with it.
 const int kOsmReportsSoftCapPerDay = 5;
 const int kOsmReportsHardCapPerDay = 10;
+
+/// The report a **seeded** circle or subspace point can make: one that a POI
+/// import created, still carrying which element it was (`osmType`/`osmId`)
+/// and what the import said (`orig*`). Null for a point with no upstream
+/// element — a hand-placed subspace point is not a place OSM is missing, it
+/// is a corner of somebody's zone.
+///
+/// [lat]/[lng]/[label] are the point as it is — or, when a change is being
+/// saved right now, as it is about to be. A seeded point is labelled
+/// "Benches 3" when OSM had no name, so the label only counts as a rename
+/// when OSM had a name to begin with; otherwise every unnamed import would
+/// look renamed.
+OsmReportSubject? seededPointSubject({
+  required String? osmType,
+  required int? osmId,
+  required double? origLat,
+  required double? origLng,
+  required String? origName,
+  required double lat,
+  required double lng,
+  required String? label,
+}) {
+  if (osmType == null || osmId == null || osmId == 0) return null;
+  return OsmReportSubject(
+    lat: lat,
+    lng: lng,
+    name: origName == null ? null : label,
+    origLat: origLat,
+    origLng: origLng,
+    origName: origName,
+    edited: true,
+    osmType: osmType,
+    osmId: osmId,
+  );
+}

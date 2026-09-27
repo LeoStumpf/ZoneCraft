@@ -23,12 +23,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/database.dart';
 import '../data/error_log.dart';
 import '../data/layer_types.dart';
+import '../data/osm_report.dart';
 import '../data/repository.dart';
 import '../geo/coords.dart';
 import '../state/providers.dart';
 import 'editor_sheet.dart';
 import 'edit_value_dialog.dart';
 import 'element_color_dialog.dart';
+import 'osm_report_sheet.dart' show publishCorrection;
 import 'poi_move.dart' show PointMoveButton;
 import 'confirm_delete.dart';
 
@@ -130,6 +132,7 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
             lat: snap.lat,
             lng: snap.lng,
             label: snap.label,
+            origin: snap.origin,
           );
         } else if (_PointSnap.of(now) != snap) {
           await _repo.updateSubspacePoint(
@@ -160,6 +163,7 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
       title: p.label?.trim().isNotEmpty == true
           ? p.label!.trim()
           : 'Point ${index + 1}',
+      canPublish: p.osmId != null,
     );
     if (answer == null || !mounted) return;
     ref.read(pointMoveProvider.notifier).cancel();
@@ -169,7 +173,28 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
       lng: answer.at.longitude,
     );
     await _repo.undo.sealStep(label: 'Move point');
+    if (!answer.publish || !mounted) return;
+    final subject = _subject(
+      p,
+      lat: answer.at.latitude,
+      lng: answer.at.longitude,
+    );
+    if (subject != null) await publishCorrection(context, subject);
   }
+
+  /// What a note about [p] would say — as it is, or with a position being
+  /// saved right now. Null for a point that did not come from OSM.
+  OsmReportSubject? _subject(SubspacePoint p, {double? lat, double? lng}) =>
+      seededPointSubject(
+        osmType: p.osmType,
+        osmId: p.osmId,
+        origLat: p.origLat,
+        origLng: p.origLng,
+        origName: p.origName,
+        lat: lat ?? p.lat,
+        lng: lng ?? p.lng,
+        label: p.label,
+      );
 
   Future<void> _deletePoint(SubspacePoint p) async {
     if (!await confirmDelete(context, title: 'Remove this point?')) return;
@@ -417,6 +442,20 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
                 ],
               ),
             ),
+            // Only for a seeded point that no longer matches what OSM said:
+            // an untouched one *is* what OSM has, and a hand-placed one is a
+            // corner of a zone, not a place.
+            if (_subject(p)?.canPublish ?? false)
+              const PopupMenuItem(
+                value: 'publish',
+                child: Row(
+                  children: [
+                    Icon(Icons.cloud_upload_outlined, size: 18),
+                    SizedBox(width: 8),
+                    Text('Report to OpenStreetMap…'),
+                  ],
+                ),
+              ),
             PopupMenuItem(
               value: 'remove',
               // Keep at least one point so the object isn't left empty.
@@ -434,6 +473,11 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
             switch (v) {
               case 'rename':
                 unawaited(_renamePoint(p));
+              case 'publish':
+                final subject = _subject(p);
+                if (subject != null) {
+                  unawaited(publishCorrection(context, subject));
+                }
               case 'remove':
                 logAsyncFailure(_deletePoint(p), 'Removing the point');
             }
@@ -458,6 +502,7 @@ class _PointSnap {
     required this.lng,
     required this.label,
     required this.isMain,
+    this.origin,
   });
 
   factory _PointSnap.of(SubspacePoint p) => _PointSnap(
@@ -466,6 +511,15 @@ class _PointSnap {
     lng: p.lng,
     label: p.label,
     isMain: p.isMain,
+    origin: p.osmType == null || p.osmId == null
+        ? null
+        : (
+            osmType: p.osmType!,
+            osmId: p.osmId!,
+            lat: p.origLat ?? p.lat,
+            lng: p.origLng ?? p.lng,
+            name: p.origName,
+          ),
   );
 
   final String id;
@@ -474,8 +528,19 @@ class _PointSnap {
   final String? label;
   final bool isMain;
 
-  _PointSnap withId(String id) =>
-      _PointSnap(id: id, lat: lat, lng: lng, label: label, isMain: isMain);
+  /// Where a seeded point came from — carried so a point Reset has to
+  /// re-create comes back still able to report itself. Not part of
+  /// equality: it never changes while the editor is open.
+  final OsmOrigin? origin;
+
+  _PointSnap withId(String id) => _PointSnap(
+    id: id,
+    lat: lat,
+    lng: lng,
+    label: label,
+    isMain: isMain,
+    origin: origin,
+  );
 
   @override
   bool operator ==(Object other) =>

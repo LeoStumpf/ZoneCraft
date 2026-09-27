@@ -24,12 +24,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/database.dart';
 import '../data/error_log.dart';
 import '../data/layer_types.dart';
+import '../data/osm_report.dart';
 import '../data/repository.dart';
 import '../geo/coords.dart';
 import '../state/providers.dart';
 import 'editor_sheet.dart';
 import 'edit_value_dialog.dart';
 import 'element_color_dialog.dart';
+import 'osm_report_sheet.dart' show publishCorrection;
 import 'poi_move.dart' show PointMoveButton;
 import 'confirm_delete.dart';
 
@@ -135,6 +137,7 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
       lat: widget.circle.centerLat,
       lng: widget.circle.centerLng,
       title: 'Centre',
+      canPublish: widget.circle.osmId != null,
     );
     if (answer == null || !mounted) return;
     ref.read(pointMoveProvider.notifier).cancel();
@@ -144,6 +147,25 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
       centerLng: answer.at.longitude,
     );
     await _repo.undo.sealStep(label: 'Move circle');
+    if (!answer.publish || !mounted) return;
+    final subject = _subject(lat: answer.at.latitude, lng: answer.at.longitude);
+    if (subject != null) await publishCorrection(context, subject);
+  }
+
+  /// What a note about this circle's place would say — as it is, or with a
+  /// centre being saved right now. Null unless a POI import seeded it.
+  OsmReportSubject? _subject({double? lat, double? lng}) {
+    final c = widget.circle;
+    return seededPointSubject(
+      osmType: c.osmType,
+      osmId: c.osmId,
+      origLat: c.origLat,
+      origLng: c.origLng,
+      origName: c.origName,
+      lat: lat ?? c.centerLat,
+      lng: lng ?? c.centerLng,
+      label: c.label,
+    );
   }
 
   void _close() {
@@ -207,6 +229,7 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final subject = _subject();
     final sliderValue =
         (math.log(_radius.clamp(_minRadius, _maxRadius)) / math.ln10).clamp(
           math.log(_minRadius) / math.ln10,
@@ -335,6 +358,15 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
               icon: const Icon(Icons.restart_alt),
               label: const Text('Reset'),
             ),
+            // A circle seeded from an OSM place that you have since moved
+            // (or renamed): the correction is worth passing on.
+            if (subject?.canPublish ?? false)
+              TextButton.icon(
+                onPressed: () =>
+                    unawaited(publishCorrection(context, subject!)),
+                icon: const Icon(Icons.cloud_upload_outlined),
+                label: const Text('Report to OSM…'),
+              ),
           ],
         ),
         const SizedBox(height: 8),

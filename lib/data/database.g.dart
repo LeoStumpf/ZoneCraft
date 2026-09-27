@@ -94,6 +94,44 @@ class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
     requiredDuringInsert: false,
     defaultValue: currentDateAndTime,
   );
+  static const VerificationMeta _colorArgbMeta = const VerificationMeta(
+    'colorArgb',
+  );
+  @override
+  late final GeneratedColumn<int> colorArgb = GeneratedColumn<int>(
+    'color_argb',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _opacityMeta = const VerificationMeta(
+    'opacity',
+  );
+  @override
+  late final GeneratedColumn<double> opacity = GeneratedColumn<double>(
+    'opacity',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1.0),
+  );
+  static const VerificationMeta _overrideColorMeta = const VerificationMeta(
+    'overrideColor',
+  );
+  @override
+  late final GeneratedColumn<bool> overrideColor = GeneratedColumn<bool>(
+    'override_color',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("override_color" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -103,6 +141,9 @@ class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
     isInverted,
     isCollapsed,
     createdAt,
+    colorArgb,
+    opacity,
+    overrideColor,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -164,6 +205,27 @@ class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
         createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
       );
     }
+    if (data.containsKey('color_argb')) {
+      context.handle(
+        _colorArgbMeta,
+        colorArgb.isAcceptableOrUnknown(data['color_argb']!, _colorArgbMeta),
+      );
+    }
+    if (data.containsKey('opacity')) {
+      context.handle(
+        _opacityMeta,
+        opacity.isAcceptableOrUnknown(data['opacity']!, _opacityMeta),
+      );
+    }
+    if (data.containsKey('override_color')) {
+      context.handle(
+        _overrideColorMeta,
+        overrideColor.isAcceptableOrUnknown(
+          data['override_color']!,
+          _overrideColorMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -201,6 +263,18 @@ class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      colorArgb: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_argb'],
+      ),
+      opacity: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}opacity'],
+      )!,
+      overrideColor: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}override_color'],
+      )!,
     );
   }
 
@@ -226,6 +300,22 @@ class Folder extends DataClass implements Insertable<Folder> {
   /// to put them away again on every visit would defeat it.
   final bool isCollapsed;
   final DateTime createdAt;
+
+  /// The folder's own colour (v32): its swatch and the rail down its members
+  /// in the drawer, and — with [overrideColor] — the colour every member is
+  /// drawn in. Null on a folder made before it had one, which then draws
+  /// nothing of its own colour.
+  final int? colorArgb;
+
+  /// Multiplies every member's own opacity (v32) — a group fades together
+  /// and each member keeps its place relative to the others. 1.0 changes
+  /// nothing, which is what every older folder migrates in as.
+  final double opacity;
+
+  /// Whether every member layer is drawn in [colorArgb] instead of its own
+  /// colour (v32). Folded in by `resolveLayers`, like the folder's invert: the
+  /// member rows keep their own colour, so switching this off gives it back.
+  final bool overrideColor;
   const Folder({
     required this.id,
     required this.name,
@@ -234,6 +324,9 @@ class Folder extends DataClass implements Insertable<Folder> {
     required this.isInverted,
     required this.isCollapsed,
     required this.createdAt,
+    this.colorArgb,
+    required this.opacity,
+    required this.overrideColor,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -245,6 +338,11 @@ class Folder extends DataClass implements Insertable<Folder> {
     map['is_inverted'] = Variable<bool>(isInverted);
     map['is_collapsed'] = Variable<bool>(isCollapsed);
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || colorArgb != null) {
+      map['color_argb'] = Variable<int>(colorArgb);
+    }
+    map['opacity'] = Variable<double>(opacity);
+    map['override_color'] = Variable<bool>(overrideColor);
     return map;
   }
 
@@ -257,6 +355,11 @@ class Folder extends DataClass implements Insertable<Folder> {
       isInverted: Value(isInverted),
       isCollapsed: Value(isCollapsed),
       createdAt: Value(createdAt),
+      colorArgb: colorArgb == null && nullToAbsent
+          ? const Value.absent()
+          : Value(colorArgb),
+      opacity: Value(opacity),
+      overrideColor: Value(overrideColor),
     );
   }
 
@@ -273,6 +376,9 @@ class Folder extends DataClass implements Insertable<Folder> {
       isInverted: serializer.fromJson<bool>(json['isInverted']),
       isCollapsed: serializer.fromJson<bool>(json['isCollapsed']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      colorArgb: serializer.fromJson<int?>(json['colorArgb']),
+      opacity: serializer.fromJson<double>(json['opacity']),
+      overrideColor: serializer.fromJson<bool>(json['overrideColor']),
     );
   }
   @override
@@ -286,6 +392,9 @@ class Folder extends DataClass implements Insertable<Folder> {
       'isInverted': serializer.toJson<bool>(isInverted),
       'isCollapsed': serializer.toJson<bool>(isCollapsed),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'colorArgb': serializer.toJson<int?>(colorArgb),
+      'opacity': serializer.toJson<double>(opacity),
+      'overrideColor': serializer.toJson<bool>(overrideColor),
     };
   }
 
@@ -297,6 +406,9 @@ class Folder extends DataClass implements Insertable<Folder> {
     bool? isInverted,
     bool? isCollapsed,
     DateTime? createdAt,
+    Value<int?> colorArgb = const Value.absent(),
+    double? opacity,
+    bool? overrideColor,
   }) => Folder(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -305,6 +417,9 @@ class Folder extends DataClass implements Insertable<Folder> {
     isInverted: isInverted ?? this.isInverted,
     isCollapsed: isCollapsed ?? this.isCollapsed,
     createdAt: createdAt ?? this.createdAt,
+    colorArgb: colorArgb.present ? colorArgb.value : this.colorArgb,
+    opacity: opacity ?? this.opacity,
+    overrideColor: overrideColor ?? this.overrideColor,
   );
   Folder copyWithCompanion(FoldersCompanion data) {
     return Folder(
@@ -319,6 +434,11 @@ class Folder extends DataClass implements Insertable<Folder> {
           ? data.isCollapsed.value
           : this.isCollapsed,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      colorArgb: data.colorArgb.present ? data.colorArgb.value : this.colorArgb,
+      opacity: data.opacity.present ? data.opacity.value : this.opacity,
+      overrideColor: data.overrideColor.present
+          ? data.overrideColor.value
+          : this.overrideColor,
     );
   }
 
@@ -331,7 +451,10 @@ class Folder extends DataClass implements Insertable<Folder> {
           ..write('isVisible: $isVisible, ')
           ..write('isInverted: $isInverted, ')
           ..write('isCollapsed: $isCollapsed, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('colorArgb: $colorArgb, ')
+          ..write('opacity: $opacity, ')
+          ..write('overrideColor: $overrideColor')
           ..write(')'))
         .toString();
   }
@@ -345,6 +468,9 @@ class Folder extends DataClass implements Insertable<Folder> {
     isInverted,
     isCollapsed,
     createdAt,
+    colorArgb,
+    opacity,
+    overrideColor,
   );
   @override
   bool operator ==(Object other) =>
@@ -356,7 +482,10 @@ class Folder extends DataClass implements Insertable<Folder> {
           other.isVisible == this.isVisible &&
           other.isInverted == this.isInverted &&
           other.isCollapsed == this.isCollapsed &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.colorArgb == this.colorArgb &&
+          other.opacity == this.opacity &&
+          other.overrideColor == this.overrideColor);
 }
 
 class FoldersCompanion extends UpdateCompanion<Folder> {
@@ -367,6 +496,9 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
   final Value<bool> isInverted;
   final Value<bool> isCollapsed;
   final Value<DateTime> createdAt;
+  final Value<int?> colorArgb;
+  final Value<double> opacity;
+  final Value<bool> overrideColor;
   final Value<int> rowid;
   const FoldersCompanion({
     this.id = const Value.absent(),
@@ -376,6 +508,9 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     this.isInverted = const Value.absent(),
     this.isCollapsed = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.colorArgb = const Value.absent(),
+    this.opacity = const Value.absent(),
+    this.overrideColor = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   FoldersCompanion.insert({
@@ -386,6 +521,9 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     this.isInverted = const Value.absent(),
     this.isCollapsed = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.colorArgb = const Value.absent(),
+    this.opacity = const Value.absent(),
+    this.overrideColor = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        name = Value(name),
@@ -398,6 +536,9 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     Expression<bool>? isInverted,
     Expression<bool>? isCollapsed,
     Expression<DateTime>? createdAt,
+    Expression<int>? colorArgb,
+    Expression<double>? opacity,
+    Expression<bool>? overrideColor,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -408,6 +549,9 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
       if (isInverted != null) 'is_inverted': isInverted,
       if (isCollapsed != null) 'is_collapsed': isCollapsed,
       if (createdAt != null) 'created_at': createdAt,
+      if (colorArgb != null) 'color_argb': colorArgb,
+      if (opacity != null) 'opacity': opacity,
+      if (overrideColor != null) 'override_color': overrideColor,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -420,6 +564,9 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     Value<bool>? isInverted,
     Value<bool>? isCollapsed,
     Value<DateTime>? createdAt,
+    Value<int?>? colorArgb,
+    Value<double>? opacity,
+    Value<bool>? overrideColor,
     Value<int>? rowid,
   }) {
     return FoldersCompanion(
@@ -430,6 +577,9 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
       isInverted: isInverted ?? this.isInverted,
       isCollapsed: isCollapsed ?? this.isCollapsed,
       createdAt: createdAt ?? this.createdAt,
+      colorArgb: colorArgb ?? this.colorArgb,
+      opacity: opacity ?? this.opacity,
+      overrideColor: overrideColor ?? this.overrideColor,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -458,6 +608,15 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (colorArgb.present) {
+      map['color_argb'] = Variable<int>(colorArgb.value);
+    }
+    if (opacity.present) {
+      map['opacity'] = Variable<double>(opacity.value);
+    }
+    if (overrideColor.present) {
+      map['override_color'] = Variable<bool>(overrideColor.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -474,6 +633,9 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
           ..write('isInverted: $isInverted, ')
           ..write('isCollapsed: $isCollapsed, ')
           ..write('createdAt: $createdAt, ')
+          ..write('colorArgb: $colorArgb, ')
+          ..write('opacity: $opacity, ')
+          ..write('overrideColor: $overrideColor, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1391,6 +1553,59 @@ class $CirclesTable extends Circles with TableInfo<$CirclesTable, Circle> {
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _osmTypeMeta = const VerificationMeta(
+    'osmType',
+  );
+  @override
+  late final GeneratedColumn<String> osmType = GeneratedColumn<String>(
+    'osm_type',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _osmIdMeta = const VerificationMeta('osmId');
+  @override
+  late final GeneratedColumn<int> osmId = GeneratedColumn<int>(
+    'osm_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _origLatMeta = const VerificationMeta(
+    'origLat',
+  );
+  @override
+  late final GeneratedColumn<double> origLat = GeneratedColumn<double>(
+    'orig_lat',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _origLngMeta = const VerificationMeta(
+    'origLng',
+  );
+  @override
+  late final GeneratedColumn<double> origLng = GeneratedColumn<double>(
+    'orig_lng',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _origNameMeta = const VerificationMeta(
+    'origName',
+  );
+  @override
+  late final GeneratedColumn<String> origName = GeneratedColumn<String>(
+    'orig_name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1403,6 +1618,11 @@ class $CirclesTable extends Circles with TableInfo<$CirclesTable, Circle> {
     colorArgb,
     colorShade,
     zOrder,
+    osmType,
+    osmId,
+    origLat,
+    origLng,
+    origName,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1486,6 +1706,36 @@ class $CirclesTable extends Circles with TableInfo<$CirclesTable, Circle> {
         zOrder.isAcceptableOrUnknown(data['z_order']!, _zOrderMeta),
       );
     }
+    if (data.containsKey('osm_type')) {
+      context.handle(
+        _osmTypeMeta,
+        osmType.isAcceptableOrUnknown(data['osm_type']!, _osmTypeMeta),
+      );
+    }
+    if (data.containsKey('osm_id')) {
+      context.handle(
+        _osmIdMeta,
+        osmId.isAcceptableOrUnknown(data['osm_id']!, _osmIdMeta),
+      );
+    }
+    if (data.containsKey('orig_lat')) {
+      context.handle(
+        _origLatMeta,
+        origLat.isAcceptableOrUnknown(data['orig_lat']!, _origLatMeta),
+      );
+    }
+    if (data.containsKey('orig_lng')) {
+      context.handle(
+        _origLngMeta,
+        origLng.isAcceptableOrUnknown(data['orig_lng']!, _origLngMeta),
+      );
+    }
+    if (data.containsKey('orig_name')) {
+      context.handle(
+        _origNameMeta,
+        origName.isAcceptableOrUnknown(data['orig_name']!, _origNameMeta),
+      );
+    }
     return context;
   }
 
@@ -1535,6 +1785,26 @@ class $CirclesTable extends Circles with TableInfo<$CirclesTable, Circle> {
         DriftSqlType.int,
         data['${effectivePrefix}z_order'],
       )!,
+      osmType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}osm_type'],
+      ),
+      osmId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}osm_id'],
+      ),
+      origLat: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}orig_lat'],
+      ),
+      origLng: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}orig_lng'],
+      ),
+      origName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}orig_name'],
+      ),
     );
   }
 
@@ -1576,6 +1846,15 @@ class Circle extends DataClass implements Insertable<Circle> {
   /// element lands on top — which is what "the newest element wins an overlap"
   /// already meant, now said out loud instead of inferred.
   final int zOrder;
+
+  /// `node` / `way` / `relation`, or null when not imported.
+  final String? osmType;
+  final int? osmId;
+
+  /// What the import returned: the position and the name.
+  final double? origLat;
+  final double? origLng;
+  final String? origName;
   const Circle({
     required this.id,
     required this.layerId,
@@ -1587,6 +1866,11 @@ class Circle extends DataClass implements Insertable<Circle> {
     this.colorArgb,
     required this.colorShade,
     required this.zOrder,
+    this.osmType,
+    this.osmId,
+    this.origLat,
+    this.origLng,
+    this.origName,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1605,6 +1889,21 @@ class Circle extends DataClass implements Insertable<Circle> {
     }
     map['color_shade'] = Variable<int>(colorShade);
     map['z_order'] = Variable<int>(zOrder);
+    if (!nullToAbsent || osmType != null) {
+      map['osm_type'] = Variable<String>(osmType);
+    }
+    if (!nullToAbsent || osmId != null) {
+      map['osm_id'] = Variable<int>(osmId);
+    }
+    if (!nullToAbsent || origLat != null) {
+      map['orig_lat'] = Variable<double>(origLat);
+    }
+    if (!nullToAbsent || origLng != null) {
+      map['orig_lng'] = Variable<double>(origLng);
+    }
+    if (!nullToAbsent || origName != null) {
+      map['orig_name'] = Variable<String>(origName);
+    }
     return map;
   }
 
@@ -1624,6 +1923,21 @@ class Circle extends DataClass implements Insertable<Circle> {
           : Value(colorArgb),
       colorShade: Value(colorShade),
       zOrder: Value(zOrder),
+      osmType: osmType == null && nullToAbsent
+          ? const Value.absent()
+          : Value(osmType),
+      osmId: osmId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(osmId),
+      origLat: origLat == null && nullToAbsent
+          ? const Value.absent()
+          : Value(origLat),
+      origLng: origLng == null && nullToAbsent
+          ? const Value.absent()
+          : Value(origLng),
+      origName: origName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(origName),
     );
   }
 
@@ -1643,6 +1957,11 @@ class Circle extends DataClass implements Insertable<Circle> {
       colorArgb: serializer.fromJson<int?>(json['colorArgb']),
       colorShade: serializer.fromJson<int>(json['colorShade']),
       zOrder: serializer.fromJson<int>(json['zOrder']),
+      osmType: serializer.fromJson<String?>(json['osmType']),
+      osmId: serializer.fromJson<int?>(json['osmId']),
+      origLat: serializer.fromJson<double?>(json['origLat']),
+      origLng: serializer.fromJson<double?>(json['origLng']),
+      origName: serializer.fromJson<String?>(json['origName']),
     );
   }
   @override
@@ -1659,6 +1978,11 @@ class Circle extends DataClass implements Insertable<Circle> {
       'colorArgb': serializer.toJson<int?>(colorArgb),
       'colorShade': serializer.toJson<int>(colorShade),
       'zOrder': serializer.toJson<int>(zOrder),
+      'osmType': serializer.toJson<String?>(osmType),
+      'osmId': serializer.toJson<int?>(osmId),
+      'origLat': serializer.toJson<double?>(origLat),
+      'origLng': serializer.toJson<double?>(origLng),
+      'origName': serializer.toJson<String?>(origName),
     };
   }
 
@@ -1673,6 +1997,11 @@ class Circle extends DataClass implements Insertable<Circle> {
     Value<int?> colorArgb = const Value.absent(),
     int? colorShade,
     int? zOrder,
+    Value<String?> osmType = const Value.absent(),
+    Value<int?> osmId = const Value.absent(),
+    Value<double?> origLat = const Value.absent(),
+    Value<double?> origLng = const Value.absent(),
+    Value<String?> origName = const Value.absent(),
   }) => Circle(
     id: id ?? this.id,
     layerId: layerId ?? this.layerId,
@@ -1684,6 +2013,11 @@ class Circle extends DataClass implements Insertable<Circle> {
     colorArgb: colorArgb.present ? colorArgb.value : this.colorArgb,
     colorShade: colorShade ?? this.colorShade,
     zOrder: zOrder ?? this.zOrder,
+    osmType: osmType.present ? osmType.value : this.osmType,
+    osmId: osmId.present ? osmId.value : this.osmId,
+    origLat: origLat.present ? origLat.value : this.origLat,
+    origLng: origLng.present ? origLng.value : this.origLng,
+    origName: origName.present ? origName.value : this.origName,
   );
   Circle copyWithCompanion(CirclesCompanion data) {
     return Circle(
@@ -1701,6 +2035,11 @@ class Circle extends DataClass implements Insertable<Circle> {
           ? data.colorShade.value
           : this.colorShade,
       zOrder: data.zOrder.present ? data.zOrder.value : this.zOrder,
+      osmType: data.osmType.present ? data.osmType.value : this.osmType,
+      osmId: data.osmId.present ? data.osmId.value : this.osmId,
+      origLat: data.origLat.present ? data.origLat.value : this.origLat,
+      origLng: data.origLng.present ? data.origLng.value : this.origLng,
+      origName: data.origName.present ? data.origName.value : this.origName,
     );
   }
 
@@ -1716,7 +2055,12 @@ class Circle extends DataClass implements Insertable<Circle> {
           ..write('createdAt: $createdAt, ')
           ..write('colorArgb: $colorArgb, ')
           ..write('colorShade: $colorShade, ')
-          ..write('zOrder: $zOrder')
+          ..write('zOrder: $zOrder, ')
+          ..write('osmType: $osmType, ')
+          ..write('osmId: $osmId, ')
+          ..write('origLat: $origLat, ')
+          ..write('origLng: $origLng, ')
+          ..write('origName: $origName')
           ..write(')'))
         .toString();
   }
@@ -1733,6 +2077,11 @@ class Circle extends DataClass implements Insertable<Circle> {
     colorArgb,
     colorShade,
     zOrder,
+    osmType,
+    osmId,
+    origLat,
+    origLng,
+    origName,
   );
   @override
   bool operator ==(Object other) =>
@@ -1747,7 +2096,12 @@ class Circle extends DataClass implements Insertable<Circle> {
           other.createdAt == this.createdAt &&
           other.colorArgb == this.colorArgb &&
           other.colorShade == this.colorShade &&
-          other.zOrder == this.zOrder);
+          other.zOrder == this.zOrder &&
+          other.osmType == this.osmType &&
+          other.osmId == this.osmId &&
+          other.origLat == this.origLat &&
+          other.origLng == this.origLng &&
+          other.origName == this.origName);
 }
 
 class CirclesCompanion extends UpdateCompanion<Circle> {
@@ -1761,6 +2115,11 @@ class CirclesCompanion extends UpdateCompanion<Circle> {
   final Value<int?> colorArgb;
   final Value<int> colorShade;
   final Value<int> zOrder;
+  final Value<String?> osmType;
+  final Value<int?> osmId;
+  final Value<double?> origLat;
+  final Value<double?> origLng;
+  final Value<String?> origName;
   final Value<int> rowid;
   const CirclesCompanion({
     this.id = const Value.absent(),
@@ -1773,6 +2132,11 @@ class CirclesCompanion extends UpdateCompanion<Circle> {
     this.colorArgb = const Value.absent(),
     this.colorShade = const Value.absent(),
     this.zOrder = const Value.absent(),
+    this.osmType = const Value.absent(),
+    this.osmId = const Value.absent(),
+    this.origLat = const Value.absent(),
+    this.origLng = const Value.absent(),
+    this.origName = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   CirclesCompanion.insert({
@@ -1786,6 +2150,11 @@ class CirclesCompanion extends UpdateCompanion<Circle> {
     this.colorArgb = const Value.absent(),
     this.colorShade = const Value.absent(),
     this.zOrder = const Value.absent(),
+    this.osmType = const Value.absent(),
+    this.osmId = const Value.absent(),
+    this.origLat = const Value.absent(),
+    this.origLng = const Value.absent(),
+    this.origName = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        layerId = Value(layerId),
@@ -1803,6 +2172,11 @@ class CirclesCompanion extends UpdateCompanion<Circle> {
     Expression<int>? colorArgb,
     Expression<int>? colorShade,
     Expression<int>? zOrder,
+    Expression<String>? osmType,
+    Expression<int>? osmId,
+    Expression<double>? origLat,
+    Expression<double>? origLng,
+    Expression<String>? origName,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1816,6 +2190,11 @@ class CirclesCompanion extends UpdateCompanion<Circle> {
       if (colorArgb != null) 'color_argb': colorArgb,
       if (colorShade != null) 'color_shade': colorShade,
       if (zOrder != null) 'z_order': zOrder,
+      if (osmType != null) 'osm_type': osmType,
+      if (osmId != null) 'osm_id': osmId,
+      if (origLat != null) 'orig_lat': origLat,
+      if (origLng != null) 'orig_lng': origLng,
+      if (origName != null) 'orig_name': origName,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1831,6 +2210,11 @@ class CirclesCompanion extends UpdateCompanion<Circle> {
     Value<int?>? colorArgb,
     Value<int>? colorShade,
     Value<int>? zOrder,
+    Value<String?>? osmType,
+    Value<int?>? osmId,
+    Value<double?>? origLat,
+    Value<double?>? origLng,
+    Value<String?>? origName,
     Value<int>? rowid,
   }) {
     return CirclesCompanion(
@@ -1844,6 +2228,11 @@ class CirclesCompanion extends UpdateCompanion<Circle> {
       colorArgb: colorArgb ?? this.colorArgb,
       colorShade: colorShade ?? this.colorShade,
       zOrder: zOrder ?? this.zOrder,
+      osmType: osmType ?? this.osmType,
+      osmId: osmId ?? this.osmId,
+      origLat: origLat ?? this.origLat,
+      origLng: origLng ?? this.origLng,
+      origName: origName ?? this.origName,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1881,6 +2270,21 @@ class CirclesCompanion extends UpdateCompanion<Circle> {
     if (zOrder.present) {
       map['z_order'] = Variable<int>(zOrder.value);
     }
+    if (osmType.present) {
+      map['osm_type'] = Variable<String>(osmType.value);
+    }
+    if (osmId.present) {
+      map['osm_id'] = Variable<int>(osmId.value);
+    }
+    if (origLat.present) {
+      map['orig_lat'] = Variable<double>(origLat.value);
+    }
+    if (origLng.present) {
+      map['orig_lng'] = Variable<double>(origLng.value);
+    }
+    if (origName.present) {
+      map['orig_name'] = Variable<String>(origName.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1900,6 +2304,11 @@ class CirclesCompanion extends UpdateCompanion<Circle> {
           ..write('colorArgb: $colorArgb, ')
           ..write('colorShade: $colorShade, ')
           ..write('zOrder: $zOrder, ')
+          ..write('osmType: $osmType, ')
+          ..write('osmId: $osmId, ')
+          ..write('origLat: $origLat, ')
+          ..write('origLng: $origLng, ')
+          ..write('origName: $origName, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2108,6 +2517,21 @@ class $AppSettingsTable extends AppSettings
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _fabCaptionsMeta = const VerificationMeta(
+    'fabCaptions',
+  );
+  @override
+  late final GeneratedColumn<bool> fabCaptions = GeneratedColumn<bool>(
+    'fab_captions',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("fab_captions" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -2126,6 +2550,7 @@ class $AppSettingsTable extends AppSettings
     overpassEndpointOverride,
     nominatimHostOverride,
     hintsEnabled,
+    fabCaptions,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2268,6 +2693,15 @@ class $AppSettingsTable extends AppSettings
         ),
       );
     }
+    if (data.containsKey('fab_captions')) {
+      context.handle(
+        _fabCaptionsMeta,
+        fabCaptions.isAcceptableOrUnknown(
+          data['fab_captions']!,
+          _fabCaptionsMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -2340,6 +2774,10 @@ class $AppSettingsTable extends AppSettings
       hintsEnabled: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}hints_enabled'],
+      )!,
+      fabCaptions: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}fab_captions'],
       )!,
     );
   }
@@ -2422,6 +2860,11 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
   /// but nobody should have to sit through three of something they already
   /// understand.
   final bool hintsEnabled;
+
+  /// Whether the map's round buttons carry a one-word caption underneath
+  /// (v32). Started as an experiment in whether the words earn their room,
+  /// so it is a switch rather than a decision.
+  final bool fabCaptions;
   const AppSetting({
     required this.id,
     required this.uncertaintyMeters,
@@ -2439,6 +2882,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     this.overpassEndpointOverride,
     this.nominatimHostOverride,
     required this.hintsEnabled,
+    required this.fabCaptions,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2475,6 +2919,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       map['nominatim_host_override'] = Variable<String>(nominatimHostOverride);
     }
     map['hints_enabled'] = Variable<bool>(hintsEnabled);
+    map['fab_captions'] = Variable<bool>(fabCaptions);
     return map;
   }
 
@@ -2510,6 +2955,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
           ? const Value.absent()
           : Value(nominatimHostOverride),
       hintsEnabled: Value(hintsEnabled),
+      fabCaptions: Value(fabCaptions),
     );
   }
 
@@ -2539,6 +2985,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
         json['nominatimHostOverride'],
       ),
       hintsEnabled: serializer.fromJson<bool>(json['hintsEnabled']),
+      fabCaptions: serializer.fromJson<bool>(json['fabCaptions']),
     );
   }
   @override
@@ -2565,6 +3012,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
         nominatimHostOverride,
       ),
       'hintsEnabled': serializer.toJson<bool>(hintsEnabled),
+      'fabCaptions': serializer.toJson<bool>(fabCaptions),
     };
   }
 
@@ -2585,6 +3033,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     Value<String?> overpassEndpointOverride = const Value.absent(),
     Value<String?> nominatimHostOverride = const Value.absent(),
     bool? hintsEnabled,
+    bool? fabCaptions,
   }) => AppSetting(
     id: id ?? this.id,
     uncertaintyMeters: uncertaintyMeters ?? this.uncertaintyMeters,
@@ -2610,6 +3059,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
         ? nominatimHostOverride.value
         : this.nominatimHostOverride,
     hintsEnabled: hintsEnabled ?? this.hintsEnabled,
+    fabCaptions: fabCaptions ?? this.fabCaptions,
   );
   AppSetting copyWithCompanion(AppSettingsCompanion data) {
     return AppSetting(
@@ -2653,6 +3103,9 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       hintsEnabled: data.hintsEnabled.present
           ? data.hintsEnabled.value
           : this.hintsEnabled,
+      fabCaptions: data.fabCaptions.present
+          ? data.fabCaptions.value
+          : this.fabCaptions,
     );
   }
 
@@ -2674,7 +3127,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
           ..write('tileUrlOverride: $tileUrlOverride, ')
           ..write('overpassEndpointOverride: $overpassEndpointOverride, ')
           ..write('nominatimHostOverride: $nominatimHostOverride, ')
-          ..write('hintsEnabled: $hintsEnabled')
+          ..write('hintsEnabled: $hintsEnabled, ')
+          ..write('fabCaptions: $fabCaptions')
           ..write(')'))
         .toString();
   }
@@ -2697,6 +3151,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     overpassEndpointOverride,
     nominatimHostOverride,
     hintsEnabled,
+    fabCaptions,
   );
   @override
   bool operator ==(Object other) =>
@@ -2717,7 +3172,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
           other.tileUrlOverride == this.tileUrlOverride &&
           other.overpassEndpointOverride == this.overpassEndpointOverride &&
           other.nominatimHostOverride == this.nominatimHostOverride &&
-          other.hintsEnabled == this.hintsEnabled);
+          other.hintsEnabled == this.hintsEnabled &&
+          other.fabCaptions == this.fabCaptions);
 }
 
 class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
@@ -2737,6 +3193,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
   final Value<String?> overpassEndpointOverride;
   final Value<String?> nominatimHostOverride;
   final Value<bool> hintsEnabled;
+  final Value<bool> fabCaptions;
   const AppSettingsCompanion({
     this.id = const Value.absent(),
     this.uncertaintyMeters = const Value.absent(),
@@ -2754,6 +3211,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     this.overpassEndpointOverride = const Value.absent(),
     this.nominatimHostOverride = const Value.absent(),
     this.hintsEnabled = const Value.absent(),
+    this.fabCaptions = const Value.absent(),
   });
   AppSettingsCompanion.insert({
     this.id = const Value.absent(),
@@ -2772,6 +3230,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     this.overpassEndpointOverride = const Value.absent(),
     this.nominatimHostOverride = const Value.absent(),
     this.hintsEnabled = const Value.absent(),
+    this.fabCaptions = const Value.absent(),
   });
   static Insertable<AppSetting> custom({
     Expression<int>? id,
@@ -2790,6 +3249,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     Expression<String>? overpassEndpointOverride,
     Expression<String>? nominatimHostOverride,
     Expression<bool>? hintsEnabled,
+    Expression<bool>? fabCaptions,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -2810,6 +3270,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
       if (nominatimHostOverride != null)
         'nominatim_host_override': nominatimHostOverride,
       if (hintsEnabled != null) 'hints_enabled': hintsEnabled,
+      if (fabCaptions != null) 'fab_captions': fabCaptions,
     });
   }
 
@@ -2830,6 +3291,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     Value<String?>? overpassEndpointOverride,
     Value<String?>? nominatimHostOverride,
     Value<bool>? hintsEnabled,
+    Value<bool>? fabCaptions,
   }) {
     return AppSettingsCompanion(
       id: id ?? this.id,
@@ -2850,6 +3312,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
       nominatimHostOverride:
           nominatimHostOverride ?? this.nominatimHostOverride,
       hintsEnabled: hintsEnabled ?? this.hintsEnabled,
+      fabCaptions: fabCaptions ?? this.fabCaptions,
     );
   }
 
@@ -2908,6 +3371,9 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     if (hintsEnabled.present) {
       map['hints_enabled'] = Variable<bool>(hintsEnabled.value);
     }
+    if (fabCaptions.present) {
+      map['fab_captions'] = Variable<bool>(fabCaptions.value);
+    }
     return map;
   }
 
@@ -2929,7 +3395,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
           ..write('tileUrlOverride: $tileUrlOverride, ')
           ..write('overpassEndpointOverride: $overpassEndpointOverride, ')
           ..write('nominatimHostOverride: $nominatimHostOverride, ')
-          ..write('hintsEnabled: $hintsEnabled')
+          ..write('hintsEnabled: $hintsEnabled, ')
+          ..write('fabCaptions: $fabCaptions')
           ..write(')'))
         .toString();
   }
@@ -3714,6 +4181,59 @@ class $SubspacePointsTable extends SubspacePoints
     requiredDuringInsert: false,
     defaultValue: currentDateAndTime,
   );
+  static const VerificationMeta _osmTypeMeta = const VerificationMeta(
+    'osmType',
+  );
+  @override
+  late final GeneratedColumn<String> osmType = GeneratedColumn<String>(
+    'osm_type',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _osmIdMeta = const VerificationMeta('osmId');
+  @override
+  late final GeneratedColumn<int> osmId = GeneratedColumn<int>(
+    'osm_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _origLatMeta = const VerificationMeta(
+    'origLat',
+  );
+  @override
+  late final GeneratedColumn<double> origLat = GeneratedColumn<double>(
+    'orig_lat',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _origLngMeta = const VerificationMeta(
+    'origLng',
+  );
+  @override
+  late final GeneratedColumn<double> origLng = GeneratedColumn<double>(
+    'orig_lng',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _origNameMeta = const VerificationMeta(
+    'origName',
+  );
+  @override
+  late final GeneratedColumn<String> origName = GeneratedColumn<String>(
+    'orig_name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -3724,6 +4244,11 @@ class $SubspacePointsTable extends SubspacePoints
     isMain,
     label,
     createdAt,
+    osmType,
+    osmId,
+    origLat,
+    origLng,
+    origName,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3792,6 +4317,36 @@ class $SubspacePointsTable extends SubspacePoints
         createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
       );
     }
+    if (data.containsKey('osm_type')) {
+      context.handle(
+        _osmTypeMeta,
+        osmType.isAcceptableOrUnknown(data['osm_type']!, _osmTypeMeta),
+      );
+    }
+    if (data.containsKey('osm_id')) {
+      context.handle(
+        _osmIdMeta,
+        osmId.isAcceptableOrUnknown(data['osm_id']!, _osmIdMeta),
+      );
+    }
+    if (data.containsKey('orig_lat')) {
+      context.handle(
+        _origLatMeta,
+        origLat.isAcceptableOrUnknown(data['orig_lat']!, _origLatMeta),
+      );
+    }
+    if (data.containsKey('orig_lng')) {
+      context.handle(
+        _origLngMeta,
+        origLng.isAcceptableOrUnknown(data['orig_lng']!, _origLngMeta),
+      );
+    }
+    if (data.containsKey('orig_name')) {
+      context.handle(
+        _origNameMeta,
+        origName.isAcceptableOrUnknown(data['orig_name']!, _origNameMeta),
+      );
+    }
     return context;
   }
 
@@ -3833,6 +4388,26 @@ class $SubspacePointsTable extends SubspacePoints
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      osmType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}osm_type'],
+      ),
+      osmId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}osm_id'],
+      ),
+      origLat: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}orig_lat'],
+      ),
+      origLng: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}orig_lng'],
+      ),
+      origName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}orig_name'],
+      ),
     );
   }
 
@@ -3853,6 +4428,15 @@ class SubspacePoint extends DataClass implements Insertable<SubspacePoint> {
   /// Optional name, e.g. the OSM `name` of an imported POI.
   final String? label;
   final DateTime createdAt;
+
+  /// `node` / `way` / `relation`, or null when not imported.
+  final String? osmType;
+  final int? osmId;
+
+  /// What the import returned: the position and the name.
+  final double? origLat;
+  final double? origLng;
+  final String? origName;
   const SubspacePoint({
     required this.id,
     required this.subspaceId,
@@ -3862,6 +4446,11 @@ class SubspacePoint extends DataClass implements Insertable<SubspacePoint> {
     required this.isMain,
     this.label,
     required this.createdAt,
+    this.osmType,
+    this.osmId,
+    this.origLat,
+    this.origLng,
+    this.origName,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3876,6 +4465,21 @@ class SubspacePoint extends DataClass implements Insertable<SubspacePoint> {
       map['label'] = Variable<String>(label);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || osmType != null) {
+      map['osm_type'] = Variable<String>(osmType);
+    }
+    if (!nullToAbsent || osmId != null) {
+      map['osm_id'] = Variable<int>(osmId);
+    }
+    if (!nullToAbsent || origLat != null) {
+      map['orig_lat'] = Variable<double>(origLat);
+    }
+    if (!nullToAbsent || origLng != null) {
+      map['orig_lng'] = Variable<double>(origLng);
+    }
+    if (!nullToAbsent || origName != null) {
+      map['orig_name'] = Variable<String>(origName);
+    }
     return map;
   }
 
@@ -3891,6 +4495,21 @@ class SubspacePoint extends DataClass implements Insertable<SubspacePoint> {
           ? const Value.absent()
           : Value(label),
       createdAt: Value(createdAt),
+      osmType: osmType == null && nullToAbsent
+          ? const Value.absent()
+          : Value(osmType),
+      osmId: osmId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(osmId),
+      origLat: origLat == null && nullToAbsent
+          ? const Value.absent()
+          : Value(origLat),
+      origLng: origLng == null && nullToAbsent
+          ? const Value.absent()
+          : Value(origLng),
+      origName: origName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(origName),
     );
   }
 
@@ -3908,6 +4527,11 @@ class SubspacePoint extends DataClass implements Insertable<SubspacePoint> {
       isMain: serializer.fromJson<bool>(json['isMain']),
       label: serializer.fromJson<String?>(json['label']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      osmType: serializer.fromJson<String?>(json['osmType']),
+      osmId: serializer.fromJson<int?>(json['osmId']),
+      origLat: serializer.fromJson<double?>(json['origLat']),
+      origLng: serializer.fromJson<double?>(json['origLng']),
+      origName: serializer.fromJson<String?>(json['origName']),
     );
   }
   @override
@@ -3922,6 +4546,11 @@ class SubspacePoint extends DataClass implements Insertable<SubspacePoint> {
       'isMain': serializer.toJson<bool>(isMain),
       'label': serializer.toJson<String?>(label),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'osmType': serializer.toJson<String?>(osmType),
+      'osmId': serializer.toJson<int?>(osmId),
+      'origLat': serializer.toJson<double?>(origLat),
+      'origLng': serializer.toJson<double?>(origLng),
+      'origName': serializer.toJson<String?>(origName),
     };
   }
 
@@ -3934,6 +4563,11 @@ class SubspacePoint extends DataClass implements Insertable<SubspacePoint> {
     bool? isMain,
     Value<String?> label = const Value.absent(),
     DateTime? createdAt,
+    Value<String?> osmType = const Value.absent(),
+    Value<int?> osmId = const Value.absent(),
+    Value<double?> origLat = const Value.absent(),
+    Value<double?> origLng = const Value.absent(),
+    Value<String?> origName = const Value.absent(),
   }) => SubspacePoint(
     id: id ?? this.id,
     subspaceId: subspaceId ?? this.subspaceId,
@@ -3943,6 +4577,11 @@ class SubspacePoint extends DataClass implements Insertable<SubspacePoint> {
     isMain: isMain ?? this.isMain,
     label: label.present ? label.value : this.label,
     createdAt: createdAt ?? this.createdAt,
+    osmType: osmType.present ? osmType.value : this.osmType,
+    osmId: osmId.present ? osmId.value : this.osmId,
+    origLat: origLat.present ? origLat.value : this.origLat,
+    origLng: origLng.present ? origLng.value : this.origLng,
+    origName: origName.present ? origName.value : this.origName,
   );
   SubspacePoint copyWithCompanion(SubspacePointsCompanion data) {
     return SubspacePoint(
@@ -3956,6 +4595,11 @@ class SubspacePoint extends DataClass implements Insertable<SubspacePoint> {
       isMain: data.isMain.present ? data.isMain.value : this.isMain,
       label: data.label.present ? data.label.value : this.label,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      osmType: data.osmType.present ? data.osmType.value : this.osmType,
+      osmId: data.osmId.present ? data.osmId.value : this.osmId,
+      origLat: data.origLat.present ? data.origLat.value : this.origLat,
+      origLng: data.origLng.present ? data.origLng.value : this.origLng,
+      origName: data.origName.present ? data.origName.value : this.origName,
     );
   }
 
@@ -3969,7 +4613,12 @@ class SubspacePoint extends DataClass implements Insertable<SubspacePoint> {
           ..write('sortOrder: $sortOrder, ')
           ..write('isMain: $isMain, ')
           ..write('label: $label, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('osmType: $osmType, ')
+          ..write('osmId: $osmId, ')
+          ..write('origLat: $origLat, ')
+          ..write('origLng: $origLng, ')
+          ..write('origName: $origName')
           ..write(')'))
         .toString();
   }
@@ -3984,6 +4633,11 @@ class SubspacePoint extends DataClass implements Insertable<SubspacePoint> {
     isMain,
     label,
     createdAt,
+    osmType,
+    osmId,
+    origLat,
+    origLng,
+    origName,
   );
   @override
   bool operator ==(Object other) =>
@@ -3996,7 +4650,12 @@ class SubspacePoint extends DataClass implements Insertable<SubspacePoint> {
           other.sortOrder == this.sortOrder &&
           other.isMain == this.isMain &&
           other.label == this.label &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.osmType == this.osmType &&
+          other.osmId == this.osmId &&
+          other.origLat == this.origLat &&
+          other.origLng == this.origLng &&
+          other.origName == this.origName);
 }
 
 class SubspacePointsCompanion extends UpdateCompanion<SubspacePoint> {
@@ -4008,6 +4667,11 @@ class SubspacePointsCompanion extends UpdateCompanion<SubspacePoint> {
   final Value<bool> isMain;
   final Value<String?> label;
   final Value<DateTime> createdAt;
+  final Value<String?> osmType;
+  final Value<int?> osmId;
+  final Value<double?> origLat;
+  final Value<double?> origLng;
+  final Value<String?> origName;
   final Value<int> rowid;
   const SubspacePointsCompanion({
     this.id = const Value.absent(),
@@ -4018,6 +4682,11 @@ class SubspacePointsCompanion extends UpdateCompanion<SubspacePoint> {
     this.isMain = const Value.absent(),
     this.label = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.osmType = const Value.absent(),
+    this.osmId = const Value.absent(),
+    this.origLat = const Value.absent(),
+    this.origLng = const Value.absent(),
+    this.origName = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   SubspacePointsCompanion.insert({
@@ -4029,6 +4698,11 @@ class SubspacePointsCompanion extends UpdateCompanion<SubspacePoint> {
     this.isMain = const Value.absent(),
     this.label = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.osmType = const Value.absent(),
+    this.osmId = const Value.absent(),
+    this.origLat = const Value.absent(),
+    this.origLng = const Value.absent(),
+    this.origName = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        subspaceId = Value(subspaceId),
@@ -4044,6 +4718,11 @@ class SubspacePointsCompanion extends UpdateCompanion<SubspacePoint> {
     Expression<bool>? isMain,
     Expression<String>? label,
     Expression<DateTime>? createdAt,
+    Expression<String>? osmType,
+    Expression<int>? osmId,
+    Expression<double>? origLat,
+    Expression<double>? origLng,
+    Expression<String>? origName,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -4055,6 +4734,11 @@ class SubspacePointsCompanion extends UpdateCompanion<SubspacePoint> {
       if (isMain != null) 'is_main': isMain,
       if (label != null) 'label': label,
       if (createdAt != null) 'created_at': createdAt,
+      if (osmType != null) 'osm_type': osmType,
+      if (osmId != null) 'osm_id': osmId,
+      if (origLat != null) 'orig_lat': origLat,
+      if (origLng != null) 'orig_lng': origLng,
+      if (origName != null) 'orig_name': origName,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -4068,6 +4752,11 @@ class SubspacePointsCompanion extends UpdateCompanion<SubspacePoint> {
     Value<bool>? isMain,
     Value<String?>? label,
     Value<DateTime>? createdAt,
+    Value<String?>? osmType,
+    Value<int?>? osmId,
+    Value<double?>? origLat,
+    Value<double?>? origLng,
+    Value<String?>? origName,
     Value<int>? rowid,
   }) {
     return SubspacePointsCompanion(
@@ -4079,6 +4768,11 @@ class SubspacePointsCompanion extends UpdateCompanion<SubspacePoint> {
       isMain: isMain ?? this.isMain,
       label: label ?? this.label,
       createdAt: createdAt ?? this.createdAt,
+      osmType: osmType ?? this.osmType,
+      osmId: osmId ?? this.osmId,
+      origLat: origLat ?? this.origLat,
+      origLng: origLng ?? this.origLng,
+      origName: origName ?? this.origName,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -4110,6 +4804,21 @@ class SubspacePointsCompanion extends UpdateCompanion<SubspacePoint> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (osmType.present) {
+      map['osm_type'] = Variable<String>(osmType.value);
+    }
+    if (osmId.present) {
+      map['osm_id'] = Variable<int>(osmId.value);
+    }
+    if (origLat.present) {
+      map['orig_lat'] = Variable<double>(origLat.value);
+    }
+    if (origLng.present) {
+      map['orig_lng'] = Variable<double>(origLng.value);
+    }
+    if (origName.present) {
+      map['orig_name'] = Variable<String>(origName.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -4127,6 +4836,11 @@ class SubspacePointsCompanion extends UpdateCompanion<SubspacePoint> {
           ..write('isMain: $isMain, ')
           ..write('label: $label, ')
           ..write('createdAt: $createdAt, ')
+          ..write('osmType: $osmType, ')
+          ..write('osmId: $osmId, ')
+          ..write('origLat: $origLat, ')
+          ..write('origLng: $origLng, ')
+          ..write('origName: $origName, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -8326,8 +9040,8 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
   /// already meant, now said out loud instead of inferred.
   final int zOrder;
 
-  /// Which kind of set this is: [kPoiSourceManual], [kPoiSourceRadius] or
-  /// [kPoiSourceBox] (v27; replaced the v25 `is_manual` flag when station
+  /// Which kind of set this is: [kPoiSourceManual], [kPoiSourceRadius],
+  /// [kPoiSourceBox] or [kPoiSourceArea] (v27; replaced the v25 `is_manual` flag when station
   /// imports joined the table — a bool and a nullable box read together in
   /// eight places is exactly the two-copies rule this app keeps avoiding).
   ///
@@ -8336,11 +9050,13 @@ class PoiSet extends DataClass implements Insertable<PoiSet> {
   /// already ran and nothing may be added to it by hand. A manual set describes
   /// no query at all — [centerLat]/[centerLng]/[radiusMeters] hold the map
   /// centre and 0 purely because the columns are NOT NULL, and the editor does
-  /// not show them. A box set likewise holds its box's centre and half-diagonal
-  /// there; nothing reads them for a box either.
+  /// not show them. A box or area set likewise holds its box's centre and
+  /// half-diagonal there; nothing reads them for a box either. (`area` needed
+  /// no schema change: this is a text column, and the box columns exist.)
   final String source;
 
-  /// **Box sets only.** The imported bounding box; null on the other kinds.
+  /// **Box and area sets only.** The imported bounding box; null on the
+  /// other kinds.
   final double? south;
   final double? west;
   final double? north;
@@ -13322,6 +14038,9 @@ typedef $$FoldersTableCreateCompanionBuilder =
       Value<bool> isInverted,
       Value<bool> isCollapsed,
       Value<DateTime> createdAt,
+      Value<int?> colorArgb,
+      Value<double> opacity,
+      Value<bool> overrideColor,
       Value<int> rowid,
     });
 typedef $$FoldersTableUpdateCompanionBuilder =
@@ -13333,6 +14052,9 @@ typedef $$FoldersTableUpdateCompanionBuilder =
       Value<bool> isInverted,
       Value<bool> isCollapsed,
       Value<DateTime> createdAt,
+      Value<int?> colorArgb,
+      Value<double> opacity,
+      Value<bool> overrideColor,
       Value<int> rowid,
     });
 
@@ -13401,6 +14123,21 @@ class $$FoldersTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorArgb => $composableBuilder(
+    column: $table.colorArgb,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get opacity => $composableBuilder(
+    column: $table.opacity,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get overrideColor => $composableBuilder(
+    column: $table.overrideColor,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -13473,6 +14210,21 @@ class $$FoldersTableOrderingComposer
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get colorArgb => $composableBuilder(
+    column: $table.colorArgb,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get opacity => $composableBuilder(
+    column: $table.opacity,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get overrideColor => $composableBuilder(
+    column: $table.overrideColor,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$FoldersTableAnnotationComposer
@@ -13508,6 +14260,17 @@ class $$FoldersTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<int> get colorArgb =>
+      $composableBuilder(column: $table.colorArgb, builder: (column) => column);
+
+  GeneratedColumn<double> get opacity =>
+      $composableBuilder(column: $table.opacity, builder: (column) => column);
+
+  GeneratedColumn<bool> get overrideColor => $composableBuilder(
+    column: $table.overrideColor,
+    builder: (column) => column,
+  );
 
   Expression<T> layersRefs<T extends Object>(
     Expression<T> Function($$LayersTableAnnotationComposer a) f,
@@ -13570,6 +14333,9 @@ class $$FoldersTableTableManager
                 Value<bool> isInverted = const Value.absent(),
                 Value<bool> isCollapsed = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<int?> colorArgb = const Value.absent(),
+                Value<double> opacity = const Value.absent(),
+                Value<bool> overrideColor = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FoldersCompanion(
                 id: id,
@@ -13579,6 +14345,9 @@ class $$FoldersTableTableManager
                 isInverted: isInverted,
                 isCollapsed: isCollapsed,
                 createdAt: createdAt,
+                colorArgb: colorArgb,
+                opacity: opacity,
+                overrideColor: overrideColor,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -13590,6 +14359,9 @@ class $$FoldersTableTableManager
                 Value<bool> isInverted = const Value.absent(),
                 Value<bool> isCollapsed = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<int?> colorArgb = const Value.absent(),
+                Value<double> opacity = const Value.absent(),
+                Value<bool> overrideColor = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FoldersCompanion.insert(
                 id: id,
@@ -13599,6 +14371,9 @@ class $$FoldersTableTableManager
                 isInverted: isInverted,
                 isCollapsed: isCollapsed,
                 createdAt: createdAt,
+                colorArgb: colorArgb,
+                opacity: opacity,
+                overrideColor: overrideColor,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -14792,6 +15567,11 @@ typedef $$CirclesTableCreateCompanionBuilder =
       Value<int?> colorArgb,
       Value<int> colorShade,
       Value<int> zOrder,
+      Value<String?> osmType,
+      Value<int?> osmId,
+      Value<double?> origLat,
+      Value<double?> origLng,
+      Value<String?> origName,
       Value<int> rowid,
     });
 typedef $$CirclesTableUpdateCompanionBuilder =
@@ -14806,6 +15586,11 @@ typedef $$CirclesTableUpdateCompanionBuilder =
       Value<int?> colorArgb,
       Value<int> colorShade,
       Value<int> zOrder,
+      Value<String?> osmType,
+      Value<int?> osmId,
+      Value<double?> origLat,
+      Value<double?> origLng,
+      Value<String?> origName,
       Value<int> rowid,
     });
 
@@ -14882,6 +15667,31 @@ class $$CirclesTableFilterComposer
 
   ColumnFilters<int> get zOrder => $composableBuilder(
     column: $table.zOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get osmType => $composableBuilder(
+    column: $table.osmType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get osmId => $composableBuilder(
+    column: $table.osmId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get origLat => $composableBuilder(
+    column: $table.origLat,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get origLng => $composableBuilder(
+    column: $table.origLng,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get origName => $composableBuilder(
+    column: $table.origName,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -14963,6 +15773,31 @@ class $$CirclesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get osmType => $composableBuilder(
+    column: $table.osmType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get osmId => $composableBuilder(
+    column: $table.osmId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get origLat => $composableBuilder(
+    column: $table.origLat,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get origLng => $composableBuilder(
+    column: $table.origLng,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get origName => $composableBuilder(
+    column: $table.origName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$LayersTableOrderingComposer get layerId {
     final $$LayersTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -15027,6 +15862,21 @@ class $$CirclesTableAnnotationComposer
   GeneratedColumn<int> get zOrder =>
       $composableBuilder(column: $table.zOrder, builder: (column) => column);
 
+  GeneratedColumn<String> get osmType =>
+      $composableBuilder(column: $table.osmType, builder: (column) => column);
+
+  GeneratedColumn<int> get osmId =>
+      $composableBuilder(column: $table.osmId, builder: (column) => column);
+
+  GeneratedColumn<double> get origLat =>
+      $composableBuilder(column: $table.origLat, builder: (column) => column);
+
+  GeneratedColumn<double> get origLng =>
+      $composableBuilder(column: $table.origLng, builder: (column) => column);
+
+  GeneratedColumn<String> get origName =>
+      $composableBuilder(column: $table.origName, builder: (column) => column);
+
   $$LayersTableAnnotationComposer get layerId {
     final $$LayersTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -15089,6 +15939,11 @@ class $$CirclesTableTableManager
                 Value<int?> colorArgb = const Value.absent(),
                 Value<int> colorShade = const Value.absent(),
                 Value<int> zOrder = const Value.absent(),
+                Value<String?> osmType = const Value.absent(),
+                Value<int?> osmId = const Value.absent(),
+                Value<double?> origLat = const Value.absent(),
+                Value<double?> origLng = const Value.absent(),
+                Value<String?> origName = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CirclesCompanion(
                 id: id,
@@ -15101,6 +15956,11 @@ class $$CirclesTableTableManager
                 colorArgb: colorArgb,
                 colorShade: colorShade,
                 zOrder: zOrder,
+                osmType: osmType,
+                osmId: osmId,
+                origLat: origLat,
+                origLng: origLng,
+                origName: origName,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -15115,6 +15975,11 @@ class $$CirclesTableTableManager
                 Value<int?> colorArgb = const Value.absent(),
                 Value<int> colorShade = const Value.absent(),
                 Value<int> zOrder = const Value.absent(),
+                Value<String?> osmType = const Value.absent(),
+                Value<int?> osmId = const Value.absent(),
+                Value<double?> origLat = const Value.absent(),
+                Value<double?> origLng = const Value.absent(),
+                Value<String?> origName = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CirclesCompanion.insert(
                 id: id,
@@ -15127,6 +15992,11 @@ class $$CirclesTableTableManager
                 colorArgb: colorArgb,
                 colorShade: colorShade,
                 zOrder: zOrder,
+                osmType: osmType,
+                osmId: osmId,
+                origLat: origLat,
+                origLng: origLng,
+                origName: origName,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -15214,6 +16084,7 @@ typedef $$AppSettingsTableCreateCompanionBuilder =
       Value<String?> overpassEndpointOverride,
       Value<String?> nominatimHostOverride,
       Value<bool> hintsEnabled,
+      Value<bool> fabCaptions,
     });
 typedef $$AppSettingsTableUpdateCompanionBuilder =
     AppSettingsCompanion Function({
@@ -15233,6 +16104,7 @@ typedef $$AppSettingsTableUpdateCompanionBuilder =
       Value<String?> overpassEndpointOverride,
       Value<String?> nominatimHostOverride,
       Value<bool> hintsEnabled,
+      Value<bool> fabCaptions,
     });
 
 class $$AppSettingsTableFilterComposer
@@ -15321,6 +16193,11 @@ class $$AppSettingsTableFilterComposer
 
   ColumnFilters<bool> get hintsEnabled => $composableBuilder(
     column: $table.hintsEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get fabCaptions => $composableBuilder(
+    column: $table.fabCaptions,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -15413,6 +16290,11 @@ class $$AppSettingsTableOrderingComposer
     column: $table.hintsEnabled,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get fabCaptions => $composableBuilder(
+    column: $table.fabCaptions,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$AppSettingsTableAnnotationComposer
@@ -15495,6 +16377,11 @@ class $$AppSettingsTableAnnotationComposer
     column: $table.hintsEnabled,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get fabCaptions => $composableBuilder(
+    column: $table.fabCaptions,
+    builder: (column) => column,
+  );
 }
 
 class $$AppSettingsTableTableManager
@@ -15544,6 +16431,7 @@ class $$AppSettingsTableTableManager
                 Value<String?> overpassEndpointOverride = const Value.absent(),
                 Value<String?> nominatimHostOverride = const Value.absent(),
                 Value<bool> hintsEnabled = const Value.absent(),
+                Value<bool> fabCaptions = const Value.absent(),
               }) => AppSettingsCompanion(
                 id: id,
                 uncertaintyMeters: uncertaintyMeters,
@@ -15561,6 +16449,7 @@ class $$AppSettingsTableTableManager
                 overpassEndpointOverride: overpassEndpointOverride,
                 nominatimHostOverride: nominatimHostOverride,
                 hintsEnabled: hintsEnabled,
+                fabCaptions: fabCaptions,
               ),
           createCompanionCallback:
               ({
@@ -15580,6 +16469,7 @@ class $$AppSettingsTableTableManager
                 Value<String?> overpassEndpointOverride = const Value.absent(),
                 Value<String?> nominatimHostOverride = const Value.absent(),
                 Value<bool> hintsEnabled = const Value.absent(),
+                Value<bool> fabCaptions = const Value.absent(),
               }) => AppSettingsCompanion.insert(
                 id: id,
                 uncertaintyMeters: uncertaintyMeters,
@@ -15597,6 +16487,7 @@ class $$AppSettingsTableTableManager
                 overpassEndpointOverride: overpassEndpointOverride,
                 nominatimHostOverride: nominatimHostOverride,
                 hintsEnabled: hintsEnabled,
+                fabCaptions: fabCaptions,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -16240,6 +17131,11 @@ typedef $$SubspacePointsTableCreateCompanionBuilder =
       Value<bool> isMain,
       Value<String?> label,
       Value<DateTime> createdAt,
+      Value<String?> osmType,
+      Value<int?> osmId,
+      Value<double?> origLat,
+      Value<double?> origLng,
+      Value<String?> origName,
       Value<int> rowid,
     });
 typedef $$SubspacePointsTableUpdateCompanionBuilder =
@@ -16252,6 +17148,11 @@ typedef $$SubspacePointsTableUpdateCompanionBuilder =
       Value<bool> isMain,
       Value<String?> label,
       Value<DateTime> createdAt,
+      Value<String?> osmType,
+      Value<int?> osmId,
+      Value<double?> origLat,
+      Value<double?> origLng,
+      Value<String?> origName,
       Value<int> rowid,
     });
 
@@ -16325,6 +17226,31 @@ class $$SubspacePointsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get osmType => $composableBuilder(
+    column: $table.osmType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get osmId => $composableBuilder(
+    column: $table.osmId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get origLat => $composableBuilder(
+    column: $table.origLat,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get origLng => $composableBuilder(
+    column: $table.origLng,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get origName => $composableBuilder(
+    column: $table.origName,
+    builder: (column) => ColumnFilters(column),
+  );
+
   $$SubspacesTableFilterComposer get subspaceId {
     final $$SubspacesTableFilterComposer composer = $composerBuilder(
       composer: this,
@@ -16393,6 +17319,31 @@ class $$SubspacePointsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get osmType => $composableBuilder(
+    column: $table.osmType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get osmId => $composableBuilder(
+    column: $table.osmId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get origLat => $composableBuilder(
+    column: $table.origLat,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get origLng => $composableBuilder(
+    column: $table.origLng,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get origName => $composableBuilder(
+    column: $table.origName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$SubspacesTableOrderingComposer get subspaceId {
     final $$SubspacesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -16446,6 +17397,21 @@ class $$SubspacePointsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<String> get osmType =>
+      $composableBuilder(column: $table.osmType, builder: (column) => column);
+
+  GeneratedColumn<int> get osmId =>
+      $composableBuilder(column: $table.osmId, builder: (column) => column);
+
+  GeneratedColumn<double> get origLat =>
+      $composableBuilder(column: $table.origLat, builder: (column) => column);
+
+  GeneratedColumn<double> get origLng =>
+      $composableBuilder(column: $table.origLng, builder: (column) => column);
+
+  GeneratedColumn<String> get origName =>
+      $composableBuilder(column: $table.origName, builder: (column) => column);
 
   $$SubspacesTableAnnotationComposer get subspaceId {
     final $$SubspacesTableAnnotationComposer composer = $composerBuilder(
@@ -16509,6 +17475,11 @@ class $$SubspacePointsTableTableManager
                 Value<bool> isMain = const Value.absent(),
                 Value<String?> label = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<String?> osmType = const Value.absent(),
+                Value<int?> osmId = const Value.absent(),
+                Value<double?> origLat = const Value.absent(),
+                Value<double?> origLng = const Value.absent(),
+                Value<String?> origName = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SubspacePointsCompanion(
                 id: id,
@@ -16519,6 +17490,11 @@ class $$SubspacePointsTableTableManager
                 isMain: isMain,
                 label: label,
                 createdAt: createdAt,
+                osmType: osmType,
+                osmId: osmId,
+                origLat: origLat,
+                origLng: origLng,
+                origName: origName,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -16531,6 +17507,11 @@ class $$SubspacePointsTableTableManager
                 Value<bool> isMain = const Value.absent(),
                 Value<String?> label = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<String?> osmType = const Value.absent(),
+                Value<int?> osmId = const Value.absent(),
+                Value<double?> origLat = const Value.absent(),
+                Value<double?> origLng = const Value.absent(),
+                Value<String?> origName = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SubspacePointsCompanion.insert(
                 id: id,
@@ -16541,6 +17522,11 @@ class $$SubspacePointsTableTableManager
                 isMain: isMain,
                 label: label,
                 createdAt: createdAt,
+                osmType: osmType,
+                osmId: osmId,
+                origLat: origLat,
+                origLng: origLng,
+                origName: origName,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

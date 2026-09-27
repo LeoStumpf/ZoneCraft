@@ -586,6 +586,8 @@ final _overrides = [
         isInverted: false,
         isCollapsed: false,
         createdAt: DateTime(2026),
+        opacity: 1.0,
+        overrideColor: false,
       ),
     ]),
   ),

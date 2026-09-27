@@ -31,6 +31,7 @@ library;
 
 import 'dart:async';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -874,9 +875,49 @@ Future<String?> showFolderPicker(BuildContext context, List<Folder> folders) {
 /// Makes a folder and leaves it where it was made — on top, empty, waiting for
 /// something to be dragged in.
 Future<void> addFolderFlow(WidgetRef ref, List<Folder> folders) async {
+  // A colour from the start: it is what marks the folder's members in the
+  // drawer, and a folder with none would be the one group you cannot see.
   await ref
       .read(repositoryProvider)
-      .createFolder(name: 'Folder ${folders.length + 1}');
+      .createFolder(
+        name: 'Folder ${folders.length + 1}',
+        colorArgb: _palette[(folders.length + 3) % _palette.length].toARGB32(),
+      );
+}
+
+/// Picks the folder's own colour. Unlike a layer there is nothing to settle
+/// afterwards: a folder's colour only reaches its members while
+/// [Folder.overrideColor] is on, and then it reaches all of them.
+Future<void> pickFolderColor(
+  BuildContext context,
+  Repository repo,
+  Folder folder,
+) async {
+  Color picked = Color(folder.colorArgb ?? kDefaultLayerColor);
+  final result = await showDialog<Color>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Folder colour'),
+      content: SingleChildScrollView(
+        child: BlockPicker(
+          pickerColor: picked,
+          onColorChanged: (c) => picked = c,
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, picked),
+          child: const Text('Select'),
+        ),
+      ],
+    ),
+  );
+  if (result == null) return;
+  await repo.updateFolder(folder.id, colorArgb: Value(result.toARGB32()));
 }
 
 Future<void> renameFolderFlow(

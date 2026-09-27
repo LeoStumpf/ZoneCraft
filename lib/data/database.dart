@@ -109,6 +109,23 @@ class Folders extends Table {
   BoolColumn get isCollapsed => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 
+  /// The folder's own colour (v32): its swatch and the rail down its members
+  /// in the drawer, and — with [overrideColor] — the colour every member is
+  /// drawn in. Null on a folder made before it had one, which then draws
+  /// nothing of its own colour.
+  IntColumn get colorArgb => integer().nullable()();
+
+  /// Multiplies every member's own opacity (v32) — a group fades together
+  /// and each member keeps its place relative to the others. 1.0 changes
+  /// nothing, which is what every older folder migrates in as.
+  RealColumn get opacity => real().withDefault(const Constant(1.0))();
+
+  /// Whether every member layer is drawn in [colorArgb] instead of its own
+  /// colour (v32). Folded in by `resolveLayers`, like the folder's invert: the
+  /// member rows keep their own colour, so switching this off gives it back.
+  BoolColumn get overrideColor =>
+      boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -206,6 +223,24 @@ class Circles extends Table {
   /// already meant, now said out loud instead of inferred.
   IntColumn get zOrder => integer().withDefault(const Constant(0))();
 
+  // --- Where it came from (v32) ----------------------------------------------
+  // A POI import can seed a circle per POI, and until v32 the point forgot which OSM
+  // element it was on the way in — so a seeded point that was plainly in the
+  // wrong place could be moved but never reported. These carry the element
+  // and what the import returned; all null for a point placed by hand. The
+  // point is a *correction* exactly when its position or name no longer
+  // matches `orig*` (no `editedAt`: nothing here is deduplicated against a
+  // re-import, so there is no fork to record — only a difference to report).
+
+  /// `node` / `way` / `relation`, or null when not imported.
+  TextColumn get osmType => text().nullable()();
+  IntColumn get osmId => integer().nullable()();
+
+  /// What the import returned: the position and the name.
+  RealColumn get origLat => real().nullable()();
+  RealColumn get origLng => real().nullable()();
+  TextColumn get origName => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -263,6 +298,24 @@ class SubspacePoints extends Table {
   /// Optional name, e.g. the OSM `name` of an imported POI.
   TextColumn get label => text().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  // --- Where it came from (v32) ----------------------------------------------
+  // A POI import can seed a subspace's points, and until v32 the point forgot which OSM
+  // element it was on the way in — so a seeded point that was plainly in the
+  // wrong place could be moved but never reported. These carry the element
+  // and what the import returned; all null for a point placed by hand. The
+  // point is a *correction* exactly when its position or name no longer
+  // matches `orig*` (no `editedAt`: nothing here is deduplicated against a
+  // re-import, so there is no fork to record — only a difference to report).
+
+  /// `node` / `way` / `relation`, or null when not imported.
+  TextColumn get osmType => text().nullable()();
+  IntColumn get osmId => integer().nullable()();
+
+  /// What the import returned: the position and the name.
+  RealColumn get origLat => real().nullable()();
+  RealColumn get origLng => real().nullable()();
+  TextColumn get origName => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -903,6 +956,11 @@ class AppSettings extends Table {
   /// understand.
   BoolColumn get hintsEnabled => boolean().withDefault(const Constant(true))();
 
+  /// Whether the map's round buttons carry a one-word caption underneath
+  /// (v32). Started as an experiment in whether the words earn their room,
+  /// so it is a switch rather than a decision.
+  BoolColumn get fabCaptions => boolean().withDefault(const Constant(true))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -1048,7 +1106,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 31;
+  int get schemaVersion => 32;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1581,6 +1639,40 @@ class AppDatabase extends _$AppDatabase {
         await m.addColumn(poiPoints, poiPoints.origLng);
         await m.addColumn(poiPoints, poiPoints.origName);
         await m.createTable(osmReports);
+      }
+      if (from < 32) {
+        // Purely additive. Every existing circle and subspace point reads as
+        // placed by hand (no OSM identity) — true of all of them as far as
+        // anything can tell, since the seeding never kept one. Every folder
+        // reads as colourless, opaque and not overriding, which is exactly
+        // how folders drew until now.
+        for (final c in [
+          circles.osmType,
+          circles.osmId,
+          circles.origLat,
+          circles.origLng,
+          circles.origName,
+        ]) {
+          await m.addColumn(circles, c);
+        }
+        for (final c in [
+          subspacePoints.osmType,
+          subspacePoints.osmId,
+          subspacePoints.origLat,
+          subspacePoints.origLng,
+          subspacePoints.origName,
+        ]) {
+          await m.addColumn(subspacePoints, c);
+        }
+        // Only a folders table that v30 created before this version: an older
+        // database gets it from the v30 block above, which builds today's
+        // shape — these columns included.
+        if (from >= 30) {
+          await m.addColumn(folders, folders.colorArgb);
+          await m.addColumn(folders, folders.opacity);
+          await m.addColumn(folders, folders.overrideColor);
+        }
+        await m.addColumn(appSettings, appSettings.fabCaptions);
       }
     },
     beforeOpen: (details) async {

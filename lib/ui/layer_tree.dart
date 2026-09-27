@@ -117,9 +117,16 @@ List<LayerNode> buildLayerTree(List<Folder> folders, List<Layer> layers) {
 ///   the identity, which is what makes the folder's switch a switch rather than
 ///   a setting that silently wins.
 ///
-/// Nothing else is folded in: a member keeps its own colour and its own
-/// opacity, because the point of a folder over the old combined layer is that
-/// what you put in comes out again unchanged.
+/// * a folder's **transparency multiplies** each member's own, so a group
+///   fades together and its members keep their opacity relative to each other;
+/// * a folder set to **use its colour** draws every member in it, and each
+///   member's elements then shade from that colour exactly as they do when a
+///   layer is recoloured. Switching it off gives each layer its own colour
+///   back, because the member rows were never written.
+///
+/// That is all: a member's stored settings are untouched, because the point
+/// of a folder over the old combined layer is that what you put in comes out
+/// again unchanged.
 List<Layer> resolveLayers(List<LayerNode> tree) => [
   for (final node in tree)
     ...switch (node) {
@@ -129,6 +136,10 @@ List<Layer> resolveLayers(List<LayerNode> tree) => [
           l.copyWith(
             isVisible: l.isVisible && folder.isVisible,
             isInverted: l.isInverted != folder.isInverted,
+            opacity: l.opacity * folder.opacity,
+            colorArgb: folder.overrideColor && folder.colorArgb != null
+                ? folder.colorArgb
+                : l.colorArgb,
           ),
       ],
     },
@@ -182,16 +193,40 @@ final class LayerLineRow extends LayerRow {
   String get id => layer.id;
 }
 
+/// The row that closes an open folder in the drawer: the line under its last
+/// member. It is what a drop reads "inside" or "after" off — above it is in
+/// the folder, below it is not — and it cannot itself be dragged.
+///
+/// Without it a folder had no end. A layer sitting right under the last
+/// member looked like one of them and was not; and a layer right under an
+/// *empty* folder's header could never be dropped in, because the only place
+/// to drop it was where it already was, and a move to the same index is no
+/// move at all.
+final class FolderEndRow extends LayerRow {
+  const FolderEndRow(this.folder, {required this.isEmpty});
+
+  final Folder folder;
+
+  /// Whether the folder holds nothing, so the row says where layers go.
+  final bool isEmpty;
+
+  @override
+  String get id => '${folder.id}/end';
+}
+
 /// The drawer's list, top of stack first: each root item, and under a folder
-/// its members — unless it is collapsed, which is the point of collapsing.
+/// its members and its end row — unless it is collapsed, which is the point
+/// of collapsing.
 List<LayerRow> drawerRows(List<LayerNode> tree) => [
   for (final node in tree.reversed)
     ...switch (node) {
       LayerNodeLeaf(:final layer) => [LayerLineRow(layer)],
       FolderNode(:final folder, :final layers) => [
         FolderRow(folder, layers: layers),
-        if (!folder.isCollapsed)
+        if (!folder.isCollapsed) ...[
           for (final l in layers.reversed) LayerLineRow(l, folder: folder),
+          FolderEndRow(folder, isEmpty: layers.isEmpty),
+        ],
       ],
     },
 ];
@@ -201,12 +236,12 @@ List<LayerRow> drawerRows(List<LayerNode> tree) => [
 ///
 /// **A dropped layer joins whatever the row above it belongs to.** That is the
 /// only rule, and it is the one a drag can express: dropped under a folder's
-/// header or among its members it joins that folder, dropped under a root row
-/// it stays at the root, dropped at the very top it is at the root. The case
-/// the rule cannot express is a folder's *last* member leaving downwards —
-/// there is no row below it that means "outside" — which is why the menu keeps
-/// "Move out of folder", and why this is a tested function rather than
-/// something inferred inside a widget.
+/// header or among its members it joins that folder, dropped under a folder's
+/// [FolderEndRow] or under a root row it is at the root, dropped at the very
+/// top it is at the root. The end row is what lets the rule say both "the
+/// last one in" and "the first one after" — before it, a folder's last member
+/// leaving downwards had no row below it that meant outside. "Move out of
+/// folder" stays in the menu as the route that needs no aim.
 ///
 /// A **collapsed** folder is opaque: a row dropped under it goes to the root,
 /// not into a group the user cannot see. Dragging a folder moves its whole
@@ -218,14 +253,22 @@ List<LayerRow> drawerRows(List<LayerNode> tree) => [
 List<LayerRow> moveDrawerRows(List<LayerRow> rows, int from, int to) {
   if (from < 0 || from >= rows.length || from == to) return rows;
   final moved = rows[from];
+  // An end row marks a boundary; it is not a thing to move.
+  if (moved is FolderEndRow) return rows;
   final List<LayerRow> block;
   final rest = [...rows];
   if (moved is FolderRow) {
-    // The header and whatever of its members are on screen travel together.
+    // The header, whatever of its members are on screen and its end row
+    // travel together.
     var end = from + 1;
     while (end < rest.length &&
         rest[end] is LayerLineRow &&
         (rest[end] as LayerLineRow).folder?.id == moved.folder.id) {
+      end++;
+    }
+    if (end < rest.length &&
+        rest[end] is FolderEndRow &&
+        (rest[end] as FolderEndRow).folder.id == moved.folder.id) {
       end++;
     }
     block = rest.sublist(from, end);
@@ -241,8 +284,9 @@ List<LayerRow> moveDrawerRows(List<LayerRow> rows, int from, int to) {
   if (moved is FolderRow) {
     while (at > 0 &&
         at < rest.length &&
-        rest[at] is LayerLineRow &&
-        (rest[at] as LayerLineRow).folder != null) {
+        (rest[at] is FolderEndRow ||
+            (rest[at] is LayerLineRow &&
+                (rest[at] as LayerLineRow).folder != null))) {
       at++;
     }
   }
@@ -268,6 +312,8 @@ Folder? _parentAt(List<LayerRow> rows, int at) {
   return switch (rows[at - 1]) {
     FolderRow(:final folder) => folder.isCollapsed ? null : folder,
     LayerLineRow(:final folder) => folder,
+    // Below a folder's end row is after the folder.
+    FolderEndRow() => null,
   };
 }
 
@@ -294,6 +340,8 @@ List<TreeWrite> treeWrites(List<LayerRow> rows) {
   final within = <String, int>{};
   for (final row in rows.reversed) {
     switch (row) {
+      case FolderEndRow():
+        continue; // a boundary, not a row with a place of its own
       case FolderRow():
         out.add((
           id: row.folder.id,

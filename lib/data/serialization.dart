@@ -293,7 +293,14 @@ class ExportLayer {
 
 /// A folder in a file: what it is called, and the two things it does.
 class ExportFolder {
-  const ExportFolder({required this.name, this.isVisible, this.isInverted});
+  const ExportFolder({
+    required this.name,
+    this.isVisible,
+    this.isInverted,
+    this.colorArgb,
+    this.opacity,
+    this.overrideColor,
+  });
 
   final String name;
 
@@ -301,6 +308,12 @@ class ExportFolder {
   /// only its name to the file.
   final bool? isVisible;
   final bool? isInverted;
+
+  /// v7: the folder's own colour (null = none), its transparency (null =
+  /// opaque) and whether it paints its members in its colour (null = no).
+  final int? colorArgb;
+  final double? opacity;
+  final bool? overrideColor;
 }
 
 /// A whole export: the ordered layers (bottom-to-top draw order), and the
@@ -359,7 +372,15 @@ class ExportData {
 /// is new, so a v5 reader still opens the file — it files such a set as a
 /// station import holding untyped stations, which shows its points under "No
 /// type given" rather than losing them.
-const int geoJsonSchemaVersion = 6;
+///
+/// v7 lets a **seeded** circle or subspace point keep the OSM element it was
+/// seeded from, in the per-point lists a POI set already uses
+/// (`pointOsmIds`/`pointOsmTypes`/`pointOrigLat`/`pointOrigLng`/
+/// `pointOrigNames` — one entry for a circle, one per point for a subspace),
+/// written only when there is one. A folder may carry `colorArgb`, `opacity`
+/// and `overrideColor`, each only when it is not the default. So a file from
+/// a map using none of it is what v6 wrote.
+const int geoJsonSchemaVersion = 7;
 
 /// Serialises [data] to a pretty-printed GeoJSON `FeatureCollection`. Each object
 /// becomes a `Feature`; layer attributes ride in a non-standard top-level
@@ -402,6 +423,9 @@ String exportToGeoJson(ExportData data) {
               'name': f.name,
               if (f.isVisible == false) 'isVisible': false,
               if (f.isInverted == true) 'isInverted': true,
+              if (f.colorArgb != null) 'colorArgb': f.colorArgb,
+              if (f.opacity != null) 'opacity': f.opacity,
+              if (f.overrideColor == true) 'overrideColor': true,
             },
         ],
     },
@@ -575,6 +599,9 @@ ExportData? importFromGeoJson(String text) {
           name: f['name'] as String,
           isVisible: f['isVisible'] as bool?,
           isInverted: f['isInverted'] as bool?,
+          colorArgb: (f['colorArgb'] as num?)?.toInt(),
+          opacity: (f['opacity'] as num?)?.toDouble(),
+          overrideColor: f['overrideColor'] as bool?,
         ),
   ];
 

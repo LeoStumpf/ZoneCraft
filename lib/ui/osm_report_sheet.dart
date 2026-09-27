@@ -80,6 +80,31 @@ Future<OsmReportResult> showOsmReportSheet(
   return result ?? const OsmReportResult(OsmReportOutcomeKind.cancelled);
 }
 
+/// Opens the publish sheet on [subject] from an editor, and says in a
+/// snackbar how it ended — the editors' one route to it.
+Future<void> publishCorrection(
+  BuildContext context,
+  OsmReportSubject subject,
+) async {
+  void toast(String m) => ScaffoldMessenger.of(context)
+    ..clearSnackBars()
+    ..showSnackBar(SnackBar(content: Text(m)));
+  if (!subject.canPublish) {
+    toast('Nothing to publish — it matches OpenStreetMap');
+    return;
+  }
+  final result = await showOsmReportSheet(context, subject);
+  if (!context.mounted) return;
+  switch (result.outcome) {
+    case OsmReportOutcomeKind.cancelled:
+      return;
+    case OsmReportOutcomeKind.saved:
+      toast('Kept in your OpenStreetMap list');
+    case OsmReportOutcomeKind.sent:
+      toast('Sent to OpenStreetMap — thank you');
+  }
+}
+
 class _OsmReportSheet extends ConsumerStatefulWidget {
   const _OsmReportSheet({required this.subject, this.kind});
 

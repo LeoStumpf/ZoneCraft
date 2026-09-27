@@ -67,7 +67,9 @@ void main() {
   group('the banner', () {
     test('asks for a drag until the pin moves, then measures it', () {
       expect(
-        pointMoveBannerText(const PointMove(pointId: 'p', from: from, to: from)),
+        pointMoveBannerText(
+          const PointMove(pointId: 'p', from: from, to: from),
+        ),
         'Drag the pin, or tap where it really is',
       );
       expect(

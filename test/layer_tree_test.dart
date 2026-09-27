@@ -54,6 +54,9 @@ Folder _folder(
   bool isVisible = true,
   bool isInverted = false,
   bool isCollapsed = false,
+  double opacity = 1.0,
+  int? colorArgb,
+  bool overrideColor = false,
 }) => Folder(
   id: id,
   name: id,
@@ -62,6 +65,9 @@ Folder _folder(
   isInverted: isInverted,
   isCollapsed: isCollapsed,
   createdAt: DateTime(2026),
+  opacity: opacity,
+  colorArgb: colorArgb,
+  overrideColor: overrideColor,
 );
 
 void main() {
@@ -150,11 +156,32 @@ void main() {
       },
     );
 
-    test('colour and opacity are never folded in', () {
+    test('a plain folder leaves colour and opacity alone', () {
       final tree = buildLayerTree([_folder('f')], [_layer('a', folderId: 'f')]);
       final drawn = resolveLayers(tree).single;
       expect(drawn.colorArgb, 0xFF000000);
       expect(drawn.opacity, 1);
+    });
+
+    test('a folder\'s transparency multiplies each member\'s own', () {
+      final tree = buildLayerTree(
+        [_folder('f', opacity: 0.5)],
+        [_layer('a', folderId: 'f').copyWith(opacity: 0.6)],
+      );
+      expect(resolveLayers(tree).single.opacity, closeTo(0.3, 1e-9));
+    });
+
+    test('"use folder colour" draws every member in it, and only then', () {
+      Layer drawn({required bool override, int? color}) => resolveLayers(
+        buildLayerTree(
+          [_folder('f', colorArgb: color, overrideColor: override)],
+          [_layer('a', folderId: 'f')],
+        ),
+      ).single;
+      expect(drawn(override: true, color: 0xFF00FF00).colorArgb, 0xFF00FF00);
+      expect(drawn(override: false, color: 0xFF00FF00).colorArgb, 0xFF000000);
+      // Switched on with no colour to use: nothing to override with.
+      expect(drawn(override: true).colorArgb, 0xFF000000);
     });
 
     test('draw order survives the fold', () {
@@ -193,6 +220,7 @@ void main() {
         'f',
         'in2',
         'in1',
+        'f/end',
         'bottom',
       ]);
     });
@@ -205,7 +233,7 @@ void main() {
   });
 
   group('moveDrawerRows', () {
-    // top · f · in2 · in1 · bottom
+    // top · f · in2 · in1 · f/end · bottom
     List<LayerRow> rows() => drawerRows(
       buildLayerTree(
         [_folder('f', sortOrder: 1)],
@@ -224,19 +252,40 @@ void main() {
     test('a layer dropped among a folder\'s members joins it', () {
       // The index is the final one, as `onReorderItem` hands it over.
       final moved = moveDrawerRows(rows(), 0, 2); // 'top' among the members
-      expect(moved.map((r) => r.id), ['f', 'in2', 'top', 'in1', 'bottom']);
+      expect(moved.map((r) => r.id), [
+        'f',
+        'in2',
+        'top',
+        'in1',
+        'f/end',
+        'bottom',
+      ]);
       expect(parentOf(moved, 'top'), 'f');
     });
 
     test('a layer dropped under a root row stays at the root', () {
       final moved = moveDrawerRows(rows(), 3, 0); // 'in1' to the very top
-      expect(moved.map((r) => r.id), ['in1', 'top', 'f', 'in2', 'bottom']);
+      expect(moved.map((r) => r.id), [
+        'in1',
+        'top',
+        'f',
+        'in2',
+        'f/end',
+        'bottom',
+      ]);
       expect(parentOf(moved, 'in1'), isNull);
     });
 
     test('dragging the folder takes its members with it', () {
-      final moved = moveDrawerRows(rows(), 1, 4); // 'f' down past 'bottom'
-      expect(moved.map((r) => r.id), ['top', 'bottom', 'f', 'in2', 'in1']);
+      final moved = moveDrawerRows(rows(), 1, 5); // 'f' down past 'bottom'
+      expect(moved.map((r) => r.id), [
+        'top',
+        'bottom',
+        'f',
+        'in2',
+        'in1',
+        'f/end',
+      ]);
       expect(parentOf(moved, 'in1'), 'f');
       expect(parentOf(moved, 'in2'), 'f');
       expect(parentOf(moved, 'bottom'), isNull);
@@ -249,9 +298,9 @@ void main() {
           [_layer('in', folderId: 'f', sortOrder: 0)],
         ),
       );
-      // g · f · in  ->  drop 'g' between 'f' and its member
+      // g · g/end · f · in · f/end  ->  drop 'g' between 'f' and its member
       final moved = moveDrawerRows(base, 0, 2);
-      expect(moved.map((r) => r.id), ['f', 'in', 'g']);
+      expect(moved.map((r) => r.id), ['f', 'in', 'f/end', 'g', 'g/end']);
       expect(parentOf(moved, 'in'), 'f');
     });
 
@@ -285,9 +334,9 @@ void main() {
           ],
         ),
       );
-      // f · in · middle · bottom  ->  drop 'middle' among the members
-      expect(base.map((r) => r.id), ['f', 'in', 'middle', 'bottom']);
-      final moved = moveDrawerRows(base, 2, 1);
+      // f · in · f/end · middle · bottom  ->  drop 'middle' among the members
+      expect(base.map((r) => r.id), ['f', 'in', 'f/end', 'middle', 'bottom']);
+      final moved = moveDrawerRows(base, 3, 1);
       expect(parentOf(moved, 'middle'), 'f');
       expect(
         parentOf(moved, 'bottom'),
@@ -301,6 +350,39 @@ void main() {
       final base = rows();
       expect(identical(moveDrawerRows(base, 2, 2), base), isTrue);
       expect(identical(moveDrawerRows(base, 9, 0), base), isTrue);
+    });
+
+    test('an end row cannot be picked up', () {
+      final base = rows();
+      expect(identical(moveDrawerRows(base, 4, 0), base), isTrue);
+    });
+
+    test('a layer just under an empty folder can be dropped into it', () {
+      // The reported bug: the only place to drop it was where it already
+      // was, and a move to the same index is no move at all.
+      final base = drawerRows(
+        buildLayerTree(
+          [_folder('f', sortOrder: 1)],
+          [_layer('root', sortOrder: 0)],
+        ),
+      );
+      expect(base.map((r) => r.id), ['f', 'f/end', 'root']);
+      final moved = moveDrawerRows(base, 2, 1);
+      expect(moved.map((r) => r.id), ['f', 'root', 'f/end']);
+      expect(parentOf(moved, 'root'), 'f');
+    });
+
+    test('below the end row is after the folder', () {
+      // f · in · f/end · root: 'in' dragged below the end row leaves.
+      final base = drawerRows(
+        buildLayerTree(
+          [_folder('f', sortOrder: 1)],
+          [_layer('root', sortOrder: 0), _layer('in', folderId: 'f')],
+        ),
+      );
+      final moved = moveDrawerRows(base, 1, 2);
+      expect(moved.map((r) => r.id), ['f', 'f/end', 'in', 'root']);
+      expect(parentOf(moved, 'in'), isNull);
     });
   });
 
@@ -334,8 +416,8 @@ void main() {
           [_layer('root', sortOrder: 0), _layer('in', folderId: 'f')],
         ),
       );
-      // f · in · root  ->  'root' dropped between the header and its member
-      final writes = treeWrites(moveDrawerRows(rows, 2, 1));
+      // f · in · f/end · root  ->  'root' between the header and its member
+      final writes = treeWrites(moveDrawerRows(rows, 3, 1));
       final root = writes.firstWhere((w) => w.id == 'root');
       expect((root.folderId, root.sortOrder), ('f', 1));
     });

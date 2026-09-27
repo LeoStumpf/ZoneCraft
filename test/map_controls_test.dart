@@ -185,4 +185,20 @@ void main() {
       }
     });
   });
+
+  test('every round button has a one-word caption', () {
+    // The top row is chrome, not round buttons; the layer's own switch takes
+    // its word from the switch it currently is.
+    for (final c in mapControls) {
+      final round =
+          c.area != MapControlArea.top && c.id != MapControlId.quickToggle;
+      if (!round) continue;
+      expect(c.caption, isNotNull, reason: c.name);
+      expect(c.caption!.contains(' '), isFalse, reason: c.caption);
+      expect(c.caption!.length, lessThanOrEqualTo(8), reason: c.caption);
+    }
+    for (final id in ['fillAreas', 'invert', 'stations']) {
+      expect(quickToggleCaption(id).contains(' '), isFalse);
+    }
+  });
 }

@@ -355,6 +355,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ref.watch(settingsProvider).asData?.value.hintsEnabled ?? true,
             onEnabled: (v) => unawaited(_repo.updateHintsEnabled(enabled: v)),
             onReset: () => unawaited(_resetTips()),
+            captions:
+                ref.watch(settingsProvider).asData?.value.fabCaptions ?? true,
+            onCaptions: (v) => unawaited(_repo.updateFabCaptions(enabled: v)),
           ),
           const Divider(height: 48),
           _DataSourcesSection(
@@ -571,11 +574,15 @@ class _TipsSection extends StatelessWidget {
     required this.enabled,
     required this.onEnabled,
     required this.onReset,
+    required this.captions,
+    required this.onCaptions,
   });
 
   final bool enabled;
   final ValueChanged<bool> onEnabled;
   final VoidCallback onReset;
+  final bool captions;
+  final ValueChanged<bool> onCaptions;
 
   @override
   Widget build(BuildContext context) {
@@ -586,11 +593,19 @@ class _TipsSection extends StatelessWidget {
         Text('Tips', style: theme.textTheme.titleMedium),
         const SizedBox(height: 4),
         Text(
-          'The map\u2019s buttons are icons without labels. Pressing one of the '
+          'The map\u2019s buttons are icons, with a one-word caption each '
+          'while Button captions is on. Pressing one of the '
           'layer switches answers with a line saying what is now true \u2014 a '
           'few times each, then it stops. “What the buttons do” in the layers '
           'menu explains all of them at any time.',
           style: theme.textTheme.bodySmall,
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Button captions'),
+          subtitle: const Text('One word under each map button'),
+          value: captions,
+          onChanged: onCaptions,
         ),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,

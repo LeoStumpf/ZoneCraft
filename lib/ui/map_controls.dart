@@ -60,7 +60,14 @@ class MapControl {
     required this.name,
     required this.what,
     this.sometimes,
+    this.caption,
   });
+
+  /// The one word under the button when captions are on (Settings → Button
+  /// captions). Null for the chrome across the top, which is not a round
+  /// button, and for the layer's own switch, whose word depends on the layer
+  /// (see [quickToggleCaption]).
+  final String? caption;
 
   final MapControlId id;
   final MapControlArea area;
@@ -138,6 +145,7 @@ const List<MapControl> mapControls = [
   ),
   MapControl(
     id: MapControlId.download,
+    caption: 'Offline',
     area: MapControlArea.tools,
     icon: Icons.download_for_offline_outlined,
     name: 'Download this area',
@@ -148,6 +156,7 @@ const List<MapControl> mapControls = [
   ),
   MapControl(
     id: MapControlId.goToPlace,
+    caption: 'Search',
     area: MapControlArea.tools,
     icon: Icons.search,
     name: 'Go to place',
@@ -158,6 +167,7 @@ const List<MapControl> mapControls = [
   ),
   MapControl(
     id: MapControlId.locate,
+    caption: 'Locate',
     area: MapControlArea.tools,
     icon: Icons.my_location,
     name: 'Locate me',
@@ -167,6 +177,7 @@ const List<MapControl> mapControls = [
   ),
   MapControl(
     id: MapControlId.share,
+    caption: 'Share',
     area: MapControlArea.tools,
     icon: Icons.ios_share,
     name: 'Share my location',
@@ -174,6 +185,7 @@ const List<MapControl> mapControls = [
   ),
   MapControl(
     id: MapControlId.elevation,
+    caption: 'Height',
     area: MapControlArea.tools,
     icon: Icons.terrain,
     name: 'Measure elevation',
@@ -181,6 +193,7 @@ const List<MapControl> mapControls = [
   ),
   MapControl(
     id: MapControlId.distance,
+    caption: 'Measure',
     area: MapControlArea.tools,
     icon: Icons.straighten,
     name: 'Measure distance',
@@ -190,6 +203,7 @@ const List<MapControl> mapControls = [
   ),
   MapControl(
     id: MapControlId.draw,
+    caption: 'Draw',
     area: MapControlArea.tools,
     icon: Icons.gesture,
     name: 'Draw with your finger',
@@ -200,6 +214,7 @@ const List<MapControl> mapControls = [
   ),
   MapControl(
     id: MapControlId.edit,
+    caption: 'Edit',
     area: MapControlArea.bottom,
     icon: Icons.edit_outlined,
     name: 'Select by tapping',
@@ -219,6 +234,7 @@ const List<MapControl> mapControls = [
   ),
   MapControl(
     id: MapControlId.featureImport,
+    caption: 'Find',
     area: MapControlArea.bottom,
     icon: Icons.travel_explore,
     name: 'Find a place by name',
@@ -229,6 +245,7 @@ const List<MapControl> mapControls = [
   ),
   MapControl(
     id: MapControlId.osmImport,
+    caption: 'Import',
     area: MapControlArea.bottom,
     icon: Icons.cloud_download_outlined,
     name: 'Import an area',
@@ -239,6 +256,7 @@ const List<MapControl> mapControls = [
   ),
   MapControl(
     id: MapControlId.add,
+    caption: 'New',
     area: MapControlArea.bottom,
     icon: Icons.add,
     name: 'Add',
@@ -250,6 +268,7 @@ const List<MapControl> mapControls = [
   ),
   MapControl(
     id: MapControlId.tools,
+    caption: 'Tools',
     area: MapControlArea.bottom,
     icon: Icons.unfold_less,
     name: 'Hide and show the tools',
@@ -258,6 +277,16 @@ const List<MapControl> mapControls = [
         'undo buttons and the layer name all go, and come back.',
   ),
 ];
+
+/// The caption of the layer's own switch, which is three different switches
+/// — named, like the switch itself, by what it makes true. Takes the
+/// `LayerActionId`'s name, so this catalogue stays free of the widget layer.
+String quickToggleCaption(String actionId) => switch (actionId) {
+  'fillAreas' => 'Colours',
+  'invert' => 'Outside',
+  'stations' => 'Stations',
+  _ => 'Switch',
+};
 
 /// The catalogue entry for [id]. Every id has exactly one — pinned by a test,
 /// because the point of the list is that it cannot fall behind the map.

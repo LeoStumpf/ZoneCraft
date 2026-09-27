@@ -256,6 +256,10 @@ class LayersDrawer extends ConsumerWidget {
                     Expanded(
                       child: ReorderableListView.builder(
                         itemCount: rows.length,
+                        // Drag starts are placed by hand: an end-of-folder row
+                        // is a boundary, and the default would make it a thing
+                        // you can pick up.
+                        buildDefaultDragHandles: false,
                         // `moveDrawerRows` works out the new parent as well as
                         // the new order — a drop joins whatever the row above
                         // it belongs to — and returns the list unchanged when
@@ -273,29 +277,71 @@ class LayersDrawer extends ConsumerWidget {
                           final row = rows[index];
                           switch (row) {
                             case FolderRow():
-                              return _FolderTile(
+                              return ReorderableDelayedDragStartListener(
                                 key: ValueKey(row.folder.id),
                                 index: index,
-                                folder: row.folder,
-                                layers: row.layers,
-                                elementCount: row.layers
-                                    .map(countOf)
-                                    .fold(0, (a, b) => a + b),
-                                canInvert: row.layers.any(
-                                  (l) =>
-                                      kInvertibleTypes.contains(l.type) &&
-                                      countOf(l) > 0,
+                                child: _FolderBand(
+                                  folder: row.folder,
+                                  header: true,
+                                  child: _FolderTile(
+                                    index: index,
+                                    folder: row.folder,
+                                    layers: row.layers,
+                                    elementCount: row.layers
+                                        .map(countOf)
+                                        .fold(0, (a, b) => a + b),
+                                    canInvert: row.layers.any(
+                                      (l) =>
+                                          kInvertibleTypes.contains(l.type) &&
+                                          countOf(l) > 0,
+                                    ),
+                                  ),
                                 ),
                               );
                             case LayerLineRow():
-                              return _LayerTile(
-                                key: ValueKey(row.layer.id),
+                              final tile = _LayerTile(
                                 index: index,
                                 layer: row.layer,
                                 layers: layers,
                                 objectCount: countOf(row.layer),
                                 isActive: row.layer.id == activeId,
                                 folder: row.folder,
+                              );
+                              final inFolder = row.folder;
+                              return ReorderableDelayedDragStartListener(
+                                key: ValueKey(row.layer.id),
+                                index: index,
+                                child: inFolder == null
+                                    ? tile
+                                    : _FolderBand(
+                                        folder: inFolder,
+                                        child: tile,
+                                      ),
+                              );
+                            case FolderEndRow():
+                              return _FolderBand(
+                                key: ValueKey(row.id),
+                                folder: row.folder,
+                                end: true,
+                                child: row.isEmpty
+                                    ? Padding(
+                                        padding: const EdgeInsets.fromLTRB(
+                                          24,
+                                          6,
+                                          8,
+                                          8,
+                                        ),
+                                        child: Text(
+                                          'Empty — drag a layer here',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(
+                                                fontStyle: FontStyle.italic,
+                                              ),
+                                        ),
+                                      )
+                                    : const SizedBox(height: 6),
                               );
                           }
                         },
@@ -392,7 +438,6 @@ const _kNewFolder = '\u0000folder';
 /// replaced.
 class _FolderTile extends ConsumerWidget {
   const _FolderTile({
-    super.key,
     required this.index,
     required this.folder,
     required this.layers,
@@ -423,6 +468,12 @@ class _FolderTile extends ConsumerWidget {
     if (elementCount > 0) subtitle.write(' · $elementCount');
     if (folder.isInverted) subtitle.write(' · inverted');
     if (!folder.isVisible) subtitle.write(' · hidden');
+    if (folder.overrideColor && folder.colorArgb != null) {
+      subtitle.write(' · one colour');
+    }
+    if (folder.opacity < 0.995) {
+      subtitle.write(' · ${(folder.opacity * 100).round()}% opacity');
+    }
 
     return ListTile(
       dense: true,
@@ -455,6 +506,23 @@ class _FolderTile extends ConsumerWidget {
       ),
       title: Row(
         children: [
+          // The folder's colour: the rail down its members, and — with "Use
+          // folder colour" — the colour they are all drawn in.
+          GestureDetector(
+            onTap: () => unawaited(pickFolderColor(context, repo, folder)),
+            child: Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                color: folder.colorArgb == null
+                    ? null
+                    : Color(folder.colorArgb!),
+                shape: BoxShape.circle,
+                border: Border.all(color: kSwatchRing),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
           const Icon(Icons.folder_outlined, size: 18),
           const SizedBox(width: 6),
           Expanded(
@@ -478,6 +546,27 @@ class _FolderTile extends ConsumerWidget {
               switch (choice) {
                 case 'rename':
                   unawaited(renameFolderFlow(context, repo, folder));
+                case 'color':
+                  unawaited(pickFolderColor(context, repo, folder));
+                case 'opacity':
+                  unawaited(
+                    showOpacityDialog(
+                      context,
+                      title: 'Folder transparency',
+                      value: folder.opacity,
+                      onChanged: (v) =>
+                          unawaited(repo.updateFolder(folder.id, opacity: v)),
+                    ),
+                  );
+                case 'override':
+                  unawaited(
+                    repo.updateFolder(
+                      folder.id,
+                      overrideColor: !folder.overrideColor,
+                    ),
+                  );
+                case 'export':
+                  unawaited(exportFolder(context, repo, folder));
                 case 'invert':
                   unawaited(
                     repo.updateFolder(
@@ -498,6 +587,34 @@ class _FolderTile extends ConsumerWidget {
             },
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'rename', child: Text('Rename')),
+              const PopupMenuItem(value: 'color', child: Text('Colour…')),
+              const PopupMenuItem(
+                value: 'opacity',
+                child: Text('Transparency…'),
+              ),
+              // A tick box, because it is a mode the folder is in: on, every
+              // layer inside draws in the folder's colour; off, each draws in
+              // its own again (nothing about the layers was changed).
+              CheckedPopupMenuItem(
+                value: 'override',
+                checked: folder.overrideColor,
+                enabled: folder.colorArgb != null || folder.overrideColor,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Use folder colour for all layers'),
+                    Text(
+                      folder.colorArgb == null
+                          ? 'Pick the folder a colour first.'
+                          : 'Off: each layer keeps its own colour.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               CheckedPopupMenuItem(
                 value: 'invert',
                 checked: folder.isInverted,
@@ -521,6 +638,11 @@ class _FolderTile extends ConsumerWidget {
                         ],
                       ),
               ),
+              PopupMenuItem(
+                value: 'export',
+                enabled: layers.isNotEmpty,
+                child: const Text('Export folder…'),
+              ),
               const PopupMenuDivider(),
               const PopupMenuItem(
                 value: 'delete',
@@ -542,6 +664,46 @@ class _FolderTile extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// What marks a folder's rows as one block in the drawer: a rail down the
+/// left in the folder's colour and a faint wash of it behind — the header
+/// strongest, the members lighter, and the [end] row closing the block with
+/// a rounded foot. An indent alone (all a member used to get) was 16 px, and
+/// the layer under a folder's last member looked exactly like one of them.
+class _FolderBand extends StatelessWidget {
+  const _FolderBand({
+    super.key,
+    required this.folder,
+    required this.child,
+    this.header = false,
+    this.end = false,
+  });
+
+  final Folder folder;
+  final Widget child;
+  final bool header;
+  final bool end;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final color = folder.colorArgb == null
+        ? scheme.outline
+        : Color(folder.colorArgb!);
+    return Container(
+      margin: EdgeInsets.fromLTRB(4, header ? 4 : 0, 4, end ? 6 : 0),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: header ? 0.16 : 0.07),
+        border: Border(left: BorderSide(color: color, width: 4)),
+        borderRadius: BorderRadius.only(
+          topRight: header ? const Radius.circular(8) : Radius.zero,
+          bottomRight: end ? const Radius.circular(8) : Radius.zero,
+        ),
+      ),
+      child: child,
     );
   }
 }
@@ -572,7 +734,6 @@ Widget _itemLabel(BuildContext context, LayerAction a) {
 
 class _LayerTile extends ConsumerWidget {
   const _LayerTile({
-    super.key,
     required this.index,
     required this.layer,
     required this.layers,

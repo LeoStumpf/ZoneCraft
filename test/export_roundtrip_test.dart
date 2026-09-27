@@ -86,6 +86,21 @@ void main() {
       centerLng: 11.6,
       radiusMeters: 800,
     );
+    // Seeded from a POI and since moved: its OSM origin has to travel (v7).
+    await repo.createCircle(
+      layerId: _id(ids, 'circles'),
+      centerLat: 48.25,
+      centerLng: 11.65,
+      radiusMeters: 100,
+      label: 'Café Luitpold',
+      origin: (
+        osmType: 'node',
+        osmId: 1234567,
+        lat: 48.2501,
+        lng: 11.6502,
+        name: 'Café Luitpold',
+      ),
+    );
     await repo.updateLayer(_id(ids, 'circles'), opacity: 0.31);
 
     // a two-point subspace (what a plane became) — inverted layer.
@@ -130,6 +145,21 @@ void main() {
       lng: 11.1,
       isMain: true,
       label: 'mine',
+    );
+    // A point seeded from a station import (v7): its OSM element and what
+    // the import said.
+    await repo.addSubspacePoint(
+      subspaceId: sub,
+      lat: 48.05,
+      lng: 11.15,
+      label: 'Pasing',
+      origin: (
+        osmType: 'node',
+        osmId: 987654,
+        lat: 48.0501,
+        lng: 11.1499,
+        name: 'München-Pasing',
+      ),
     );
 
     // freeline — an offset and an explicit inclusion circle, and vertices
@@ -388,7 +418,13 @@ void main() {
     // combined layer. What has to survive is the membership and the folder's
     // own two settings; each member is an ordinary layer and travels as one.
     ids['folder'] = await repo.createFolder(name: 'Everything');
-    await repo.updateFolder(_id(ids, 'folder'), isInverted: true);
+    await repo.updateFolder(
+      _id(ids, 'folder'),
+      isInverted: true,
+      colorArgb: const Value(0xFF8D6E63),
+      opacity: 0.6,
+      overrideColor: true,
+    );
     ids['inCircles'] = await repo.createLayer(
       name: 'Everything (Circles)',
       colorArgb: 0xFF7E57C2,
@@ -894,12 +930,47 @@ void main() {
     final folders = await repo.watchFolders().first;
     final back = folders.firstWhere((f) => f.name == 'Everything');
     expect(back.isInverted, isTrue);
+    expect(back.colorArgb, 0xFF8D6E63);
+    expect(back.opacity, 0.6);
+    expect(back.overrideColor, isTrue);
     final layers = await repo.watchLayers().first;
     final inside = layers.where((l) => l.folderId == back.id).toList();
     expect(inside.map((l) => l.type), ['circles', 'freearea', 'poi']);
     expect(
       after.where((l) => l['name'] == 'Everything (Circles)'),
       hasLength(1),
+    );
+  });
+
+  test('a seeded circle and subspace point keep their OSM origin', () async {
+    // Without it a point seeded from an import and then moved could no longer
+    // say it was a correction — the report button would silently vanish on
+    // the device the file was opened on.
+    await seedEverything();
+    await reimport(await repo.exportData());
+    final circles = await repo.watchAllCircles().first;
+    final seededCircles = circles.where((c) => c.label == 'Café Luitpold');
+    expect(seededCircles, isNotEmpty);
+    for (final c in seededCircles) {
+      expect((c.osmType, c.osmId), ('node', 1234567));
+      expect(
+        (c.origLat, c.origLng, c.origName),
+        (48.2501, 11.6502, 'Café Luitpold'),
+      );
+    }
+    final points = await repo.watchAllSubspacePoints().first;
+    final pasing = points.where((p) => p.label == 'Pasing');
+    expect(pasing, isNotEmpty);
+    for (final p in pasing) {
+      expect(
+        (p.osmType, p.osmId, p.origName),
+        ('node', 987654, 'München-Pasing'),
+      );
+    }
+    // A hand-placed point next to it stays without one.
+    expect(
+      points.where((p) => p.label == 'mine').every((p) => p.osmId == null),
+      isTrue,
     );
   });
 

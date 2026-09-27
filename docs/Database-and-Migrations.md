@@ -1,7 +1,7 @@
 # Database and migrations
 
 The app's whole state is one SQLite database managed by
-[Drift](https://drift.simonbinder.eu/), at **schema v31**. Tables: `layers` and `folders`;
+[Drift](https://drift.simonbinder.eu/), at **schema v32**. Tables: `layers` and `folders`;
 one table per region type plus its point table (`circles`, `subspaces` +
 `subspace_points`, `free_lines` + `free_line_points`, `free_areas` + `free_area_points`,
 `height_regions` + `height_polygons` + `height_polygon_points`); the two imports
@@ -18,7 +18,9 @@ blocks *drop* tables: v19 dropped abandoned transit-route tables, and v27 folded
 `planes` and `transit` layer types into `subspace` and `poi` (rows retyped, ids kept) and
 dropped `tracks` with its data. v30 split every old `mixed` layer into one layer per kind it
 held, inside a folder when that was more than one. v31 added the four `poi_points`
-correction columns and the outbox, purely additively.
+correction columns and the outbox, purely additively. v32 (also additive) lets a circle or
+subspace point seeded from a POI import remember its OpenStreetMap element, gives folders a
+colour, a transparency and a colour override, and adds the button-captions setting.
 
 Installing with `scripts/build.sh --install` (adb `-r`) keeps the app's data, so every
 install on the developer phone exercises the migration path on a real map.

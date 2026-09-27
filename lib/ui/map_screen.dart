@@ -29,7 +29,7 @@ import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart' hide Circle;
 import 'package:share_plus/share_plus.dart';
 
-import '../data/osm_report.dart' show OsmReportSubject;
+import '../data/osm_report.dart' show OsmReportSubject, seededPointSubject;
 import '../data/borders.dart';
 import '../data/cached_tile_provider.dart';
 import '../data/database.dart';
@@ -46,7 +46,7 @@ import '../data/overpass_client.dart'
         overpassEndpointOverride;
 import '../data/layer_types.dart';
 import '../data/platform_files.dart';
-import '../data/repository.dart' show Repository;
+import '../data/repository.dart' show OsmOrigin, Repository;
 import '../data/service_credits.dart';
 import '../data/shared_point.dart';
 import '../data/tile_health.dart';
@@ -1427,11 +1427,41 @@ class _MapScreenState extends ConsumerState<MapScreen>
         if (!publish || point == null || !mounted) return;
         await _publishSubject(osmSubjectFor(point, sets, lat: lat, lng: lng));
       case PointMoveTarget.subspacePoint:
+        final p = (ref.read(subspacePointsProvider).asData?.value ?? const [])
+            .where((x) => x.id == move.pointId)
+            .firstOrNull;
         await repo.updateSubspacePoint(move.pointId, lat: lat, lng: lng);
         await repo.undo.sealStep(label: 'Move point');
+        if (!publish || p == null || !mounted) return;
+        final subject = seededPointSubject(
+          osmType: p.osmType,
+          osmId: p.osmId,
+          origLat: p.origLat,
+          origLng: p.origLng,
+          origName: p.origName,
+          lat: lat,
+          lng: lng,
+          label: p.label,
+        );
+        if (subject != null) await _publishSubject(subject);
       case PointMoveTarget.circle:
+        final c = (ref.read(circlesProvider).asData?.value ?? const [])
+            .where((x) => x.id == move.pointId)
+            .firstOrNull;
         await repo.updateCircle(move.pointId, centerLat: lat, centerLng: lng);
         await repo.undo.sealStep(label: 'Move circle');
+        if (!publish || c == null || !mounted) return;
+        final subject = seededPointSubject(
+          osmType: c.osmType,
+          osmId: c.osmId,
+          origLat: c.origLat,
+          origLng: c.origLng,
+          origName: c.origName,
+          lat: lat,
+          lng: lng,
+          label: c.label,
+        );
+        if (subject != null) await _publishSubject(subject);
       case PointMoveTarget.freeLinePoint:
         await repo.updateFreeLinePoint(move.pointId, lat: lat, lng: lng);
         await repo.undo.sealStep(label: 'Move point');
@@ -1440,6 +1470,24 @@ class _MapScreenState extends ConsumerState<MapScreen>
         await repo.undo.sealStep(label: 'Move point');
     }
   }
+
+  /// Whether the banner for [move] offers **Save & publish**: always for a
+  /// POI (the sheet itself says when there is nothing to send), and for a
+  /// seeded circle or subspace point only when it came from an OSM element —
+  /// a hand-placed corner of a zone is not something to tell OSM about.
+  bool _movePublishable(
+    PointMove move,
+    List<Circle> circles,
+    List<SubspacePoint> subspacePoints,
+  ) => switch (move.target) {
+    PointMoveTarget.poi => true,
+    PointMoveTarget.circle =>
+      circles.where((c) => c.id == move.pointId).firstOrNull?.osmId != null,
+    PointMoveTarget.subspacePoint =>
+      subspacePoints.where((p) => p.id == move.pointId).firstOrNull?.osmId !=
+          null,
+    PointMoveTarget.freeLinePoint || PointMoveTarget.freeAreaPoint => false,
+  };
 
   /// Opens the publish sheet on [subject] and says how it ended.
   Future<void> _publishSubject(OsmReportSubject subject) async {
@@ -2048,6 +2096,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
     // so fall back to the category plus an index — every imported POI is named.
     String labelFor(int i) =>
         within[i].name ?? '${config.category.label} ${i + 1}';
+    // Which element each seeded point is, so a point found to be in the
+    // wrong place can later be reported rather than only moved.
+    OsmOrigin? originOf(int i) {
+      final r = within[i];
+      final type = r.osmType;
+      final id = r.osmId;
+      if (type == null || id == null || id == 0) return null;
+      return (osmType: type, osmId: id, lat: r.lat, lng: r.lng, name: r.name);
+    }
 
     if (isCircleLayer) {
       for (var i = 0; i < within.length; i++) {
@@ -2057,6 +2114,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
           centerLng: within[i].lng,
           radiusMeters: config.circleRadiusMeters!,
           label: labelFor(i),
+          origin: originOf(i),
         );
       }
       if (mounted) _hint('Imported ${within.length} $label as circles.');
@@ -2082,6 +2140,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
         lng: within[i].lng,
         isMain: makeMain,
         label: labelFor(i),
+        origin: originOf(i),
       );
       if (makeMain) hasMain = true;
     }
@@ -5958,8 +6017,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               padding: const EdgeInsets.only(bottom: 8),
                               child: PointMoveBanner(
                                 move: pointMove,
-                                canPublish:
-                                    pointMove.target == PointMoveTarget.poi,
+                                canPublish: _movePublishable(
+                                  pointMove,
+                                  circles,
+                                  selectedSubspacePoints,
+                                ),
                                 onCancel: () => ref
                                     .read(pointMoveProvider.notifier)
                                     .cancel(),
@@ -6336,6 +6398,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       floatingActionButton: bottomSheet != null
           ? null
           : MapFabColumn(
+              captions: settings?.fabCaptions ?? true,
               controlState: controlState,
               mode: mode,
               toolsExpanded: toolsExpanded,
