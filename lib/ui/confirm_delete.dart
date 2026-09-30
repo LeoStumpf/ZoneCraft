@@ -39,6 +39,7 @@ Future<bool> confirmDelete(
     builder: (ctx) {
       final scheme = Theme.of(ctx).colorScheme;
       return AlertDialog(
+        scrollable: true,
         title: Text(title),
         content: Text(body),
         actions: [

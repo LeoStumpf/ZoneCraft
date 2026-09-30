@@ -176,10 +176,7 @@ class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
           children: [
             const Icon(Icons.terrain, size: 18),
             const SizedBox(width: 8),
-            Text(
-              'Edit height area',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            EditorTitle('Edit height area'),
             const SizedBox(width: 12),
             // The layer picker takes the slack and ellipsises: a layer named
             // after an imported border ("Ludwigsvorstadt-Isarvorstadt") is
@@ -316,35 +313,43 @@ class _HeightEditorSheetState extends ConsumerState<HeightEditorSheet> {
           ],
         ),
         const SizedBox(height: 8),
-        Row(
-          children: [
-            SegmentedButton<bool>(
-              segments: const [
-                ButtonSegment(value: true, label: Text('Above')),
-                ButtonSegment(value: false, label: Text('Below')),
-              ],
-              selected: {r.aboveThreshold},
-              onSelectionChanged: (s) =>
-                  _repo.updateHeightRegion(id, aboveThreshold: s.first),
-            ),
-            const Spacer(),
-            DropdownButton<int>(
-              value: r.sampleZoom,
-              items: const [
-                DropdownMenuItem(value: 12, child: Text('Coarse')),
-                DropdownMenuItem(value: 13, child: Text('Medium')),
-                DropdownMenuItem(value: 14, child: Text('Fine')),
-              ],
-              onChanged: (v) {
-                if (v != null) {
-                  logAsyncFailure(
-                    _repo.updateHeightRegion(id, sampleZoom: v),
-                    'Saving the detail level',
-                  );
-                }
-              },
-            ),
-          ],
+        // A Wrap, not Row + Spacer: at a large font the two controls are
+        // wider than a phone together, and the detail picker went off the
+        // edge. Here it drops to its own line instead.
+        SizedBox(
+          width: double.infinity,
+          child: Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            children: [
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(value: true, label: Text('Above')),
+                  ButtonSegment(value: false, label: Text('Below')),
+                ],
+                selected: {r.aboveThreshold},
+                onSelectionChanged: (s) =>
+                    _repo.updateHeightRegion(id, aboveThreshold: s.first),
+              ),
+              DropdownButton<int>(
+                value: r.sampleZoom,
+                items: const [
+                  DropdownMenuItem(value: 12, child: Text('Coarse')),
+                  DropdownMenuItem(value: 13, child: Text('Medium')),
+                  DropdownMenuItem(value: 14, child: Text('Fine')),
+                ],
+                onChanged: (v) {
+                  if (v != null) {
+                    logAsyncFailure(
+                      _repo.updateHeightRegion(id, sampleZoom: v),
+                      'Saving the detail level',
+                    );
+                  }
+                },
+              ),
+            ],
+          ),
         ),
         TextField(
           controller: _label,

@@ -588,6 +588,13 @@ class MapChrome extends StatelessWidget {
   }
 }
 
+/// The most text drawn *on the map* — POI names, cluster counts, border
+/// name plates — grows with the system font. The map's own tile labels do not
+/// grow at all, and a marker is a fixed, geo-anchored box, so past this a name
+/// crowds out the map it labels. Chrome (buttons, banners, sheets) is not
+/// capped; only the picture is. The credit line uses the same number.
+const double kMapTextMaxScale = 1.3;
+
 /// A label the app draws **on the map**, haloed the way osm-carto haloes its
 /// own — so a POI name reads as part of the map rather than as a small card
 /// sitting on it.

@@ -232,10 +232,7 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
           children: [
             const Icon(Icons.scatter_plot_outlined, size: 18),
             const SizedBox(width: 8),
-            Text(
-              'Edit subspace',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            EditorTitle('Edit subspace'),
             const SizedBox(width: 12),
             // The layer picker takes the slack and ellipsises: a layer named
             // after an imported border ("Ludwigsvorstadt-Isarvorstadt") is
@@ -359,6 +356,7 @@ class _SubspaceEditorSheetState extends ConsumerState<SubspaceEditorSheet> {
     final name = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         title: const Text('Name point'),
         content: TextField(
           controller: controller,

@@ -85,6 +85,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final choice = await showDialog<_ClearChoice>(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         title: const Text('Clear all data?'),
         content: const Text(
           'This deletes every layer and object, empties your OpenStreetMap '

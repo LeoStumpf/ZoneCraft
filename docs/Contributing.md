@@ -54,6 +54,7 @@ one fails fast rather than on a device. The ones you are most likely to meet:
 | `test/export_roundtrip_test.dart` | `export → import → export` is byte-identical for every type. |
 | `test/map_controls_test.dart` | No two map controls in one area share an icon. |
 | `test/layer_actions_test.dart`, `test/selection_test.dart` | Every layer type's actions and editor are stated, not inferred. |
+| `test/visual_robustness_test.dart` | The map, every editor, sheet, screen, dialog and import form lay out without overflow, and every map control stays inside the safe area, on six screen shapes (small phone to tablet, portrait and landscape) × text scale 1.0 / 1.3 / 2.0. `test/flutter_test_config.dart` loads Roboto so an overflow in a test is one a phone would draw. |
 
 ## Rules that are not tests
 

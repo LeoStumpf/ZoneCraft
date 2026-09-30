@@ -90,6 +90,7 @@ class _FeatureSearchDialogState extends State<_FeatureSearchDialog> {
   Widget build(BuildContext context) {
     final results = _results;
     return AlertDialog(
+      scrollable: true,
       title: const Text('Import map feature'),
       content: SizedBox(
         width: 360,
@@ -128,31 +129,33 @@ class _FeatureSearchDialogState extends State<_FeatureSearchDialog> {
                 ),
               )
             else if (results != null && results.isNotEmpty)
-              Flexible(
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: results.length,
-                  separatorBuilder: (_, _) => const Divider(height: 1),
-                  itemBuilder: (context, i) {
-                    final r = results[i];
-                    return ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(
-                        r.dominantKind == GeometryKind.area
-                            ? Icons.hexagon_outlined
-                            : Icons.polyline,
-                      ),
-                      title: Text(
-                        r.displayName,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: Text(_subtitle(r)),
-                      onTap: () => Navigator.of(context).pop(r),
-                    );
-                  },
-                ),
+              ListView.separated(
+                shrinkWrap: true,
+                // The dialog scrolls as a whole (`scrollable: true`, so a large
+                // font in landscape still reaches the buttons); the list is laid
+                // out in full inside it rather than scrolling on its own.
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: results.length,
+                separatorBuilder: (_, _) => const Divider(height: 1),
+                itemBuilder: (context, i) {
+                  final r = results[i];
+                  return ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      r.dominantKind == GeometryKind.area
+                          ? Icons.hexagon_outlined
+                          : Icons.polyline,
+                    ),
+                    title: Text(
+                      r.displayName,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(_subtitle(r)),
+                    onTap: () => Navigator.of(context).pop(r),
+                  );
+                },
               )
             else
               Column(

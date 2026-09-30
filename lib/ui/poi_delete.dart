@@ -98,6 +98,7 @@ class _DeleteDialog extends StatelessWidget {
     final what = (name == null || name.isEmpty) ? 'this place' : '“$name”';
     final canTell = subject.canReportGone;
     return AlertDialog(
+      scrollable: true,
       title: Text('Delete $what?'),
       content: Text(
         canTell

@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../data/database.dart';
@@ -79,6 +81,46 @@ class EditorSheet extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// An editor's title on its header row, ellipsised rather than overflowing.
+///
+/// It was a bare `Text`, i.e. rigid: at a large font or on a narrow phone the
+/// title alone took the row and the buttons beside it — colour, delete,
+/// close — ran off the edge, the one place on the sheet they cannot be
+/// reached. So its width is capped at what the row can spare after its
+/// [buttons] (48 dp each), its icon and the sheet's padding, and at 40 % of
+/// the screen so a layer picker beside it keeps some room. Not a `Flexible`:
+/// the row's `Spacer`/layer picker would then split the free space with it
+/// and truncate the title at the default font.
+class EditorTitle extends StatelessWidget {
+  const EditorTitle(this.text, {super.key, this.buttons = 3});
+
+  final String text;
+
+  /// How many 48 dp buttons share the header row with this title.
+  final int buttons;
+
+  /// The sheet's horizontal padding (16 + 8), the leading icon and its gap
+  /// (18–20 + 8), and the gap after the title (12).
+  static const double _rowChrome = 64;
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final spare = width - _rowChrome - buttons * 48;
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxWidth: math.max(0, math.min(width * 0.4, spare)),
+      ),
+      child: Text(
+        text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.titleMedium,
       ),
     );
   }

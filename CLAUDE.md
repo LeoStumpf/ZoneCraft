@@ -439,6 +439,23 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
 - **Button captions** (`AppSettings.fabCaptions`, default on): one word under each round map
   button, from `MapControl.caption` / `quickToggleCaption`; `map_controls_test` pins them. Each is haloed text
   (no box) tucked right under its button, with a 14 dp gap to the next, so proximity pairs them.
+- **Layout is tested at size × orientation × text scale** (`test/visual_robustness_test.dart`,
+  harness in `test/support/map_harness.dart`). Six screens (320 dp phone → tablet, portrait
+  **and landscape**) × text 1.0/1.3/2.0; every map mode, editor, sheet, screen, dialog and
+  import form. It fails on any reported error (overflow included), on a map control leaving
+  the safe area, on two `MapChrome` pills overlapping and on a sheet/dialog whose last button
+  cannot be pressed. It only means something because **`test/flutter_test_config.dart` loads
+  Roboto** from the SDK cache: the placeholder test font is wider, so overflow used to be
+  *filtered out* of the smoke test, and with it the only automated look at layout.
+  **Landscape is supported, not locked**: the app never locked orientation, and from
+  Android 16 the system ignores a lock on displays ≥ 600 dp anyway. The mechanisms:
+  `MapFabColumn(maxHeight:)` flows the tools into a second column (a vertical `Wrap`);
+  the drawer and the Elements list scroll their header/footer with the list when short;
+  every plain `AlertDialog` is `scrollable: true`; `EditorTitle` caps an editor's title to
+  what its header buttons leave. **Text drawn on the map is capped at `kMapTextMaxScale`
+  (1.3)**: the whole `FlutterMap` sits in `MediaQuery.withClampedTextScaling`, because
+  markers are fixed geo-anchored boxes (at 2.0 every cluster badge drew overflow stripes);
+  the button captions share the cap and the credit line always had it. Chrome is never capped.
 - **Nothing is drawn over an open sheet.** Flutter lays a snackbar out above the FABs but never
   above the Scaffold's sheet slot, so `map_screen._hint` shows its message in the top banner
   column (`_topHint`) whenever `_sheetUp`. While a drawer row is dragged, each open folder's

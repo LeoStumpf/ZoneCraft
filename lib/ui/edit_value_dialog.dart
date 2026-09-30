@@ -73,6 +73,7 @@ class _EditValueDialogState extends State<EditValueDialog> {
   Widget build(BuildContext context) {
     final error = widget.validate(_text.text);
     return AlertDialog(
+      scrollable: true,
       title: Text(widget.title),
       content: TextField(
         controller: _text,

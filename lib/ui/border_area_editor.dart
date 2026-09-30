@@ -126,7 +126,7 @@ class _BorderAreaEditorSheetState extends ConsumerState<BorderAreaEditorSheet> {
           children: [
             const Icon(Icons.public, size: 20),
             const SizedBox(width: 8),
-            Text('Edit area', style: theme.textTheme.titleMedium),
+            EditorTitle('Edit area'),
             const SizedBox(width: 12),
             // Read-only on purpose: an area belongs to the *import* that
             // fetched it, and one borders layer holds one admin level, so

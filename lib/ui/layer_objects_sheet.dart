@@ -280,6 +280,87 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
 
     final empty = summaries.isEmpty && groups.isEmpty;
 
+    // The title, sort, search and divider above the list. On a short sheet —
+    // a phone in landscape, or a large font — they alone were taller than the
+    // sheet's first stop and the Column overflowed, so there they scroll away
+    // with the rows. An empty layer has only the one-line title, and keeps it.
+    final scrollHeader =
+        !empty &&
+        MediaQuery.sizeOf(context).height <
+            MediaQuery.textScalerOf(context).scale(560);
+    final header = <Widget>[
+      Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 8, 0),
+        child: Row(
+          children: [
+            Icon(typeIcon(layer.type), size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                layer.name,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleMedium,
+              ),
+            ),
+            Text(count, style: theme.textTheme.bodySmall),
+            const SizedBox(width: 12),
+          ],
+        ),
+      ),
+      if (!empty)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+          // A labelled button beside the search field, not an unlabelled
+          // icon in the title row: the sort used to be a glyph nobody
+          // recognised as one, and the list gave no sign of its order.
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _SortButton(
+                sort: sort,
+                choices: choices,
+                locating: _locating,
+                hasFix: myPosition != null,
+                onSelected: _chooseSort,
+              ),
+              if (_sortProblem != null)
+                Text(
+                  _sortProblem!,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+              if (_sortRemedy case final remedy?)
+                TextButton(onPressed: remedy.open, child: Text(remedy.label)),
+            ],
+          ),
+        ),
+      if (!empty)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: TextField(
+            controller: _search,
+            decoration: InputDecoration(
+              isDense: true,
+              prefixIcon: const Icon(Icons.search),
+              hintText: 'Search elements',
+              border: const OutlineInputBorder(),
+              suffixIcon: _search.text.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.clear),
+                      tooltip: 'Clear',
+                      onPressed: _search.clear,
+                    ),
+            ),
+          ),
+        ),
+      const Divider(height: 1),
+    ];
+    final skip = scrollHeader ? header.length : 0;
+
     return Padding(
       // The search field raises a keyboard, and a modal sheet does not move
       // for one: without this the bottom rows sit under it.
@@ -287,78 +368,7 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 8, 0),
-            child: Row(
-              children: [
-                Icon(typeIcon(layer.type), size: 18),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    layer.name,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleMedium,
-                  ),
-                ),
-                Text(count, style: theme.textTheme.bodySmall),
-                const SizedBox(width: 12),
-              ],
-            ),
-          ),
-          if (!empty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-              // A labelled button beside the search field, not an unlabelled
-              // icon in the title row: the sort used to be a glyph nobody
-              // recognised as one, and the list gave no sign of its order.
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  _SortButton(
-                    sort: sort,
-                    choices: choices,
-                    locating: _locating,
-                    hasFix: myPosition != null,
-                    onSelected: _chooseSort,
-                  ),
-                  if (_sortProblem != null)
-                    Text(
-                      _sortProblem!,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.error,
-                      ),
-                    ),
-                  if (_sortRemedy case final remedy?)
-                    TextButton(
-                      onPressed: remedy.open,
-                      child: Text(remedy.label),
-                    ),
-                ],
-              ),
-            ),
-          if (!empty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: TextField(
-                controller: _search,
-                decoration: InputDecoration(
-                  isDense: true,
-                  prefixIcon: const Icon(Icons.search),
-                  hintText: 'Search elements',
-                  border: const OutlineInputBorder(),
-                  suffixIcon: _search.text.isEmpty
-                      ? null
-                      : IconButton(
-                          icon: const Icon(Icons.clear),
-                          tooltip: 'Clear',
-                          onPressed: _search.clear,
-                        ),
-                ),
-              ),
-            ),
-          const Divider(height: 1),
+          if (!scrollHeader) ...header,
           Expanded(
             child: empty
                 ? _EmptyState(
@@ -367,18 +377,20 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
                   )
                 : ListView.builder(
                     controller: widget.scrollController,
-                    itemCount: model.rows.length,
-                    itemBuilder: (context, i) => _buildRow(
-                      context,
-                      model.rows[i],
-                      canEdit: canEdit,
-                      selectedIds: selectedIds,
-                      summaries: summaries,
-                      tallyVisible: tally?.visible,
-                      tallySetIds: tally?.setIds,
-                      myPosition: myPosition,
-                      mapCenter: mapCenter,
-                    ),
+                    itemCount: model.rows.length + skip,
+                    itemBuilder: (context, index) => index < skip
+                        ? header[index]
+                        : _buildRow(
+                            context,
+                            model.rows[index - skip],
+                            canEdit: canEdit,
+                            selectedIds: selectedIds,
+                            summaries: summaries,
+                            tallyVisible: tally?.visible,
+                            tallySetIds: tally?.setIds,
+                            myPosition: myPosition,
+                            mapCenter: mapCenter,
+                          ),
                   ),
           ),
         ],
@@ -724,6 +736,7 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
   }) => showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
+      scrollable: true,
       title: Text(title),
       content: Text(body),
       actions: [
@@ -801,6 +814,7 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
     final name = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         title: const Text('Rename element'),
         content: TextField(
           controller: controller,
@@ -873,6 +887,7 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         title: Text('Delete ${s.title}?'),
         content: const Text('Undo will bring it back.'),
         actions: [

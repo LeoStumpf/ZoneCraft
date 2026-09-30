@@ -110,6 +110,7 @@ Future<bool> confirmLargeImport(
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         title: const Text('That file is too big'),
         content: Text(
           '"$name" is $size. ZoneCraft cannot read a file that large without '
@@ -130,6 +131,7 @@ Future<bool> confirmLargeImport(
   final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
+      scrollable: true,
       title: const Text('Large file'),
       content: Text(
         '"$name" is $size. Reading it may take a while and will use a lot of '
@@ -160,6 +162,7 @@ Future<bool> confirmLargeExport(BuildContext context, ExportData data) async {
   final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
+      scrollable: true,
       title: const Text('Large export'),
       content: Text(
         'This holds ${_thousands(points)} points and will make a file of '
@@ -522,6 +525,7 @@ Future<double?> askFreeLineRadius(
       String? error;
       return StatefulBuilder(
         builder: (ctx, setState) => AlertDialog(
+          scrollable: true,
           title: const Text('Line area of interest'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1133,6 +1137,7 @@ Future<String?> combineLayerFlow(
   final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
+      scrollable: true,
       title: const Text('Combine layers?'),
       content: Text(
         'Move all objects from “${source.name}” into “${target.name}” and '

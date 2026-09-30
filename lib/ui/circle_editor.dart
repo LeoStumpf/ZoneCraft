@@ -242,7 +242,7 @@ class _CircleEditorSheetState extends ConsumerState<CircleEditorSheet> {
           children: [
             const Icon(Icons.circle_outlined, size: 18),
             const SizedBox(width: 8),
-            Text('Edit circle', style: Theme.of(context).textTheme.titleMedium),
+            EditorTitle('Edit circle'),
             const Spacer(),
             ElementColorButton(
               kind: ColoredElement.circle,

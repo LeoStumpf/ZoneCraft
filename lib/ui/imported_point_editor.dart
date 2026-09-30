@@ -268,7 +268,7 @@ class _ImportedPointEditorSheetState
           children: [
             Icon(widget.icon, size: 20),
             const SizedBox(width: 8),
-            Text(widget.title, style: theme.textTheme.titleMedium),
+            EditorTitle(widget.title, buttons: 2),
             const Spacer(),
             IconButton(
               tooltip: 'Delete…',

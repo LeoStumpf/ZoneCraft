@@ -72,6 +72,7 @@ class _PastePlaceDialogState extends State<_PastePlaceDialog> {
     final theme = Theme.of(context);
     final point = _parsed;
     return AlertDialog(
+      scrollable: true,
       title: const Text('Open a shared place'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
@@ -225,6 +226,7 @@ class _ShareNameDialogState extends State<_ShareNameDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      scrollable: true,
       title: const Text('Share this place'),
       content: Column(
         mainAxisSize: MainAxisSize.min,

@@ -149,13 +149,12 @@ class _PoiSetEditorSheetState extends ConsumerState<PoiSetEditorSheet> {
               size: 20,
             ),
             const SizedBox(width: 8),
-            Text(
+            EditorTitle(
               s.isManual
                   ? 'Edit category'
                   : s.isStationImport
                   ? 'Edit station import'
                   : 'Edit POI import',
-              style: theme.textTheme.titleMedium,
             ),
             const SizedBox(width: 12),
             EditorLayerPicker(

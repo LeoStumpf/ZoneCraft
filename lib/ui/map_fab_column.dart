@@ -19,7 +19,7 @@ import 'package:flutter/material.dart';
 import '../state/map_mode.dart';
 import 'layer_actions.dart';
 import 'map_controls.dart';
-import 'theme.dart' show MapLabel;
+import 'theme.dart' show MapLabel, kMapTextMaxScale;
 
 /// The Add button's label for a layer type. A nested ternary got unreadable at
 /// seven types; this is the same mapping as a switch.
@@ -80,7 +80,19 @@ class MapFabColumn extends StatelessWidget {
     required this.onAddAtMapCentre,
     required this.onToggleTools,
     this.captions = false,
+    this.maxHeight,
   });
+
+  /// The height the column may take, top of the tools to the bottom of the
+  /// row, or null for "as tall as it needs".
+  ///
+  /// In landscape a phone has about 360 dp, and six captioned tools stacked
+  /// over the bottom row need well over 500: the Column overflowed, pushed the
+  /// row off the bottom of the screen and ran the top buttons under the
+  /// status bar. Given a height, the tools flow into a second column to the
+  /// left instead — the map loses a strip of width, which in landscape it has
+  /// to spare, and every button stays on screen and pressable.
+  final double? maxHeight;
 
   /// Whether each round button carries its one-word caption underneath
   /// (Settings → Button captions).
@@ -226,10 +238,25 @@ class MapFabColumn extends StatelessWidget {
             // well belong to the button beneath it.
             Transform.translate(
               offset: const Offset(0, -2),
-              child: MapLabel(
-                caption,
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700,
+              // Capped like the map's own text: the slot is a fixed 60 dp
+              // so a row of them lines up and fits a phone, and at 2.0 every
+              // word ellipsised ("Sea…", "Loc…"). At 1.3 the widest caption,
+              // "Measure", is 59 dp in Roboto bold.
+              //
+              // And scaled down rather than ellipsised when it still does
+              // not fit: a device's system font can be wider than Roboto,
+              // and on the Pixel "Measure" lost its last letters. A word a
+              // few percent smaller reads; "Measu…" does not.
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: MediaQuery.withClampedTextScaling(
+                  maxScaleFactor: kMapTextMaxScale,
+                  child: MapLabel(
+                    caption,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
             ),
           ],
@@ -245,6 +272,9 @@ class MapFabColumn extends StatelessWidget {
   /// would run off a phone's edge.
   double get _rowGap => captions ? 0 : 12;
 
+  /// The gap between two tools in the column.
+  double get _columnGap => captions ? 14 : 12;
+
   String? _cap(MapControlId id) => mapControl(id).caption;
 
   @override
@@ -253,128 +283,141 @@ class MapFabColumn extends StatelessWidget {
     // final fields, and this one is part of the public API.
     final toggle = quickToggle;
 
-    return Column(
+    final column = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         if (toolsExpanded) ...[
-          // Offline download exists only where the tile source allows
-          // pre-emptive fetching — not on the community OSM servers.
-          // See `data/tile_source.dart`.
-          if (allowsPrefetch) ...[
-            _captioned(
-              FloatingActionButton.small(
-                heroTag: 'download',
-                tooltip: mapControl(MapControlId.download).name,
-                onPressed: downloading ? null : onDownloadArea,
-                child: downloading
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.download_for_offline_outlined),
-              ),
-              _cap(MapControlId.download),
-            ),
-            SizedBox(height: captions ? 14 : 12),
-          ],
-          // First in the column, because on a fresh install it is
-          // the only button that can get you to your own town: the
-          // camera starts over southern Germany wherever you are.
-          _captioned(
-            FloatingActionButton.small(
-              heroTag: 'goToPlace',
-              tooltip: mapControl(MapControlId.goToPlace).name,
-              onPressed: onGoToPlace,
-              child: Icon(mapControl(MapControlId.goToPlace).icon),
-            ),
-            _cap(MapControlId.goToPlace),
-          ),
-          SizedBox(height: captions ? 14 : 12),
-          // (The compass lives on the map itself, top-right, and only
-          // while the map is rotated — see the map chrome above.)
-          // A toggle, lit while the marker is up, in the shape the
-          // probe and distance buttons already use — tapping it again
-          // is the only way to put your position away, and the lit
-          // state is what says there is something to put away.
-          _captioned(
-            FloatingActionButton.small(
-              heroTag: 'locate',
-              tooltip: showingMyLocation ? 'Hide my location' : 'Locate me',
-              backgroundColor: showingMyLocation
-                  ? Theme.of(context).colorScheme.primary
-                  : null,
-              foregroundColor: showingMyLocation
-                  ? Theme.of(context).colorScheme.onPrimary
-                  : null,
-              onPressed: locating ? null : onToggleMyLocation,
-              child: locating
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Icon(
-                      showingMyLocation
-                          ? Icons.location_disabled
-                          : Icons.my_location,
+          Flexible(
+            // Vertical, bottom-up and right-to-left: the column grows up
+            // from the row exactly as before while it fits, and what does
+            // not fit starts a second column to its left rather than
+            // running under the status bar. The children are listed top to
+            // bottom (as they read) and reversed for the bottom-up flow.
+            child: Wrap(
+              direction: Axis.vertical,
+              verticalDirection: VerticalDirection.up,
+              textDirection: TextDirection.rtl,
+              spacing: _columnGap,
+              runSpacing: 12,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                // Offline download exists only where the tile source allows
+                // pre-emptive fetching — not on the community OSM servers.
+                // See `data/tile_source.dart`.
+                if (allowsPrefetch)
+                  _captioned(
+                    FloatingActionButton.small(
+                      heroTag: 'download',
+                      tooltip: mapControl(MapControlId.download).name,
+                      onPressed: downloading ? null : onDownloadArea,
+                      child: downloading
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.download_for_offline_outlined),
                     ),
+                    _cap(MapControlId.download),
+                  ),
+                // First in the column, because on a fresh install it is
+                // the only button that can get you to your own town: the
+                // camera starts over southern Germany wherever you are.
+                _captioned(
+                  FloatingActionButton.small(
+                    heroTag: 'goToPlace',
+                    tooltip: mapControl(MapControlId.goToPlace).name,
+                    onPressed: onGoToPlace,
+                    child: Icon(mapControl(MapControlId.goToPlace).icon),
+                  ),
+                  _cap(MapControlId.goToPlace),
+                ),
+                // (The compass lives on the map itself, top-right, and only
+                // while the map is rotated — see the map chrome above.)
+                // A toggle, lit while the marker is up, in the shape the
+                // probe and distance buttons already use — tapping it again
+                // is the only way to put your position away, and the lit
+                // state is what says there is something to put away.
+                _captioned(
+                  FloatingActionButton.small(
+                    heroTag: 'locate',
+                    tooltip: showingMyLocation
+                        ? 'Hide my location'
+                        : 'Locate me',
+                    backgroundColor: showingMyLocation
+                        ? Theme.of(context).colorScheme.primary
+                        : null,
+                    foregroundColor: showingMyLocation
+                        ? Theme.of(context).colorScheme.onPrimary
+                        : null,
+                    onPressed: locating ? null : onToggleMyLocation,
+                    child: locating
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Icon(
+                            showingMyLocation
+                                ? Icons.location_disabled
+                                : Icons.my_location,
+                          ),
+                  ),
+                  _cap(MapControlId.locate),
+                ),
+                // Next to Locate on purpose: both answer "where am I", one
+                // for you and one for the person you are meeting. Any
+                // *other* place is shared by long-pressing it.
+                _captioned(
+                  FloatingActionButton.small(
+                    heroTag: 'share',
+                    tooltip: mapControl(MapControlId.share).name,
+                    onPressed: sharing ? null : onShareMyLocation,
+                    child: sharing
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.ios_share),
+                  ),
+                  _cap(MapControlId.share),
+                ),
+                _captioned(
+                  FloatingActionButton.small(
+                    heroTag: 'probe',
+                    tooltip: mapControl(MapControlId.elevation).name,
+                    backgroundColor: mode == MapMode.elevation
+                        ? Theme.of(context).colorScheme.primary
+                        : null,
+                    foregroundColor: mode == MapMode.elevation
+                        ? Theme.of(context).colorScheme.onPrimary
+                        : null,
+                    onPressed: onToggleProbe,
+                    child: const Icon(Icons.terrain),
+                  ),
+                  _cap(MapControlId.elevation),
+                ),
+                _captioned(
+                  FloatingActionButton.small(
+                    heroTag: 'distance',
+                    tooltip: mapControl(MapControlId.distance).name,
+                    backgroundColor: mode == MapMode.distance
+                        ? Theme.of(context).colorScheme.primary
+                        : null,
+                    foregroundColor: mode == MapMode.distance
+                        ? Theme.of(context).colorScheme.onPrimary
+                        : null,
+                    onPressed: onToggleDistance,
+                    child: const Icon(Icons.straighten),
+                  ),
+                  _cap(MapControlId.distance),
+                ),
+              ].reversed.toList(),
             ),
-            _cap(MapControlId.locate),
           ),
-          SizedBox(height: captions ? 14 : 12),
-          // Next to Locate on purpose: both answer "where am I", one
-          // for you and one for the person you are meeting. Any
-          // *other* place is shared by long-pressing it.
-          _captioned(
-            FloatingActionButton.small(
-              heroTag: 'share',
-              tooltip: mapControl(MapControlId.share).name,
-              onPressed: sharing ? null : onShareMyLocation,
-              child: sharing
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.ios_share),
-            ),
-            _cap(MapControlId.share),
-          ),
-          SizedBox(height: captions ? 14 : 12),
-          _captioned(
-            FloatingActionButton.small(
-              heroTag: 'probe',
-              tooltip: mapControl(MapControlId.elevation).name,
-              backgroundColor: mode == MapMode.elevation
-                  ? Theme.of(context).colorScheme.primary
-                  : null,
-              foregroundColor: mode == MapMode.elevation
-                  ? Theme.of(context).colorScheme.onPrimary
-                  : null,
-              onPressed: onToggleProbe,
-              child: const Icon(Icons.terrain),
-            ),
-            _cap(MapControlId.elevation),
-          ),
-          SizedBox(height: captions ? 14 : 12),
-          _captioned(
-            FloatingActionButton.small(
-              heroTag: 'distance',
-              tooltip: mapControl(MapControlId.distance).name,
-              backgroundColor: mode == MapMode.distance
-                  ? Theme.of(context).colorScheme.primary
-                  : null,
-              foregroundColor: mode == MapMode.distance
-                  ? Theme.of(context).colorScheme.onPrimary
-                  : null,
-              onPressed: onToggleDistance,
-              child: const Icon(Icons.straighten),
-            ),
-            _cap(MapControlId.distance),
-          ),
-          SizedBox(height: captions ? 14 : 12),
+          SizedBox(height: _columnGap),
         ],
         // Bottom row, left to right: Edit, the per-type quick toggle,
         // up to two import buttons, Add, and finally the tools toggle.
@@ -519,6 +562,12 @@ class MapFabColumn extends StatelessWidget {
           ],
         ),
       ],
+    );
+    final limit = maxHeight;
+    if (limit == null) return column;
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: limit),
+      child: column,
     );
   }
 }

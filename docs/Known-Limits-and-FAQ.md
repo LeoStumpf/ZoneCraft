@@ -31,6 +31,12 @@ From the About screen:
 
 ## Questions
 
+**Does ZoneCraft work sideways, or with a large system font?** Yes, both. In landscape
+the right-hand buttons flow into a second column when they don't fit one. Every sheet
+and dialog scrolls when the screen is short. Buttons, sheets and dialogs follow Android's
+font size all the way up. Text drawn *on* the map (place names, cluster counts, border
+names) grows only to 1.3×, as the map's own street names don't grow at all.
+
 **Why is the button greyed?** Because it cannot do anything right now. Press it: it says why.
 Typically the layer is empty, hidden, or none is active.
 

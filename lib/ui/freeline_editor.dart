@@ -186,10 +186,7 @@ class _FreeLineEditorSheetState extends ConsumerState<FreeLineEditorSheet> {
           children: [
             const Icon(Icons.polyline, size: 18),
             const SizedBox(width: 8),
-            Text(
-              'Edit freehand line',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            EditorTitle('Edit freehand line'),
             const SizedBox(width: 12),
             // The layer picker takes the slack and ellipsises: a layer named
             // after an imported border ("Ludwigsvorstadt-Isarvorstadt") is

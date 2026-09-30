@@ -216,10 +216,20 @@ class _PoiImportSheetState extends State<PoiImportSheet> {
                   ),
                   DropdownButtonFormField<PoiCategory>(
                     initialValue: _category,
+                    // Expanded + ellipsis: a long category name at a large
+                    // font ran the closed field past a narrow phone's edge.
+                    isExpanded: true,
                     decoration: const InputDecoration(labelText: 'Category'),
                     items: [
                       for (final c in _choices)
-                        DropdownMenuItem(value: c, child: Text(c.label)),
+                        DropdownMenuItem(
+                          value: c,
+                          child: Text(
+                            c.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                     ],
                     onChanged: (c) =>
                         setState(() => _category = c ?? _category),

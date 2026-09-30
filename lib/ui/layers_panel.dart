@@ -15,6 +15,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -90,7 +91,14 @@ class _LayersDrawerState extends ConsumerState<LayersDrawer> {
     // The drawer gets its own messenger: a Scaffold draws its drawer *above*
     // its snackbars, so "Deleted … UNDO" raised from here would otherwise be
     // hidden behind the very drawer it was raised from.
+    // Wider at a large font. Material's drawer is a fixed 304 dp, and with
+    // the eye, swatch and three trailing controls a layer's name got ~80 dp
+    // at 2.0 — "Circl / es 1", broken mid-word. It grows with the text (up to
+    // 1.4x) but always leaves a 48 dp strip of map to tap back to.
+    final width = MediaQuery.sizeOf(context).width;
+    final grow = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 1.4);
     return Drawer(
+      width: math.min(304 * grow, width - 48),
       child: ScaffoldMessenger(
         child: Scaffold(
           body: SafeArea(
@@ -158,17 +166,96 @@ class _LayersDrawerState extends ConsumerState<LayersDrawer> {
                   _ => circles.where((c) => c.layerId == layer.id).length,
                 };
 
+                // The rows under the list: the base map, the guide, the
+                // outbox and Settings. Pinned below the list while there is
+                // room; on a short drawer (landscape, or a large font) they
+                // took all of it — the list got negative height and the
+                // Column overflowed — so there they scroll as the list's
+                // footer instead, still one flick away.
+                final shortDrawer =
+                    MediaQuery.sizeOf(context).height <
+                    MediaQuery.textScalerOf(context).scale(560);
+                final footer = <Widget>[
+                  const Divider(height: 1),
+                  // The base map, pinned as the bottom-most layer: hideable and
+                  // opacity-adjustable like any layer, but never reorderable or
+                  // deletable.
+                  const _BasemapTile(),
+                  const Divider(height: 1),
+                  // Above Settings: someone who cannot read the map's
+                  // buttons opens the drawer looking for words, and this is
+                  // the first place they land.
+                  ListTile(
+                    leading: const Icon(Icons.help_outline),
+                    title: const Text('What the buttons do'),
+                    onTap: () {
+                      Navigator.pop(context); // close the drawer
+                      unawaited(
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const MapControlsScreen(),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  // Only once there is something in it. An outbox nobody
+                  // has written to is a row explaining a feature, and the
+                  // drawer is not where features are explained — the editor
+                  // that offers the report is.
+                  if (ref.watch(osmReportsProvider).asData?.value.isNotEmpty ??
+                      false)
+                    ListTile(
+                      leading: Badge(
+                        isLabelVisible:
+                            ref.watch(pendingOsmReportsProvider) > 0,
+                        label: Text('${ref.watch(pendingOsmReportsProvider)}'),
+                        child: const Icon(Icons.volunteer_activism_outlined),
+                      ),
+                      title: const Text('OpenStreetMap outbox'),
+                      onTap: () {
+                        Navigator.pop(context); // close the drawer
+                        unawaited(
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const OsmReportsScreen(),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ListTile(
+                    leading: const Icon(Icons.settings_outlined),
+                    title: const Text('Settings'),
+                    onTap: () {
+                      Navigator.pop(context); // close the drawer
+                      unawaited(
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const SettingsScreen(),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ];
+
                 return Column(
                   children: [
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
                       child: Row(
                         children: [
-                          Text(
-                            'Layers',
-                            style: Theme.of(context).textTheme.titleLarge,
+                          // Expanded, not Text + Spacer: at a large font the
+                          // title alone pushed the four buttons off the edge.
+                          Expanded(
+                            child: Text(
+                              'Layers',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
                           ),
-                          const Spacer(),
                           IconButton(
                             tooltip: 'Import layer from file',
                             icon: const Icon(Icons.file_open_outlined),
@@ -268,6 +355,12 @@ class _LayersDrawerState extends ConsumerState<LayersDrawer> {
                     Expanded(
                       child: ReorderableListView.builder(
                         itemCount: rows.length,
+                        footer: shortDrawer
+                            ? Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: footer,
+                              )
+                            : null,
                         // Drag starts are placed by hand: an end-of-folder row
                         // is a boundary, and the default would make it a thing
                         // you can pick up.
@@ -379,74 +472,7 @@ class _LayersDrawerState extends ConsumerState<LayersDrawer> {
                         },
                       ),
                     ),
-                    const Divider(height: 1),
-                    // The base map, pinned as the bottom-most layer: hideable and
-                    // opacity-adjustable like any layer, but never reorderable or
-                    // deletable.
-                    const _BasemapTile(),
-                    const Divider(height: 1),
-                    // Above Settings: someone who cannot read the map's
-                    // buttons opens the drawer looking for words, and this is
-                    // the first place they land.
-                    ListTile(
-                      leading: const Icon(Icons.help_outline),
-                      title: const Text('What the buttons do'),
-                      onTap: () {
-                        Navigator.pop(context); // close the drawer
-                        unawaited(
-                          Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => const MapControlsScreen(),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                    // Only once there is something in it. An outbox nobody
-                    // has written to is a row explaining a feature, and the
-                    // drawer is not where features are explained — the editor
-                    // that offers the report is.
-                    if (ref
-                            .watch(osmReportsProvider)
-                            .asData
-                            ?.value
-                            .isNotEmpty ??
-                        false)
-                      ListTile(
-                        leading: Badge(
-                          isLabelVisible:
-                              ref.watch(pendingOsmReportsProvider) > 0,
-                          label: Text(
-                            '${ref.watch(pendingOsmReportsProvider)}',
-                          ),
-                          child: const Icon(Icons.volunteer_activism_outlined),
-                        ),
-                        title: const Text('OpenStreetMap outbox'),
-                        onTap: () {
-                          Navigator.pop(context); // close the drawer
-                          unawaited(
-                            Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const OsmReportsScreen(),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ListTile(
-                      leading: const Icon(Icons.settings_outlined),
-                      title: const Text('Settings'),
-                      onTap: () {
-                        Navigator.pop(context); // close the drawer
-                        unawaited(
-                          Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => const SettingsScreen(),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+                    if (!shortDrawer) ...footer,
                   ],
                 );
               },

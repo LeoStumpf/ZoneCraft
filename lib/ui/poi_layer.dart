@@ -120,6 +120,14 @@ class PoiMarkersLayer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final camera = MapCamera.of(context);
+    // Text on the map is part of the map picture, like the tiles' own
+    // labels, which do not grow with the system font at all. So it follows
+    // the setting only up to [kMapTextMaxScale], and the marker boxes — fixed,
+    // geo-anchored sizes — are measured with the same scale. At Android's 2.0
+    // every badge drew overflow stripes and the name plates were cut off.
+    final scaler = MediaQuery.textScalerOf(
+      context,
+    ).clamp(maxScaleFactor: kMapTextMaxScale);
     final showStationLabels = camera.zoom >= _labelMinZoom;
     // One POI *set* is one element of the layer, so the colour lives there:
     // two categories imported into one layer read apart at a glance.
@@ -167,7 +175,7 @@ class PoiMarkersLayer extends StatelessWidget {
     for (final c in clusters) {
       if (c.indices.length == 1) {
         final i = c.indices.single;
-        markers.add(_poiMarker(lls[i], icons[i], names[i], colors[i]));
+        markers.add(_poiMarker(lls[i], icons[i], names[i], colors[i], scaler));
       } else {
         // Anchor the badge at the members' mean position (average lat/lng is
         // fine at cluster scale).
@@ -205,17 +213,26 @@ class PoiMarkersLayer extends StatelessWidget {
         );
       }
     }
-    return MarkerLayer(markers: markers);
+    return MediaQuery(
+      data: MediaQuery.of(context).copyWith(textScaler: scaler),
+      child: MarkerLayer(markers: markers),
+    );
   }
 
   /// A single POI: white disc + its set's icon, name on a tiny plate below.
-  Marker _poiMarker(LatLng point, IconData icon, String? name, Color color) {
+  Marker _poiMarker(
+    LatLng point,
+    IconData icon,
+    String? name,
+    Color color,
+    TextScaler scaler,
+  ) {
     const coreSize = 26.0;
-    const labelHeight = 14.0;
+    final labelHeight = scaler.scale(14);
     const gap = 1.0;
     final hasLabel = name != null && name.isNotEmpty;
     // Equal top/bottom padding keeps the disc centred on the point.
-    const pad = gap + labelHeight;
+    final pad = gap + labelHeight;
     return Marker(
       point: point,
       width: hasLabel ? 140 : coreSize,
@@ -224,7 +241,7 @@ class PoiMarkersLayer extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (hasLabel) const SizedBox(height: pad),
+          if (hasLabel) SizedBox(height: pad),
           Container(
             width: coreSize,
             height: coreSize,
@@ -270,22 +287,27 @@ class PoiMarkersLayer extends StatelessWidget {
             border: Border.all(color: color, width: 2.5),
             boxShadow: const [BoxShadow(color: kMapShadow, blurRadius: 3)],
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (sharedIcon != null)
-                Icon(sharedIcon, size: 13, color: kMapInk),
-              Text(
-                '$count',
-                style: TextStyle(
-                  fontSize: sharedIcon != null ? 11 : 14,
-                  height: 1.1,
-                  fontWeight: FontWeight.bold,
-                  color: kMapInk,
+          // Scaled down rather than overflowing: a four-digit count under
+          // an icon, at a large font, is taller than the badge.
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (sharedIcon != null)
+                  Icon(sharedIcon, size: 13, color: kMapInk),
+                Text(
+                  '$count',
+                  style: TextStyle(
+                    fontSize: sharedIcon != null ? 11 : 14,
+                    height: 1.1,
+                    fontWeight: FontWeight.bold,
+                    color: kMapInk,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

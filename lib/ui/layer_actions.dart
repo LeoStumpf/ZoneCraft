@@ -1181,6 +1181,7 @@ Future<String?> _askName(BuildContext context, String title, String current) {
   return showDialog<String>(
     context: context,
     builder: (ctx) => AlertDialog(
+      scrollable: true,
       title: Text(title),
       content: TextField(
         controller: controller,
@@ -1255,6 +1256,7 @@ Future<void> _askAboutOverrides(
   final answer = await showDialog<String>(
     context: context,
     builder: (ctx) => AlertDialog(
+      scrollable: true,
       title: const Text('Elements with their own colour'),
       content: Text(
         n == 1
@@ -1487,6 +1489,7 @@ Future<void> showOpacityDialog(
   return showDialog<void>(
     context: context,
     builder: (ctx) => AlertDialog(
+      scrollable: true,
       title: Text(title),
       content: OpacityControl(value: value, onChanged: onChanged),
       actions: [

@@ -201,6 +201,7 @@ class _ImportProgressDialogState extends State<_ImportProgressDialog> {
     final theme = Theme.of(context);
     final seconds = _elapsed.elapsed.inSeconds;
     return AlertDialog(
+      scrollable: true,
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,

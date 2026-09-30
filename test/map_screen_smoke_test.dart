@@ -22,10 +22,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:zonecraft/data/database.dart';
 import 'package:zonecraft/data/repository.dart';
 import 'package:zonecraft/state/map_mode.dart';
-import 'package:zonecraft/state/providers.dart';
 import 'package:zonecraft/ui/map_controls.dart';
 import 'package:zonecraft/ui/map_screen.dart';
-import 'package:zonecraft/ui/welcome_sheet.dart';
+
+import 'support/map_harness.dart' as harness;
 
 /// The first widget test `map_screen.dart` has ever had.
 ///
@@ -54,75 +54,21 @@ void main() {
     await db.close();
   });
 
-  /// Winds the map down inside the test body, which the binding requires:
-  /// it refuses to end a body with a pending timer, and three different
-  /// things here leave one.
-  ///
-  /// * `_hint()` shows a SnackBar, whose auto-dismiss timer is real.
-  /// * `UndoJournal` arms an idle timer on every write.
-  /// * drift posts a zero-duration timer per query stream when the stream is
-  ///   cancelled (`StreamQueryStore.markAsClosed`) — and the streams are only
-  ///   cancelled when the `ProviderScope` unmounts, which otherwise happens
-  ///   after the body has returned.
-  ///
-  /// So: pump past the SnackBar, unmount the tree, pump again to let drift's
-  /// close timers fire, and stop the journal. The database stays open until
-  /// `tearDown` because `MapScreen.dispose()` saves the camera through it.
-  Future<void> quiesce(WidgetTester tester) async {
-    await tester.pump(const Duration(seconds: 10));
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.runAsync(() => db.undo.dispose());
-    await tester.pump();
-  }
+  Future<void> pumpMap(WidgetTester tester) => harness.pumpMap(tester, db);
+  Future<void> quiesce(WidgetTester tester) => harness.quiesce(tester, db);
 
-  /// Fails on a crash, but not on a layout overflow.
+  /// Fails on any error, overflow included.
   ///
-  /// Widget tests lay text out in a placeholder font whose metrics are not the
-  /// real one's, so a `Row` that fits on a device can overflow here purely
-  /// because the glyphs are wider. That is exactly what happened: this test
-  /// reported "RenderFlex overflowed by 56 pixels" for
-  /// `MapMode.distance`, and the same mode on a 1080x2340 emulator renders the
-  /// banner with room to spare and logs no overflow at all.
-  ///
-  /// So overflow is filtered rather than asserted. Layout at width and text
-  /// scale is checked on a device, where the font is real; what this file is
-  /// for is "does the map still build and switch modes without throwing".
+  /// Overflow used to be filtered out here: widget tests laid text out in a
+  /// placeholder font wider than Roboto, and this test reported a 56 px
+  /// overflow for `MapMode.distance` that the device never drew.
+  /// `flutter_test_config.dart` now loads the real font, so an overflow here
+  /// is one a phone would show — and `visual_robustness_test.dart` sweeps the
+  /// same screen across sizes, orientations and text scales.
   void expectNoCrash(WidgetTester tester, {String? reason}) {
     final error = tester.takeException();
     if (error == null) return;
-    final text = error.toString();
-    if (text.contains('overflowed')) return;
     fail('${reason ?? 'map screen'}: $error');
-  }
-
-  Future<void> pumpMap(WidgetTester tester) async {
-    // Hide the base map first. Otherwise `CachedTileProvider` issues real HTTP
-    // requests for every visible tile — `package:http` is not stubbed by the
-    // test binding — and the test waits on a network that is not there. This
-    // is the app's own "Map" layer toggle, so nothing is faked: the map simply
-    // renders with no tiles, which is exactly the state it shows offline.
-    await Repository(db).updateBasemapVisible(visible: false);
-    // Burn the first-run welcome. It is a modal route with a life of its own,
-    // it is covered by `welcome_test.dart`, and what this file is about is the
-    // map underneath it.
-    await Repository(db).noteHintShown(kWelcomeHintKey, limit: 1);
-
-    // A phone-shaped surface; the FAB row's layout depends on width.
-    tester.view.physicalSize = const Size(1080, 2340);
-    tester.view.devicePixelRatio = 2.75;
-    addTearDown(tester.view.reset);
-
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [databaseProvider.overrideWithValue(db)],
-        child: const MaterialApp(home: MapScreen()),
-      ),
-    );
-    // Not pumpAndSettle: tiles are loading and never will, so nothing settles.
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
   }
 
   testWidgets('a fresh map renders its chrome without throwing', (

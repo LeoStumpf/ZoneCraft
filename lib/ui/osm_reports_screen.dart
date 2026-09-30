@@ -139,6 +139,7 @@ class _OsmReportsScreenState extends ConsumerState<OsmReportsScreen> {
     final saved = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         title: const Text('Edit report'),
         content: TextField(
           controller: controller,
@@ -258,33 +259,37 @@ class _OsmReportsScreenState extends ConsumerState<OsmReportsScreen> {
     );
   }
 
+  // Scrolls: in landscape at a large font the icon and two paragraphs are
+  // taller than the screen.
   Widget _empty(ThemeData theme) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.volunteer_activism_outlined,
-            size: 48,
-            color: theme.colorScheme.outline,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Nothing to report yet',
-            style: theme.textTheme.titleMedium,
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Tap an imported POI on the map and correct it — the editor '
-            'then offers to pass the correction on. Reports you keep here '
-            'can be exported as a file for someone to file under their '
-            'own OpenStreetMap account.',
-            style: theme.textTheme.bodySmall,
-            textAlign: TextAlign.center,
-          ),
-        ],
+    child: SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.volunteer_activism_outlined,
+              size: 48,
+              color: theme.colorScheme.outline,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Nothing to report yet',
+              style: theme.textTheme.titleMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Tap an imported POI on the map and correct it — the editor '
+              'then offers to pass the correction on. Reports you keep here '
+              'can be exported as a file for someone to file under their '
+              'own OpenStreetMap account.',
+              style: theme.textTheme.bodySmall,
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     ),
   );

@@ -144,14 +144,7 @@ class _FreeAreaEditorSheetState extends ConsumerState<FreeAreaEditorSheet> {
           children: [
             const Icon(Icons.hexagon_outlined, size: 18),
             const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                'Edit freehand area',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            ),
+            const EditorTitle('Edit freehand area'),
             const SizedBox(width: 12),
             EditorLayerPicker(
               layers: areaLayers,
