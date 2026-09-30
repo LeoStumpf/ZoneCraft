@@ -55,6 +55,7 @@ one fails fast rather than on a device. The ones you are most likely to meet:
 | `test/map_controls_test.dart` | No two map controls in one area share an icon. |
 | `test/layer_actions_test.dart`, `test/selection_test.dart` | Every layer type's actions and editor are stated, not inferred. |
 | `test/visual_robustness_test.dart` | The map, every editor, sheet, screen, dialog and import form lay out without overflow, and every map control stays inside the safe area, on six screen shapes (small phone to tablet, portrait and landscape) × text scale 1.0 / 1.3 / 2.0. `test/flutter_test_config.dart` loads Roboto so an overflow in a test is one a phone would draw. |
+| `test/rotation_and_zoom_test.dart`, `test/scaled_px_test.dart` | Turning the device keeps what is open and where the camera is; every type draws at zoom 2 and 19; sizes chosen against text grow with Android 14's nonlinear font scaling, not just a linear one. |
 
 ## Rules that are not tests
 

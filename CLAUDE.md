@@ -456,6 +456,16 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   (1.3)**: the whole `FlutterMap` sits in `MediaQuery.withClampedTextScaling`, because
   markers are fixed geo-anchored boxes (at 2.0 every cluster badge drew overflow stripes);
   the button captions share the cap and the credit line always had it. Chrome is never capped.
+  **`scaledPx` multiplies by `textScaleFactorOf` (the scale at 14 sp), never
+  `textScaler.scale(px)`**: Android 14 scales fonts on a *curve* (at 2.0, 14 sp doubles and
+  132 sp grows ~6 %), so asking for a 132 "font" left a field its 1.0 width around a doubled
+  label. Tests and Android 13 are linear, which hid it — `AndroidNonLinearTextScaler` in
+  the harness now puts the curve into the sweep and `test/scaled_px_test.dart`.
+  A drawer layer row drops its three controls onto the subtitle line when the name would
+  get less than ~8 characters (320 dp + font 2.0 printed "PO / I…").
+  `test/rotation_and_zoom_test.dart` pins that a turn keeps the mode, editor, drawer,
+  sheet, move and camera, and that every type (inverted, 500 m band) draws at zoom 2 across
+  the antimeridian and at zoom 19.
 - **Nothing is drawn over an open sheet.** Flutter lays a snackbar out above the FABs but never
   above the Scaffold's sheet slot, so `map_screen._hint` shows its message in the top banner
   column (`_topHint`) whenever `_sheetUp`. While a drawer row is dragged, each open folder's

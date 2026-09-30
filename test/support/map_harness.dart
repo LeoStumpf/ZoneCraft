@@ -36,6 +36,7 @@ class TestScreen {
     this.size, {
     this.textScale = 1.0,
     this.padding = EdgeInsets.zero,
+    this.nonLinear = false,
   });
 
   final String name;
@@ -43,16 +44,99 @@ class TestScreen {
   final double textScale;
   final EdgeInsets padding;
 
+  /// Scale text the way Android 14+ does ([AndroidNonLinearTextScaler])
+  /// instead of by one factor for every size.
+  final bool nonLinear;
+
   bool get isLandscape => size.width > size.height;
 
-  TestScreen scaled(double scale) =>
-      TestScreen(name, size, textScale: scale, padding: padding);
+  TestScreen scaled(double scale, {bool nonLinear = false}) => TestScreen(
+    name,
+    size,
+    textScale: scale,
+    padding: padding,
+    nonLinear: nonLinear,
+  );
 
   @override
   String toString() =>
       '$name ${size.width.toInt()}x${size.height.toInt()} '
       '@${textScale}x';
 }
+
+/// Android 14's font scaling at "Font size: largest" (2.0), which is not a
+/// single factor: small text doubles, large text barely grows. These are the
+/// platform's own `FontScaleConverter` points for 2.0 (sp → dp), interpolated
+/// linearly between them and 1:1 past 100 sp.
+///
+/// The test binding only offers a *linear* factor, and so does Android 13 —
+/// which is how `scaledPx` shipped asking `scale(132)` for a field width and
+/// getting 140 back on an Android 14 tablet instead of 264.
+class AndroidNonLinearTextScaler extends TextScaler {
+  const AndroidNonLinearTextScaler();
+
+  static const _from = [
+    0.0,
+    8.0,
+    10.0,
+    12.0,
+    14.0,
+    18.0,
+    20.0,
+    24.0,
+    30.0,
+    100.0,
+  ];
+  static const _to = [
+    0.0,
+    16.0,
+    20.0,
+    24.0,
+    28.0,
+    32.0,
+    35.0,
+    40.0,
+    45.0,
+    100.0,
+  ];
+
+  @override
+  double scale(double fontSize) {
+    if (fontSize >= _from.last) return fontSize;
+    for (var i = 1; i < _from.length; i++) {
+      if (fontSize <= _from[i]) {
+        final t = (fontSize - _from[i - 1]) / (_from[i] - _from[i - 1]);
+        return _to[i - 1] + t * (_to[i] - _to[i - 1]);
+      }
+    }
+    return fontSize;
+  }
+
+  @override
+  // The deprecated linear factor is still abstract on TextScaler; what it
+  // should say for a curve is exactly what Android reports: the setting.
+  // ignore: deprecated_member_use
+  double get textScaleFactor => 2.0;
+
+  @override
+  bool operator ==(Object other) => other is AndroidNonLinearTextScaler;
+
+  @override
+  int get hashCode => 0x14;
+}
+
+/// Wraps [child] in the Android 14 curve when [screen] asks for it.
+Widget withScreenScaler(TestScreen? screen, Widget child) =>
+    screen != null && screen.nonLinear
+    ? Builder(
+        builder: (context) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const AndroidNonLinearTextScaler()),
+          child: child,
+        ),
+      )
+    : child;
 
 /// Applies [screen] to the test view; undone by `addTearDown`.
 void applyScreen(WidgetTester tester, TestScreen screen) {
@@ -126,7 +210,10 @@ Future<void> pumpMap(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [databaseProvider.overrideWithValue(db)],
-      child: const MaterialApp(home: MapScreen()),
+      child: MaterialApp(
+        builder: (_, child) => withScreenScaler(screen, child!),
+        home: const MapScreen(),
+      ),
     ),
   );
   // Not pumpAndSettle: tiles are loading and never will, so nothing settles.

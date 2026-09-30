@@ -25,7 +25,6 @@ import 'package:latlong2/latlong.dart';
 
 import 'package:zonecraft/data/database.dart';
 import 'package:zonecraft/data/repository.dart';
-import 'package:zonecraft/geo/border_areas.dart';
 import 'package:zonecraft/state/map_mode.dart';
 import 'package:zonecraft/state/providers.dart';
 import 'package:zonecraft/ui/about_screen.dart';
@@ -54,6 +53,7 @@ import 'package:zonecraft/ui/theme.dart';
 import 'package:zonecraft/ui/welcome_sheet.dart';
 
 import 'support/map_harness.dart';
+import 'support/seed.dart';
 
 /// Every surface of the app, at every size it will meet, at every text scale.
 ///
@@ -91,10 +91,16 @@ void main() {
   setUp(() => db = AppDatabase.forTesting(NativeDatabase.memory()));
   tearDown(() => db.close());
 
-  for (final base in screens) {
-    for (final scale in scales) {
-      final screen = base.scaled(scale);
-
+  // Every screen at the linear scales, and the phones and a tablet once more
+  // with Android 14's nonlinear curve at its largest setting.
+  final matrix = [
+    for (final base in screens)
+      for (final scale in scales) base.scaled(scale),
+    for (final base in [screens[0], screens[1], screens[3], screens[4]])
+      base.scaled(2.0, nonLinear: true),
+  ];
+  for (final screen in matrix) {
+    {
       testWidgets('map chrome fits: $screen', (tester) async {
         final problems = <String>[];
         await _sweep(tester, problems, 'fresh map', () async {
@@ -130,8 +136,8 @@ void main() {
 
       testWidgets('editors and sheets fit: $screen', (tester) async {
         final problems = <String>[];
-        late _Seeded seeded;
-        await tester.runAsync(() async => seeded = await _seed(db));
+        late SeededMap seeded;
+        await tester.runAsync(() async => seeded = await seedAllTypes(db));
         await _sweep(tester, problems, 'seeded map', () async {
           await pumpMap(tester, db, screen: screen);
           await _settle(tester);
@@ -235,6 +241,7 @@ void main() {
           ProviderScope(
             overrides: [databaseProvider.overrideWithValue(db)],
             child: MaterialApp(
+              builder: (_, child) => withScreenScaler(screen, child!),
               home: StatefulBuilder(
                 builder: (_, setState) {
                   setSlot = setState;
@@ -531,179 +538,4 @@ void _clearSelection(ProviderContainer c) {
   c.read(selectedPoiSetProvider.notifier).select(null);
   c.read(selectedPoiPointProvider.notifier).select(null);
   c.read(selectedBorderAreaProvider.notifier).select(null);
-}
-
-class _Seeded {
-  _Seeded(this.layers, this.selections);
-  final List<Layer> layers;
-  final List<(String, void Function(ProviderContainer))> selections;
-}
-
-/// One layer of each type, each with long names — the names a user types
-/// are the text a fixed-width row has to survive.
-Future<_Seeded> _seed(AppDatabase db) async {
-  final repo = Repository(db);
-  const lat = 48.137, lng = 11.575;
-  const long = 'Kindergartens within walking distance of the old town';
-  Future<String> layer(String type) => repo.createLayer(
-    name: '$long ($type)',
-    colorArgb: 0xFF2196F3,
-    type: type,
-  );
-
-  final circle = await repo.createCircle(
-    layerId: await layer('circles'),
-    centerLat: lat,
-    centerLng: lng,
-    radiusMeters: 1500,
-    label: long,
-  );
-
-  final subspace = await repo.createSubspace(
-    layerId: await layer('subspace'),
-    label: long,
-  );
-  await repo.addSubspacePoint(
-    subspaceId: subspace,
-    lat: lat,
-    lng: lng,
-    isMain: true,
-    label: long,
-  );
-  await repo.addSubspacePoint(subspaceId: subspace, lat: lat + 0.02, lng: lng);
-  await repo.addSubspacePoint(subspaceId: subspace, lat: lat, lng: lng + 0.03);
-
-  final line = await repo.createFreeLine(
-    layerId: await layer('freeline'),
-    label: long,
-    inclusionLat: lat,
-    inclusionLng: lng,
-    inclusionRadiusMeters: 3000,
-  );
-  for (var i = 0; i < 4; i++) {
-    await repo.addFreeLinePoint(
-      freeLineId: line,
-      lat: lat - 0.02 + i * 0.01,
-      lng: lng + (i.isEven ? 0.01 : -0.01),
-    );
-  }
-
-  final area = await repo.createFreeArea(
-    layerId: await layer('freearea'),
-    label: long,
-  );
-  for (final (a, b) in const [
-    (0.0, 0.0),
-    (0.01, 0.0),
-    (0.01, 0.01),
-    (0.0, 0.01),
-  ]) {
-    await repo.addFreeAreaPoint(freeAreaId: area, lat: lat + a, lng: lng + b);
-  }
-
-  final height = await repo.createHeightRegion(
-    layerId: await layer('height'),
-    centerLat: lat,
-    centerLng: lng,
-    radiusMeters: 2000,
-    thresholdMeters: 520,
-    label: long,
-  );
-
-  final poiLayer = await layer('poi');
-  final poiSet = await repo.createPoiSet(
-    layerId: poiLayer,
-    source: kPoiSourceManual,
-    categoryKey: 'peak',
-    centerLat: lat,
-    centerLng: lng,
-    radiusMeters: 0,
-    label: long,
-    iconKey: 'peak',
-  );
-  final poi = await repo.addManualPoiPoint(
-    poiSetId: poiSet,
-    lat: lat + 0.005,
-    lng: lng + 0.005,
-    label: long,
-  );
-  // Named POIs spread out, and a tight bunch that clusters into a count
-  // badge — both are fixed-size markers whose text used to overflow them at a
-  // large font, which a single point never showed.
-  for (var i = 0; i < 4; i++) {
-    await repo.addManualPoiPoint(
-      poiSetId: poiSet,
-      lat: lat - 0.004 * i,
-      lng: lng - 0.006,
-      label: 'Café $i',
-    );
-  }
-  for (var i = 0; i < 12; i++) {
-    await repo.addManualPoiPoint(
-      poiSetId: poiSet,
-      lat: lat + 0.0001 * i,
-      lng: lng + 0.003,
-    );
-  }
-
-  final bordersLayer = await repo.createLayer(
-    name: '$long (borders)',
-    colorArgb: 0xFF2196F3,
-    type: 'borders',
-    borderLevel: '9',
-  );
-  await repo.addBorderSet(
-    layerId: bordersLayer,
-    south: lat - 0.05,
-    west: lng - 0.05,
-    north: lat + 0.05,
-    east: lng + 0.05,
-    adminLevel: '9',
-    areas: [
-      (
-        osmId: 12345,
-        name: long,
-        south: lat - 0.01,
-        west: lng - 0.01,
-        north: lat + 0.01,
-        east: lng + 0.01,
-        labelLat: lat,
-        labelLng: lng,
-        pointCount: 4,
-        rings: encodeRings([
-          [
-            const LatLng(lat - 0.01, lng - 0.01),
-            const LatLng(lat - 0.01, lng + 0.01),
-            const LatLng(lat + 0.01, lng + 0.01),
-            const LatLng(lat + 0.01, lng - 0.01),
-          ],
-        ]),
-        wayIds: const [1, 2],
-      ),
-    ],
-  );
-  final border = (await db.select(db.borderAreas).get()).single.id;
-  // Look at the seeded objects, close enough for names and clusters.
-  await repo.saveCamera(lat, lng, 15);
-
-  final layers = await db.select(db.layers).get();
-  return _Seeded(layers, [
-    ('circle', (c) => c.read(selectedCircleProvider.notifier).select(circle)),
-    (
-      'subspace',
-      (c) => c.read(selectedSubspaceProvider.notifier).select(subspace),
-    ),
-    ('freeline', (c) => c.read(selectedFreeLineProvider.notifier).select(line)),
-    ('freearea', (c) => c.read(selectedFreeAreaProvider.notifier).select(area)),
-    (
-      'height',
-      (c) => c.read(selectedHeightRegionProvider.notifier).select(height),
-    ),
-    ('poi set', (c) => c.read(selectedPoiSetProvider.notifier).select(poiSet)),
-    ('poi', (c) => c.read(selectedPoiPointProvider.notifier).select(poi)),
-    (
-      'border area',
-      (c) => c.read(selectedBorderAreaProvider.notifier).select(border),
-    ),
-  ]);
 }

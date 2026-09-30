@@ -29,6 +29,7 @@ import '../data/transit.dart' show transitMaskWith;
 import '../state/providers.dart';
 import 'elements_list_model.dart';
 import 'import_actions.dart' show convertRingsToFreehandFlow;
+import 'editor_sheet.dart';
 import 'element_color.dart';
 import 'layer_actions.dart' show emptyStateActions;
 import 'element_color_dialog.dart';
@@ -285,9 +286,7 @@ class _LayerObjectsListState extends ConsumerState<_LayerObjectsList> {
     // sheet's first stop and the Column overflowed, so there they scroll away
     // with the rows. An empty layer has only the one-line title, and keeps it.
     final scrollHeader =
-        !empty &&
-        MediaQuery.sizeOf(context).height <
-            MediaQuery.textScalerOf(context).scale(560);
+        !empty && MediaQuery.sizeOf(context).height < scaledPx(context, 560);
     final header = <Widget>[
       Padding(
         padding: const EdgeInsets.fromLTRB(20, 0, 8, 0),

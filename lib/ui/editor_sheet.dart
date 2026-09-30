@@ -203,5 +203,18 @@ class EditorLayerPicker extends StatelessWidget {
 /// ellipsises both at 1.3x. Passing the value that was right at the default
 /// scale through here keeps the *content* that fits constant instead of the
 /// box.
+///
+/// The factor is read at body-text size, not at [atDefaultScale]. Android 14
+/// scales fonts **nonlinearly** — at 2.0 a 14 sp line doubles, a 132 sp one
+/// grows about 6 % — so `textScaler.scale(132)` answered "how big is a 132 sp
+/// *font*" and left a 132 dp field the width it had at 1.0 while the label
+/// inside it doubled ("Radius (…"). Tests and Android 13 scale linearly, which
+/// is why neither showed it; a tablet emulator on API 34 did.
 double scaledPx(BuildContext context, double atDefaultScale) =>
-    MediaQuery.textScalerOf(context).scale(atDefaultScale);
+    atDefaultScale * textScaleFactorOf(context);
+
+/// How much the system font setting grows body text: 1.0 by default, 2.0 at
+/// Android's largest. The one way to turn a text scale into a factor for
+/// sizes that are not fonts (see [scaledPx]).
+double textScaleFactorOf(BuildContext context) =>
+    MediaQuery.textScalerOf(context).scale(14) / 14;

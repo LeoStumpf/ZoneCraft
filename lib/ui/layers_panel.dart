@@ -24,6 +24,7 @@ import '../data/borders.dart';
 import '../data/database.dart';
 import '../data/layer_types.dart';
 import '../state/providers.dart';
+import 'editor_sheet.dart' show scaledPx, textScaleFactorOf;
 import 'import_actions.dart';
 import 'layer_actions.dart';
 import 'layer_tree.dart';
@@ -96,7 +97,7 @@ class _LayersDrawerState extends ConsumerState<LayersDrawer> {
     // at 2.0 — "Circl / es 1", broken mid-word. It grows with the text (up to
     // 1.4x) but always leaves a 48 dp strip of map to tap back to.
     final width = MediaQuery.sizeOf(context).width;
-    final grow = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 1.4);
+    final grow = textScaleFactorOf(context).clamp(1.0, 1.4);
     return Drawer(
       width: math.min(304 * grow, width - 48),
       child: ScaffoldMessenger(
@@ -173,8 +174,7 @@ class _LayersDrawerState extends ConsumerState<LayersDrawer> {
                 // Column overflowed — so there they scroll as the list's
                 // footer instead, still one flick away.
                 final shortDrawer =
-                    MediaQuery.sizeOf(context).height <
-                    MediaQuery.textScalerOf(context).scale(560);
+                    MediaQuery.sizeOf(context).height < scaledPx(context, 560);
                 final footer = <Widget>[
                   const Divider(height: 1),
                   // The base map, pinned as the bottom-most layer: hideable and
@@ -870,138 +870,163 @@ class _LayerTile extends ConsumerWidget {
 
     final scheme = Theme.of(context).colorScheme;
     final dimmed = Theme.of(context).disabledColor;
-    return ListTile(
-      selected: isActive,
-      // The active layer has to be visible at a glance — `selected` alone only
-      // tints the text, which is nothing next to four other rows. So: a filled
-      // tile, an accent bar on the left, a bold name and "Active" in the
-      // subtitle. A hidden layer is dimmed, since it is *not* what is shown.
-      selectedTileColor: scheme.primaryContainer,
-      selectedColor: scheme.onPrimaryContainer,
-      textColor: layer.isVisible ? null : dimmed,
-      iconColor: layer.isVisible ? null : dimmed,
-      shape: isActive
-          ? Border(left: BorderSide(color: scheme.primary, width: 4))
-          : null,
-      // Three trailing controls (elements, menu, drag) leave little room for the
-      // name, so claw back the default paddings and keep every control compact.
-      // The folder band's rail already says a member is in a folder; the old
-      // 16 dp indent on top of it only took room from the name.
-      contentPadding: EdgeInsets.only(left: folder == null ? 4 : 8, right: 4),
-      horizontalTitleGap: 4,
-      minLeadingWidth: 36,
-      // Tap to make active; tap the active layer again to have no active layer.
-      onTap: () => ref
-          .read(activeLayerProvider.notifier)
-          .toggle(layer.id, isActive: isActive),
-      leading: IconButton(
-        visualDensity: VisualDensity.compact,
-        padding: EdgeInsets.zero,
-        constraints: const BoxConstraints.tightFor(width: 36, height: 36),
-        tooltip: layer.isVisible ? 'Hide' : 'Show',
-        icon: Icon(
-          layer.isVisible ? Icons.visibility : Icons.visibility_off_outlined,
+    final subtitleText = Text(
+      isActive ? 'Active · $subtitle' : subtitle.toString(),
+    );
+    final controls = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Always present, for every layer type: the list of this layer's
+        // objects. Deliberately not a popup-menu entry — reaching an element
+        // must never depend on the layer's type or state.
+        IconButton(
+          tooltip: 'Elements',
+          icon: const Icon(Icons.format_list_bulleted),
+          iconSize: 20,
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints.tightFor(width: 32, height: 36),
+          onPressed: () => _openElements(context, ref),
         ),
-        onPressed: () =>
-            repo.updateLayer(layer.id, isVisible: !layer.isVisible),
-      ),
-      title: Row(
-        children: [
-          _SwatchButton(
-            label: 'Layer colour',
-            color: Color(layer.colorArgb),
-            onTap: () => pickLayerColor(context, ref, layer),
+        // NB: PopupMenuButton.constraints sizes the *menu*, not the button —
+        // keep the button slim with iconSize/padding only.
+        //
+        // The items come from [layerActionsFor], the one definition the
+        // map's layer sheet renders too. Explicit stacking items are there
+        // because dragging a tile is fiddly on a phone and impossible to
+        // aim at "all the way to the top" with twenty layers.
+        Builder(
+          builder: (context) {
+            final actions = layerActionsFor(context, ref, layer, layers);
+            return PopupMenuButton<LayerAction>(
+              iconSize: 20,
+              padding: EdgeInsets.zero,
+              onSelected: (action) {
+                // A map-owned action needs the drawer out of the way: the
+                // map answers with a form, a preview or a banner, all of
+                // which this drawer would cover.
+                if (action.needsMap) Navigator.pop(context);
+                unawaited(action.run());
+              },
+              itemBuilder: (_) => [
+                for (var i = 0; i < actions.length; i++) ...[
+                  if (i > 0 &&
+                      layerActionGroup(actions[i].id) !=
+                          layerActionGroup(actions[i - 1].id))
+                    const PopupMenuDivider(),
+                  if (actions[i].checked != null)
+                    CheckedPopupMenuItem(
+                      value: actions[i],
+                      checked: actions[i].checked!,
+                      enabled: actions[i].unavailable == null,
+                      child: _itemLabel(context, actions[i]),
+                    )
+                  else
+                    PopupMenuItem(
+                      value: actions[i],
+                      enabled: actions[i].unavailable == null,
+                      child: _itemLabel(context, actions[i]),
+                    ),
+                ],
+              ],
+            );
+          },
+        ),
+        // A real handle, not a hint of one: dragging anywhere on the tile
+        // also reorders (after a long press), but a handle that looks like a
+        // handle should grab at once.
+        ReorderableDragStartListener(
+          index: index,
+          child: const Padding(
+            padding: EdgeInsets.only(left: 4),
+            child: Icon(Icons.drag_handle, size: 20),
           ),
-          const SizedBox(width: 2),
-          Icon(typeIcon(layer.type), size: 16),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              layer.name,
-              // Two lines before an ellipsis: with three trailing controls the
-              // name gets ~80 dp at a large system font, and "Subspac…" does
-              // not say which layer it is.
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: isActive
-                  ? const TextStyle(fontWeight: FontWeight.bold)
-                  : null,
-            ),
+        ),
+      ],
+    );
+    // The three controls take ~120 dp at any font size. Beside the name they
+    // left it ~90 dp in a narrow drawer at a large font ("PO / I…", "Cir /
+    // cl…"), so when the name would get less than about eight characters'
+    // room they drop to the subtitle line and the name has the full width.
+    return LayoutBuilder(
+      builder: (context, box) {
+        final roomy = box.maxWidth - 200 >= scaledPx(context, 90);
+        return ListTile(
+          selected: isActive,
+          // The active layer has to be visible at a glance — `selected` alone only
+          // tints the text, which is nothing next to four other rows. So: a filled
+          // tile, an accent bar on the left, a bold name and "Active" in the
+          // subtitle. A hidden layer is dimmed, since it is *not* what is shown.
+          selectedTileColor: scheme.primaryContainer,
+          selectedColor: scheme.onPrimaryContainer,
+          textColor: layer.isVisible ? null : dimmed,
+          iconColor: layer.isVisible ? null : dimmed,
+          shape: isActive
+              ? Border(left: BorderSide(color: scheme.primary, width: 4))
+              : null,
+          // Three trailing controls (elements, menu, drag) leave little room for the
+          // name, so claw back the default paddings and keep every control compact.
+          // The folder band's rail already says a member is in a folder; the old
+          // 16 dp indent on top of it only took room from the name.
+          contentPadding: EdgeInsets.only(
+            left: folder == null ? 4 : 8,
+            right: 4,
           ),
-        ],
-      ),
-      subtitle: Text(isActive ? 'Active · $subtitle' : subtitle.toString()),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Always present, for every layer type: the list of this layer's
-          // objects. Deliberately not a popup-menu entry — reaching an element
-          // must never depend on the layer's type or state.
-          IconButton(
-            tooltip: 'Elements',
-            icon: const Icon(Icons.format_list_bulleted),
-            iconSize: 20,
+          horizontalTitleGap: 4,
+          minLeadingWidth: 36,
+          // Tap to make active; tap the active layer again to have no active layer.
+          onTap: () => ref
+              .read(activeLayerProvider.notifier)
+              .toggle(layer.id, isActive: isActive),
+          leading: IconButton(
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints.tightFor(width: 32, height: 36),
-            onPressed: () => _openElements(context, ref),
-          ),
-          // NB: PopupMenuButton.constraints sizes the *menu*, not the button —
-          // keep the button slim with iconSize/padding only.
-          //
-          // The items come from [layerActionsFor], the one definition the
-          // map's layer sheet renders too. Explicit stacking items are there
-          // because dragging a tile is fiddly on a phone and impossible to
-          // aim at "all the way to the top" with twenty layers.
-          Builder(
-            builder: (context) {
-              final actions = layerActionsFor(context, ref, layer, layers);
-              return PopupMenuButton<LayerAction>(
-                iconSize: 20,
-                padding: EdgeInsets.zero,
-                onSelected: (action) {
-                  // A map-owned action needs the drawer out of the way: the
-                  // map answers with a form, a preview or a banner, all of
-                  // which this drawer would cover.
-                  if (action.needsMap) Navigator.pop(context);
-                  unawaited(action.run());
-                },
-                itemBuilder: (_) => [
-                  for (var i = 0; i < actions.length; i++) ...[
-                    if (i > 0 &&
-                        layerActionGroup(actions[i].id) !=
-                            layerActionGroup(actions[i - 1].id))
-                      const PopupMenuDivider(),
-                    if (actions[i].checked != null)
-                      CheckedPopupMenuItem(
-                        value: actions[i],
-                        checked: actions[i].checked!,
-                        enabled: actions[i].unavailable == null,
-                        child: _itemLabel(context, actions[i]),
-                      )
-                    else
-                      PopupMenuItem(
-                        value: actions[i],
-                        enabled: actions[i].unavailable == null,
-                        child: _itemLabel(context, actions[i]),
-                      ),
-                  ],
-                ],
-              );
-            },
-          ),
-          // A real handle, not a hint of one: dragging anywhere on the tile
-          // also reorders (after a long press), but a handle that looks like a
-          // handle should grab at once.
-          ReorderableDragStartListener(
-            index: index,
-            child: const Padding(
-              padding: EdgeInsets.only(left: 4),
-              child: Icon(Icons.drag_handle, size: 20),
+            constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+            tooltip: layer.isVisible ? 'Hide' : 'Show',
+            icon: Icon(
+              layer.isVisible
+                  ? Icons.visibility
+                  : Icons.visibility_off_outlined,
             ),
+            onPressed: () =>
+                repo.updateLayer(layer.id, isVisible: !layer.isVisible),
           ),
-        ],
-      ),
+          title: Row(
+            children: [
+              _SwatchButton(
+                label: 'Layer colour',
+                color: Color(layer.colorArgb),
+                onTap: () => pickLayerColor(context, ref, layer),
+              ),
+              const SizedBox(width: 2),
+              Icon(typeIcon(layer.type), size: 16),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  layer.name,
+                  // Two lines before an ellipsis: with three trailing controls the
+                  // name gets ~80 dp at a large system font, and "Subspac…" does
+                  // not say which layer it is.
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: isActive
+                      ? const TextStyle(fontWeight: FontWeight.bold)
+                      : null,
+                ),
+              ),
+            ],
+          ),
+          subtitle: roomy
+              ? subtitleText
+              : Row(
+                  children: [
+                    Expanded(child: subtitleText),
+                    controls,
+                  ],
+                ),
+          trailing: roomy ? controls : null,
+        );
+      },
     );
   }
 
