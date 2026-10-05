@@ -277,7 +277,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
   bool _mapReady = false;
 
   /// Terrain elevation (m) at the current "Locate me" position, when known.
+  /// Shown for [kMyElevationShownFor], then taken down by [_myElevationTimer];
+  /// the marker stays.
   double? _myElevation;
+  Timer? _myElevationTimer;
+
+  /// How long the "You: 512 m" readout stays after a Locate me answer. It is
+  /// a reading, not a mode: once glanced at it only covers the map.
+  static const kMyElevationShownFor = Duration(seconds: 6);
 
   // --- Elevation probe ------------------------------------------------------
   /// Scratch for [MapMode.elevation]: the measured point and its result.
@@ -547,6 +554,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   @override
   void dispose() {
     _infoTimer?.cancel();
+    _myElevationTimer?.cancel();
     _topHintTimer?.cancel();
     _glide.dispose();
     _twoFingerTap.reset();
@@ -878,6 +886,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
         _myPosition = here;
         _myElevation = null;
       });
+      _myElevationTimer?.cancel();
       _animateTo(
         here,
         math.max(_mapController.camera.zoom, kMinFocusZoom).clamp(2.0, 19.0),
@@ -897,6 +906,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// what actually retires that readout; the banner's condition reads it, not
   /// the position.
   void _hideMyLocation() {
+    _myElevationTimer?.cancel();
     setState(() {
       _myPosition = null;
       _myElevation = null;
@@ -1168,6 +1178,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
     );
     if (!mounted || _myPosition != p) return;
     setState(() => _myElevation = e);
+    _myElevationTimer?.cancel();
+    if (e == null) return;
+    _myElevationTimer = Timer(kMyElevationShownFor, () {
+      if (mounted) setState(() => _myElevation = null);
+    });
   }
 
   static String _formatElevation(double meters) {
