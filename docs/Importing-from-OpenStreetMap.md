@@ -84,7 +84,7 @@ travels with an export, because the area keeps its OSM identity.
 Two imports fill a **freehand** layer rather than a snapshot layer, so what arrives is yours
 to edit:
 
-- **Find a place by name / Import map feature…** — type a city, district, river, road, park
+- **Import shape by name…** (the map’s **Import** button on a line or area layer) — type a city, district, river, road, park
   or coastline; the app geocodes it through Nominatim (paced to one request a second, results
   cached) and imports the outline it finds as a freehand area or line.
 - **Import track…** — read a **GPX, KML, KMZ or GeoJSON** file into the layer. Tracks and

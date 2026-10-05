@@ -8,7 +8,7 @@ OpenStreetMap has, so there is nothing to say about it.
 
 ## Editing a place
 
-Open the point (Select by tapping, or from the Elements list). Its editor shows the facts, each
+Open the point (Edit by tapping, or from the Elements list). Its editor shows the facts, each
 with the button that changes it:
 
 - **Name** — shown as text, with **Edit**.

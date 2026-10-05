@@ -171,8 +171,8 @@ const List<MapControl> mapControls = [
     icon: Icons.my_location,
     name: 'Locate me',
     what:
-        'Finds where you are and marks it, with the ground height there. '
-        'Press again to take the mark away.',
+        'Finds where you are and marks it, and shows the ground height '
+        'there for a few seconds. Press again to take the mark away.',
   ),
   MapControl(
     id: MapControlId.share,
@@ -192,7 +192,7 @@ const List<MapControl> mapControls = [
   ),
   MapControl(
     id: MapControlId.distance,
-    caption: 'Measure',
+    caption: 'Distance',
     area: MapControlArea.tools,
     icon: Icons.straighten,
     name: 'Measure distance',
@@ -205,7 +205,7 @@ const List<MapControl> mapControls = [
     caption: 'Edit',
     area: MapControlArea.bottom,
     icon: Icons.edit_outlined,
-    name: 'Select by tapping',
+    name: 'Edit by tapping',
     what:
         'Turns the map into a chooser: a tap opens whatever you tapped. '
         'Reaches anything you can see, on any visible layer.',
@@ -222,13 +222,13 @@ const List<MapControl> mapControls = [
   ),
   MapControl(
     id: MapControlId.featureImport,
-    caption: 'Find',
+    caption: 'Import',
     area: MapControlArea.bottom,
     icon: Icons.travel_explore,
-    name: 'Find a place by name',
+    name: 'Import a shape by name',
     what:
-        'Searches OpenStreetMap for a city, river or coastline and imports '
-        'its outline.',
+        'Type the name of a city, river or coastline: its outline is '
+        'fetched from OpenStreetMap and added to this layer.',
     sometimes: 'Only on a layer that holds lines or areas.',
   ),
   MapControl(
@@ -236,15 +236,16 @@ const List<MapControl> mapControls = [
     caption: 'Import',
     area: MapControlArea.bottom,
     icon: Icons.cloud_download_outlined,
-    name: 'Import an area',
+    name: 'Import places in a box',
     what:
-        'Fetches places or transit stops inside a box you mark from '
-        'OpenStreetMap into this layer, and keeps them on the device.',
+        'Fetches places or stations from OpenStreetMap inside a box you '
+        'mark and keeps them on the device — as markers, or on a circle or '
+        'subspace layer as circle centres or points.',
     sometimes: 'Only on layers that can hold imported points.',
   ),
   MapControl(
     id: MapControlId.add,
-    caption: 'New',
+    caption: 'Add',
     area: MapControlArea.bottom,
     icon: Icons.add,
     name: 'Add',

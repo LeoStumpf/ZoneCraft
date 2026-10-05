@@ -298,7 +298,7 @@ void main() {
       await tester.pumpWidget(
         host(onToggleEdit: () => toggled++, onUnavailable: (r) => said = r),
       );
-      await tester.tap(find.byTooltip('Select by tapping the map'));
+      await tester.tap(find.byTooltip('Edit by tapping the map'));
       expect(toggled, 1);
       expect(said, isNull);
     });

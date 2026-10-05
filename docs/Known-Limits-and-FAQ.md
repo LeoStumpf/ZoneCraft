@@ -49,7 +49,7 @@ there is nothing to be transparent. The number is kept and applies the moment it
 
 **I long-pressed and nothing opened.** In View mode a long-press offers a chooser of what is
 under your finger, and Share / Copy for the spot; a plain tap only shows a chip. Turn on
-**Select by tapping** (✎) to make taps open things.
+**Edit by tapping** (✎) to make taps open things.
 
 **The map rotated by accident.** It should not: rotation needs a deliberate twist of 20° or
 more. Tap the compass to go back to north.

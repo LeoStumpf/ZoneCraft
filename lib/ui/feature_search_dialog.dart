@@ -91,7 +91,7 @@ class _FeatureSearchDialogState extends State<_FeatureSearchDialog> {
     final results = _results;
     return AlertDialog(
       scrollable: true,
-      title: const Text('Import map feature'),
+      title: const Text('Import shape by name'),
       content: SizedBox(
         width: 360,
         child: Column(

@@ -24,7 +24,7 @@ layer's *type* can never use is hidden rather than greyed.
 |---|---|---|
 | **Download this area** | Stores the map around you for use with no reception. | Only in a build pointed at a provider whose terms allow downloading ahead. Never on OpenStreetMap's own servers — see [Offline and Map Cache](Offline-and-Map-Cache.md). |
 | **Go to place** | Type a town, street or landmark and the map moves there. It searches OpenStreetMap's own place index and changes nothing on your map. | Always. |
-| **Locate me** | Finds where you are and marks it, with the ground height there. Press again to take the mark away. | Always. Asks for location permission the first time, and only then. |
+| **Locate me** | Finds where you are and marks it, and shows the ground height there for a few seconds. Press again to take the mark away. | Always. Asks for location permission the first time, and only then. |
 | **Share my location** | Sends where you are to another app. | Always. |
 | **Measure elevation** | Tap anywhere afterwards to read the height of the ground there. | Always. |
 | **Measure distance** | Tap two points afterwards for the distance and bearing between them. | Always. |
@@ -33,10 +33,10 @@ layer's *type* can never use is hidden rather than greyed.
 
 | Control | What it does | When it is there |
 |---|---|---|
-| **Select by tapping** (✎) | Turns the map into a chooser: a tap opens whatever you tapped. Reaches anything you can see, on any visible layer. | Always; greyed until some visible layer holds something. |
+| **Edit by tapping** (✎) | Turns the map into a chooser: a tap opens whatever you tapped. Reaches anything you can see, on any visible layer. | Always; greyed until some visible layer holds something. |
 | **The layer's own switch** | Changes with the layer: **Fill outside / Fill inside** on a region layer, **Colour areas** on a borders layer, the **station filter** on a places layer that holds a station import. Lit while the switch is on. | Only where the layer has one. |
-| **Find a place by name** | Searches OpenStreetMap for a city, river or coastline and imports its outline. | Only on line and area layers. |
-| **Import an area** | Fetches places or transit stops inside a box you mark from OpenStreetMap into this layer, and keeps them on the device. | Only on layers that can hold imported points. |
+| **Import a shape by name** | Type the name of a city, river or coastline: its outline is fetched from OpenStreetMap and added to this layer. | Only on line and area layers. |
+| **Import places in a box** | Fetches places or stations from OpenStreetMap inside a box you mark and keeps them on the device — as markers, or on a circle or subspace layer as circle centres or points. | Only on layers that can hold imported points. |
 | **Add** (＋) | Arms the map: the next tap places a new element of the active layer’s kind where you point. On a line or area layer it asks first: point by point, or drawn with your finger. Long-press to place one at the centre instead. | Always. |
 | **Hide and show the tools** | Clears the screen down to the map: the column above it, the undo buttons and the layer name all go, and come back. | Always — it is the one thing that survives its own press, along with the layers menu. |
 

@@ -52,7 +52,7 @@ never poll. [Importing from OpenStreetMap](Importing-from-OpenStreetMap.md) has 
 
 ## Every layer has an editor
 
-Tap anything with **Select by tapping** on (or long-press it in the default mode) and its
+Tap anything with **Edit by tapping** on (or long-press it in the default mode) and its
 editor docks at the bottom: a circle's centre and radius, a nearest-point's points, a line's
 vertices, an imported place's name and position, a border area's outline. Every number is
 typeable. A position is changed with **Edit** — one *"lat, lng"* field that accepts values

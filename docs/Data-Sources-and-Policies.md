@@ -10,7 +10,7 @@ for people forking the app, and for the operators of those services.
 |---|---|---|
 | **OpenStreetMap tiles** | The base map | `tile.openstreetmap.org` by default, run on donations; or a provider of your own (`TILE_URL`, or Settings → Data sources) |
 | **Overpass** | Places, station and border imports | `overpass-api.de`, then `overpass.kumi.systems`, then `overpass.private.coffee` — three community instances tried in turn; a configured server is tried first |
-| **Nominatim** | *Go to place* and *Import map feature by name* | `nominatim.openstreetmap.org` |
+| **Nominatim** | *Go to place* and *Import shape by name* | `nominatim.openstreetmap.org` |
 | **AWS Terrain Tiles** | Ground-height layers, *Measure elevation*, the height under *Locate me* | `s3.amazonaws.com/elevation-tiles-prod/terrarium/` — SRTM, 3DEP and GMTED2010 courtesy of the U.S. Geological Survey; ETOPO1 courtesy of NOAA |
 | **OpenStreetMap Notes API** | *Publish to OpenStreetMap* — the one thing the app ever writes | `api.openstreetmap.org`; `OSM_API_URL` at build time |
 

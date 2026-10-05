@@ -439,8 +439,8 @@ class MapFabColumn extends StatelessWidget {
               _fab(
                 heroTag: 'editMode',
                 tooltip: mode == MapMode.edit
-                    ? 'Stop selecting by tap'
-                    : 'Select by tapping the map',
+                    ? 'Stop editing by tap'
+                    : 'Edit by tapping the map',
                 unavailable: unavailableReason(MapControlId.edit, controlState),
                 lit: mode == MapMode.edit,
                 onPressed: onToggleEdit,

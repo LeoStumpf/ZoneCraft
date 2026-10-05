@@ -43,7 +43,7 @@ the bottom row — in the app's own words:
 | **Import POIs…** | Fetch places of one kind — cafés, benches — inside a box you draw. |
 | **Import transit stations…** | Fetch public-transport stops inside a box you draw. |
 | **Import borders in view…** | Fetch administrative areas covering the current view. |
-| **Import map feature…** | Search OpenStreetMap by name and import the shape it finds. |
+| **Import shape by name…** | Search OpenStreetMap by name and import the shape it finds. |
 | **Import track…** | Read a GPX, KML or GeoJSON file into this layer. |
 | **Export layer…** | Save this one layer to a file, or share it. |
 | **Combine…** | Move everything from this layer into another one. Shown only when there is a layer it could go into. |

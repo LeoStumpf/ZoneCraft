@@ -148,7 +148,7 @@ class LayerActionContext {
 /// - 'height' layers use an above/below toggle, not viewport invert; 'poi' is
 ///   markers with nothing to invert; 'borders' draws many separate areas, so
 ///   there is no single region to take the complement of.
-/// - "Import map feature…" fetches a *named place*, so it belongs to the
+/// - "Import shape by name…" fetches a *named place*, so it belongs to the
 ///   freehand types; "Import track…" is one entry, not one per matching type,
 ///   because the same item listed twice is a menu bug.
 /// - Moving into a folder is always offered and greyed when there are no
@@ -348,7 +348,7 @@ List<EmptyStateAction> emptyStateActions(String type) => [
     if (layerTypeHolds(type, kPoi)) ...[
       (
         kind: MapRequestKind.importPois,
-        icon: Icons.travel_explore,
+        icon: Icons.cloud_download_outlined,
         label: 'Import POIs',
       ),
       (
@@ -366,8 +366,8 @@ List<EmptyStateAction> emptyStateActions(String type) => [
     if (layerTypeHolds(type, kFreeLine) || layerTypeHolds(type, kFreeArea))
       (
         kind: MapRequestKind.importFeature,
-        icon: Icons.search,
-        label: 'Import map feature',
+        icon: Icons.travel_explore,
+        label: 'Import shape by name',
       ),
     if (type != kBorders)
       (
@@ -648,7 +648,7 @@ List<LayerAction> layerActionsFor(
     ),
     LayerActionId.importPois => LayerAction(
       id: id,
-      icon: Icons.travel_explore,
+      icon: Icons.cloud_download_outlined,
       label: 'Import POIs…',
       description:
           'Fetch places of one kind — cafés, benches — inside a box you draw.',
@@ -673,8 +673,8 @@ List<LayerAction> layerActionsFor(
     ),
     LayerActionId.importFeature => LayerAction(
       id: id,
-      icon: Icons.search,
-      label: 'Import map feature…',
+      icon: Icons.travel_explore,
+      label: 'Import shape by name…',
       description:
           'Search OpenStreetMap by name and import the shape it finds.',
       needsMap: true,
