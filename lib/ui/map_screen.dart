@@ -1152,6 +1152,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
   }
 
   /// Looks up and stores the elevation at the current location for the readout.
+  ///
+  /// The answer is kept only if [p] is still the fix on the map. The lookup
+  /// can take up to [kTerrainTileTimeout] on a slow network, and hiding the
+  /// location in the meantime used to let the late answer write the readout
+  /// back — with the marker gone and the button showing "Locate me", so
+  /// nothing could take it down again short of locating and hiding once more.
   Future<void> _updateMyElevation(LatLng p) async {
     final e = await queryElevation(
       repo: ref.read(repositoryProvider),
@@ -1160,7 +1166,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       lng: p.longitude,
       headers: const {'User-Agent': tileUserAgent},
     );
-    if (!mounted) return;
+    if (!mounted || _myPosition != p) return;
     setState(() => _myElevation = e);
   }
 
@@ -6308,7 +6314,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           // Elevation readout: the measured point and/or current location.
                           if (mode == MapMode.elevation ||
                               _probePoint != null ||
-                              _myElevation != null ||
+                              (_myPosition != null && _myElevation != null) ||
                               mode == MapMode.distance ||
                               _distA != null)
                             Padding(
@@ -6350,7 +6356,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                             ),
                                           ],
                                         ),
-                                      if (_myElevation != null)
+                                      if (_myPosition != null &&
+                                          _myElevation != null)
                                         Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
