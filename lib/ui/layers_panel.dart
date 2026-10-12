@@ -244,92 +244,118 @@ class _LayersDrawerState extends ConsumerState<LayersDrawer> {
                   children: [
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-                      child: Row(
-                        children: [
-                          // Expanded, not Text + Spacer: at a large font the
-                          // title alone pushed the four buttons off the edge.
-                          Expanded(
-                            child: Text(
-                              'Layers',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.titleLarge,
+                      // The title and its three buttons share one line until the
+                      // title would be cut to "L…" (320 dp at a 2.0 font); then
+                      // the buttons take a line of their own under it.
+                      child: LayoutBuilder(
+                        builder: (context, box) {
+                          final actions = <Widget>[
+                            IconButton(
+                              tooltip: 'Import layer from file',
+                              icon: const Icon(Icons.file_open_outlined),
+                              onPressed: () => importLayerFlow(
+                                context,
+                                repo,
+                                layers,
+                                ref: ref,
+                              ),
                             ),
-                          ),
-                          IconButton(
-                            tooltip: 'Import layer from file',
-                            icon: const Icon(Icons.file_open_outlined),
-                            onPressed: () => importLayerFlow(
-                              context,
-                              repo,
-                              layers,
-                              ref: ref,
+                            // Export lives here too, not only in Settings: it is an
+                            // action on the map, and this is where the map's layers
+                            // are.
+                            IconButton(
+                              tooltip: 'Export all layers',
+                              icon: const Icon(Icons.ios_share),
+                              onPressed: () => exportAllFlow(context, repo),
                             ),
-                          ),
-                          // Export lives here too, not only in Settings: it is an
-                          // action on the map, and this is where the map's layers
-                          // are.
-                          IconButton(
-                            tooltip: 'Export all layers',
-                            icon: const Icon(Icons.ios_share),
-                            onPressed: () => exportAllFlow(context, repo),
-                          ),
-                          // (Importing a named map feature is not here any more: it
-                          // always produces freehand geometry, so it lives on the
-                          // freehand layers themselves, next to "Import track…".)
-                          PopupMenuButton<String>(
-                            tooltip: 'Add layer',
-                            onSelected: (type) => type == _kNewFolder
-                                ? unawaited(addFolderFlow(ref, folders))
-                                : addLayerFlow(context, ref, layers, type),
-                            itemBuilder: (_) => [
-                              for (final c in kLayerTypeChoices)
-                                PopupMenuItem(
-                                  value: c.type,
+                            // (Importing a named map feature is not here any more: it
+                            // always produces freehand geometry, so it lives on the
+                            // freehand layers themselves, next to "Import track…".)
+                            PopupMenuButton<String>(
+                              tooltip: 'Add layer',
+                              onSelected: (type) => type == _kNewFolder
+                                  ? unawaited(addFolderFlow(ref, folders))
+                                  : addLayerFlow(context, ref, layers, type),
+                              itemBuilder: (_) => [
+                                for (final c in kLayerTypeChoices)
+                                  PopupMenuItem(
+                                    value: c.type,
+                                    child: ListTile(
+                                      dense: true,
+                                      contentPadding: EdgeInsets.zero,
+                                      leading: Icon(c.icon),
+                                      title: Text(c.label),
+                                      subtitle: c.subtitle == null
+                                          ? null
+                                          : Text(c.subtitle!),
+                                    ),
+                                  ),
+                                // A folder sits apart: it is not an eighth kind of
+                                // content but a way to hold the other seven.
+                                const PopupMenuDivider(),
+                                const PopupMenuItem(
+                                  value: _kNewFolder,
                                   child: ListTile(
                                     dense: true,
                                     contentPadding: EdgeInsets.zero,
-                                    leading: Icon(c.icon),
-                                    title: Text(c.label),
-                                    subtitle: c.subtitle == null
-                                        ? null
-                                        : Text(c.subtitle!),
+                                    leading: Icon(
+                                      Icons.create_new_folder_outlined,
+                                    ),
+                                    title: Text('Folder'),
+                                    subtitle: Text(
+                                      'Group layers to hide or invert together',
+                                    ),
                                   ),
                                 ),
-                              // A folder sits apart: it is not an eighth kind of
-                              // content but a way to hold the other seven.
-                              const PopupMenuDivider(),
-                              const PopupMenuItem(
-                                value: _kNewFolder,
-                                child: ListTile(
-                                  dense: true,
-                                  contentPadding: EdgeInsets.zero,
-                                  leading: Icon(
-                                    Icons.create_new_folder_outlined,
-                                  ),
-                                  title: Text('Folder'),
-                                  subtitle: Text(
-                                    'Group layers to hide or invert together',
-                                  ),
+                              ],
+                              child: const Padding(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 8,
                                 ),
-                              ),
-                            ],
-                            child: const Padding(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 8,
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.add),
-                                  SizedBox(width: 4),
-                                  Text('Add'),
-                                ],
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.add),
+                                    SizedBox(width: 4),
+                                    Text('Add'),
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                          ];
+                          final title = Text(
+                            'Layers',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleLarge,
+                          );
+                          // Two icon buttons, "+ Add", and about "Layers" at
+                          // titleLarge.
+                          final roomy =
+                              box.maxWidth - 96 - scaledPx(context, 52) >=
+                              scaledPx(context, 80);
+                          if (!roomy) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                title,
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: actions,
+                                ),
+                              ],
+                            );
+                          }
+                          return Row(
+                            children: [
+                              // Expanded, not Text + Spacer: at a large font the
+                              // title alone pushed the buttons off the edge.
+                              Expanded(child: title),
+                              ...actions,
+                            ],
+                          );
+                        },
                       ),
                     ),
                     // What is active, in words — and, when nothing is, that
@@ -347,7 +373,9 @@ class _LayersDrawerState extends ConsumerState<LayersDrawer> {
                             'Active: ${l.name} · tap it again for none',
                         },
                         style: Theme.of(context).textTheme.bodySmall,
-                        maxLines: 1,
+                        // Two lines: at a large font one cut the gesture
+                        // ("tap i…"), which is the half worth reading.
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),

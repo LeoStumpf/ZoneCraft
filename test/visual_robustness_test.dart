@@ -467,7 +467,8 @@ void _checkSheetScrolls(
 
 /// No two pieces of floating map chrome overlap.
 ///
-/// The banners start at a fixed [kBannerTop] under the chrome row; if the row
+/// The banners start under the chrome row ([kBannerTop], one chip line lower
+/// when the active-layer chip has its own); if the row
 /// grows (a large font) or a banner stacks up, one pill lands on another and
 /// the one underneath can be neither read nor pressed. Nested chrome (a pill
 /// inside a pill) is not an overlap.

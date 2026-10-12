@@ -463,6 +463,10 @@ no login. Android-first, iOS-ready. Map via flutter_map; state via Riverpod.
   the harness now puts the curve into the sweep and `test/scaled_px_test.dart`.
   A drawer layer row drops its three controls onto the subtitle line when the name would
   get less than ~8 characters (320 dp + font 2.0 printed "PO / I…").
+  The same ~8-character rule moves the **active-layer chip** onto a line of its own under
+  the chrome row (`activeLayerChipOnOwnLine`; it printed "P…"), and the banners and the FAB
+  column's height move down with it (`kBannerTop` + `kChipLineHeight`), and drops the
+  drawer header's three buttons under the "Layers" title (it printed "L…").
   `test/rotation_and_zoom_test.dart` pins that a turn keeps the mode, editor, drawer,
   sheet, move and camera, and that every type (inverted, 500 m band) draws at zoom 2 across
   the antimeridian and at zoom 19.

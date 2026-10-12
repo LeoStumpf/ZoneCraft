@@ -63,6 +63,7 @@ import 'external_link.dart';
 import 'border_reshape.dart';
 import 'camera_viewport.dart';
 import 'confirm_delete.dart';
+import 'editor_sheet.dart' show scaledPx;
 import 'editor_sheet_host.dart';
 import 'go_to_place_dialog.dart';
 import 'hit_test.dart';
@@ -119,6 +120,33 @@ const Duration kCameraGlide = Duration(milliseconds: 350);
 /// Where the top-centre banners start: below the chrome row (8 dp padding +
 /// a 48 dp round button + 8 dp), so a banner never lands on the menu button.
 const double kBannerTop = 68;
+
+/// How much taller the chrome is when the active-layer chip has a line of its
+/// own (see [activeLayerChipOnOwnLine]): its 48 dp plus an 8 dp gap.
+const double kChipLineHeight = 56;
+
+/// What the active-layer chip spends on everything but the name: padding,
+/// swatch, type icon, chevron and the gaps between them.
+const double _kChipFixedWidth = 80;
+
+/// Whether the active-layer chip leaves the chrome row for a line of its own.
+///
+/// Beside the menu button, the undo pair and (rotated) the compass, the chip
+/// got ~60 dp at 320 dp and a 2.0 font, and printed "P…" — the one answer it
+/// exists to give, gone for exactly the people who most need it spelled out.
+/// So when the name would get less than about eight characters' room, the
+/// same threshold a drawer row uses, the chip moves under the row and the
+/// banners move down with it. [rowWidth] is the row's width inside its
+/// padding; [nameRoom] is that threshold already scaled to the font.
+bool activeLayerChipOnOwnLine({
+  required double rowWidth,
+  required bool undo,
+  required bool compass,
+  required double nameRoom,
+}) {
+  final taken = 48 + (undo ? 8 + 48 + 8 + 48 : 0) + 8 + (compass ? 8 + 48 : 0);
+  return rowWidth - taken - _kChipFixedWidth < nameRoom;
+}
 
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key});
@@ -4830,6 +4858,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final settings = ref.watch(settingsProvider).asData?.value;
     final uncertainty = settings?.uncertaintyMeters ?? 0;
     final toolsExpanded = settings?.toolsExpanded ?? true;
+    final mq = MediaQuery.of(context);
+    final chipOwnLine =
+        toolsExpanded &&
+        activeLayerChipOnOwnLine(
+          rowWidth: mq.size.width - mq.padding.horizontal - 16,
+          undo: true,
+          compass: _rotation != 0,
+          nameRoom: scaledPx(context, 90),
+        );
+    final bannerTop = kBannerTop + (chipOwnLine ? kChipLineHeight : 0);
     // Push the stored Overpass instance into the client. It is process-wide
     // configuration rather than an argument (see `overpassEndpointOverride`),
     // and this is the one widget that both outlives every import and already
@@ -6013,63 +6051,80 @@ class _MapScreenState extends ConsumerState<MapScreen>
                 SafeArea(
                   child: Padding(
                     padding: const EdgeInsets.all(8),
-                    child: Row(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        MapChrome(
-                          circle: true,
-                          clipBehavior: Clip.antiAlias,
-                          child: IconButton(
-                            icon: const Icon(Icons.menu),
-                            tooltip: mapControl(MapControlId.layers).name,
-                            onPressed: () =>
-                                _scaffoldKey.currentState?.openDrawer(),
-                          ),
-                        ),
-                        if (toolsExpanded) ...[
-                          const SizedBox(width: 8),
-                          const UndoButtons(),
-                        ],
-                        const SizedBox(width: 8),
-                        // The active layer: everything the map does — Add, ✎,
-                        // the import button, the long-press context — is about
-                        // this layer, and without this the only way to learn
-                        // which one it was was to open the drawer.
-                        Expanded(
-                          // Kept as an Expanded even when empty: it is what
-                          // holds the compass against the right edge, and a
-                          // fixed height because an unbounded Align would take
-                          // the Stack's full height and drop the whole row to
-                          // mid-screen.
-                          child: SizedBox(
-                            height: 48,
-                            child: toolsExpanded
-                                ? Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: _ActiveLayerChip(
-                                      layer: activeLayer,
-                                      onTap: () => showLayerSheet(context, ref),
+                        Row(
+                          children: [
+                            MapChrome(
+                              circle: true,
+                              clipBehavior: Clip.antiAlias,
+                              child: IconButton(
+                                icon: const Icon(Icons.menu),
+                                tooltip: mapControl(MapControlId.layers).name,
+                                onPressed: () =>
+                                    _scaffoldKey.currentState?.openDrawer(),
+                              ),
+                            ),
+                            if (toolsExpanded) ...[
+                              const SizedBox(width: 8),
+                              const UndoButtons(),
+                            ],
+                            const SizedBox(width: 8),
+                            // The active layer: everything the map does — Add, ✎,
+                            // the import button, the long-press context — is about
+                            // this layer, and without this the only way to learn
+                            // which one it was was to open the drawer.
+                            Expanded(
+                              // Kept as an Expanded even when empty: it is what
+                              // holds the compass against the right edge, and a
+                              // fixed height because an unbounded Align would take
+                              // the Stack's full height and drop the whole row to
+                              // mid-screen.
+                              child: SizedBox(
+                                height: 48,
+                                child: toolsExpanded && !chipOwnLine
+                                    ? Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: _ActiveLayerChip(
+                                          layer: activeLayer,
+                                          onTap: () =>
+                                              showLayerSheet(context, ref),
+                                        ),
+                                      )
+                                    : null,
+                              ),
+                            ),
+                            if (_rotation != 0) ...[
+                              const SizedBox(width: 8),
+                              MapChrome(
+                                circle: true,
+                                clipBehavior: Clip.antiAlias,
+                                child: IconButton(
+                                  tooltip: 'Reset to north-up',
+                                  onPressed: () => _mapController.rotate(0),
+                                  icon: Transform.rotate(
+                                    // Counter-rotate so the needle points to
+                                    // map-north.
+                                    angle: -_rotation * math.pi / 180,
+                                    child: const Icon(
+                                      Icons.navigation,
+                                      color: kCompassNeedle,
                                     ),
-                                  )
-                                : null,
-                          ),
-                        ),
-                        if (_rotation != 0) ...[
-                          const SizedBox(width: 8),
-                          MapChrome(
-                            circle: true,
-                            clipBehavior: Clip.antiAlias,
-                            child: IconButton(
-                              tooltip: 'Reset to north-up',
-                              onPressed: () => _mapController.rotate(0),
-                              icon: Transform.rotate(
-                                // Counter-rotate so the needle points to
-                                // map-north.
-                                angle: -_rotation * math.pi / 180,
-                                child: const Icon(
-                                  Icons.navigation,
-                                  color: kCompassNeedle,
+                                  ),
                                 ),
                               ),
+                            ],
+                          ],
+                        ),
+                        if (chipOwnLine) ...[
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            height: 48,
+                            child: _ActiveLayerChip(
+                              layer: activeLayer,
+                              onTap: () => showLayerSheet(context, ref),
                             ),
                           ),
                         ],
@@ -6086,7 +6141,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   child: Align(
                     alignment: Alignment.topCenter,
                     child: Padding(
-                      padding: const EdgeInsets.only(top: kBannerTop),
+                      padding: EdgeInsets.only(top: bannerTop),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -6538,7 +6593,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       floatingActionButton: bottomSheet != null
           ? null
           : MapFabColumn(
-              maxHeight: _fabColumnMaxHeight(context),
+              maxHeight: _fabColumnMaxHeight(context, bannerTop),
               captions: settings?.fabCaptions ?? true,
               controlState: controlState,
               mode: mode,
@@ -6723,15 +6778,15 @@ class _ActiveLayerChip extends StatelessWidget {
 }
 
 /// How tall the FAB column may grow: from the credit it sits on up to the
-/// bottom of the chrome row, which is where the banners start
-/// ([kBannerTop]).
+/// bottom of the chrome, which is where the banners start ([bannerTop]:
+/// [kBannerTop], plus [kChipLineHeight] when the chip has its own line).
 ///
 /// Without a bound the column is as tall as its buttons, which in landscape
 /// is taller than the screen — the tools ran under the status bar and the
 /// bottom row off the bottom edge. The credit's line is estimated at its
 /// clamped text scale (it never grows past 1.3, see [_MapAttribution]) with a
 /// little slack, since a two-line credit lifts the buttons a line further.
-double _fabColumnMaxHeight(BuildContext context) {
+double _fabColumnMaxHeight(BuildContext context, double bannerTop) {
   final mq = MediaQuery.of(context);
   final creditLine = mq.textScaler
       .clamp(maxScaleFactor: kMapTextMaxScale)
@@ -6739,7 +6794,7 @@ double _fabColumnMaxHeight(BuildContext context) {
   final height =
       mq.size.height -
       mq.padding.top -
-      kBannerTop -
+      bannerTop -
       mq.padding.bottom -
       (creditLine + 16);
   return math.max(height, 0);
