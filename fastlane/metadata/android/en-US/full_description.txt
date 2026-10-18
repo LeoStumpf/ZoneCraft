@@ -1,0 +1,71 @@
+ZoneCraft builds map areas out of geometric rules. Each rule you add is
+a zone — within a distance of a point, closer to one place than another,
+above a chosen elevation — and where the zones overlap is the area that
+satisfies all of them.
+
+Useful wherever a place has to meet several conditions at once: planning
+a move, scouting a site, teaching geography, plotting a walk, or any
+"which parts of the map fit all of this?" question.
+
+Want everywhere within 2 km of the station? Drop a circle. Everywhere
+further out than that? Press Fill outside. Add a layer per rule, and the
+overlap is your area.
+
+SEVEN KINDS OF ZONE
+
+• Circle — everything within a distance of a point, as a true geodesic
+  radius rather than a shape drawn on a flat map.
+• Nearest point — everywhere closer to one point than to any of the
+  others. With two points it simply splits the map in half.
+• Freehand line — draw a line to cut an area in two and keep one side.
+• Freehand area — draw any shape by hand and fill it.
+• Ground height — ground above or below an elevation you choose, built
+  once from public terrain data and then kept offline.
+• Places — import cafés, benches, drinking water, toilets or transit
+  stations from OpenStreetMap, or name your own category and tap to place
+  markers in it.
+• Borders — download real district, city, state or country outlines
+  once and keep them offline, coloured so no two neighbours match.
+
+HOW THEY COMBINE
+
+Overlapping zones merge into one clean colour instead of getting muddier.
+Any layer can be inverted — "everywhere EXCEPT this" — and an adjustable
+uncertainty band shows the fuzzy edge when your information is not exact.
+Folders group layers so you can hide or invert a whole set at once, while
+each layer keeps its own colour and settings.
+
+ALSO
+
+• Type a town, street or landmark and the map goes there.
+• Every element can carry its own colour, so zones on one layer stay
+  apart.
+• Drag a shape's points on the map, or press Move and Save when it
+  is right; every change can be undone.
+• Import a city, river, park or boundary by name and edit it as your
+  own shape.
+• Import GeoJSON, KML, KMZ and GPX; export GeoJSON or KML — share a
+  map with someone else, or bring in tracks from other apps.
+• Measure elevation or distance anywhere on the map.
+• "Locate me" centres the map on your position, only when you tap it.
+• The map remembers where you left off, and tiles you have looked at
+  keep working with no reception.
+
+GIVING SOMETHING BACK
+
+Spotted a bench in the wrong place, or one that is missing? Fix it, and
+ZoneCraft can pass your change to OpenStreetMap as a note — only when you
+press Send now, only with words you have read and edited, and never
+automatically.
+
+PRIVATE BY DESIGN
+
+No account. No sign-up. No ads. No tracking, analytics or crash
+reporting. Everything you create stays in local storage on your device
+and is never uploaded — there is no server to upload it to. It is not
+backed up to Google either, so use Export to keep a copy. Location is
+used only on your device, and only when you ask.
+
+Free software under the GNU AGPL v3. English only for now.
+
+Map data © OpenStreetMap contributors.

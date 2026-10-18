@@ -22,6 +22,7 @@ scripts/build.sh --install           # also install on the connected device (-r:
 scripts/build.sh --install --run     # install, then launch the app
 scripts/build.sh --release           # build a release APK instead of debug
 scripts/build.sh --bundle            # build a release App Bundle (.aab) for Play
+scripts/build.sh --split-per-abi     # one signed release APK per ABI (what a release ships)
 scripts/build.sh --skip-checks       # skip format/analyze/test (fast rebuilds)
 DEVICE=<adb-serial> scripts/build.sh --install    # target a specific device
 ```

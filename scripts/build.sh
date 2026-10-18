@@ -8,6 +8,8 @@
 #   scripts/build.sh --install --run     install, then launch the app
 #   scripts/build.sh --release           build a release APK instead of debug
 #   scripts/build.sh --bundle            build a release App Bundle (.aab) for Play
+#   scripts/build.sh --split-per-abi     build one release APK per ABI -- what a
+#                                        GitHub release / IzzyOnDroid ships
 #   scripts/build.sh --skip-checks       skip format/analyze/test
 #
 # Env overrides:
@@ -50,6 +52,7 @@ ADB="$(command -v adb || echo /usr/bin/adb)"
 # --- parse args --------------------------------------------------------------
 MODE="debug"
 BUNDLE=0
+SPLIT=0
 INSTALL=0
 RUN=0
 SKIP_CHECKS=0
@@ -58,10 +61,11 @@ for arg in "$@"; do
     --debug)       MODE="debug" ;;
     --release)     MODE="release" ;;
     --bundle|--aab) BUNDLE=1; MODE="release" ;; # App Bundle is always release
+    --split-per-abi) SPLIT=1; MODE="release" ;; # only ever shipped, so release
     --install)     INSTALL=1 ;;
     --run)         INSTALL=1; RUN=1 ;; # running implies installing first
     --skip-checks) SKIP_CHECKS=1 ;;
-    -h|--help)     sed -n '2,35p' "$0"; exit 0 ;;
+    -h|--help)     sed -n '2,37p' "$0"; exit 0 ;;
     *) echo "Unknown option: $arg (try --help)" >&2; exit 1 ;;
   esac
 done
@@ -120,22 +124,23 @@ if [ -n "${OSM_API_URL:-}" ]; then
 fi
 
 # --- bundle guards -----------------------------------------------------------
-# A bundle exists only to be uploaded to Play, so refuse the two ways it can
-# come out wrong without anything failing. Checked before the tests so the
-# answer arrives in a second, not after a full test run.
-if [ "$BUNDLE" -eq 1 ]; then
+# A bundle exists only to be uploaded to Play, and the split APKs only to be
+# published, so refuse the two ways either can come out wrong without anything
+# failing. Checked before the tests so the answer arrives in a second, not after
+# a full test run.
+if [ "$BUNDLE" -eq 1 ] || [ "$SPLIT" -eq 1 ]; then
   # build.gradle.kts falls back to the debug key when key.properties is absent,
   # which is right for `--release` smoke builds and wrong for this: Play refuses
   # a debug-signed bundle, and only after the upload.
   if [ ! -f android/key.properties ]; then
-    echo "!!! --bundle without android/key.properties: refusing." >&2
-    echo "    The bundle would be signed with the debug key, which Play rejects." >&2
+    echo "!!! --bundle/--split-per-abi without android/key.properties: refusing." >&2
+    echo "    It would be signed with the debug key, which nobody can update from." >&2
     exit 1
   fi
   # Without TILE_URL the store build draws its map from OpenStreetMap's donated
   # tile servers — a decision to make on purpose, not by a missing file.
   if [ -z "${TILE_URL:-}" ]; then
-    echo "!!! --bundle without TILE_URL: refusing." >&2
+    echo "!!! --bundle/--split-per-abi without TILE_URL: refusing." >&2
     echo "    Set it (or check $ZONECRAFT_ENV) — see planning/RELEASE.md, 'Tile provider'." >&2
     exit 1
   fi
@@ -164,6 +169,19 @@ if [ "$BUNDLE" -eq 1 ]; then
   flutter build appbundle --release "${DART_DEFINES[@]}"
   AAB="build/app/outputs/bundle/release/app-release.aab"
   echo "==> built $AAB (upload this to Play Console)"
+  echo "Done."
+  exit 0
+fi
+
+# One APK per ABI instead of one carrying all three: the universal APK is ~78 MB,
+# almost all of it libflutter.so + libapp.so three times over, and IzzyOnDroid
+# takes ~30 MB as its rule of thumb. Flutter gives each split its own
+# versionCode (abi * 1000 + code), so a release never mixes splits with a
+# universal APK -- moving from one to the other would read as a downgrade.
+if [ "$SPLIT" -eq 1 ]; then
+  echo "==> flutter build apk --release --split-per-abi"
+  flutter build apk --release --split-per-abi "${DART_DEFINES[@]}"
+  ls -l build/app/outputs/flutter-apk/app-*-release.apk
   echo "Done."
   exit 0
 fi

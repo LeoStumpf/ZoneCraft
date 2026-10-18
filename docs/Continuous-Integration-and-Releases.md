@@ -2,8 +2,8 @@
 
 ## What CI does
 
-`.github/workflows/ci.yml` runs on every push to `main`, every pull request, and on demand
-(**Run workflow**). One job, in increasing cost:
+`.github/workflows/ci.yml` runs on every push to `main`, every pull request, every tag `v*`
+and on demand (**Run workflow**). One job, in increasing cost:
 
 1. **Dependencies match the lockfile** — `flutter pub get --enforce-lockfile`, so a bump has
    to be deliberate.
@@ -17,6 +17,7 @@
    files are signed differently: `apksigner` for the APK (a v2/v3 signature only it reads),
    `keytool -printcert -jarfile` for the App Bundle (a plain jar-signed zip).
 6. **Keep the signed build** as a workflow artifact.
+7. **On a tag only: publish the release** — see [Publishing a release](#publishing-a-release).
 
 Flutter is pinned (3.44.0) rather than `stable`, and the JDK is 21 because that is what
 builds the project on the developer's machine.
@@ -76,6 +77,36 @@ Then confirm what you have before uploading it — the same check CI made:
 keytool -printcert -jarfile ~/Downloads/zonecraft-release/bundle/release/app-release.aab | grep Owner
 # must not say CN=Android Debug
 ```
+
+## Publishing a release
+
+ZoneCraft is distributed through **GitHub Releases** (installable directly, or kept up to date
+with [Obtainium](https://obtainium.imranr.dev/)) and **IzzyOnDroid**, which picks the APKs up
+from those releases. Play's production review asked for another 14-day closed test, and a
+finished free app does not need a store's permission to be shared.
+
+1. **Bump the version** in `pubspec.yaml` and `lib/app_info.dart` (see below — the same two
+   files, the same rule that the `versionCode` only goes up).
+2. **Write the release notes** to `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`.
+   That one file is both the GitHub release's text and what IzzyOnDroid shows. The listing
+   itself is in the same folder (`title.txt`, `short_description.txt`, `full_description.txt`).
+3. **Commit, push, then tag:** `git tag v1.4.3 && git push origin v1.4.3`.
+
+The tag's run fails early if the tag is not `v` + the `pubspec.yaml` version name, or if the
+changelog for that `versionCode` is missing — either would publish a release that contradicts
+itself. It then builds **one APK per ABI** (`scripts/build.sh --split-per-abi`): the universal
+APK is ~78 MB, nearly all of it the Flutter engine and the app's code three times over, and
+IzzyOnDroid takes ~30 MB as its rule of thumb. Each split is checked for the upload key and
+attached as `ZoneCraft-<version>-<abi>.apk`.
+
+- **Splits only, never a universal APK beside them.** Flutter numbers each split
+  `abi × 1000 + versionCode` (arm64 of `+8` is `2008`), so moving from a split to a universal
+  APK would read as a downgrade and Android would refuse it.
+- **Signed with the upload key.** Installs from Play are re-signed by Google (Play App
+  Signing) and can never update from these APKs, or the other way round; switching between
+  the two means export, uninstall, install, import.
+- These builds use the keyed tile provider, like every release build — the key is as
+  extractable from a public APK as from a Play one.
 
 ## Releasing to Google Play
 

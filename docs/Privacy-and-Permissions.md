@@ -32,7 +32,7 @@ recording, no tracking. Decline the permission and everything else works.
 ## What leaves the phone
 
 Only requests for what you are looking at or asked for, each to a service named on the About
-screen: map tiles (from Geoapify in the Play Store build, OpenStreetMap's own servers in a
+screen: map tiles (from Geoapify in the published build, OpenStreetMap's own servers in a
 build without a provider, or a server you configure), imports through Overpass,
 place search through Nominatim, terrain tiles for ground height, and — only when you press
 **Send now** — one note to OpenStreetMap containing what you typed and a position. Every request

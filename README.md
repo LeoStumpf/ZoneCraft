@@ -8,6 +8,23 @@ and no server**: every layer, object and setting lives in a local SQLite databas
 
 Android-first, iOS-ready. Built with Flutter.
 
+## Install
+
+Two ways, both free:
+
+1. **Download from GitHub** — take the `arm64-v8a` APK from the
+   [latest release](https://github.com/LeoStumpf/ZoneCraft/releases/latest) (it fits nearly
+   every phone; `armeabi-v7a` is for older 32-bit ones), open it and allow the install. To get
+   updates automatically, add this repository to [Obtainium](https://obtainium.imranr.dev/).
+2. **Install through Google Play as a tester** — join the Google group
+   [LeosTesterBuddys](https://groups.google.com/g/leostesterbuddys), then open
+   [the test sign-up page](https://play.google.com/apps/testing/io.github.leostumpf.zonecraft)
+   with the same Google account, tap *Become a tester*, and install from the Play Store link
+   it gives you. Play keeps it updated, and feedback from testers is very welcome.
+
+The two are signed differently, so Android will not update one with the other: to switch,
+**export your map first** (Settings → Export), uninstall, install the other and import it.
+
 > **Transparency:** ZoneCraft was "vibe-coded" collaboratively with Claude (Anthropic's AI
 > assistant), which wrote much of the code under human direction.
 
@@ -171,8 +188,8 @@ test/          geometry, parsing, network, migration and database unit tests
 ## Develop
 
 The [wiki](https://github.com/LeoStumpf/ZoneCraft/wiki) holds the user guide and the developer
-pages — building, architecture, migrations, data-source policies, and how a CI build reaches
-Google Play. What follows is the short version.
+pages — building, architecture, migrations, data-source policies, and how a tag becomes a
+release. What follows is the short version.
 
 Those pages are written in [`docs/`](docs/) and published to the wiki by
 [`.github/workflows/wiki.yml`](.github/workflows/wiki.yml) on every push to `main`, so a doc fix
@@ -190,6 +207,7 @@ so it works even when the SDK isn't installed globally):
 ./scripts/build.sh --install --run # install, then launch the app
 ./scripts/build.sh --release       # build a release APK instead of debug
 ./scripts/build.sh --bundle        # build a signed release App Bundle (.aab) for Play
+./scripts/build.sh --split-per-abi # one signed release APK per ABI (what a release ships)
 ./scripts/build.sh --skip-checks   # skip analyze/test (faster rebuilds)
 DEVICE=<adb-serial> ./scripts/build.sh --install   # target a specific device
 ```

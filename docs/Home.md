@@ -18,8 +18,19 @@ AGPL.
 
 ## Getting the app
 
-- A closed test on Google Play is being prepared. Until it opens, **build it yourself** —
-  see [Building](Building.md); it takes one script and a connected Android phone.
+- **Download it** from [GitHub Releases](https://github.com/LeoStumpf/ZoneCraft/releases/latest).
+  Take the `arm64-v8a` APK — that is nearly every phone from the last ten years
+  (`armeabi-v7a` for older 32-bit phones, `x86_64` for emulators and Chromebooks).
+- **Stay up to date** with [Obtainium](https://obtainium.imranr.dev/): add
+  `https://github.com/LeoStumpf/ZoneCraft` and it installs each new release.
+- **Or test it through Google Play:** join the Google group
+  [LeosTesterBuddys](https://groups.google.com/g/leostesterbuddys), open
+  [the test sign-up page](https://play.google.com/apps/testing/io.github.leostumpf.zonecraft)
+  with the same account and install from Play. The Play and GitHub builds are signed
+  differently, so switching between them means export, uninstall, install, import.
+- Your map lives only on the phone; use [Export](Export-and-Backup.md) before switching phones.
+- Or **build it yourself** — see [Building](Building.md); it takes one script and a connected
+  Android phone.
 - Source: <https://github.com/LeoStumpf/ZoneCraft>. Issues and feature requests:
   <https://github.com/LeoStumpf/ZoneCraft/issues>.
 

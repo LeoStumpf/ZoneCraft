@@ -36,11 +36,21 @@
 # against the community OSM tiles when TILE_URL is unset. That build is the
 # smoke test this workflow started as, and it is deliberately not uploaded: a
 # release-looking APK nobody can ship would only mislead.
+#
+# A tag `vX.Y.Z` also publishes: ZoneCraft is distributed through GitHub
+# Releases and IzzyOnDroid, not Play (Play's production review asked for
+# another 14-day closed test). The tag run builds one APK per ABI -- the
+# universal one is ~78 MB, IzzyOnDroid's rule of thumb is ~30 -- checks each
+# carries the upload key, and attaches them to a release whose notes are the
+# fastlane changelog for that versionCode, the same file IzzyOnDroid reads. The
+# upload key, not Play's: Play installs are re-signed by Google (Play App
+# Signing), so they could never update from these anyway.
 name: CI
 
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -52,14 +62,38 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    # Only the tag run's `gh release create` writes; everything else reads.
+    permissions:
+      contents: write
 
     # The `secrets` context cannot be read in a step's `if:`; an env var can.
     # Empty on a fork's pull request, set on every push to main.
     env:
       HAVE_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
 
     steps:
       - uses: actions/checkout@v4
+
+      # First, because it is free: a tag that does not match pubspec.yaml would
+      # publish a release whose APKs report another version, and a release
+      # without its changelog would go out with empty notes -- and IzzyOnDroid
+      # would show none either.
+      - name: Tag matches the version, changelog exists
+        if: env.IS_RELEASE == 'true'
+        run: |
+          version="$(sed -n 's/^version: *//p' pubspec.yaml)"
+          name="${version%%+*}"
+          code="${version##*+}"
+          if [ "$GITHUB_REF_NAME" != "v$name" ]; then
+            echo "!!! tag $GITHUB_REF_NAME, but pubspec.yaml says $version" >&2; exit 1
+          fi
+          notes="fastlane/metadata/android/en-US/changelogs/$code.txt"
+          if [ ! -s "$notes" ]; then
+            echo "!!! missing $notes" >&2; exit 1
+          fi
+          echo "VERSION_NAME=$name" >> "$GITHUB_ENV"
+          echo "RELEASE_NOTES=$notes" >> "$GITHUB_ENV"
 
       # The Android build needs a JDK, and this is the *runtime* one, not the
       # bytecode target — `android/app/build.gradle.kts` pins source, target
@@ -170,3 +204,31 @@ jobs:
             build/app/outputs/bundle/release/app-release.aab
           if-no-files-found: error
           retention-days: 30
+
+      - name: Release build (one APK per ABI)
+        if: env.IS_RELEASE == 'true' && env.HAVE_KEYSTORE != ''
+        env:
+          TILE_URL: ${{ secrets.TILE_URL }}
+          TILE_ATTRIBUTION: ${{ secrets.TILE_ATTRIBUTION }}
+        run: scripts/build.sh --split-per-abi --skip-checks
+
+      # Same test as above, per split: a debug-signed APK in a public release
+      # is one nobody can ever update from.
+      - name: Publish the GitHub release
+        if: env.IS_RELEASE == 'true' && env.HAVE_KEYSTORE != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)"
+          mkdir -p dist
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            src="build/app/outputs/flutter-apk/app-$abi-release.apk"
+            certs="$("$apksigner" verify --print-certs "$src")"
+            echo "== $src"; echo "$certs" | grep -E 'DN:|SHA-?256' || true
+            if [ -z "$certs" ] || echo "$certs" | grep -q 'CN=Android Debug'; then
+              echo "!!! $src is not signed with the upload key" >&2; exit 1
+            fi
+            cp "$src" "dist/ZoneCraft-$VERSION_NAME-$abi.apk"
+          done
+          gh release create "$GITHUB_REF_NAME" dist/*.apk \
+            --title "ZoneCraft $VERSION_NAME" --notes-file "$RELEASE_NOTES" --verify-tag

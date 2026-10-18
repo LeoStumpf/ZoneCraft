@@ -1,0 +1,10 @@
+First public release.
+
+• A short welcome says what the app is for.
+• Search for a town, street or landmark and jump there.
+• Every map button has a one-word caption.
+• Folders group layers, with their own colour.
+• Fix, add or remove a place, then publish it to OpenStreetMap.
+• Move a point, check it, then Save — or Cancel.
+• Your map is never uploaded and is not backed up anywhere —
+  use Export to keep a copy.
