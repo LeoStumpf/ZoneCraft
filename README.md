@@ -22,6 +22,11 @@ Two ways, both free:
    with the same Google account, tap *Become a tester*, and install from the Play Store link
    it gives you. Play keeps it updated, and feedback from testers is very welcome.
 
+   **This is also the way to help ZoneCraft into the public Play Store.** Google only lets a
+   new developer publish an app after at least 12 testers have stayed in its test for 14 days
+   in a row — so every tester who installs it through Play and stays in the test brings the
+   public release a step closer. Thank you!
+
 The two are signed differently, so Android will not update one with the other: to switch,
 **export your map first** (Settings → Export), uninstall, install the other and import it.
 

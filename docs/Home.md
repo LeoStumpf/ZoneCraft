@@ -26,7 +26,9 @@ AGPL.
 - **Or test it through Google Play:** join the Google group
   [LeosTesterBuddys](https://groups.google.com/g/leostesterbuddys), open
   [the test sign-up page](https://play.google.com/apps/testing/io.github.leostumpf.zonecraft)
-  with the same account and install from Play. The Play and GitHub builds are signed
+  with the same account and install from Play. This also helps the app into the public Play
+  Store: Google publishes a new developer's app only after at least 12 testers have stayed in
+  its test for 14 days in a row. The Play and GitHub builds are signed
   differently, so switching between them means export, uninstall, install, import.
 - Your map lives only on the phone; use [Export](Export-and-Backup.md) before switching phones.
 - Or **build it yourself** — see [Building](Building.md); it takes one script and a connected
